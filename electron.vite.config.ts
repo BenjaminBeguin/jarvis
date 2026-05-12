@@ -13,6 +13,10 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: resolve(__dirname, 'electron/main/index.ts'),
+        output: {
+          format: 'es',
+          entryFileNames: '[name].js',
+        },
       },
     },
   },
@@ -26,6 +30,14 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: resolve(__dirname, 'electron/preload/index.ts'),
+        output: {
+          // Preload must stay CJS — Electron loads it via require() in the
+          // renderer's isolated context, and ESM preload requires sandbox=false
+          // plus an .mjs filename to work cross-version. CJS is the boring,
+          // bulletproof choice.
+          format: 'cjs',
+          entryFileNames: '[name].cjs',
+        },
       },
     },
   },

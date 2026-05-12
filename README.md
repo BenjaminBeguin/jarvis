@@ -16,17 +16,21 @@ Personal AI operating layer for builders. Electron + React desktop app on top of
 ## Getting started
 
 ```sh
-nvm use            # node 20
-npm install        # builds native deps via electron-builder install-app-deps
-npm run dev        # electron-vite dev with HMR
+nvm use                                       # node 20
+pnpm install --ignore-scripts                 # populate node_modules
+pnpm rebuild electron                         # download the Electron binary
+pnpm exec electron-builder install-app-deps   # build better-sqlite3 + keytar for Electron's Node ABI
+pnpm dev                                      # electron-vite with HMR
 ```
+
+`pnpm` is preferred (we run `node-linker=hoisted` so Electron tools find the binary in the usual place). `npm install` works too, but don't mix lockfiles.
 
 On first launch the observatory opens and prompts for your Anthropic API key (stored in the macOS Keychain, never on disk). Then press ⌘⇧J anywhere to summon the palette, type or hold the mic icon to dictate, hit Enter.
 
 ## Build a standalone app
 
 ```sh
-npm run dist:mac
+pnpm dist:mac
 ```
 
 DMGs land in `release/`. Notarization is not configured by default — add `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` env vars before `dist:mac` once you're ready to ship.

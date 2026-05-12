@@ -57,11 +57,24 @@ Migrations live in `electron/main/db.ts` as an ordered array. **Append, never ed
 
 ## Build + dev
 
-- `npm install` runs `electron-builder install-app-deps` postinstall to rebuild native modules (`better-sqlite3`, `keytar`) against Electron's Node ABI.
-- If `npm install` fails on a fresh machine due to `distutils` (Python 3.12+ removed it), run `npm install --ignore-scripts` then `npx electron-builder install-app-deps`.
-- `npm run dev` — electron-vite with HMR. Renderer dev server is pinned to **port 3010** (`strictPort: true`) in [electron.vite.config.ts](electron.vite.config.ts). Keep it in the 3006–3015 range.
-- `npm run typecheck` — runs both `tsconfig.node.json` (main + preload + shared) and `tsconfig.web.json` (renderer + shared). Run before committing.
-- `npm run build` — production build. `npm run dist:mac` for a DMG.
+We use **pnpm** with `node-linker=hoisted` (configured in [.npmrc](.npmrc)) because `electron-vite` and `electron-builder` expect a flat `node_modules` to locate Electron's prebuilt binary and rebuild native modules. The pnpm `onlyBuiltDependencies` allowlist in `package.json` permits scripts for `electron`, `better-sqlite3`, `keytar`, `esbuild` — without it pnpm 9+ silently skips them.
+
+Cold install on a fresh machine (Node 24 + Python 3.12 breaks node-gyp, so we always defer native builds to electron-builder):
+
+```sh
+rm -rf node_modules                            # if you ever got into a bad state
+pnpm install --ignore-scripts                  # populate the tree
+pnpm rebuild electron                          # downloads the prebuilt Electron binary → node_modules/electron/dist
+pnpm exec electron-builder install-app-deps    # builds better-sqlite3 + keytar against Electron's Node ABI
+```
+
+Day-to-day:
+
+- `pnpm dev` — electron-vite with HMR. Renderer dev server is pinned to **port 3010** (`strictPort: true`) in [electron.vite.config.ts](electron.vite.config.ts). Keep it in the 3006–3015 range.
+- `pnpm typecheck` — runs both `tsconfig.node.json` (main + preload + shared) and `tsconfig.web.json` (renderer + shared). Run before committing.
+- `pnpm build` — production build. `pnpm dist:mac` for a DMG.
+
+`npm install` still works the same way (`postinstall` already calls `electron-builder install-app-deps`), but using both in one tree will fight over the lockfile — pick one.
 
 ## Project conventions
 

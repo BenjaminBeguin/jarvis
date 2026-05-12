@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const preloadPath = join(__dirname, '../preload/index.js');
+const preloadPath = join(__dirname, '../preload/index.cjs');
 const rendererDevUrl = process.env['ELECTRON_RENDERER_URL'];
 const rendererProdEntry = join(__dirname, '../renderer/index.html');
 
