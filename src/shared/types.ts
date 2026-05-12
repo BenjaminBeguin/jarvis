@@ -12,6 +12,11 @@ export interface TaskSummary {
   endedAt: number | null;
   costUsd: number;
   inputPreview: string;
+  /**
+   * Tasks sharing a groupKey are visually clustered in the constellation
+   * (e.g. all Claude Code sessions in the same project).
+   */
+  groupKey?: string;
 }
 
 export interface TaskEvent {

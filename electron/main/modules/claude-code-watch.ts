@@ -201,6 +201,7 @@ export class ClaudeCodeWatchModule implements Module {
       endedAt: isActive ? null : mtimeMs,
       costUsd: 0,
       inputPreview: title,
+      groupKey: `claude-code:${projectSlug}`,
     };
     ctx.registerExternalTask(summary);
 
