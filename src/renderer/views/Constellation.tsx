@@ -77,6 +77,7 @@ export function Constellation({ tasks, selectedId, onSelect }: Props) {
   const positions = useMemo(() => layoutRing(visible), [visible]);
   const liveCount = visible.filter((t) => t.status === 'running').length;
   const recentCount = visible.length - liveCount;
+  const awaitingCount = visible.filter((t) => t.awaitingInput).length;
   const overflow = Math.max(0, tasks.filter(shouldDisplay).length - MAX_NODES);
 
   // Group-key adjacency: if two visible nodes share a group, connect them.
@@ -217,6 +218,16 @@ export function Constellation({ tasks, selectedId, onSelect }: Props) {
           >
             {liveCount} LIVE{recentCount ? ` · ${recentCount} RECENT` : ''}
           </text>
+          {awaitingCount > 0 && (
+            <text
+              x={CENTER.x}
+              y={CENTER.y + 36}
+              className="core__awaiting"
+              textAnchor="middle"
+            >
+              {awaitingCount} AWAITING REPLY
+            </text>
+          )}
         </g>
 
         {/* Nodes (agents). */}
@@ -231,10 +242,11 @@ export function Constellation({ tasks, selectedId, onSelect }: Props) {
             const ly = CENTER.y + Math.sin(p.angle) * (RING_RADIUS + labelOffset);
             const textAnchor =
               Math.cos(p.angle) > 0.2 ? 'start' : Math.cos(p.angle) < -0.2 ? 'end' : 'middle';
+            const awaiting = !!p.task.awaitingInput;
             return (
               <g
                 key={p.task.id}
-                className={`node node--${group}${p.isLive ? '' : ' node--idle'}${isSelected ? ' node--selected' : ''}`}
+                className={`node node--${group}${p.isLive ? '' : ' node--idle'}${awaiting ? ' node--awaiting' : ''}${isSelected ? ' node--selected' : ''}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelect(p.task.id);
@@ -243,6 +255,25 @@ export function Constellation({ tasks, selectedId, onSelect }: Props) {
                 <circle cx={p.x} cy={p.y} r={30} fill="url(#node-glow)" />
                 <circle cx={p.x} cy={p.y} r={isSelected ? 14 : 10} className="node__disc" />
                 <circle cx={p.x} cy={p.y} r={5} className="node__pulse" />
+                {awaiting && (
+                  <g className="node__awaiting-mark">
+                    <circle
+                      cx={p.x + 16}
+                      cy={p.y - 16}
+                      r={7}
+                      className="node__awaiting-bg"
+                    />
+                    <text
+                      x={p.x + 16}
+                      y={p.y - 16}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      className="node__awaiting-glyph"
+                    >
+                      !
+                    </text>
+                  </g>
+                )}
                 <text
                   x={lx}
                   y={ly}

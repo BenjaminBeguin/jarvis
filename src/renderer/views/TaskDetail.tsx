@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { TaskEvent, TaskSummary } from '../../shared/types';
 
@@ -134,6 +134,7 @@ export function TaskDetail({ task }: Props) {
   }, [events.length]);
 
   const rendered = events.map(renderEvent).filter((e): e is RenderedEvent => e !== null);
+  const isAwaiting = !!task.awaitingInput;
 
   return (
     <section className="detail">
@@ -145,12 +146,13 @@ export function TaskDetail({ task }: Props) {
             {task.costUsd > 0 && ` · $${task.costUsd.toFixed(4)}`}
           </div>
         </div>
-        {task.status === 'running' && (
+        {task.status === 'running' && task.origin !== 'external' && (
           <button onClick={() => void window.jarvis.abortTask(task.id)}>
             Stop
           </button>
         )}
       </header>
+      {isAwaiting && <AwaitingBanner />}
       <div className="detail__body" ref={bodyRef}>
         {rendered.length === 0 && (
           <div className="empty">Waiting for output…</div>
@@ -173,6 +175,98 @@ export function TaskDetail({ task }: Props) {
           </div>
         ))}
       </div>
+      {isAwaiting && task.origin === 'external' && <QuickReply task={task} />}
     </section>
+  );
+}
+
+function AwaitingBanner() {
+  return (
+    <div className="detail__awaiting">
+      <span className="detail__awaiting-glyph">!</span>
+      <span>Agent is waiting for your input</span>
+    </div>
+  );
+}
+
+function QuickReply({ task }: { task: TaskSummary }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [copied, setCopied] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (open) taRef.current?.focus();
+  }, [open]);
+
+  // Reset when the selected task changes.
+  useEffect(() => {
+    setOpen(false);
+    setText('');
+    setCopied(false);
+  }, [task.id]);
+
+  const send = async () => {
+    const value = text.trim();
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+        setOpen(false);
+        setText('');
+      }, 1100);
+    } catch {
+      // No clipboard access (very rare in Electron); leave text in box.
+    }
+  };
+
+  if (!open) {
+    return (
+      <div className="detail__reply-dock">
+        <button className="detail__reply-open" onClick={() => setOpen(true)}>
+          ✎ Compose reply → clipboard
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="detail__reply-dock detail__reply-dock--open">
+      <textarea
+        ref={taRef}
+        value={text}
+        rows={3}
+        placeholder="Type your reply. ⌘↵ to copy to clipboard."
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            void send();
+          } else if (e.key === 'Escape') {
+            setOpen(false);
+            setText('');
+          }
+        }}
+      />
+      <div className="detail__reply-actions">
+        <button
+          onClick={() => {
+            setOpen(false);
+            setText('');
+          }}
+        >
+          Cancel
+        </button>
+        <button onClick={() => void send()} disabled={!text.trim()}>
+          {copied ? '✓ Copied' : 'Copy to clipboard'}
+        </button>
+      </div>
+      <div className="detail__reply-hint">
+        Paste into the Claude Code terminal that owns this session — Jarvis
+        can't write into a running process directly.
+      </div>
+    </div>
   );
 }

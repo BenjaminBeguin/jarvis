@@ -133,6 +133,23 @@ export class TaskRunner extends EventEmitter {
     this.emit('status', rec.summary);
   }
 
+  updateExternalMeta(taskId: string, patch: Partial<TaskSummary>): void {
+    const rec = this.records.get(taskId);
+    if (!rec || !rec.external) return;
+    const next = { ...rec.summary, ...patch };
+    // Bail if nothing actually changed — avoids broadcast noise.
+    let dirty = false;
+    for (const key of Object.keys(patch) as (keyof TaskSummary)[]) {
+      if (rec.summary[key] !== next[key]) {
+        dirty = true;
+        break;
+      }
+    }
+    if (!dirty) return;
+    rec.summary = next;
+    this.emit('status', rec.summary);
+  }
+
   hasExternal(id: string): boolean {
     return !!this.records.get(id)?.external;
   }

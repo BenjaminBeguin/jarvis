@@ -22,6 +22,8 @@ export interface ModuleContext {
     status: TaskStatus,
     endedAt: number | null,
   ): void;
+  /** Patch arbitrary fields on an external entry (e.g. awaitingInput). */
+  updateExternalTaskMeta(taskId: string, patch: Partial<TaskSummary>): void;
   /** True if Jarvis already has an external entry with that id. */
   hasExternalTask(id: string): boolean;
 }

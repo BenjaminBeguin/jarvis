@@ -26,6 +26,8 @@ const TITLE_MAX_CHARS = 72;
 /** How many recent events we backfill so a clicked node has context. */
 const BACKFILL_EVENT_COUNT = 10;
 
+type LastEventKind = 'user' | 'assistant' | 'system' | null;
+
 interface SessionState {
   taskId: string;
   filePath: string;
@@ -33,6 +35,14 @@ interface SessionState {
   position: number;
   lastEventAt: number;
   startedAt: number;
+  lastEventKind: LastEventKind;
+}
+
+function eventKind(transformed: unknown): LastEventKind {
+  if (!transformed || typeof transformed !== 'object') return null;
+  const t = (transformed as { type?: unknown }).type;
+  if (t === 'user' || t === 'assistant' || t === 'system') return t;
+  return null;
 }
 
 function deriveTaskId(filePath: string): string {
@@ -83,10 +93,15 @@ function transformEvent(line: unknown): unknown | null {
 interface SessionContext {
   title: string;
   backfill: unknown[];
+  lastKind: LastEventKind;
 }
 
 function extractSessionContext(filePath: string): SessionContext {
-  const ctx: SessionContext = { title: 'Claude Code session', backfill: [] };
+  const ctx: SessionContext = {
+    title: 'Claude Code session',
+    backfill: [],
+    lastKind: null,
+  };
   let raw: string;
   try {
     raw = readFileSync(filePath, 'utf8');
@@ -117,7 +132,8 @@ function extractSessionContext(filePath: string): SessionContext {
   }
 
   // Backfill: walk from the END, collect last N renderable events. Reverse at
-  // the end so the renderer sees them in chronological order.
+  // the end so the renderer sees them in chronological order. The FIRST event
+  // we hit (last in file order) tells us if the agent is awaiting input.
   const collected: unknown[] = [];
   for (let i = lines.length - 1; i >= 0 && collected.length < BACKFILL_EVENT_COUNT; i--) {
     const line = lines[i];
@@ -129,7 +145,9 @@ function extractSessionContext(filePath: string): SessionContext {
       continue;
     }
     const event = transformEvent(parsed);
-    if (event) collected.push(event);
+    if (!event) continue;
+    if (ctx.lastKind === null) ctx.lastKind = eventKind(event);
+    collected.push(event);
   }
   ctx.backfill = collected.reverse();
   return ctx;
@@ -219,7 +237,7 @@ export class ClaudeCodeWatchModule implements Module {
     const taskId = deriveTaskId(filePath);
     if (ctx.hasExternalTask(taskId)) return;
 
-    const { title: rawTitle, backfill } = extractSessionContext(filePath);
+    const { title: rawTitle, backfill, lastKind } = extractSessionContext(filePath);
     const title = `${prettyProject(projectSlug)} · ${rawTitle}`;
     const isActive = Date.now() - mtimeMs < ACTIVE_THRESHOLD_MS;
     const summary: TaskSummary = {
@@ -233,6 +251,7 @@ export class ClaudeCodeWatchModule implements Module {
       costUsd: 0,
       inputPreview: title,
       groupKey: `claude-code:${projectSlug}`,
+      awaitingInput: lastKind === 'assistant',
     };
     ctx.registerExternalTask(summary);
 
@@ -250,6 +269,7 @@ export class ClaudeCodeWatchModule implements Module {
       position: fileSize,
       lastEventAt: mtimeMs,
       startedAt: summary.startedAt,
+      lastEventKind: lastKind,
     });
   }
 
@@ -302,6 +322,7 @@ export class ClaudeCodeWatchModule implements Module {
       if (lastNewline === -1) return;
       const complete = buffer.slice(0, lastNewline);
       state.position += Buffer.byteLength(complete, 'utf8') + 1;
+      let latestKind: LastEventKind = null;
       for (const line of complete.split('\n')) {
         if (!line.trim()) continue;
         let parsed: unknown;
@@ -311,7 +332,16 @@ export class ClaudeCodeWatchModule implements Module {
           continue;
         }
         const event = transformEvent(parsed);
-        if (event) ctx.recordExternalEvent(state.taskId, event);
+        if (!event) continue;
+        ctx.recordExternalEvent(state.taskId, event);
+        const k = eventKind(event);
+        if (k) latestKind = k;
+      }
+      if (latestKind) {
+        state.lastEventKind = latestKind;
+        ctx.updateExternalTaskMeta(state.taskId, {
+          awaitingInput: latestKind === 'assistant',
+        });
       }
     });
     stream.on('error', () => {

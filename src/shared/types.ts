@@ -17,6 +17,12 @@ export interface TaskSummary {
    * (e.g. all Claude Code sessions in the same project).
    */
   groupKey?: string;
+  /**
+   * The session is paused waiting for user input (for external Claude Code
+   * sessions: the JSONL's last event is an assistant message). Lit up in
+   * amber on the constellation so it stands out from busy/idle.
+   */
+  awaitingInput?: boolean;
 }
 
 export interface TaskEvent {

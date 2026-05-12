@@ -272,6 +272,8 @@ app.whenReady().then(async () => {
       runner.recordExternalEvent(taskId, msg),
     updateExternalTaskStatus: (taskId, status, endedAt) =>
       runner.updateExternalStatus(taskId, status, endedAt),
+    updateExternalTaskMeta: (taskId, patch) =>
+      runner.updateExternalMeta(taskId, patch),
     hasExternalTask: (id) => runner.hasExternal(id),
   });
   await modules.register(quickNoteModule);

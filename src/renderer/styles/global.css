@@ -800,6 +800,129 @@ button:disabled:hover {
   stroke-dasharray: 0;
 }
 
+/* Awaiting: the session's last event is from the assistant — user input owed.
+   Amber takes over the node so it pops out of the cyan field. */
+.node--awaiting .node__disc {
+  stroke: var(--warn);
+  filter: drop-shadow(0 0 10px rgba(255, 180, 84, 0.7));
+  opacity: 1;
+  stroke-dasharray: 0;
+}
+
+.node--awaiting .node__pulse {
+  fill: var(--warn);
+  filter: drop-shadow(0 0 6px var(--warn));
+  animation: node-pulse 1.4s ease-in-out infinite;
+}
+
+.node__awaiting-bg {
+  fill: var(--warn);
+  filter: drop-shadow(0 0 6px rgba(255, 180, 84, 0.85));
+}
+
+.node__awaiting-glyph {
+  fill: var(--bg);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.core__awaiting {
+  fill: var(--warn);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-shadow: 0 0 6px rgba(255, 180, 84, 0.55);
+}
+
+/* Awaiting banner + quick-reply dock inside TaskDetail */
+
+.detail__awaiting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 24px;
+  background: rgba(255, 180, 84, 0.08);
+  border-bottom: 1px solid rgba(255, 180, 84, 0.35);
+  color: var(--warn);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.detail__awaiting-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: var(--warn);
+  color: var(--bg);
+  font-weight: 700;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.detail__reply-dock {
+  border-top: 1px solid var(--border-strong);
+  background: rgba(4, 7, 11, 0.85);
+  padding: 10px 18px;
+}
+
+.detail__reply-open {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  color: var(--text-dim);
+}
+
+.detail__reply-open:hover {
+  border-color: var(--warn);
+  color: var(--warn);
+  box-shadow: 0 0 12px rgba(255, 180, 84, 0.18);
+}
+
+.detail__reply-dock--open {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail__reply-dock--open textarea {
+  background: rgba(0, 212, 255, 0.03);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  padding: 10px;
+  border-radius: 2px;
+  outline: 0;
+  resize: vertical;
+}
+
+.detail__reply-dock--open textarea:focus {
+  border-color: var(--warn);
+  box-shadow: 0 0 12px rgba(255, 180, 84, 0.2);
+}
+
+.detail__reply-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.detail__reply-hint {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
 .node__label {
   fill: var(--text-dim);
   font-family: var(--mono);
