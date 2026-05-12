@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const SAMPLE_SKILL = `---
+const BRAINSTORM_SKILL = `---
 name: brainstorm
 description: Sparring partner for product or engineering ideas — quick critique + counter-proposals
 allowed-tools: []
@@ -19,15 +19,71 @@ For each message:
 Keep responses under 200 words. Push back where they're hand-waving.
 `;
 
-export function seedExampleSkillIfEmpty(): void {
-  const skillsRoot = join(homedir(), '.jarvis', 'skills');
+const DAILY_BRIEF_SKILL = `---
+name: daily-brief
+description: Morning briefing — Slack DMs, Linear assignments, calendar, surfaced as a markdown digest
+allowed-tools:
+  - mcp__slack__*
+  - mcp__linear__*
+mcp-servers:
+  - slack
+  - linear
+---
+
+You are Jarvis preparing the user's morning brief.
+
+Pull from the connected MCP servers (Slack DMs/mentions from the last 18 hours,
+Linear issues assigned to the user, upcoming calendar items if available) and
+return a tight markdown digest:
+
+## Slack
+- Top 3 threads needing a reply, each with a one-line summary and a suggested
+  next action ("reply", "skip", "escalate").
+
+## Linear
+- Open issues assigned to the user, grouped by status. Flag anything past due.
+
+## Today
+- Calendar highlights if available, otherwise note "no calendar configured".
+
+End with a single "Recommended first move" sentence. No fluff, no preamble.
+`;
+
+const SAMPLE_MCP_CONFIG = `{
+  "//": "Define MCP servers globally; skills opt-in via mcp-servers: [name].",
+  "//slack": "Get a Slack MCP server (e.g. modelcontextprotocol/servers#slack) and put the bot token in env.",
+  "//linear": "Linear MCP — see https://github.com/anthropics/mcp-linear or equivalent.",
+  "mcpServers": {
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "~"]
+    }
+  }
+}
+`;
+
+function writeIfMissing(path: string, content: string): void {
+  if (!existsSync(path)) writeFileSync(path, content, 'utf8');
+}
+
+export function seedDefaultsIfEmpty(): void {
+  const root = join(homedir(), '.jarvis');
+  const skillsRoot = join(root, 'skills');
   mkdirSync(skillsRoot, { recursive: true });
-  const hasAny = readdirSync(skillsRoot, { withFileTypes: true }).some((e) =>
-    e.isDirectory(),
+
+  writeIfMissing(join(root, 'mcp.json.example'), SAMPLE_MCP_CONFIG);
+
+  const hasAnySkill = readdirSync(skillsRoot, { withFileTypes: true }).some(
+    (e) => e.isDirectory(),
   );
-  if (hasAny) return;
-  const dir = join(skillsRoot, 'brainstorm');
-  mkdirSync(dir, { recursive: true });
-  const file = join(dir, 'SKILL.md');
-  if (!existsSync(file)) writeFileSync(file, SAMPLE_SKILL, 'utf8');
+  if (hasAnySkill) return;
+
+  const brainstormDir = join(skillsRoot, 'brainstorm');
+  mkdirSync(brainstormDir, { recursive: true });
+  writeIfMissing(join(brainstormDir, 'SKILL.md'), BRAINSTORM_SKILL);
+
+  const briefDir = join(skillsRoot, 'daily-brief');
+  mkdirSync(briefDir, { recursive: true });
+  writeIfMissing(join(briefDir, 'SKILL.md'), DAILY_BRIEF_SKILL);
 }

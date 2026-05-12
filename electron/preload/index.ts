@@ -4,6 +4,8 @@ import { IpcChannels } from '@shared/ipc';
 import type {
   AppStatus,
   LaunchTaskRequest,
+  McpServerSummary,
+  RoutineDef,
   SkillSummary,
   TaskEvent,
   TaskSummary,
@@ -37,6 +39,24 @@ const api = {
     ipcRenderer.invoke(IpcChannels.refreshSkills),
   onSkillsChanged: (listener: Listener<SkillSummary[]>): Unsubscribe =>
     subscribe(IpcChannels.listSkills, listener),
+
+  listMcpServers: (): Promise<McpServerSummary[]> =>
+    ipcRenderer.invoke(IpcChannels.listMcpServers),
+  onMcpServersChanged: (listener: Listener<McpServerSummary[]>): Unsubscribe =>
+    subscribe(IpcChannels.listMcpServers, listener),
+
+  listRoutines: (): Promise<RoutineDef[]> =>
+    ipcRenderer.invoke(IpcChannels.listRoutines),
+  saveRoutine: (
+    input: Partial<RoutineDef> & { skillId: string; cron: string },
+  ): Promise<RoutineDef> =>
+    ipcRenderer.invoke(IpcChannels.saveRoutine, input),
+  deleteRoutine: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.deleteRoutine, id),
+  runRoutineNow: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.runRoutineNow, id),
+  onRoutinesChanged: (listener: Listener<RoutineDef[]>): Unsubscribe =>
+    subscribe(IpcChannels.routinesChanged, listener),
 
   launchTask: (req: LaunchTaskRequest): Promise<TaskSummary> =>
     ipcRenderer.invoke(IpcChannels.launchTask, req),

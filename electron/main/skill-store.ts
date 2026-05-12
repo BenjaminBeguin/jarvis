@@ -15,6 +15,7 @@ interface SkillFrontmatter {
   name?: string;
   description?: string;
   'allowed-tools'?: unknown;
+  'mcp-servers'?: unknown;
   model?: string;
 }
 
@@ -105,6 +106,7 @@ export class SkillStore extends EventEmitter {
       const name = String(fm.name ?? dirName).trim();
       const description = String(fm.description ?? '').trim();
       const allowedTools = toStringArray(fm['allowed-tools']);
+      const mcpServers = toStringArray(fm['mcp-servers']);
       const model = typeof fm.model === 'string' ? fm.model : null;
       const body = content.trim();
       return {
@@ -113,6 +115,7 @@ export class SkillStore extends EventEmitter {
         description,
         path: filePath,
         allowedTools,
+        mcpServers,
         model,
         hasBody: body.length > 0,
         body,

@@ -8,6 +8,14 @@ export const IpcChannels = {
   listSkills: 'skills:list',
   refreshSkills: 'skills:refresh',
 
+  listMcpServers: 'mcp:list',
+
+  listRoutines: 'routines:list',
+  saveRoutine: 'routines:save',
+  deleteRoutine: 'routines:delete',
+  runRoutineNow: 'routines:runNow',
+  routinesChanged: 'routines:changed',
+
   launchTask: 'task:launch',
   abortTask: 'task:abort',
   listTasks: 'task:list',

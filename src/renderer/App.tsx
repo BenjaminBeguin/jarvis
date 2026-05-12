@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 
 import type { AppStatus } from '../shared/types';
 import { CommandPalette } from './views/CommandPalette';
-import { Observatory } from './views/Observatory';
 import { Setup } from './views/Setup';
+import { Shell } from './views/Shell';
 
 function getRoute(): string {
   const hash = window.location.hash.replace(/^#/, '');
@@ -36,5 +36,5 @@ export function App() {
   }
 
   if (!status.hasApiKey) return <Setup />;
-  return <Observatory />;
+  return <Shell />;
 }

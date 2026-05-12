@@ -10,6 +10,7 @@ import type {
   TaskSummary,
 } from '@shared/types';
 import { appendTaskEvent, insertTask, updateTaskStatus } from './db.js';
+import type { McpConfigStore } from './mcp-config.js';
 import type { SkillRecord, SkillStore } from './skill-store.js';
 
 const DEFAULT_SYSTEM_PROMPT =
@@ -25,9 +26,14 @@ interface TaskRecord {
 export class TaskRunner extends EventEmitter {
   private readonly records = new Map<string, TaskRecord>();
   private skills: SkillStore | null = null;
+  private mcp: McpConfigStore | null = null;
 
   setSkillStore(store: SkillStore): void {
     this.skills = store;
+  }
+
+  setMcpStore(store: McpConfigStore): void {
+    this.mcp = store;
   }
 
   list(): TaskSummary[] {
@@ -102,6 +108,14 @@ export class TaskRunner extends EventEmitter {
       };
       if (skill?.allowedTools.length) options.allowedTools = skill.allowedTools;
       if (skill?.model) options.model = skill.model;
+      if (skill?.mcpServers.length && this.mcp) {
+        const resolved = this.mcp.resolve(skill.mcpServers);
+        if (Object.keys(resolved).length > 0) {
+          // The SDK's mcpServers type narrows to its own McpServerConfig union;
+          // our stored configs match its shape so we cast through unknown.
+          (options as unknown as { mcpServers?: unknown }).mcpServers = resolved;
+        }
+      }
 
       const stream = query({ prompt, options });
 

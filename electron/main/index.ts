@@ -9,7 +9,9 @@ import type {
 } from '@shared/types';
 
 import { closeDatabase, getTaskEvents, initDatabase, listRecentTasks } from './db.js';
-import { seedExampleSkillIfEmpty } from './seed.js';
+import { McpConfigStore } from './mcp-config.js';
+import { RoutineStore } from './routines.js';
+import { seedDefaultsIfEmpty } from './seed.js';
 import {
   clearAnthropicApiKey,
   getAnthropicApiKey,
@@ -21,8 +23,12 @@ import { getRunningTasksCount, initTray, setRunningTasksCount } from './tray.js'
 import { broadcast, hidePalette, openObservatory, openPalette } from './windows.js';
 
 const skills = new SkillStore();
+const mcp = new McpConfigStore();
 const runner = new TaskRunner();
+const routines = new RoutineStore();
 runner.setSkillStore(skills);
+runner.setMcpStore(mcp);
+routines.setRunner(runner);
 
 async function loadApiKeyIntoEnv(): Promise<boolean> {
   const key = await getAnthropicApiKey();
@@ -69,6 +75,17 @@ function registerIpc(): void {
     return skills.list();
   });
 
+  ipcMain.handle(IpcChannels.listMcpServers, () => mcp.list());
+
+  ipcMain.handle(IpcChannels.listRoutines, () => routines.list());
+  ipcMain.handle(IpcChannels.saveRoutine, (_e, input) => routines.save(input));
+  ipcMain.handle(IpcChannels.deleteRoutine, (_e, id: string) =>
+    routines.remove(id),
+  );
+  ipcMain.handle(IpcChannels.runRoutineNow, (_e, id: string) =>
+    routines.runNow(id),
+  );
+
   ipcMain.handle(IpcChannels.launchTask, (_e, req: LaunchTaskRequest) => {
     if (!process.env['ANTHROPIC_API_KEY']) {
       throw new Error('Set your Anthropic API key first.');
@@ -108,11 +125,14 @@ function wireRunnerEvents(): void {
     broadcast(IpcChannels.taskStatus, summary);
     if (summary.status === 'completed' || summary.status === 'errored') {
       try {
+        const titlePrefix =
+          summary.origin === 'routine'
+            ? 'Jarvis · routine'
+            : 'Jarvis · task';
+        const titleSuffix =
+          summary.status === 'completed' ? 'complete' : 'failed';
         new Notification({
-          title:
-            summary.status === 'completed'
-              ? 'Jarvis · task complete'
-              : 'Jarvis · task failed',
+          title: `${titlePrefix} ${titleSuffix}`,
           body: summary.title,
           silent: false,
         })
@@ -141,9 +161,13 @@ app.whenReady().then(async () => {
 
   initDatabase();
   await loadApiKeyIntoEnv();
-  seedExampleSkillIfEmpty();
+  seedDefaultsIfEmpty();
   skills.init();
+  mcp.init();
+  routines.init();
   skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
+  mcp.on('changed', (list) => broadcast(IpcChannels.listMcpServers, list));
+  routines.on('changed', (list) => broadcast(IpcChannels.routinesChanged, list));
   registerIpc();
   wireRunnerEvents();
   initTray();
@@ -160,7 +184,9 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   runner.abortAll();
   globalShortcut.unregisterAll();
+  routines.close();
   skills.close();
+  mcp.close();
   closeDatabase();
 });
 

@@ -32,8 +32,26 @@ export interface SkillSummary {
   description: string;
   path: string;
   allowedTools: string[];
+  mcpServers: string[];
   model: string | null;
   hasBody: boolean;
+}
+
+export interface RoutineDef {
+  id: string;
+  skillId: string;
+  cron: string;
+  input: string;
+  enabled: boolean;
+  lastRunAt: number | null;
+  nextRunAt: number | null;
+}
+
+export interface McpServerSummary {
+  id: string;
+  type: 'stdio' | 'sse' | 'http';
+  command?: string;
+  url?: string;
 }
 
 export interface AppStatus {
