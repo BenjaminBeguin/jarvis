@@ -106,6 +106,7 @@ export function CommandPalette() {
   return (
     <div className="palette palette-body">
       <div className="palette__inner">
+        <span className="palette__prompt" aria-hidden>›</span>
         {activeSkill && (
           <span className="skill-chip">
             {activeSkill.name}
@@ -162,11 +163,16 @@ export function CommandPalette() {
             onMouseDown={startVoice}
             onMouseUp={stopVoice}
             onMouseLeave={stopVoice}
+            aria-label="Toggle voice input"
           >
-            ●
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <rect x="4" y="2" width="4" height="6" rx="2" stroke="currentColor" />
+              <path d="M3 6.5C3 8 4 9 6 9C8 9 9 8 9 6.5" stroke="currentColor" strokeLinecap="round" />
+              <line x1="6" y1="9" x2="6" y2="11" stroke="currentColor" strokeLinecap="round" />
+            </svg>
           </button>
         )}
-        <span className="hint">↵ run</span>
+        <span className="hint">↵ exec</span>
       </div>
       {pickerOpen && matches.length > 0 && (
         <div className="skill-picker">

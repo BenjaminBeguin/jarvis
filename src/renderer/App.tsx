@@ -25,6 +25,13 @@ export function App() {
     };
   }, []);
 
+  // Add a body class for the palette window so the scanline overlay (which
+  // would render on top of the transparent frameless window) is suppressed.
+  useEffect(() => {
+    if (route === '/palette') document.body.classList.add('palette-body');
+    else document.body.classList.remove('palette-body');
+  }, [route]);
+
   if (!status) return null;
 
   const ready = isReady(status);
