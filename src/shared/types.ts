@@ -31,6 +31,9 @@ export interface SkillSummary {
   name: string;
   description: string;
   path: string;
+  allowedTools: string[];
+  model: string | null;
+  hasBody: boolean;
 }
 
 export interface AppStatus {

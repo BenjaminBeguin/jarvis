@@ -33,6 +33,10 @@ const api = {
 
   listSkills: (): Promise<SkillSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listSkills),
+  refreshSkills: (): Promise<SkillSummary[]> =>
+    ipcRenderer.invoke(IpcChannels.refreshSkills),
+  onSkillsChanged: (listener: Listener<SkillSummary[]>): Unsubscribe =>
+    subscribe(IpcChannels.listSkills, listener),
 
   launchTask: (req: LaunchTaskRequest): Promise<TaskSummary> =>
     ipcRenderer.invoke(IpcChannels.launchTask, req),

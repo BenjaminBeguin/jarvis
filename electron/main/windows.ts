@@ -58,8 +58,8 @@ export function openPalette(): BrowserWindow {
     return paletteWindow;
   }
   const display = screen.getPrimaryDisplay();
-  const width = 640;
-  const height = 96;
+  const width = 680;
+  const height = 360;
   paletteWindow = new BrowserWindow({
     width,
     height,

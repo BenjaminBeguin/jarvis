@@ -9,16 +9,20 @@ import type {
 } from '@shared/types';
 
 import { closeDatabase, getTaskEvents, initDatabase, listRecentTasks } from './db.js';
+import { seedExampleSkillIfEmpty } from './seed.js';
 import {
   clearAnthropicApiKey,
   getAnthropicApiKey,
   setAnthropicApiKey,
 } from './secrets.js';
+import { SkillStore } from './skill-store.js';
 import { asTaskOrigin, TaskRunner } from './task-runner.js';
 import { getRunningTasksCount, initTray, setRunningTasksCount } from './tray.js';
 import { broadcast, hidePalette, openObservatory, openPalette } from './windows.js';
 
+const skills = new SkillStore();
 const runner = new TaskRunner();
+runner.setSkillStore(skills);
 
 async function loadApiKeyIntoEnv(): Promise<boolean> {
   const key = await getAnthropicApiKey();
@@ -59,9 +63,11 @@ function registerIpc(): void {
     openPalette();
   });
 
-  // Phase 0 stub: no skill store yet.
-  ipcMain.handle(IpcChannels.listSkills, () => []);
-  ipcMain.handle(IpcChannels.refreshSkills, () => []);
+  ipcMain.handle(IpcChannels.listSkills, () => skills.list());
+  ipcMain.handle(IpcChannels.refreshSkills, () => {
+    skills.reloadAll();
+    return skills.list();
+  });
 
   ipcMain.handle(IpcChannels.launchTask, (_e, req: LaunchTaskRequest) => {
     if (!process.env['ANTHROPIC_API_KEY']) {
@@ -135,6 +141,9 @@ app.whenReady().then(async () => {
 
   initDatabase();
   await loadApiKeyIntoEnv();
+  seedExampleSkillIfEmpty();
+  skills.init();
+  skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
   registerIpc();
   wireRunnerEvents();
   initTray();
@@ -151,6 +160,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   runner.abortAll();
   globalShortcut.unregisterAll();
+  skills.close();
   closeDatabase();
 });
 

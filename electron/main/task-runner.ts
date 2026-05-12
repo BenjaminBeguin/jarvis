@@ -10,6 +10,10 @@ import type {
   TaskSummary,
 } from '@shared/types';
 import { appendTaskEvent, insertTask, updateTaskStatus } from './db.js';
+import type { SkillRecord, SkillStore } from './skill-store.js';
+
+const DEFAULT_SYSTEM_PROMPT =
+  'You are Jarvis, the user\'s personal AI operating layer. Be concise, direct, and helpful. Prefer action over commentary.';
 
 interface TaskRecord {
   summary: TaskSummary;
@@ -20,6 +24,11 @@ interface TaskRecord {
 
 export class TaskRunner extends EventEmitter {
   private readonly records = new Map<string, TaskRecord>();
+  private skills: SkillStore | null = null;
+
+  setSkillStore(store: SkillStore): void {
+    this.skills = store;
+  }
 
   list(): TaskSummary[] {
     return [...this.records.values()]
@@ -48,10 +57,12 @@ export class TaskRunner extends EventEmitter {
   launch(req: LaunchTaskRequest): TaskSummary {
     const id = nanoid(10);
     const now = Date.now();
+    const skill = req.skillId ? this.skills?.get(req.skillId) ?? null : null;
+    const skillId = skill?.id ?? null;
     const summary: TaskSummary = {
       id,
-      skillId: req.skillId ?? null,
-      title: deriveTitle(req.prompt),
+      skillId,
+      title: deriveTitle(req.prompt, skill),
       status: 'running',
       origin: req.origin ?? 'palette',
       startedAt: now,
@@ -70,22 +81,29 @@ export class TaskRunner extends EventEmitter {
     this.emit('status', summary);
 
     // Fire-and-forget; never block main loop.
-    void this.run(record, req.prompt);
+    void this.run(record, req.prompt, skill);
     return summary;
   }
 
-  private async run(record: TaskRecord, prompt: string): Promise<void> {
+  private async run(
+    record: TaskRecord,
+    prompt: string,
+    skill: SkillRecord | null,
+  ): Promise<void> {
     const { id } = record.summary;
     let cost = 0;
     let finalStatus: TaskStatus = 'completed';
     try {
-      const stream = query({
-        prompt,
-        options: {
-          abortController: record.abort,
-          permissionMode: 'bypassPermissions',
-        },
-      });
+      const systemPrompt = skill?.hasBody ? skill.body : DEFAULT_SYSTEM_PROMPT;
+      const options: Parameters<typeof query>[0]['options'] = {
+        abortController: record.abort,
+        permissionMode: 'bypassPermissions',
+        systemPrompt,
+      };
+      if (skill?.allowedTools.length) options.allowedTools = skill.allowedTools;
+      if (skill?.model) options.model = skill.model;
+
+      const stream = query({ prompt, options });
 
       for await (const msg of stream as AsyncIterable<SDKMessage>) {
         this.recordEvent(record, msg);
@@ -127,9 +145,12 @@ export class TaskRunner extends EventEmitter {
   }
 }
 
-function deriveTitle(prompt: string): string {
+function deriveTitle(prompt: string, skill: SkillRecord | null): string {
   const first = prompt.trim().split('\n')[0] ?? '';
-  return first.length > 80 ? first.slice(0, 77) + '…' : first || 'Untitled task';
+  const trimmed = first.length > 80 ? first.slice(0, 77) + '…' : first;
+  if (skill && trimmed) return `${skill.name} · ${trimmed}`;
+  if (skill) return skill.name;
+  return trimmed || 'Untitled task';
 }
 
 export function asTaskOrigin(value: unknown): TaskOrigin {
