@@ -17,17 +17,63 @@ The choice lives in `~/.jarvis/config.json` (`{ "authMode": "subscription" | "ap
 
 **Never leave `ANTHROPIC_API_KEY` set in `process.env` for subscription mode** — the SDK / CLI would prefer it over OAuth. `TaskRunner.buildEnv()` strips it on every launch and re-adds it only for `api-key` mode.
 
-## Mental model: one primitive
+## Mental model: two primitives
 
-**A Task = one `query()` call to the Agent SDK.** Everything is a Task:
+### 1. Tasks (the agentic loop)
 
-- Typing in the command palette → Task.
+**A Task = one `query()` call to the Agent SDK.** Tasks are how Jarvis runs Claude:
+
+- Typing free text in the palette → Task.
 - Voice command (Web Speech API) → transcribed → Task.
 - Routine firing on cron → Task.
-- A **Skill** is a saved Task template: `~/.jarvis/skills/<name>/SKILL.md` with frontmatter `name`, `description`, `allowed-tools`, `mcp-servers`, `model`, body becomes the system prompt.
+- A **Skill** is a saved Task template: `~/.jarvis/skills/<name>/SKILL.md` with frontmatter `name`, `description`, `allowed-tools`, `mcp-servers`, `model`; body is the system prompt.
 - A **Routine** is `(skillId, cron, input?)`, persisted in `~/.jarvis/routines.json`, scheduled with `node-cron`.
 
-If a new feature breaks this model, push back before implementing.
+### 2. Modules (extensions)
+
+**Every feature the user asks for ships as a module.** Modules are code; skills are markdown. They don't compete — a module can register palette intents, source feeds, contextual actions, and may launch Tasks internally.
+
+A module exports a `Module` from `electron/main/modules/types.ts`:
+
+```ts
+{
+  id: 'quick-note',
+  name: 'Quick note',
+  description: '…',
+  version: '1.0.0',
+  intents: [
+    {
+      id: 'note',
+      prefix: '/note',           // palette types this to invoke
+      label: 'Quick note',
+      placeholder: '…',
+      handler: async (input, ctx) => {
+        // ctx.jarvisRoot, ctx.notify(), ctx.launchTask()
+      },
+    },
+  ],
+  onLoad?(ctx) {…},
+  onUnload?() {…},
+}
+```
+
+Registration happens in `electron/main/index.ts` after `app.whenReady()`:
+```ts
+modules.setContext({ jarvisRoot, notify, launchTask });
+await modules.register(quickNoteModule);
+```
+
+Built-in modules live in `electron/main/modules/<id>/index.ts` (or a single file when small, like `quick-note.ts`). The renderer learns about them via `window.jarvis.listModules()` and reacts to `onModulesChanged`. The palette automatically picks up new intents — no UI changes needed when adding a module.
+
+**Module conventions:**
+- Keep module state on disk under `~/.jarvis/<module-id>/`. Use `ctx.jarvisRoot` to build paths.
+- Don't import from `electron/main/` directly except through `ModuleContext`. If you need a capability that's not on the context, add it to the context (one place to evolve).
+- Don't talk to the renderer. Modules emit notifications and disk side-effects; the renderer learns about them through normal stores.
+- A module that wants to launch agentic work calls `ctx.launchTask({ skillId, prompt, origin: 'api' })` and lets the existing Observatory display it.
+
+**Future: external/community modules.** Same `Module` shape, loaded from `~/.jarvis/modules/<id>/` at runtime. Will need a sandboxed runtime (worker thread + a typed capability bridge); not built yet.
+
+If a new feature breaks either primitive, push back before implementing.
 
 ## Process architecture
 
@@ -114,7 +160,8 @@ We follow `~/.claude/plans/hey-i-would-love-staged-dewdrop.md`:
 - Phase 0 ✅ scaffolding (tray, palette, observatory, SDK pipe).
 - Phase 1 ✅ skills from disk, palette picker, history filters.
 - Phase 2 ✅ MCP config, routines, daily-brief seed.
-- Phase 3 — skill-to-skill chaining, workflow DAG, whisper.cpp swap.
+- Phase 2.5 ✅ Module system + quick-note module.
+- Phase 3 — next modules (meeting recorder, agent-bump on context), skill-to-skill chaining, workflow DAG, whisper.cpp swap.
 
 Don't start Phase 3 work until Phase 2 is shipped and used for at least a week.
 

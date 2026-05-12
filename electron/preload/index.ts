@@ -4,8 +4,10 @@ import { IpcChannels } from '@shared/ipc';
 import type {
   AppStatus,
   AuthMode,
+  DispatchIntentResult,
   LaunchTaskRequest,
   McpServerSummary,
+  ModuleSummary,
   RoutineDef,
   SkillSummary,
   TaskEvent,
@@ -47,6 +49,17 @@ const api = {
     ipcRenderer.invoke(IpcChannels.listMcpServers),
   onMcpServersChanged: (listener: Listener<McpServerSummary[]>): Unsubscribe =>
     subscribe(IpcChannels.listMcpServers, listener),
+
+  listModules: (): Promise<ModuleSummary[]> =>
+    ipcRenderer.invoke(IpcChannels.listModules),
+  dispatchIntent: (
+    moduleId: string,
+    intentId: string,
+    input: string,
+  ): Promise<DispatchIntentResult> =>
+    ipcRenderer.invoke(IpcChannels.dispatchIntent, { moduleId, intentId, input }),
+  onModulesChanged: (listener: Listener<ModuleSummary[]>): Unsubscribe =>
+    subscribe(IpcChannels.modulesChanged, listener),
 
   listRoutines: (): Promise<RoutineDef[]> =>
     ipcRenderer.invoke(IpcChannels.listRoutines),

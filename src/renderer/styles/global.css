@@ -239,6 +239,18 @@ button:disabled:hover {
   flex-shrink: 0;
 }
 
+.palette__error {
+  -webkit-app-region: no-drag;
+  background: rgba(255, 85, 119, 0.08);
+  border: 1px solid rgba(255, 85, 119, 0.45);
+  color: var(--bad);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 6px 12px;
+  border-radius: 2px;
+}
+
 .palette .mic {
   position: relative;
   display: inline-flex;
@@ -303,6 +315,13 @@ button:disabled:hover {
   text-shadow: var(--accent-glow);
 }
 
+.skill-chip--intent {
+  background: rgba(95, 255, 166, 0.08);
+  color: var(--good);
+  border-color: var(--good);
+  text-shadow: 0 0 8px rgba(95, 255, 166, 0.5);
+}
+
 .skill-chip__remove {
   background: transparent;
   border: 0;
@@ -341,6 +360,23 @@ button:disabled:hover {
   color: var(--text);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.skill-picker__kind {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  padding: 1px 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 1px;
+  color: var(--text-faint);
+}
+
+.skill-picker__row--active .skill-picker__kind {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .skill-picker__row--active .skill-picker__name {

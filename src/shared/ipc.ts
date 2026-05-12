@@ -11,6 +11,10 @@ export const IpcChannels = {
 
   listMcpServers: 'mcp:list',
 
+  listModules: 'modules:list',
+  dispatchIntent: 'modules:dispatchIntent',
+  modulesChanged: 'modules:changed',
+
   listRoutines: 'routines:list',
   saveRoutine: 'routines:save',
   deleteRoutine: 'routines:delete',

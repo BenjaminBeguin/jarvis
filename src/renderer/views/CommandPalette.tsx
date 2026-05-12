@@ -1,51 +1,116 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { SkillSummary } from '../../shared/types';
+import type {
+  ModuleSummary,
+  PaletteIntentSummary,
+  SkillSummary,
+} from '../../shared/types';
 import {
   createTranscriber,
   isVoiceSupported,
   type VoiceTranscriber,
 } from '../voice/WebSpeechTranscriber';
 
+interface PendingIntent extends PaletteIntentSummary {}
+
 export function CommandPalette() {
   const [text, setText] = useState('');
   const [listening, setListening] = useState(false);
   const [partial, setPartial] = useState('');
   const [skills, setSkills] = useState<SkillSummary[]>([]);
+  const [modules, setModules] = useState<ModuleSummary[]>([]);
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
+  const [activeIntent, setActiveIntent] = useState<PendingIntent | null>(null);
   const [pickerIndex, setPickerIndex] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const transcriberRef = useRef<VoiceTranscriber | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void window.jarvis.listSkills().then(setSkills);
-    const off = window.jarvis.onSkillsChanged(setSkills);
-    return off;
+    void window.jarvis.listModules().then(setModules);
+    const offS = window.jarvis.onSkillsChanged(setSkills);
+    const offM = window.jarvis.onModulesChanged(setModules);
+    return () => {
+      offS();
+      offM();
+    };
   }, []);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  const pickerOpen = text.startsWith('/');
+  const intents = useMemo<PaletteIntentSummary[]>(
+    () => modules.flatMap((m) => m.intents),
+    [modules],
+  );
+
+  // If the user types a full intent prefix as the first word, promote it to
+  // an active intent chip so Enter dispatches it (don't open the skill picker).
+  useEffect(() => {
+    if (activeIntent || activeSkill) return;
+    if (!text.startsWith('/')) return;
+    const firstSpace = text.indexOf(' ');
+    if (firstSpace === -1) return;
+    const prefix = text.slice(0, firstSpace);
+    const match = intents.find((i) => i.prefix === prefix);
+    if (match) {
+      setActiveIntent(match);
+      setText(text.slice(firstSpace + 1));
+    }
+  }, [text, intents, activeIntent, activeSkill]);
+
+  const pickerOpen = text.startsWith('/') && !activeSkill && !activeIntent;
   const filter = pickerOpen ? text.slice(1).toLowerCase().trim() : '';
 
-  const matches = useMemo(() => {
-    if (!pickerOpen) return [] as SkillSummary[];
+  type PickerRow =
+    | { kind: 'intent'; value: PaletteIntentSummary }
+    | { kind: 'skill'; value: SkillSummary };
+
+  const matches = useMemo<PickerRow[]>(() => {
+    if (!pickerOpen) return [];
     const tokens = filter.split(/\s+/).filter(Boolean);
-    return skills.filter((s) => {
+    const score = (haystack: string): boolean => {
       if (tokens.length === 0) return true;
-      const haystack = `${s.name} ${s.description}`.toLowerCase();
-      return tokens.every((t) => haystack.includes(t));
-    });
-  }, [skills, filter, pickerOpen]);
+      const h = haystack.toLowerCase();
+      return tokens.every((t) => h.includes(t));
+    };
+    const intentRows: PickerRow[] = intents
+      .filter((i) => score(`${i.prefix} ${i.label} ${i.description ?? ''}`))
+      .map((value) => ({ kind: 'intent', value }));
+    const skillRows: PickerRow[] = skills
+      .filter((s) => score(`${s.name} ${s.description}`))
+      .map((value) => ({ kind: 'skill', value }));
+    return [...intentRows, ...skillRows];
+  }, [intents, skills, filter, pickerOpen]);
 
   useEffect(() => {
     if (pickerIndex >= matches.length) setPickerIndex(0);
   }, [matches.length, pickerIndex]);
 
-  const launch = async (value: string) => {
-    const prompt = value.trim();
+  const dispatch = async () => {
+    setError(null);
+    const prompt = text.trim();
+    if (activeIntent) {
+      try {
+        const result = await window.jarvis.dispatchIntent(
+          activeIntent.moduleId,
+          activeIntent.id,
+          prompt,
+        );
+        if (!result.ok) {
+          setError(result.message ?? 'Intent failed');
+          return;
+        }
+        setText('');
+        setPartial('');
+        setActiveIntent(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+      return;
+    }
     if (!prompt && !activeSkill) return;
     try {
       await window.jarvis.launchTask({
@@ -57,14 +122,20 @@ export function CommandPalette() {
       setPartial('');
       setActiveSkill(null);
     } catch (e) {
-      console.error('launch failed', e);
+      setError(e instanceof Error ? e.message : String(e));
     }
   };
 
-  const selectSkill = (skill: SkillSummary) => {
-    setActiveSkill(skill);
-    setText('');
+  const selectRow = (row: PickerRow) => {
+    if (row.kind === 'skill') {
+      setActiveSkill(row.value);
+      setText('');
+    } else {
+      setActiveIntent(row.value);
+      setText('');
+    }
     setPickerIndex(0);
+    setError(null);
     inputRef.current?.focus();
   };
 
@@ -97,9 +168,11 @@ export function CommandPalette() {
 
   const placeholder = listening
     ? partial || 'Listening…'
+    : activeIntent
+    ? activeIntent.placeholder ?? `${activeIntent.label}…`
     : activeSkill
     ? `${activeSkill.name} — add a prompt or press Enter`
-    : '/ to pick a skill · ask anything';
+    : '/ to pick · ask anything';
 
   const displayValue = listening && partial ? partial : text;
 
@@ -107,6 +180,18 @@ export function CommandPalette() {
     <div className="palette palette-body">
       <div className="palette__inner">
         <span className="palette__prompt" aria-hidden>›</span>
+        {activeIntent && (
+          <span className="skill-chip skill-chip--intent">
+            {activeIntent.label}
+            <button
+              className="skill-chip__remove"
+              onClick={() => setActiveIntent(null)}
+              title="Clear intent"
+            >
+              ×
+            </button>
+          </span>
+        )}
         {activeSkill && (
           <span className="skill-chip">
             {activeSkill.name}
@@ -139,20 +224,25 @@ export function CommandPalette() {
               if (e.key === 'Enter' || e.key === 'Tab') {
                 e.preventDefault();
                 const pick = matches[pickerIndex];
-                if (pick) selectSkill(pick);
+                if (pick) selectRow(pick);
                 return;
               }
             }
-            if (e.key === 'Enter') void launch(text);
+            if (e.key === 'Enter') void dispatch();
             if (e.key === 'Escape') {
+              if (activeIntent) {
+                setActiveIntent(null);
+                return;
+              }
               if (activeSkill) {
                 setActiveSkill(null);
                 return;
               }
               window.close();
             }
-            if (e.key === 'Backspace' && !text && activeSkill) {
-              setActiveSkill(null);
+            if (e.key === 'Backspace' && !text) {
+              if (activeIntent) setActiveIntent(null);
+              else if (activeSkill) setActiveSkill(null);
             }
           }}
         />
@@ -174,32 +264,61 @@ export function CommandPalette() {
         )}
         <span className="hint">↵ exec</span>
       </div>
+      {error && <div className="palette__error">{error}</div>}
       {pickerOpen && matches.length > 0 && (
         <div className="skill-picker">
-          {matches.map((s, i) => (
-            <div
-              key={s.id}
-              className={`skill-picker__row${
-                i === pickerIndex ? ' skill-picker__row--active' : ''
-              }`}
-              onMouseEnter={() => setPickerIndex(i)}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                selectSkill(s);
-              }}
-            >
-              <div className="skill-picker__name">{s.name}</div>
-              {s.description && (
-                <div className="skill-picker__desc">{s.description}</div>
-              )}
-            </div>
-          ))}
+          {matches.map((row, i) => {
+            const isActive = i === pickerIndex;
+            const className = `skill-picker__row${
+              isActive ? ' skill-picker__row--active' : ''
+            }`;
+            if (row.kind === 'intent') {
+              return (
+                <div
+                  key={`intent-${row.value.moduleId}-${row.value.id}`}
+                  className={className}
+                  onMouseEnter={() => setPickerIndex(i)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    selectRow(row);
+                  }}
+                >
+                  <div className="skill-picker__name">
+                    <span className="skill-picker__kind">module</span>
+                    {row.value.prefix} · {row.value.label}
+                  </div>
+                  {row.value.description && (
+                    <div className="skill-picker__desc">{row.value.description}</div>
+                  )}
+                </div>
+              );
+            }
+            return (
+              <div
+                key={`skill-${row.value.id}`}
+                className={className}
+                onMouseEnter={() => setPickerIndex(i)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  selectRow(row);
+                }}
+              >
+                <div className="skill-picker__name">
+                  <span className="skill-picker__kind">skill</span>
+                  {row.value.name}
+                </div>
+                {row.value.description && (
+                  <div className="skill-picker__desc">{row.value.description}</div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
       {pickerOpen && matches.length === 0 && (
         <div className="skill-picker">
           <div className="skill-picker__empty">
-            No skills match. Drop a SKILL.md in ~/.jarvis/skills/.
+            No matches. Drop a SKILL.md or write a module.
           </div>
         </div>
       )}

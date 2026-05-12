@@ -54,6 +54,28 @@ export interface McpServerSummary {
   url?: string;
 }
 
+export interface PaletteIntentSummary {
+  id: string;
+  moduleId: string;
+  prefix: string;
+  label: string;
+  description?: string;
+  placeholder?: string;
+}
+
+export interface ModuleSummary {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  intents: PaletteIntentSummary[];
+}
+
+export interface DispatchIntentResult {
+  ok: boolean;
+  message?: string;
+}
+
 export type AuthMode = 'subscription' | 'api-key';
 
 export interface AppStatus {
