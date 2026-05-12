@@ -3,11 +3,18 @@ import { app, globalShortcut, ipcMain, Notification } from 'electron';
 import { IpcChannels } from '@shared/ipc';
 import type {
   AppStatus,
+  AuthMode,
   LaunchTaskRequest,
   TaskEvent,
   TaskSummary,
 } from '@shared/types';
 
+import {
+  clearAuthMode,
+  detectClaudeBinary,
+  loadAuthMode,
+  saveAuthMode,
+} from './auth.js';
 import { closeDatabase, getTaskEvents, initDatabase, listRecentTasks } from './db.js';
 import { McpConfigStore } from './mcp-config.js';
 import { RoutineStore } from './routines.js';
@@ -30,36 +37,81 @@ runner.setSkillStore(skills);
 runner.setMcpStore(mcp);
 routines.setRunner(runner);
 
-async function loadApiKeyIntoEnv(): Promise<boolean> {
-  const key = await getAnthropicApiKey();
-  if (key) {
-    process.env['ANTHROPIC_API_KEY'] = key;
-    return true;
+let claudeBinaryPath: string | null = null;
+
+async function refreshAuth(): Promise<AppStatus> {
+  const apiKey = await getAnthropicApiKey();
+  const hasApiKey = !!apiKey;
+  claudeBinaryPath = detectClaudeBinary();
+  let mode = loadAuthMode();
+  // Auto-pick: subscription if the user's claude CLI is logged in,
+  // else api-key if they've configured one, else null (show Setup).
+  if (!mode) {
+    if (claudeBinaryPath) mode = 'subscription';
+    else if (hasApiKey) mode = 'api-key';
   }
-  return false;
+  // If they picked subscription but the binary disappeared, fall back.
+  if (mode === 'subscription' && !claudeBinaryPath && hasApiKey) {
+    mode = 'api-key';
+  }
+  // Never leave a stale API key in the env for subscription mode — the SDK
+  // would otherwise prefer it over OAuth.
+  if (mode === 'subscription') delete process.env['ANTHROPIC_API_KEY'];
+  else if (mode === 'api-key' && apiKey) process.env['ANTHROPIC_API_KEY'] = apiKey;
+
+  runner.setAuth({
+    mode: mode ?? 'subscription',
+    apiKey: apiKey ?? null,
+    claudeBinaryPath,
+  });
+
+  return {
+    authMode: mode,
+    hasApiKey,
+    claudeBinaryPath,
+    version: app.getVersion(),
+  };
 }
 
-async function buildAppStatus(): Promise<AppStatus> {
-  const hasApiKey = !!(await getAnthropicApiKey());
-  return { hasApiKey, version: app.getVersion() };
+async function broadcastStatus(): Promise<AppStatus> {
+  const status = await refreshAuth();
+  broadcast(IpcChannels.appStatus, status);
+  return status;
 }
 
 function registerIpc(): void {
-  ipcMain.handle(IpcChannels.appStatus, () => buildAppStatus());
+  ipcMain.handle(IpcChannels.appStatus, () => refreshAuth());
 
   ipcMain.handle(IpcChannels.setApiKey, async (_e, value: string) => {
     if (typeof value !== 'string' || value.trim().length === 0) {
       throw new Error('API key cannot be empty');
     }
     await setAnthropicApiKey(value.trim());
-    process.env['ANTHROPIC_API_KEY'] = value.trim();
-    broadcast(IpcChannels.appStatus, await buildAppStatus());
+    saveAuthMode('api-key');
+    await broadcastStatus();
   });
 
   ipcMain.handle(IpcChannels.clearApiKey, async () => {
     await clearAnthropicApiKey();
-    delete process.env['ANTHROPIC_API_KEY'];
-    broadcast(IpcChannels.appStatus, await buildAppStatus());
+    // Drop their explicit api-key preference; refreshAuth will fall back.
+    clearAuthMode();
+    await broadcastStatus();
+  });
+
+  ipcMain.handle(IpcChannels.setAuthMode, async (_e, mode: AuthMode) => {
+    if (mode !== 'subscription' && mode !== 'api-key') {
+      throw new Error(`Invalid auth mode: ${String(mode)}`);
+    }
+    if (mode === 'subscription' && !claudeBinaryPath) {
+      throw new Error(
+        'Claude Code CLI not found. Install it from claude.ai/download or run `claude login`.',
+      );
+    }
+    if (mode === 'api-key' && !(await getAnthropicApiKey())) {
+      throw new Error('Add an API key first.');
+    }
+    saveAuthMode(mode);
+    await broadcastStatus();
   });
 
   ipcMain.handle(IpcChannels.openObservatory, () => {
@@ -86,9 +138,18 @@ function registerIpc(): void {
     routines.runNow(id),
   );
 
-  ipcMain.handle(IpcChannels.launchTask, (_e, req: LaunchTaskRequest) => {
-    if (!process.env['ANTHROPIC_API_KEY']) {
-      throw new Error('Set your Anthropic API key first.');
+  ipcMain.handle(IpcChannels.launchTask, async (_e, req: LaunchTaskRequest) => {
+    const status = await refreshAuth();
+    if (!status.authMode) {
+      throw new Error('Pick an auth mode first.');
+    }
+    if (status.authMode === 'api-key' && !status.hasApiKey) {
+      throw new Error('Add an API key first.');
+    }
+    if (status.authMode === 'subscription' && !status.claudeBinaryPath) {
+      throw new Error(
+        'Claude Code CLI not found. Run `claude login` or switch to API-key mode.',
+      );
     }
     const summary = runner.launch({
       ...req,
@@ -160,7 +221,7 @@ app.whenReady().then(async () => {
   if (process.platform === 'darwin' && app.dock) app.dock.hide();
 
   initDatabase();
-  await loadApiKeyIntoEnv();
+  await refreshAuth();
   seedDefaultsIfEmpty();
   skills.init();
   mcp.init();

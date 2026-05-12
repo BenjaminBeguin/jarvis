@@ -2,6 +2,21 @@
 
 Personal AI operating layer for builders. Electron + React desktop app on top of `@anthropic-ai/claude-agent-sdk`. Read this first before changing anything in this repo.
 
+## Auth
+
+Two modes, picked once in Setup and switchable from the Shell's `auth: …` badge:
+
+- **`subscription`** — Tasks route through the user's installed `claude` CLI (`pathToClaudeCodeExecutable` on the SDK option). Bills against their Claude.ai subscription quota. Detected by probing `~/.local/bin/claude`, `~/.claude/local/claude`, `/opt/homebrew/bin/claude`, `/usr/local/bin/claude`, then `command -v claude`. **Preferred.**
+- **`api-key`** — `ANTHROPIC_API_KEY` set from the macOS Keychain. Bills against the API account.
+
+The choice lives in `~/.jarvis/config.json` (`{ "authMode": "subscription" | "api-key" }`). On startup, `refreshAuth()` in `electron/main/index.ts` reconciles:
+- explicit choice from config takes precedence,
+- otherwise default to `subscription` when the CLI is detected,
+- otherwise fall back to `api-key` if a key is on file,
+- otherwise show Setup.
+
+**Never leave `ANTHROPIC_API_KEY` set in `process.env` for subscription mode** — the SDK / CLI would prefer it over OAuth. `TaskRunner.buildEnv()` strips it on every launch and re-adds it only for `api-key` mode.
+
 ## Mental model: one primitive
 
 **A Task = one `query()` call to the Agent SDK.** Everything is a Task:

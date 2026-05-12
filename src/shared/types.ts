@@ -54,7 +54,11 @@ export interface McpServerSummary {
   url?: string;
 }
 
+export type AuthMode = 'subscription' | 'api-key';
+
 export interface AppStatus {
+  authMode: AuthMode | null;
   hasApiKey: boolean;
+  claudeBinaryPath: string | null;
   version: string;
 }

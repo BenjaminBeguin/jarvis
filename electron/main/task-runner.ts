@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
 import type {
+  AuthMode,
   LaunchTaskRequest,
   TaskEvent,
   TaskOrigin,
@@ -23,10 +24,17 @@ interface TaskRecord {
   nextSeq: number;
 }
 
+export interface AuthContext {
+  mode: AuthMode;
+  apiKey?: string | null;
+  claudeBinaryPath?: string | null;
+}
+
 export class TaskRunner extends EventEmitter {
   private readonly records = new Map<string, TaskRecord>();
   private skills: SkillStore | null = null;
   private mcp: McpConfigStore | null = null;
+  private auth: AuthContext = { mode: 'subscription' };
 
   setSkillStore(store: SkillStore): void {
     this.skills = store;
@@ -34,6 +42,24 @@ export class TaskRunner extends EventEmitter {
 
   setMcpStore(store: McpConfigStore): void {
     this.mcp = store;
+  }
+
+  setAuth(ctx: AuthContext): void {
+    this.auth = ctx;
+  }
+
+  private buildEnv(): Record<string, string> {
+    // Start from the main-process env, strip any keys that would leak the
+    // wrong auth into the spawned CLI, then add what we want.
+    const base: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) {
+      if (typeof v === 'string') base[k] = v;
+    }
+    delete base['ANTHROPIC_API_KEY'];
+    if (this.auth.mode === 'api-key' && this.auth.apiKey) {
+      base['ANTHROPIC_API_KEY'] = this.auth.apiKey;
+    }
+    return isStringRecord(base) ? base : {};
   }
 
   list(): TaskSummary[] {
@@ -105,7 +131,14 @@ export class TaskRunner extends EventEmitter {
         abortController: record.abort,
         permissionMode: 'bypassPermissions',
         systemPrompt,
+        env: this.buildEnv(),
       };
+      if (
+        this.auth.mode === 'subscription' &&
+        this.auth.claudeBinaryPath
+      ) {
+        options.pathToClaudeCodeExecutable = this.auth.claudeBinaryPath;
+      }
       if (skill?.allowedTools.length) options.allowedTools = skill.allowedTools;
       if (skill?.model) options.model = skill.model;
       if (skill?.mcpServers.length && this.mcp) {
@@ -157,6 +190,10 @@ export class TaskRunner extends EventEmitter {
     appendTaskEvent(record.summary.id, event);
     this.emit('event', { taskId: record.summary.id, event });
   }
+}
+
+function isStringRecord(v: unknown): v is Record<string, string> {
+  return typeof v === 'object' && v !== null;
 }
 
 function deriveTitle(prompt: string, skill: SkillRecord | null): string {

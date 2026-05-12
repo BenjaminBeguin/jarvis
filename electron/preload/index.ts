@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannels } from '@shared/ipc';
 import type {
   AppStatus,
+  AuthMode,
   LaunchTaskRequest,
   McpServerSummary,
   RoutineDef,
@@ -27,6 +28,8 @@ const api = {
     ipcRenderer.invoke(IpcChannels.setApiKey, value),
   clearApiKey: (): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.clearApiKey),
+  setAuthMode: (mode: AuthMode): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.setAuthMode, mode),
 
   openObservatory: (): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.openObservatory),

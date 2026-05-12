@@ -27,14 +27,19 @@ export function App() {
 
   if (!status) return null;
 
+  const ready = isReady(status);
+
   if (route === '/palette') {
-    if (!status.hasApiKey) {
-      // The palette window can't run tasks without an API key — bail out.
-      return null;
-    }
+    if (!ready) return null;
     return <CommandPalette />;
   }
 
-  if (!status.hasApiKey) return <Setup />;
-  return <Shell />;
+  if (!ready) return <Setup status={status} />;
+  return <Shell status={status} />;
+}
+
+function isReady(status: AppStatus): boolean {
+  if (status.authMode === 'subscription') return !!status.claudeBinaryPath;
+  if (status.authMode === 'api-key') return status.hasApiKey;
+  return false;
 }

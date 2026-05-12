@@ -2,6 +2,7 @@ export const IpcChannels = {
   appStatus: 'app:status',
   setApiKey: 'app:setApiKey',
   clearApiKey: 'app:clearApiKey',
+  setAuthMode: 'app:setAuthMode',
   openObservatory: 'app:openObservatory',
   openPalette: 'app:openPalette',
 

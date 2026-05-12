@@ -1,0 +1,82 @@
+import { execSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
+import { homedir } from 'node:os';
+
+import type { AuthMode } from '@shared/types';
+
+interface PersistedConfig {
+  authMode?: AuthMode;
+}
+
+const CONFIG_PATH = join(homedir(), '.jarvis', 'config.json');
+
+// Where Claude Code typically installs the `claude` binary; we probe these
+// before falling back to `which` so a missing PATH entry in Electron's env
+// doesn't make us think the CLI is absent.
+const CANDIDATE_PATHS = [
+  join(homedir(), '.local', 'bin', 'claude'),
+  join(homedir(), '.claude', 'local', 'claude'),
+  '/opt/homebrew/bin/claude',
+  '/usr/local/bin/claude',
+];
+
+export function detectClaudeBinary(): string | null {
+  for (const candidate of CANDIDATE_PATHS) {
+    if (existsSync(candidate)) return candidate;
+  }
+  // Last resort: ask the user's shell.
+  try {
+    const out = execSync('command -v claude', {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: [
+          process.env['PATH'] ?? '',
+          join(homedir(), '.local', 'bin'),
+          '/opt/homebrew/bin',
+          '/usr/local/bin',
+        ].join(delimiter),
+      },
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+    if (out && existsSync(out)) return out;
+  } catch {
+    // not found
+  }
+  return null;
+}
+
+function readConfig(): PersistedConfig {
+  if (!existsSync(CONFIG_PATH)) return {};
+  try {
+    return JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function writeConfig(cfg: PersistedConfig): void {
+  mkdirSync(join(homedir(), '.jarvis'), { recursive: true });
+  writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf8');
+}
+
+export function loadAuthMode(): AuthMode | null {
+  const cfg = readConfig();
+  if (cfg.authMode === 'subscription' || cfg.authMode === 'api-key') {
+    return cfg.authMode;
+  }
+  return null;
+}
+
+export function saveAuthMode(mode: AuthMode): void {
+  writeConfig({ ...readConfig(), authMode: mode });
+}
+
+export function clearAuthMode(): void {
+  const cfg = readConfig();
+  delete cfg.authMode;
+  writeConfig(cfg);
+}

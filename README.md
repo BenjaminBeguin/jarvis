@@ -25,7 +25,12 @@ pnpm dev                                      # electron-vite with HMR
 
 `pnpm` is preferred (we run `node-linker=hoisted` so Electron tools find the binary in the usual place). `npm install` works too, but don't mix lockfiles.
 
-On first launch the observatory opens and prompts for your Anthropic API key (stored in the macOS Keychain, never on disk). Then press ⌘⇧J anywhere to summon the palette, type or hold the mic icon to dictate, hit Enter.
+On first launch Jarvis offers two auth options:
+
+- **Use my Claude subscription** — if `claude` CLI is installed and logged in (`claude login`), Jarvis routes tasks through it so they bill against your Claude.ai quota. **No API key needed.**
+- **Use an Anthropic API key** — stored in the macOS Keychain. Bills against the API account.
+
+Either way, press ⌘⇧J anywhere to summon the palette, type or hold the mic icon to dictate, hit Enter. Switch modes any time from the `auth: …` badge in the top-right.
 
 ## Build a standalone app
 
