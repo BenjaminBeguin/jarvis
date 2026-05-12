@@ -21,6 +21,7 @@ import {
 import { closeDatabase, getTaskEvents, initDatabase, listRecentTasks } from './db.js';
 import { McpConfigStore } from './mcp-config.js';
 import { ModuleRegistry } from './module-registry.js';
+import { claudeCodeWatchModule } from './modules/claude-code-watch.js';
 import { quickNoteModule } from './modules/quick-note.js';
 import { RoutineStore } from './routines.js';
 import { seedDefaultsIfEmpty } from './seed.js';
@@ -197,10 +198,17 @@ function wireRunnerEvents(): void {
     broadcast(IpcChannels.taskEvent, payload);
   });
   runner.on('status', (summary: TaskSummary) => {
-    const running = runner.list().filter((t) => t.status === 'running').length;
+    // Tray indicator counts only tasks Jarvis owns — external sessions cycle
+    // between running/idle and would make the indicator meaningless.
+    const running = runner
+      .list()
+      .filter((t) => t.status === 'running' && t.origin !== 'external').length;
     setRunningTasksCount(running);
     broadcast(IpcChannels.taskStatus, summary);
-    if (summary.status === 'completed' || summary.status === 'errored') {
+    if (
+      summary.origin !== 'external' &&
+      (summary.status === 'completed' || summary.status === 'errored')
+    ) {
       try {
         const titlePrefix =
           summary.origin === 'routine'
@@ -259,8 +267,15 @@ app.whenReady().then(async () => {
     },
     launchTask: (req) =>
       runner.launch({ ...req, origin: asTaskOrigin(req.origin) }),
+    registerExternalTask: (summary) => runner.registerExternal(summary),
+    recordExternalEvent: (taskId, msg) =>
+      runner.recordExternalEvent(taskId, msg),
+    updateExternalTaskStatus: (taskId, status, endedAt) =>
+      runner.updateExternalStatus(taskId, status, endedAt),
+    hasExternalTask: (id) => runner.hasExternal(id),
   });
   await modules.register(quickNoteModule);
+  await modules.register(claudeCodeWatchModule);
 
   skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
   mcp.on('changed', (list) => broadcast(IpcChannels.listMcpServers, list));

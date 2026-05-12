@@ -1,4 +1,4 @@
-import type { LaunchTaskRequest, TaskSummary } from '@shared/types';
+import type { LaunchTaskRequest, TaskStatus, TaskSummary } from '@shared/types';
 
 /**
  * What a module receives at load time. Stays stable across the module's
@@ -12,6 +12,18 @@ export interface ModuleContext {
   notify(title: string, body: string): void;
   /** Fire a Task into the runner. Useful when a module wants to chain into Claude. */
   launchTask(req: LaunchTaskRequest): TaskSummary;
+  /** Publish an observable entry the module is watching (not running). */
+  registerExternalTask(summary: TaskSummary): void;
+  /** Push a streamed event for a previously-registered external entry. */
+  recordExternalEvent(taskId: string, msg: unknown): void;
+  /** Update the running/idle/completed state of an external entry. */
+  updateExternalTaskStatus(
+    taskId: string,
+    status: TaskStatus,
+    endedAt: number | null,
+  ): void;
+  /** True if Jarvis already has an external entry with that id. */
+  hasExternalTask(id: string): boolean;
 }
 
 /**

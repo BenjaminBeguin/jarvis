@@ -22,6 +22,8 @@ interface TaskRecord {
   abort: AbortController;
   events: TaskEvent[];
   nextSeq: number;
+  /** External entries (e.g. tailed Claude Code sessions) live in-memory only. */
+  external?: boolean;
 }
 
 export interface AuthContext {
@@ -82,8 +84,57 @@ export class TaskRunner extends EventEmitter {
 
   abortAll(): void {
     for (const rec of this.records.values()) {
-      if (rec.summary.status === 'running') rec.abort.abort();
+      if (rec.summary.status === 'running' && !rec.external) rec.abort.abort();
     }
+  }
+
+  /**
+   * Register an entry that wasn't run by us — e.g. a Claude Code session
+   * observed by the claude-code-watch module. In-memory only; the SQLite
+   * tables stay reserved for tasks we actually ran.
+   */
+  registerExternal(summary: TaskSummary): void {
+    if (this.records.has(summary.id)) return;
+    const record: TaskRecord = {
+      summary,
+      abort: new AbortController(),
+      events: [],
+      nextSeq: 0,
+      external: true,
+    };
+    this.records.set(summary.id, record);
+    this.emit('status', summary);
+  }
+
+  recordExternalEvent(taskId: string, msg: unknown): void {
+    const rec = this.records.get(taskId);
+    if (!rec || !rec.external) return;
+    const event: TaskEvent = {
+      seq: rec.nextSeq++,
+      ts: Date.now(),
+      msg,
+    };
+    rec.events.push(event);
+    this.emit('event', { taskId, event });
+  }
+
+  updateExternalStatus(
+    taskId: string,
+    status: TaskStatus,
+    endedAt: number | null,
+  ): void {
+    const rec = this.records.get(taskId);
+    if (!rec || !rec.external) return;
+    if (
+      rec.summary.status === status &&
+      rec.summary.endedAt === endedAt
+    ) return;
+    rec.summary = { ...rec.summary, status, endedAt };
+    this.emit('status', rec.summary);
+  }
+
+  hasExternal(id: string): boolean {
+    return !!this.records.get(id)?.external;
   }
 
   launch(req: LaunchTaskRequest): TaskSummary {

@@ -1,6 +1,6 @@
 export type TaskStatus = 'queued' | 'running' | 'completed' | 'aborted' | 'errored';
 
-export type TaskOrigin = 'palette' | 'voice' | 'routine' | 'api';
+export type TaskOrigin = 'palette' | 'voice' | 'routine' | 'api' | 'external';
 
 export interface TaskSummary {
   id: string;
