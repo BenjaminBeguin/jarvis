@@ -1,0 +1,24 @@
+appId: app.jarvis
+productName: Jarvis
+asar: true
+directories:
+  output: release
+  buildResources: resources
+files:
+  - out/**
+  - package.json
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: Jarvis uses the microphone for voice commands.
+    LSUIElement: true
+dmg:
+  sign: false
+publish: null
