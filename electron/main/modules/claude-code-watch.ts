@@ -18,11 +18,13 @@ const PROJECTS_ROOT = join(homedir(), '.claude', 'projects');
 /** Sessions touched within this window are surfaced on startup. */
 const STARTUP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /** A session is "running" if its file was modified more recently than this. */
-const ACTIVE_THRESHOLD_MS = 2 * 60 * 1000;
+const ACTIVE_THRESHOLD_MS = 5 * 60 * 1000;
 /** How often we sweep to flip stale sessions to "completed". */
-const SWEEP_INTERVAL_MS = 30 * 1000;
+const SWEEP_INTERVAL_MS = 20 * 1000;
 /** Trim title to a sensible width for the sidebar. */
 const TITLE_MAX_CHARS = 72;
+/** How many recent events we backfill so a clicked node has context. */
+const BACKFILL_EVENT_COUNT = 10;
 
 interface SessionState {
   taskId: string;
@@ -78,31 +80,59 @@ function transformEvent(line: unknown): unknown | null {
   return null;
 }
 
-function extractTitle(filePath: string): string {
+interface SessionContext {
+  title: string;
+  backfill: unknown[];
+}
+
+function extractSessionContext(filePath: string): SessionContext {
+  const ctx: SessionContext = { title: 'Claude Code session', backfill: [] };
+  let raw: string;
   try {
-    const buf = readFileSync(filePath, 'utf8');
-    for (const line of buf.split('\n').slice(0, 40)) {
-      if (!line.trim()) continue;
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      const e = parsed as Record<string, unknown>;
-      if (
-        e['type'] === 'queue-operation' &&
-        e['operation'] === 'enqueue' &&
-        typeof e['content'] === 'string' &&
-        e['content']
-      ) {
-        return truncate(e['content']);
-      }
-    }
+    raw = readFileSync(filePath, 'utf8');
   } catch {
-    // unreadable; fall through
+    return ctx;
   }
-  return 'Claude Code session';
+  const lines = raw.split('\n');
+
+  // Title: first user prompt anywhere in the head of the file.
+  for (const line of lines.slice(0, 60)) {
+    if (!line.trim()) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const e = parsed as Record<string, unknown>;
+    if (
+      e['type'] === 'queue-operation' &&
+      e['operation'] === 'enqueue' &&
+      typeof e['content'] === 'string' &&
+      e['content']
+    ) {
+      ctx.title = truncate(e['content']);
+      break;
+    }
+  }
+
+  // Backfill: walk from the END, collect last N renderable events. Reverse at
+  // the end so the renderer sees them in chronological order.
+  const collected: unknown[] = [];
+  for (let i = lines.length - 1; i >= 0 && collected.length < BACKFILL_EVENT_COUNT; i--) {
+    const line = lines[i];
+    if (!line || !line.trim()) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const event = transformEvent(parsed);
+    if (event) collected.push(event);
+  }
+  ctx.backfill = collected.reverse();
+  return ctx;
 }
 
 export class ClaudeCodeWatchModule implements Module {
@@ -189,7 +219,8 @@ export class ClaudeCodeWatchModule implements Module {
     const taskId = deriveTaskId(filePath);
     if (ctx.hasExternalTask(taskId)) return;
 
-    const title = `${prettyProject(projectSlug)} · ${extractTitle(filePath)}`;
+    const { title: rawTitle, backfill } = extractSessionContext(filePath);
+    const title = `${prettyProject(projectSlug)} · ${rawTitle}`;
     const isActive = Date.now() - mtimeMs < ACTIVE_THRESHOLD_MS;
     const summary: TaskSummary = {
       id: taskId,
@@ -204,6 +235,11 @@ export class ClaudeCodeWatchModule implements Module {
       groupKey: `claude-code:${projectSlug}`,
     };
     ctx.registerExternalTask(summary);
+
+    // Backfill recent events so clicking the node immediately shows context.
+    for (const event of backfill) {
+      ctx.recordExternalEvent(taskId, event);
+    }
 
     this.sessions.set(filePath, {
       taskId,

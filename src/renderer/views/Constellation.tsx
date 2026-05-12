@@ -7,12 +7,27 @@ const CENTER = { x: 500, y: 500 };
 const CORE_RADIUS = 56;
 const RING_RADIUS = 260;
 const MAX_NODES = 12;
+/** External sessions that ended within this window still show as faded nodes. */
+const RECENCY_MS = 30 * 60 * 1000;
 
 interface NodePos {
   task: TaskSummary;
   x: number;
   y: number;
   angle: number;
+  isLive: boolean;
+}
+
+function lastActivityAt(task: TaskSummary): number {
+  if (task.status === 'running') return Date.now();
+  return task.endedAt ?? task.startedAt;
+}
+
+function shouldDisplay(task: TaskSummary): boolean {
+  if (task.status === 'running') return true;
+  if (task.origin !== 'external') return false;
+  const ended = task.endedAt ?? 0;
+  return Date.now() - ended < RECENCY_MS;
 }
 
 function layoutRing(tasks: TaskSummary[]): NodePos[] {
@@ -25,6 +40,7 @@ function layoutRing(tasks: TaskSummary[]): NodePos[] {
       angle,
       x: CENTER.x + Math.cos(angle) * RING_RADIUS,
       y: CENTER.y + Math.sin(angle) * RING_RADIUS,
+      isLive: task.status === 'running',
     };
   });
 }
@@ -49,17 +65,19 @@ interface Props {
 }
 
 export function Constellation({ tasks, selectedId, onSelect }: Props) {
-  const active = useMemo(
+  const visible = useMemo(
     () =>
       tasks
-        .filter((t) => t.status === 'running')
-        .sort((a, b) => b.startedAt - a.startedAt)
+        .filter(shouldDisplay)
+        .sort((a, b) => lastActivityAt(b) - lastActivityAt(a))
         .slice(0, MAX_NODES),
     [tasks],
   );
 
-  const positions = useMemo(() => layoutRing(active), [active]);
-  const overflow = Math.max(0, tasks.filter((t) => t.status === 'running').length - MAX_NODES);
+  const positions = useMemo(() => layoutRing(visible), [visible]);
+  const liveCount = visible.filter((t) => t.status === 'running').length;
+  const recentCount = visible.length - liveCount;
+  const overflow = Math.max(0, tasks.filter(shouldDisplay).length - MAX_NODES);
 
   // Group-key adjacency: if two visible nodes share a group, connect them.
   const connections = useMemo(() => {
@@ -197,7 +215,7 @@ export function Constellation({ tasks, selectedId, onSelect }: Props) {
             className="core__count"
             textAnchor="middle"
           >
-            {active.length} ACTIVE
+            {liveCount} LIVE{recentCount ? ` · ${recentCount} RECENT` : ''}
           </text>
         </g>
 
@@ -216,7 +234,7 @@ export function Constellation({ tasks, selectedId, onSelect }: Props) {
             return (
               <g
                 key={p.task.id}
-                className={`node node--${group}${isSelected ? ' node--selected' : ''}`}
+                className={`node node--${group}${p.isLive ? '' : ' node--idle'}${isSelected ? ' node--selected' : ''}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelect(p.task.id);
@@ -250,7 +268,7 @@ export function Constellation({ tasks, selectedId, onSelect }: Props) {
           </text>
         )}
 
-        {active.length === 0 && (
+        {visible.length === 0 && (
           <text
             x={CENTER.x}
             y={780}

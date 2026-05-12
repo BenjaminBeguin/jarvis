@@ -778,6 +778,28 @@ button:disabled:hover {
   filter: drop-shadow(0 0 12px rgba(0, 212, 255, 0.95));
 }
 
+/* Idle: the session was active in the last 30 min but has gone quiet.
+   Visible to give context but visually subordinate to live nodes. */
+.node--idle .node__disc {
+  opacity: 0.55;
+  stroke-dasharray: 3 3;
+  filter: none;
+}
+
+.node--idle .node__pulse {
+  opacity: 0;
+  animation: none;
+}
+
+.node--idle .node__label {
+  opacity: 0.6;
+}
+
+.node--idle.node--selected .node__disc {
+  opacity: 1;
+  stroke-dasharray: 0;
+}
+
 .node__label {
   fill: var(--text-dim);
   font-family: var(--mono);
