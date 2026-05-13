@@ -24,6 +24,9 @@ export const skillSuggesterModule: Module = {
       description:
         'Send recent prompts to Claude to find reusable patterns worth saving as skills',
       handler: (_input, ctx) => {
+        // Visible "I ran" beacon — if the user sees this fire but nothing
+        // else, we know the handler started but failed downstream.
+        ctx.notify('Skill suggester', 'starting analysis…');
         const recent = ctx.listRecentTasks(MAX_RECENT);
         // Filter to Jarvis-owned tasks with a real prompt. External
         // claude-code sessions get noisy, skip them.

@@ -740,7 +740,11 @@ app.whenReady().then(async () => {
       runner.launch({ ...req, origin: asTaskOrigin(req.origin) }),
     showHud: (taskId) => pushTaskToHud(taskId),
     listRecentTasks: (limit) => {
-      const all = runner.list();
+      // Mirror the listTasks IPC: if the in-memory runner is empty (fresh
+      // boot, or all tasks aged out), fall back to SQLite history so the
+      // suggester can still see what the user has run over time.
+      const live = runner.list();
+      const all = live.length > 0 ? live : listRecentTasks();
       return typeof limit === 'number' ? all.slice(0, limit) : all;
     },
     parseFreeTextIntent: (input: string) => parseIntent(input),
