@@ -23,11 +23,14 @@ The choice lives in `~/.jarvis/config.json` (`{ "authMode": "subscription" | "ap
 
 **A Task = one `query()` call to the Agent SDK.** Tasks are how Jarvis runs Claude:
 
-- Typing free text in the palette → Task.
-- Voice command (Web Speech API) → transcribed → Task.
+- Typing free text in the palette → Task (after intent routing).
+- Voice command (local Whisper transcription) → transcribed → Task.
 - Routine firing on cron → Task.
-- A **Skill** is a saved Task template: `~/.jarvis/skills/<name>/SKILL.md` with frontmatter `name`, `description`, `allowed-tools`, `mcp-servers`, `model`; body is the system prompt.
+- Reminder / scheduled action firing → Task (with a framed prompt).
+- A **Skill** is a saved Task template: `~/.jarvis/skills/<name>/SKILL.md` with frontmatter `name`, `description`, `allowed-tools`, `mcp-servers`, `model`; body is the system prompt. Built-ins are seeded by `seed.ts` and only written if missing.
 - A **Routine** is `(skillId, cron, input?)`, persisted in `~/.jarvis/routines.json`, scheduled with `node-cron`.
+- A **Reminder** is `(body, mode, fireAt)` persisted in `~/.jarvis/reminders.json`, scheduled with `setTimeout`. `mode='reminder'` fires a notify-style Claude turn; `mode='scheduled'` fires an action-style turn that *does* the thing. Both rehydrate on startup; past-due fire immediately.
+- The palette goes through `parseIntent()` → either a `task` (run now) or a `reminder` (queue for later). Skill-pinned dispatches bypass routing.
 
 ### 2. Modules (extensions)
 
@@ -81,16 +84,18 @@ If a new feature breaks either primitive, push back before implementing.
 
 - `electron/main/index.ts` — bootstrap, IPC handlers, completion notifications, lifecycle.
 - `electron/main/task-runner.ts` — invokes Agent SDK `query()`, streams `SDKMessage` events.
-- `electron/main/task-registry.ts` — _(future)_ split out from task-runner if it gets fat.
+- `electron/main/intent-router.ts` — pure-function parser for palette free-text → task / reminder / scheduled action.
+- `electron/main/reminders.ts` — persistent setTimeout-based fires; rehydrates on startup.
 - `electron/main/skill-store.ts` — loads + watches `~/.jarvis/skills/*/SKILL.md` (chokidar).
 - `electron/main/mcp-config.ts` — loads + watches `~/.jarvis/mcp.json`.
-- `electron/main/routines.ts` — `node-cron` scheduler + persistence.
+- `electron/main/routines.ts` — `node-cron` scheduler + persistence (recurring; one-shot is in reminders).
 - `electron/main/db.ts` — `better-sqlite3` (WAL, foreign keys on).
 - `electron/main/secrets.ts` — keytar wrapper, macOS Keychain.
-- `electron/main/windows.ts` — observatory + palette `BrowserWindow`s.
-- `electron/main/tray.ts` — template tray icon with running indicator.
+- `electron/main/seed.ts` — first-launch / missing-file seeds for skills + sample configs.
+- `electron/main/windows.ts` — observatory + palette + Answer HUD `BrowserWindow`s.
+- `electron/main/tray.ts` — template tray icon + live menu (running · awaiting · scheduled + abort-all).
 - `electron/preload/index.ts` — `contextBridge` → `window.jarvis` API.
-- `src/renderer/` — React. Hash-routed. Subscribes to IPC events, never holds source-of-truth state.
+- `src/renderer/` — React. Hash-routed (`/observatory`, `/palette`, `/answer-hud`). Subscribes to IPC events, never holds source-of-truth state.
 - `src/shared/` — types + IPC channel names used by both sides. **Anything crossing IPC lives here.**
 
 ### IPC pattern
@@ -110,6 +115,9 @@ If a new feature breaks either primitive, push back before implementing.
   skills/<name>/SKILL.md   # frontmatter + body; body is the systemPrompt
   mcp.json                 # global MCP servers; skills opt-in by name
   mcp.json.example         # seeded on first launch
+  reminders.json           # one-shot fires; rehydrated on startup
+  notes/<date>.md          # quick-note module
+  meetings/<ts>-<slug>.md  # meeting-recorder module (auto-debriefed)
   routines.json            # array of routine defs, schema in routines.ts
   jarvis.sqlite            # tasks + task_events
 ```
@@ -148,10 +156,12 @@ Day-to-day:
 
 ## Adding capabilities
 
+- **Lean on Claude before reinventing.** If a behavior can ship as a SKILL.md (action item extraction, status digest, commit message drafting), put it in `electron/main/seed.ts` and let the agent loop do the work. Don't write JS-based extractors / classifiers when a skill prompt will do.
 - **New IPC channel**: add constant to `src/shared/ipc.ts`, types to `src/shared/types.ts`, handler in `electron/main/index.ts:registerIpc()`, method on `electron/preload/index.ts:api`, then use from a renderer view. Don't skip the constant — typos in inline strings are the most common IPC bug.
 - **New stored field on a Task**: extend `TaskSummary`, add a SQLite migration appended to `MIGRATIONS` in `db.ts`, update the insert/update queries, update the renderer.
 - **New MCP integration**: don't hardcode. The user puts servers in `~/.jarvis/mcp.json`; skills opt in via `mcp-servers: [name]` in frontmatter. The TaskRunner filters by skill.
-- **New scheduler trigger**: routines are the only mechanism today. Add to `RoutineStore`, not as a parallel timer somewhere else.
+- **New time-fired trigger**: there are two systems. `RoutineStore` is for recurring crons; `ReminderStore` is for one-shot fires (both reminders and scheduled actions). Pick the right one — don't introduce a parallel timer.
+- **New module capability**: extend `ModuleContext` in `electron/main/modules/types.ts`, then implement in `setContext()` in `index.ts`. Modules never import from `electron/main/` directly except through that context.
 
 ## Phases
 
@@ -161,9 +171,8 @@ We follow `~/.claude/plans/hey-i-would-love-staged-dewdrop.md`:
 - Phase 1 ✅ skills from disk, palette picker, history filters.
 - Phase 2 ✅ MCP config, routines, daily-brief seed.
 - Phase 2.5 ✅ Module system + quick-note module.
-- Phase 3 — next modules (meeting recorder, agent-bump on context), skill-to-skill chaining, workflow DAG, whisper.cpp swap.
-
-Don't start Phase 3 work until Phase 2 is shipped and used for at least a week.
+- Phase 3 ✅ meeting recorder + auto-debrief skill, Answer HUD, intent router (reminders / scheduled actions), Dashboard view, /status + /next, command history, inline schedule preview.
+- Phase 4 — next: skill-to-skill chaining, workflow DAG, calendar-aware briefings, whisper.cpp swap, external/community modules.
 
 ## What's _not_ in here
 

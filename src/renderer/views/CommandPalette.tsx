@@ -13,6 +13,20 @@ interface PendingIntent extends PaletteIntentSummary {}
 const HISTORY_KEY = 'jarvis.palette.history';
 const HISTORY_MAX = 50;
 
+/**
+ * Placeholder suggestions that rotate when the palette is idle. Teaches
+ * the three high-value patterns (free question, schedule, intent) without
+ * adding a tutorial overlay.
+ */
+const PLACEHOLDER_HINTS = [
+  '/ to pick · ask anything',
+  'remind me in 2h to ship the patch',
+  'check my PR in 20min and ping Luca if no review',
+  '/status · what is happening right now',
+  '/next · best move for the next 30 minutes',
+  '/note quick thought to look at later',
+];
+
 function loadHistory(): string[] {
   try {
     const raw = window.localStorage.getItem(HISTORY_KEY);
@@ -103,6 +117,7 @@ export function CommandPalette() {
    */
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const draftRef = useRef<string>('');
+  const [hintIdx, setHintIdx] = useState(0);
   const captureRef = useRef<AudioCapture | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const paletteRef = useRef<HTMLDivElement>(null);
@@ -130,6 +145,16 @@ export function CommandPalette() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Cycle placeholder hints while idle. Stops once the user starts typing
+  // or picks anything so we don't distract.
+  useEffect(() => {
+    if (text || activeSkill || activeIntent || listening || transcribing) return;
+    const t = setInterval(() => {
+      setHintIdx((i) => (i + 1) % PLACEHOLDER_HINTS.length);
+    }, 4_000);
+    return () => clearInterval(t);
+  }, [text, activeSkill, activeIntent, listening, transcribing]);
 
   // Resize the palette window to fit its content. ResizeObserver fires
   // whenever the picker opens/closes, error appears, mic-progress shows,
@@ -410,7 +435,7 @@ export function CommandPalette() {
     ? activeIntent.placeholder ?? `${activeIntent.label}…`
     : activeSkill
     ? `${activeSkill.name} — add a prompt or press Enter`
-    : '/ to pick · ask anything';
+    : PLACEHOLDER_HINTS[hintIdx] ?? '/ to pick · ask anything';
 
   const displayValue = text;
 
