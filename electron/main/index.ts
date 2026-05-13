@@ -32,6 +32,7 @@ import { ModuleRegistry } from './module-registry.js';
 import { claudeCodeWatchModule } from './modules/claude-code-watch.js';
 import { meetingRecorderModule, persistMeeting } from './modules/meeting-recorder.js';
 import { quickNoteModule } from './modules/quick-note.js';
+import { sendModule } from './modules/send.js';
 import { skillSuggesterModule } from './modules/skill-suggester.js';
 import { statusModule } from './modules/status.js';
 import { parseIntent } from './intent-router.js';
@@ -768,6 +769,7 @@ app.whenReady().then(async () => {
   await modules.register(meetingRecorderModule);
   await modules.register(statusModule);
   await modules.register(skillSuggesterModule);
+  await modules.register(sendModule);
 
   skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
   mcp.on('changed', (list) => broadcast(IpcChannels.listMcpServers, list));
