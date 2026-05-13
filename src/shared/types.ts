@@ -55,6 +55,30 @@ export interface SkillSummary {
   hasBody: boolean;
 }
 
+export type ReminderStatus = 'pending' | 'fired' | 'cancelled';
+
+export interface Reminder {
+  id: string;
+  /** Original prompt the user gave (without the "remind me" / time wrapper). */
+  body: string;
+  createdAt: number;
+  fireAt: number;
+  status: ReminderStatus;
+  /** ms epoch when it actually fired; null while pending. */
+  firedAt: number | null;
+  /** Task ID we kicked off when firing — lets the constellation link them. */
+  firedTaskId: string | null;
+}
+
+/**
+ * Result of routing a free-text palette prompt. Either we recognized it as a
+ * reminder ("remind me X in 2h") and persisted one, or we treated it as a
+ * regular task launch and returned the resulting summary.
+ */
+export type RoutePromptResult =
+  | { kind: 'reminder'; reminder: Reminder }
+  | { kind: 'task'; task: TaskSummary };
+
 export interface RoutineDef {
   id: string;
   skillId: string;

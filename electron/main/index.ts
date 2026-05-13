@@ -30,7 +30,9 @@ import { ModuleRegistry } from './module-registry.js';
 import { claudeCodeWatchModule } from './modules/claude-code-watch.js';
 import { meetingRecorderModule, persistMeeting } from './modules/meeting-recorder.js';
 import { quickNoteModule } from './modules/quick-note.js';
+import { parseIntent } from './intent-router.js';
 import { ProjectStore } from './projects.js';
+import { ReminderStore } from './reminders.js';
 import { RoutineStore } from './routines.js';
 import { seedDefaultsIfEmpty } from './seed.js';
 import {
@@ -62,6 +64,7 @@ const mcp = new McpConfigStore();
 const projects = new ProjectStore();
 const runner = new TaskRunner();
 const routines = new RoutineStore();
+const reminders = new ReminderStore();
 const modules = new ModuleRegistry();
 runner.setSkillStore(skills);
 runner.setMcpStore(mcp);
@@ -374,6 +377,64 @@ function registerIpc(): void {
     routines.runNow(id),
   );
 
+  ipcMain.handle(IpcChannels.listReminders, () => reminders.list());
+  ipcMain.handle(IpcChannels.cancelReminder, (_e, id: string) =>
+    reminders.cancel(id),
+  );
+  ipcMain.handle(IpcChannels.removeReminder, (_e, id: string) =>
+    reminders.remove(id),
+  );
+
+  ipcMain.handle(
+    IpcChannels.routePrompt,
+    async (
+      _e,
+      payload: { prompt: string; origin?: 'palette' | 'voice' },
+    ) => {
+      const prompt = typeof payload?.prompt === 'string' ? payload.prompt : '';
+      const intent = parseIntent(prompt);
+      if (intent.kind === 'reminder') {
+        const reminder = reminders.create({ body: intent.body, fireAt: intent.fireAt });
+        try {
+          const when = new Date(reminder.fireAt).toLocaleString(undefined, {
+            hour: '2-digit',
+            minute: '2-digit',
+            day: 'numeric',
+            month: 'short',
+          });
+          new Notification({
+            title: `Reminder set · ${when}`,
+            body: reminder.body,
+            silent: true,
+          })
+            .on('click', () => openObservatory())
+            .show();
+        } catch {
+          // Notifications can fail pre-permission; the reminder is still
+          // scheduled.
+        }
+        return { kind: 'reminder' as const, reminder };
+      }
+      // Fall through to a normal task launch — same auth + plumbing as the
+      // launchTask handler, but inline to avoid a second IPC hop.
+      const status = await refreshAuth();
+      if (!status.authMode) throw new Error('Pick an auth mode first.');
+      if (status.authMode === 'api-key' && !status.hasApiKey) {
+        throw new Error('Add an API key first.');
+      }
+      if (status.authMode === 'subscription' && !status.claudeBinaryPath) {
+        throw new Error(
+          'Claude Code CLI not found. Run `claude login` or switch to API-key mode.',
+        );
+      }
+      const task = runner.launch({
+        prompt: intent.body,
+        origin: asTaskOrigin(payload?.origin),
+      });
+      return { kind: 'task' as const, task };
+    },
+  );
+
   ipcMain.handle(IpcChannels.launchTask, async (_e, req: LaunchTaskRequest) => {
     const status = await refreshAuth();
     if (!status.authMode) {
@@ -500,6 +561,51 @@ app.whenReady().then(async () => {
   mcp.init();
   projects.init();
   routines.init();
+  // Wire reminder fire handler before init() so any past-due reminders that
+  // fire on this tick land in the runner. The handler launches a Claude
+  // task with the original body and pops a native notification — clicking
+  // it focuses the spawned task in the observatory.
+  reminders.setFireHandler((reminder) => {
+    let firedTaskId: string | null = null;
+    try {
+      const t = runner.launch({
+        prompt: reminder.body,
+        origin: 'palette',
+      });
+      firedTaskId = t.id;
+    } catch (e) {
+      console.error('Reminder fire failed:', e);
+    }
+    reminders.markFired(reminder.id, firedTaskId);
+    try {
+      const preview =
+        reminder.body.length > 80 ? `${reminder.body.slice(0, 80)}…` : reminder.body;
+      const notif = new Notification({
+        title: 'Reminder',
+        body: preview,
+        silent: false,
+      });
+      notif.on('click', () => {
+        if (firedTaskId) {
+          const win = openObservatory();
+          win.focus();
+          const send = () =>
+            win.webContents.send(IpcChannels.observatoryFocusTask, firedTaskId);
+          if (win.webContents.isLoading()) {
+            win.webContents.once('did-finish-load', send);
+          } else {
+            send();
+          }
+        } else {
+          openObservatory();
+        }
+      });
+      notif.show();
+    } catch {
+      // Notifications can fail pre-permission; not fatal.
+    }
+  });
+  reminders.init();
 
   // Module foundation: every user-asked feature ships as a module that
   // registers here. Built-ins live in electron/main/modules/. External
@@ -538,6 +644,7 @@ app.whenReady().then(async () => {
   skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
   mcp.on('changed', (list) => broadcast(IpcChannels.listMcpServers, list));
   routines.on('changed', (list) => broadcast(IpcChannels.routinesChanged, list));
+  reminders.on('changed', (list) => broadcast(IpcChannels.remindersChanged, list));
   modules.on('changed', (list) => broadcast(IpcChannels.modulesChanged, list));
 
   setProgressEmitter((event) =>
@@ -561,6 +668,7 @@ app.on('before-quit', () => {
   globalShortcut.unregisterAll();
   void modules.unloadAll();
   routines.close();
+  reminders.disposeAll();
   skills.close();
   mcp.close();
   projects.close();

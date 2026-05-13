@@ -1481,6 +1481,40 @@ button:disabled:hover {
   fill: var(--text);
 }
 
+/* Pending reminders — outer orbit, amber tone so they stand apart from
+   active tasks. Click cancels (handled in TS). */
+.reminder-node {
+  cursor: pointer;
+}
+
+.reminder-node__disc {
+  fill: rgba(255, 180, 84, 0.08);
+  stroke: var(--warn);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
+.reminder-node__dot {
+  fill: var(--warn);
+  filter: drop-shadow(0 0 4px rgba(255, 180, 84, 0.6));
+}
+
+.reminder-node__label {
+  fill: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.reminder-node:hover .reminder-node__disc {
+  fill: rgba(255, 180, 84, 0.18);
+}
+
+.reminder-node:hover .reminder-node__label {
+  fill: var(--warn);
+}
+
 .constellation__overflow,
 .constellation__standby {
   fill: var(--text-faint);

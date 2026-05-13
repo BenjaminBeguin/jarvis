@@ -1,12 +1,14 @@
 import { useMemo } from 'react';
 
-import type { TaskSummary } from '../../shared/types';
+import type { Reminder, TaskSummary } from '../../shared/types';
 
 /* The SVG lives in a 1000×1000 viewBox; coordinates below are in that space. */
 const CENTER = { x: 500, y: 500 };
 const CORE_RADIUS = 56;
 const RING_RADIUS = 260;
+const REMINDER_RING_RADIUS = 360;
 const MAX_NODES = 12;
+const MAX_REMINDERS = 8;
 /** External sessions that ended within this window still show as faded nodes. */
 const RECENCY_MS = 30 * 60 * 1000;
 /** Pulsing "you just launched this" focus ring lifetime. */
@@ -60,13 +62,61 @@ function nodeGroup(task: TaskSummary): string {
   return 'task';
 }
 
-interface Props {
-  tasks: TaskSummary[];
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
+interface ReminderNodePos {
+  reminder: Reminder;
+  x: number;
+  y: number;
+  angle: number;
 }
 
-export function Constellation({ tasks, selectedId, onSelect }: Props) {
+function layoutReminderRing(reminders: Reminder[]): ReminderNodePos[] {
+  const n = Math.max(1, reminders.length);
+  return reminders.map((reminder, i) => {
+    // Offset by half a step from the task ring so reminder + task nodes don't
+    // overlap when the constellation is light.
+    const step = (2 * Math.PI) / n;
+    const angle = -Math.PI / 2 + step / 2 + i * step;
+    return {
+      reminder,
+      angle,
+      x: CENTER.x + Math.cos(angle) * REMINDER_RING_RADIUS,
+      y: CENTER.y + Math.sin(angle) * REMINDER_RING_RADIUS,
+    };
+  });
+}
+
+function fireCountdown(fireAt: number, now: number): string {
+  const diff = fireAt - now;
+  if (diff <= 0) return 'now';
+  const s = Math.round(diff / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.round(h / 24)}d`;
+}
+
+function reminderLabel(r: Reminder, now: number): string {
+  const head = r.body.length > 24 ? `${r.body.slice(0, 23)}…` : r.body;
+  return `${head}  ·  ${fireCountdown(r.fireAt, now)}`;
+}
+
+interface Props {
+  tasks: TaskSummary[];
+  reminders: Reminder[];
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  onCancelReminder?: (id: string) => void;
+}
+
+export function Constellation({
+  tasks,
+  reminders,
+  selectedId,
+  onSelect,
+  onCancelReminder,
+}: Props) {
   const visible = useMemo(
     () =>
       tasks
@@ -81,6 +131,20 @@ export function Constellation({ tasks, selectedId, onSelect }: Props) {
   const recentCount = visible.length - liveCount;
   const awaitingCount = visible.filter((t) => t.awaitingInput).length;
   const overflow = Math.max(0, tasks.filter(shouldDisplay).length - MAX_NODES);
+
+  const visibleReminders = useMemo(
+    () =>
+      reminders
+        .filter((r) => r.status === 'pending')
+        .sort((a, b) => a.fireAt - b.fireAt)
+        .slice(0, MAX_REMINDERS),
+    [reminders],
+  );
+  const reminderPositions = useMemo(
+    () => layoutReminderRing(visibleReminders),
+    [visibleReminders],
+  );
+  const now = Date.now();
 
   // Most-recently-launched Jarvis-owned task within the focus window —
   // gets a pulsing ring so the user can find what they just kicked off.
@@ -271,6 +335,42 @@ export function Constellation({ tasks, selectedId, onSelect }: Props) {
                   x={lx}
                   y={ly}
                   className="node__label"
+                  textAnchor={textAnchor}
+                  dominantBaseline="middle"
+                >
+                  {label}
+                </text>
+              </g>
+            );
+          })}
+        </g>
+
+        {/* Pending reminders, outer orbit. Click to cancel. */}
+        <g className="constellation__reminders">
+          {reminderPositions.map((p) => {
+            const label = reminderLabel(p.reminder, now);
+            const labelOffset = 26;
+            const lx = CENTER.x + Math.cos(p.angle) * (REMINDER_RING_RADIUS + labelOffset);
+            const ly = CENTER.y + Math.sin(p.angle) * (REMINDER_RING_RADIUS + labelOffset);
+            const textAnchor =
+              Math.cos(p.angle) > 0.2 ? 'start' : Math.cos(p.angle) < -0.2 ? 'end' : 'middle';
+            return (
+              <g
+                key={`rem-${p.reminder.id}`}
+                className="reminder-node"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onCancelReminder && confirm(`Cancel reminder: "${p.reminder.body}"?`)) {
+                    onCancelReminder(p.reminder.id);
+                  }
+                }}
+              >
+                <circle cx={p.x} cy={p.y} r={7} className="reminder-node__disc" />
+                <circle cx={p.x} cy={p.y} r={3} className="reminder-node__dot" />
+                <text
+                  x={lx}
+                  y={ly}
+                  className="reminder-node__label"
                   textAnchor={textAnchor}
                   dominantBaseline="middle"
                 >

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { TaskSummary } from '../../shared/types';
+import type { Reminder, TaskSummary } from '../../shared/types';
 import { Constellation } from './Constellation';
 import { TaskDetail } from './TaskDetail';
 import { TaskList } from './TaskList';
@@ -9,11 +9,14 @@ type ViewMode = 'constellation' | 'list';
 
 export function Observatory() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>('constellation');
 
   useEffect(() => {
     void window.jarvis.listTasks().then(setTasks);
+    void window.jarvis.listReminders().then(setReminders);
+    const offReminders = window.jarvis.onRemindersChanged(setReminders);
     const offStatus = window.jarvis.onTaskStatus((summary) => {
       setTasks((prev) => {
         const idx = prev.findIndex((t) => t.id === summary.id);
@@ -35,6 +38,7 @@ export function Observatory() {
       offStatus();
       offRemoved();
       offFocus();
+      offReminders();
     };
   }, []);
 
@@ -83,8 +87,10 @@ export function Observatory() {
         {view === 'constellation' ? (
           <Constellation
             tasks={tasks}
+            reminders={reminders}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            onCancelReminder={(id) => void window.jarvis.cancelReminder(id)}
           />
         ) : (
           <TaskList

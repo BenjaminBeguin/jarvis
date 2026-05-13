@@ -173,17 +173,31 @@ export function CommandPalette() {
     }
     if (!prompt && !skillForCall) return;
     try {
-      const summary = await window.jarvis.launchTask({
-        prompt: prompt || (skillForCall ? 'Begin.' : ''),
-        skillId: skillForCall?.id ?? null,
+      // Skill-pinned launches always go straight to the runner — the
+      // intent router would just see the prompt body without knowing
+      // about the skill.
+      if (skillForCall) {
+        const summary = await window.jarvis.launchTask({
+          prompt: prompt || 'Begin.',
+          skillId: skillForCall.id,
+          origin: override.origin ?? 'palette',
+        });
+        setText('');
+        setActiveSkill(null);
+        void window.jarvis.showAnswerHud(summary.id);
+        return;
+      }
+      // Free-text: let main classify ("remind me in 2h …" → reminder, else
+      // task). Reminder confirmations show as a brief native notification;
+      // tasks pop the HUD as before.
+      const result = await window.jarvis.routePrompt(prompt, {
         origin: override.origin ?? 'palette',
       });
       setText('');
-      setActiveSkill(null);
-      // Pop the answer in the HUD instead of inline. The HUD owns the
-      // streaming view + reply controls; the palette goes back to being a
-      // pure input.
-      void window.jarvis.showAnswerHud(summary.id);
+      if (result.kind === 'task') {
+        void window.jarvis.showAnswerHud(result.task.id);
+      }
+      // For reminders: main fires its own notification; nothing more to do.
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }

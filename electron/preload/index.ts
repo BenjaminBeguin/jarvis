@@ -9,6 +9,8 @@ import type {
   LaunchTaskRequest,
   McpServerSummary,
   ModuleSummary,
+  Reminder,
+  RoutePromptResult,
   RoutineDef,
   SkillSummary,
   TaskEvent,
@@ -125,6 +127,21 @@ const api = {
     ipcRenderer.invoke(IpcChannels.runRoutineNow, id),
   onRoutinesChanged: (listener: Listener<RoutineDef[]>): Unsubscribe =>
     subscribe(IpcChannels.routinesChanged, listener),
+
+  routePrompt: (
+    prompt: string,
+    options?: { origin?: 'palette' | 'voice' },
+  ): Promise<RoutePromptResult> =>
+    ipcRenderer.invoke(IpcChannels.routePrompt, { prompt, origin: options?.origin }),
+
+  listReminders: (): Promise<Reminder[]> =>
+    ipcRenderer.invoke(IpcChannels.listReminders),
+  cancelReminder: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.cancelReminder, id),
+  removeReminder: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.removeReminder, id),
+  onRemindersChanged: (listener: Listener<Reminder[]>): Unsubscribe =>
+    subscribe(IpcChannels.remindersChanged, listener),
 
   launchTask: (req: LaunchTaskRequest): Promise<TaskSummary> =>
     ipcRenderer.invoke(IpcChannels.launchTask, req),

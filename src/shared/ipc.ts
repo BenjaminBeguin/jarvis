@@ -45,6 +45,13 @@ export const IpcChannels = {
   runRoutineNow: 'routines:runNow',
   routinesChanged: 'routines:changed',
 
+  routePrompt: 'palette:routePrompt',
+
+  listReminders: 'reminders:list',
+  cancelReminder: 'reminders:cancel',
+  removeReminder: 'reminders:remove',
+  remindersChanged: 'reminders:changed',
+
   launchTask: 'task:launch',
   abortTask: 'task:abort',
   sendTaskMessage: 'task:sendMessage',
