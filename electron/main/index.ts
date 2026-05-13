@@ -50,6 +50,7 @@ import { setProgressEmitter, transcribePcm } from './transcribe.js';
 import {
   getRunningTasksCount,
   initTray,
+  setAbortAllHandler,
   setAwaitingRepliesCount,
   setPendingRemindersCount,
   setRunningTasksCount,
@@ -706,6 +707,7 @@ app.whenReady().then(async () => {
   registerIpc();
   wireRunnerEvents();
   initTray();
+  setAbortAllHandler(() => runner.abortAll());
   registerGlobalShortcut();
 
   // Open observatory on first launch (or whenever no API key is configured).

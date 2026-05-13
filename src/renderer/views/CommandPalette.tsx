@@ -10,6 +10,33 @@ import { AudioCapture } from '../voice/AudioCapture';
 
 interface PendingIntent extends PaletteIntentSummary {}
 
+const HISTORY_KEY = 'jarvis.palette.history';
+const HISTORY_MAX = 50;
+
+function loadHistory(): string[] {
+  try {
+    const raw = window.localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((s) => typeof s === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function pushHistory(prompt: string): void {
+  const trimmed = prompt.trim();
+  if (!trimmed) return;
+  try {
+    const cur = loadHistory();
+    // Drop duplicates so the most-recent is always at index 0.
+    const next = [trimmed, ...cur.filter((p) => p !== trimmed)].slice(0, HISTORY_MAX);
+    window.localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+  } catch {
+    // Storage failures are non-fatal; the user just loses history.
+  }
+}
+
 function formatScheduleHint(fireAt: number): string {
   const diff = fireAt - Date.now();
   if (diff <= 0) return 'now';
@@ -69,6 +96,13 @@ export function CommandPalette() {
     mode: 'reminder' | 'scheduled';
     fireAt: number;
   } | null>(null);
+  /**
+   * Command history index. -1 = current draft (whatever the user typed last),
+   * 0 = most-recent past prompt, etc. Up/Down arrow cycles when the picker
+   * isn't open. We snapshot the draft so Down past 0 restores it.
+   */
+  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const draftRef = useRef<string>('');
   const captureRef = useRef<AudioCapture | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const paletteRef = useRef<HTMLDivElement>(null);
@@ -202,6 +236,9 @@ export function CommandPalette() {
     const prompt = (override.text ?? text).trim();
     const intentForCall = override.intent !== undefined ? override.intent : activeIntent;
     const skillForCall = override.skill !== undefined ? override.skill : activeSkill;
+    // Reset history navigation on any successful dispatch.
+    setHistoryIndex(-1);
+    if (prompt) pushHistory(prompt);
 
     if (intentForCall) {
       try {
@@ -409,7 +446,13 @@ export function CommandPalette() {
           ref={inputRef}
           placeholder={placeholder}
           value={displayValue}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            // Any direct edit takes us out of history-navigation mode so the
+            // next Up arrow walks from "newest" again instead of one above
+            // where we were.
+            if (historyIndex !== -1) setHistoryIndex(-1);
+            setText(e.target.value);
+          }}
           onKeyDown={(e) => {
             if (pickerOpen && matches.length > 0) {
               if (e.key === 'ArrowDown') {
@@ -426,6 +469,28 @@ export function CommandPalette() {
                 e.preventDefault();
                 const pick = matches[pickerIndex];
                 if (pick) selectRow(pick);
+                return;
+              }
+            }
+            // Arrow-key history when not in the picker. Up = older, Down =
+            // newer; Down past index 0 restores the draft the user had
+            // before they started cycling.
+            if (!pickerOpen && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+              const history = loadHistory();
+              if (history.length === 0) return;
+              if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (historyIndex === -1) draftRef.current = text;
+                const next = Math.min(history.length - 1, historyIndex + 1);
+                setHistoryIndex(next);
+                setText(history[next] ?? '');
+                return;
+              }
+              if (e.key === 'ArrowDown' && historyIndex >= 0) {
+                e.preventDefault();
+                const next = historyIndex - 1;
+                setHistoryIndex(next);
+                setText(next === -1 ? draftRef.current : history[next] ?? '');
                 return;
               }
             }

@@ -4,6 +4,12 @@ import { fileURLToPath } from 'node:url';
 
 import { openObservatory, openPalette, showAnswerHud } from './windows.js';
 
+type AbortHandler = () => void;
+let abortAllHandler: AbortHandler | null = null;
+export function setAbortAllHandler(fn: AbortHandler): void {
+  abortAllHandler = fn;
+}
+
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 let tray: Tray | null = null;
@@ -50,9 +56,14 @@ function rebuildMenu(): void {
     { label: 'Open Observatory', click: () => openObservatory() },
     { label: 'Open Palette  ⌘⇧J', click: () => openPalette() },
     { label: 'Show Answer HUD', click: () => showAnswerHud() },
-    { type: 'separator' },
-    { role: 'quit' },
   );
+  if (runningTasks > 0 && abortAllHandler) {
+    items.push(
+      { type: 'separator' },
+      { label: `Abort all running (${runningTasks})`, click: () => abortAllHandler?.() },
+    );
+  }
+  items.push({ type: 'separator' }, { role: 'quit' });
   tray.setContextMenu(Menu.buildFromTemplate(items));
 }
 
