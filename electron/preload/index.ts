@@ -45,6 +45,8 @@ const api = {
     ipcRenderer.invoke(IpcChannels.openPalette),
   resizePalette: (height: number): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.resizePalette, height),
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.openExternal, url),
 
   listSkills: (): Promise<SkillSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listSkills),
@@ -115,6 +117,8 @@ const api = {
   ): Unsubscribe => subscribe(IpcChannels.taskEvent, listener),
   onTaskStatus: (listener: Listener<TaskSummary>): Unsubscribe =>
     subscribe(IpcChannels.taskStatus, listener),
+  onTaskRemoved: (listener: Listener<string>): Unsubscribe =>
+    subscribe(IpcChannels.taskRemoved, listener),
   onAppStatus: (listener: Listener<AppStatus>): Unsubscribe =>
     subscribe(IpcChannels.appStatus, listener),
 };

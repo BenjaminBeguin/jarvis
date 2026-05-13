@@ -14,7 +14,7 @@ export function Observatory() {
 
   useEffect(() => {
     void window.jarvis.listTasks().then(setTasks);
-    const off = window.jarvis.onTaskStatus((summary) => {
+    const offStatus = window.jarvis.onTaskStatus((summary) => {
       setTasks((prev) => {
         const idx = prev.findIndex((t) => t.id === summary.id);
         if (idx === -1) return [summary, ...prev];
@@ -23,7 +23,14 @@ export function Observatory() {
         return next;
       });
     });
-    return off;
+    const offRemoved = window.jarvis.onTaskRemoved((taskId) => {
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setSelectedId((id) => (id === taskId ? null : id));
+    });
+    return () => {
+      offStatus();
+      offRemoved();
+    };
   }, []);
 
   const selected = useMemo(

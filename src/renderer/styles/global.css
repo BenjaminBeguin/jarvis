@@ -1473,8 +1473,129 @@ button:disabled:hover {
 }
 
 .event__text {
-  white-space: pre-wrap;
   color: var(--text);
+}
+
+/* Plain (tool / system / result / error / tool_result) — keep mono + pre-wrap. */
+.event--tool .event__text,
+.event--system .event__text,
+.event--result .event__text,
+.event--error .event__text {
+  font-family: var(--mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Markdown-rendered (assistant text + user prompt) — sans, real layout. */
+.event--text .event__text,
+.event--user .event__text {
+  font-family: var(--sans);
+  line-height: 1.55;
+  font-size: 13.5px;
+}
+
+.event__text > *:first-child { margin-top: 0; }
+.event__text > *:last-child  { margin-bottom: 0; }
+
+.event__text p { margin: 0 0 8px; }
+
+.event__text strong { color: var(--text); font-weight: 600; }
+.event__text em     { font-style: italic; color: var(--text); }
+.event__text del    { text-decoration: line-through; color: var(--text-dim); }
+
+.event__text a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(0, 212, 255, 0.4);
+  cursor: pointer;
+}
+.event__text a:hover {
+  color: var(--accent-strong);
+  border-bottom-color: var(--accent-strong);
+  text-shadow: var(--accent-glow);
+}
+
+.event__text code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  background: var(--bg-elev-2);
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--accent-strong);
+}
+
+.event__text pre {
+  background: rgba(4, 7, 11, 0.6);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--border-strong);
+  padding: 10px 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+  border-radius: 2px;
+  white-space: pre;
+}
+.event__text pre code {
+  background: transparent;
+  padding: 0;
+  border: 0;
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: pre;
+}
+
+.event__text ul, .event__text ol {
+  margin: 4px 0 8px;
+  padding-left: 22px;
+}
+.event__text li { margin: 2px 0; }
+.event__text li > p { margin: 0; }
+
+.event__text h1, .event__text h2, .event__text h3, .event__text h4 {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 14px 0 6px;
+}
+.event__text h1 { font-size: 13px; text-shadow: var(--accent-glow); }
+
+.event__text table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.event__text th, .event__text td {
+  border: 1px solid var(--border-strong);
+  padding: 5px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.event__text th {
+  background: rgba(0, 212, 255, 0.06);
+  color: var(--accent);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.event__text blockquote {
+  border-left: 2px solid var(--accent);
+  margin: 6px 0;
+  padding: 4px 0 4px 10px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.event__text hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
 }
 
 .event--tool {

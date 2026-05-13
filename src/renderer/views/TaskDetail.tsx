@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { TaskEvent, TaskSummary } from '../../shared/types';
+import { MarkdownText } from './MarkdownText';
 import { formatRelative } from './TaskList';
 
 interface Props {
@@ -245,7 +246,13 @@ export function TaskDetail({ task, onSelectTask }: Props) {
                 {formatTime(e.ts)}
               </span>
             </div>
-            <div className="event__text">{e.body}</div>
+            <div className="event__text">
+              {e.kind === 'text' || e.kind === 'user' ? (
+                <MarkdownText>{e.body}</MarkdownText>
+              ) : (
+                e.body
+              )}
+            </div>
           </div>
         ))}
       </div>

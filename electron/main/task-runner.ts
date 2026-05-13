@@ -49,6 +49,12 @@ interface TaskRecord {
   external?: boolean;
   /** Streaming input queue for multi-turn Jarvis-owned tasks. */
   inputs?: AsyncMessageQueue;
+  /**
+   * The session_id the SDK-spawned claude assigned to this task, learned
+   * from its system/init message. Used to de-duplicate the claude-code-watch
+   * mirror entry that appears for the same conversation.
+   */
+  sdkSessionId?: string;
 }
 
 function userMessage(text: string, sessionId: string): SDKUserMessage {
@@ -411,6 +417,40 @@ export class TaskRunner extends EventEmitter {
     record.events.push(event);
     appendTaskEvent(record.summary.id, event);
     this.emit('event', { taskId: record.summary.id, event });
+
+    // If the SDK has just announced its session id, remember it + drop any
+    // claude-code-watch mirror that's tracking the same JSONL — otherwise
+    // the user sees two entries for one conversation (the Jarvis-owned task
+    // here, and a duplicate external session).
+    if (!record.external) {
+      const m = msg as { type?: string; subtype?: string; session_id?: string };
+      if (
+        m.type === 'system' &&
+        m.subtype === 'init' &&
+        typeof m.session_id === 'string' &&
+        !record.sdkSessionId
+      ) {
+        record.sdkSessionId = m.session_id;
+        const mirrorId = `cc-${m.session_id}`;
+        if (this.records.has(mirrorId)) this.removeExternal(mirrorId);
+      }
+    }
+  }
+
+  /** True if any Jarvis-owned task is bound to this claude session id. */
+  isOwnedSessionId(sessionId: string): boolean {
+    for (const rec of this.records.values()) {
+      if (!rec.external && rec.sdkSessionId === sessionId) return true;
+    }
+    return false;
+  }
+
+  removeExternal(taskId: string): boolean {
+    const rec = this.records.get(taskId);
+    if (!rec || !rec.external) return false;
+    this.records.delete(taskId);
+    this.emit('removed', taskId);
+    return true;
   }
 }
 

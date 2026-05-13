@@ -311,6 +311,19 @@ export class ClaudeCodeWatchModule implements Module {
         } catch {
           continue;
         }
+        const sessionId = basename(filePath, '.jsonl');
+        // Skip claude session files that mirror Jarvis-owned tasks (e.g. the
+        // forked session that "Continue here" creates). Otherwise the user
+        // sees two entries — the cyan Jarvis task and a duplicate amber
+        // external mirror — for the same conversation.
+        if (ctx.isOwnedSessionId(sessionId)) {
+          const existingId = `cc-${sessionId}`;
+          if (this.sessions.has(filePath)) {
+            this.sessions.delete(filePath);
+            ctx.removeExternalTask(existingId);
+          }
+          continue;
+        }
         const existing = this.sessions.get(filePath);
         if (!existing) {
           if (now - stat.mtimeMs > STARTUP_WINDOW_MS) continue;

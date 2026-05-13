@@ -1,4 +1,4 @@
-import { app, globalShortcut, ipcMain, Notification, systemPreferences } from 'electron';
+import { app, globalShortcut, ipcMain, Notification, shell, systemPreferences } from 'electron';
 import {
   readFileSync,
   readdirSync,
@@ -175,6 +175,13 @@ function registerIpc(): void {
       resizePalette(height);
     }
   });
+  ipcMain.handle(IpcChannels.openExternal, async (_e, url: string) => {
+    // Only allow http/https. mailto + other schemes are easy XSS vectors
+    // when the URL comes from rendered assistant content.
+    if (typeof url !== 'string') return;
+    if (!/^https?:\/\//i.test(url)) return;
+    await shell.openExternal(url);
+  });
 
   ipcMain.handle(IpcChannels.listSkills, () => skills.list());
   ipcMain.handle(IpcChannels.refreshSkills, () => {
@@ -350,6 +357,9 @@ function wireRunnerEvents(): void {
   runner.on('event', (payload: { taskId: string; event: TaskEvent }) => {
     broadcast(IpcChannels.taskEvent, payload);
   });
+  runner.on('removed', (taskId: string) => {
+    broadcast(IpcChannels.taskRemoved, taskId);
+  });
   runner.on('status', (summary: TaskSummary) => {
     // Tray indicator counts only tasks Jarvis owns — external sessions cycle
     // between running/idle and would make the indicator meaningless.
@@ -429,6 +439,10 @@ app.whenReady().then(async () => {
     updateExternalTaskMeta: (taskId, patch) =>
       runner.updateExternalMeta(taskId, patch),
     hasExternalTask: (id) => runner.hasExternal(id),
+    isOwnedSessionId: (id) => runner.isOwnedSessionId(id),
+    removeExternalTask: (id) => {
+      runner.removeExternal(id);
+    },
   });
   await modules.register(quickNoteModule);
   await modules.register(claudeCodeWatchModule);

@@ -26,6 +26,10 @@ export interface ModuleContext {
   updateExternalTaskMeta(taskId: string, patch: Partial<TaskSummary>): void;
   /** True if Jarvis already has an external entry with that id. */
   hasExternalTask(id: string): boolean;
+  /** True if any Jarvis-owned task is bound to this claude session id. */
+  isOwnedSessionId(sessionId: string): boolean;
+  /** Drop an external entry (used to dedupe mirrors of owned sessions). */
+  removeExternalTask(taskId: string): void;
 }
 
 /**

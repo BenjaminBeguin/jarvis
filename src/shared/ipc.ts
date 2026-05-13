@@ -8,6 +8,7 @@ export const IpcChannels = {
   openObservatory: 'app:openObservatory',
   openPalette: 'app:openPalette',
   resizePalette: 'app:resizePalette',
+  openExternal: 'app:openExternal',
 
   listSkills: 'skills:list',
   refreshSkills: 'skills:refresh',
@@ -42,6 +43,7 @@ export const IpcChannels = {
 
   taskEvent: 'task:event',
   taskStatus: 'task:status',
+  taskRemoved: 'task:removed',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];
