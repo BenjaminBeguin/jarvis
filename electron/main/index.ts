@@ -2,7 +2,9 @@ import { app, globalShortcut, ipcMain, Notification, shell, systemPreferences } 
 import {
   readFileSync,
   readdirSync,
+  rmSync,
   statSync,
+  writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, normalize, relative, resolve } from 'node:path';
@@ -319,6 +321,52 @@ function registerIpc(): void {
     (_e, rel: string): string => {
       const target = resolveSafe(rel);
       return readFileSync(target, 'utf8');
+    },
+  );
+
+  // Delete a single timestamped entry from a daily notes/<date>.md file.
+  // The note file is a sequence of `## HH:MM\n\n<body>\n` blocks appended
+  // over the day; we re-parse, drop the one at `fileIndex` (top-down
+  // order), and rewrite. Deleting the last entry deletes the file.
+  ipcMain.handle(
+    IpcChannels.deleteNoteEntry,
+    (
+      _e,
+      { date, fileIndex }: { date: string; fileIndex: number },
+    ): { ok: boolean; message?: string } => {
+      if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return { ok: false, message: 'Invalid date' };
+      }
+      if (!Number.isInteger(fileIndex) || fileIndex < 0) {
+        return { ok: false, message: 'Invalid entry index' };
+      }
+      const path = resolveSafe(join('notes', `${date}.md`));
+      let raw: string;
+      try {
+        raw = readFileSync(path, 'utf8');
+      } catch {
+        return { ok: false, message: 'Note file not found' };
+      }
+      // Same parser shape the renderer uses. Capture each entry as a block
+      // including its `## HH:MM` header so we can splice it out by index.
+      const re = /(?:^|\n)(## \d{2}:\d{2}\n[\s\S]*?)(?=\n## \d{2}:\d{2}|$)/g;
+      const blocks: string[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(raw)) !== null) blocks.push(m[1]!);
+      if (fileIndex >= blocks.length) {
+        return { ok: false, message: 'Entry not found' };
+      }
+      blocks.splice(fileIndex, 1);
+      if (blocks.length === 0) {
+        try {
+          rmSync(path);
+        } catch {
+          // ignore
+        }
+        return { ok: true };
+      }
+      writeFileSync(path, blocks.join('\n') + '\n', 'utf8');
+      return { ok: true };
     },
   );
 

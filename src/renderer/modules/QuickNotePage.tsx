@@ -5,6 +5,8 @@ import type { JarvisFileEntry } from '../../shared/types';
 interface NoteEntry {
   time: string;
   body: string;
+  /** 0-based index in file order — used by the delete IPC to splice. */
+  fileIndex: number;
 }
 
 interface NoteFile {
@@ -17,14 +19,16 @@ interface NoteFile {
 function parseEntries(raw: string): NoteEntry[] {
   // The file is appended as: "\n## HH:MM\n\n<text>\n" — split on those
   // headers so we can offer per-entry actions without throwing away the
-  // original markdown.
+  // original markdown. Keep file-order index so deletion can splice.
   const entries: NoteEntry[] = [];
   const re = /(?:^|\n)## (\d{2}:\d{2})\n([\s\S]*?)(?=\n## \d{2}:\d{2}|$)/g;
   let m: RegExpExecArray | null;
+  let i = 0;
   while ((m = re.exec(raw)) !== null) {
     const time = m[1];
     const body = m[2].trim();
-    if (body) entries.push({ time, body });
+    if (body) entries.push({ time, body, fileIndex: i });
+    i++;
   }
   return entries.reverse(); // newest first within the day
 }
@@ -94,6 +98,22 @@ export function QuickNotePage() {
     }
   };
 
+  const deleteEntry = async (date: string, entry: NoteEntry) => {
+    const preview =
+      entry.body.length > 60 ? `${entry.body.slice(0, 60)}…` : entry.body;
+    if (!confirm(`Delete note from ${date} ${entry.time}?\n\n"${preview}"`)) return;
+    try {
+      const r = await window.jarvis.deleteNoteEntry(date, entry.fileIndex);
+      if (!r.ok) {
+        setError(r.message ?? 'Could not delete.');
+        return;
+      }
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return (
     <div className="module-page">
       <header className="module-page__header">
@@ -134,6 +154,13 @@ export function QuickNotePage() {
                         onClick={() => void pushEntry(key, entry.body)}
                       >
                         {pushing === key ? 'Pushing…' : '↪ Push to Claude'}
+                      </button>
+                      <button
+                        className="note-card__delete"
+                        title="Delete this note"
+                        onClick={() => void deleteEntry(f.date, entry)}
+                      >
+                        ×
                       </button>
                     </div>
                     <pre className="note-card__entry-body">{entry.body}</pre>

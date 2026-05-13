@@ -91,6 +91,11 @@ const api = {
     ipcRenderer.invoke(IpcChannels.listJarvisDir, rel),
   readJarvisFile: (rel: string): Promise<string> =>
     ipcRenderer.invoke(IpcChannels.readJarvisFile, rel),
+  deleteNoteEntry: (
+    date: string,
+    fileIndex: number,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.deleteNoteEntry, { date, fileIndex }),
 
   requestMicAccess: (): Promise<{ granted: boolean; status: string }> =>
     ipcRenderer.invoke(IpcChannels.requestMicAccess),

@@ -28,6 +28,7 @@ export const IpcChannels = {
 
   listJarvisDir: 'fs:listJarvisDir',
   readJarvisFile: 'fs:readJarvisFile',
+  deleteNoteEntry: 'notes:deleteEntry',
 
   requestMicAccess: 'media:requestMic',
   micStatus: 'media:micStatus',
