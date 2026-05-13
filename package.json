@@ -7,7 +7,7 @@
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "sh -c 'ulimit -n 10240 2>/dev/null; electron-vite dev'",
+    "dev": "sh -c 'ulimit -n 65536 2>/dev/null || ulimit -n 10240 2>/dev/null || ulimit -n 4096 2>/dev/null; echo \"FD limit: $(ulimit -n)\"; electron-vite dev'",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",

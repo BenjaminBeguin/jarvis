@@ -66,6 +66,16 @@ async function load(): Promise<Transcriber> {
         }
       },
     })) as unknown as Transcriber;
+    // Defensive scrub: some Whisper model configs ship with `language` /
+    // `task` pre-populated, which makes `_retrieve_init_tokens` throw for
+    // English-only checkpoints. Null them out on the loaded model.
+    const inner = p as unknown as {
+      model?: { generation_config?: Record<string, unknown> };
+    };
+    if (inner.model?.generation_config) {
+      inner.model.generation_config['language'] = null;
+      inner.model.generation_config['task'] = null;
+    }
     emitProgress({ status: 'ready' });
     transcriber = p;
     return p;
@@ -81,12 +91,16 @@ export async function transcribePcm(pcm: Float32Array): Promise<string> {
   const w = await load();
   // Whisper expects 16kHz mono PCM as a Float32Array. The renderer is
   // already resampling, but the pipeline doesn't enforce — caller's responsibility.
-  // whisper-tiny.en is English-only and rejects task/language args.
+  // whisper-tiny.en is English-only and rejects task/language. We pass nulls
+  // explicitly so even if the cached model's generation_config has them set,
+  // our kwargs override before _retrieve_init_tokens runs.
   // For multilingual support, swap MODEL_NAME to 'Xenova/whisper-tiny' (no .en).
   const result = await w(pcm, {
     sampling_rate: TARGET_SAMPLE_RATE,
     chunk_length_s: 30,
-  });
+    language: null,
+    task: null,
+  } as unknown as Parameters<Transcriber>[1]);
   emitProgress({ status: 'done' });
   const text = Array.isArray(result)
     ? result.map((r) => r.text).join(' ')
