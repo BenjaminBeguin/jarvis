@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { homedir } from 'node:os';
 import { nanoid } from 'nanoid';
 import { query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 
@@ -317,6 +318,17 @@ export class TaskRunner extends EventEmitter {
         permissionMode: 'bypassPermissions',
         systemPrompt,
         env: this.buildEnv(),
+        // SDK defaults to "isolation mode" — no MCP servers, no plugins, no
+        // CLAUDE.md memory from the user's normal Claude Code setup. Opt
+        // into the full config so Jarvis tasks have access to the same
+        // toolbox the user has in their day-to-day claude CLI / Claude
+        // Desktop sessions.
+        settingSources: ['user', 'project', 'local'],
+        // Run from the user's home directory by default. Electron's cwd is
+        // the .app bundle path, which is the wrong place for the agent to
+        // operate from (read/write/git/etc. would target Jarvis itself).
+        // Skills can override this in the future via a `cwd` frontmatter.
+        cwd: homedir(),
       };
       if (
         this.auth.mode === 'subscription' &&
