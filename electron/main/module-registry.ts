@@ -22,7 +22,10 @@ export class ModuleRegistry extends EventEmitter {
   private disabledIds = new Set<string>(loadDisabledModules());
   // Renderer-side pages exist for these module ids. We mirror that here so
   // the renderer can render a 'View' affordance without an extra lookup.
-  private static readonly PAGED_MODULES = new Set(['quick-note']);
+  private static readonly PAGED_MODULES = new Set([
+    'quick-note',
+    'meeting-recorder',
+  ]);
 
   setContext(ctx: ModuleContext): void {
     this.ctx = ctx;

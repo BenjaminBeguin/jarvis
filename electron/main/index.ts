@@ -28,6 +28,7 @@ import { closeDatabase, getTaskEvents, initDatabase, listRecentTasks } from './d
 import { McpConfigStore } from './mcp-config.js';
 import { ModuleRegistry } from './module-registry.js';
 import { claudeCodeWatchModule } from './modules/claude-code-watch.js';
+import { meetingRecorderModule, persistMeeting } from './modules/meeting-recorder.js';
 import { quickNoteModule } from './modules/quick-note.js';
 import { ProjectStore } from './projects.js';
 import { RoutineStore } from './routines.js';
@@ -292,6 +293,35 @@ function registerIpc(): void {
     },
   );
 
+  ipcMain.handle(
+    IpcChannels.meetingFinish,
+    async (
+      _e,
+      payload: {
+        title: string;
+        startedAt: number;
+        endedAt: number;
+        sampleRate: number;
+        pcm: ArrayBuffer;
+      },
+    ): Promise<{ filename: string }> => {
+      const filename = await persistMeeting(join(homedir(), '.jarvis'), {
+        title: payload.title,
+        startedAt: payload.startedAt,
+        endedAt: payload.endedAt,
+        sampleRate: payload.sampleRate,
+        pcm: new Float32Array(payload.pcm),
+      });
+      new Notification({
+        title: 'Meeting saved',
+        body: `~/.jarvis/meetings/${filename}`,
+      })
+        .on('click', () => openObservatory())
+        .show();
+      return { filename };
+    },
+  );
+
   ipcMain.handle(IpcChannels.listRoutines, () => routines.list());
   ipcMain.handle(IpcChannels.saveRoutine, (_e, input) => routines.save(input));
   ipcMain.handle(IpcChannels.deleteRoutine, (_e, id: string) =>
@@ -443,9 +473,11 @@ app.whenReady().then(async () => {
     removeExternalTask: (id) => {
       runner.removeExternal(id);
     },
+    broadcast: (channel, payload) => broadcast(channel, payload),
   });
   await modules.register(quickNoteModule);
   await modules.register(claudeCodeWatchModule);
+  await modules.register(meetingRecorderModule);
 
   skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
   mcp.on('changed', (list) => broadcast(IpcChannels.listMcpServers, list));

@@ -88,6 +88,20 @@ const api = {
   onTranscribeProgress: (listener: Listener<TranscribeProgress>): Unsubscribe =>
     subscribe(IpcChannels.transcribeProgress, listener),
 
+  meetingFinish: (payload: {
+    title: string;
+    startedAt: number;
+    endedAt: number;
+    sampleRate: number;
+    pcm: ArrayBuffer;
+  }): Promise<{ filename: string }> =>
+    ipcRenderer.invoke(IpcChannels.meetingFinish, payload),
+  onMeetingStart: (
+    listener: Listener<{ title: string; startedAt: number }>,
+  ): Unsubscribe => subscribe(IpcChannels.meetingStart, listener),
+  onMeetingStopRequest: (listener: Listener<void>): Unsubscribe =>
+    subscribe(IpcChannels.meetingStopRequest, listener),
+
   listRoutines: (): Promise<RoutineDef[]> =>
     ipcRenderer.invoke(IpcChannels.listRoutines),
   saveRoutine: (

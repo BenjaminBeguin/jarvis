@@ -30,6 +30,13 @@ export interface ModuleContext {
   isOwnedSessionId(sessionId: string): boolean;
   /** Drop an external entry (used to dedupe mirrors of owned sessions). */
   removeExternalTask(taskId: string): void;
+  /**
+   * Broadcast a custom event channel to every renderer window. Use sparingly
+   * — most modules should communicate via stores / IPC channels owned by
+   * the runtime. Useful for modules that need to coordinate with renderer-
+   * side state (the meeting recorder kicks off audio capture this way).
+   */
+  broadcast(channel: string, payload?: unknown): void;
 }
 
 /**

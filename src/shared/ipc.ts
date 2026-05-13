@@ -29,6 +29,10 @@ export const IpcChannels = {
   transcribeAudio: 'audio:transcribe',
   transcribeProgress: 'audio:progress',
 
+  meetingStart: 'meeting:start',
+  meetingStopRequest: 'meeting:stop-request',
+  meetingFinish: 'meeting:finish',
+
   listRoutines: 'routines:list',
   saveRoutine: 'routines:save',
   deleteRoutine: 'routines:delete',

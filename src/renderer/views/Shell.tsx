@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { AppStatus, ModuleSummary } from '../../shared/types';
 import { getModulePage } from '../modules/registry';
+import { MeetingOverlay } from './MeetingOverlay';
 import { ModulesPage } from './ModulesPage';
 import { Observatory } from './Observatory';
 import { Routines } from './Routines';
@@ -200,6 +201,7 @@ export function Shell({ status }: Props) {
           <ModulesPage onOpenPage={(id) => setOpenModuleId(id)} />
         )}
       </div>
+      <MeetingOverlay />
     </div>
   );
 }

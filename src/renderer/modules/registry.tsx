@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 
+import { MeetingsPage } from './MeetingsPage';
 import { QuickNotePage } from './QuickNotePage';
 
 /**
@@ -12,6 +13,7 @@ import { QuickNotePage } from './QuickNotePage';
  */
 export const MODULE_PAGES: Record<string, ComponentType> = {
   'quick-note': QuickNotePage,
+  'meeting-recorder': MeetingsPage,
 };
 
 export function getModulePage(id: string): ComponentType | null {
