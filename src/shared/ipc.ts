@@ -35,6 +35,7 @@ export const IpcChannels = {
 
   launchTask: 'task:launch',
   abortTask: 'task:abort',
+  sendTaskMessage: 'task:sendMessage',
   listTasks: 'task:list',
   getTaskHistory: 'task:getHistory',
 

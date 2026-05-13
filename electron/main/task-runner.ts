@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { nanoid } from 'nanoid';
-import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 
 import type {
   AuthMode,
@@ -10,6 +10,7 @@ import type {
   TaskStatus,
   TaskSummary,
 } from '@shared/types';
+import { AsyncMessageQueue } from './async-message-queue.js';
 import { appendTaskEvent, insertTask, updateTaskStatus } from './db.js';
 import type { McpConfigStore } from './mcp-config.js';
 import type { SkillRecord, SkillStore } from './skill-store.js';
@@ -24,6 +25,20 @@ interface TaskRecord {
   nextSeq: number;
   /** External entries (e.g. tailed Claude Code sessions) live in-memory only. */
   external?: boolean;
+  /** Streaming input queue for multi-turn Jarvis-owned tasks. */
+  inputs?: AsyncMessageQueue;
+}
+
+function userMessage(text: string, sessionId: string): SDKUserMessage {
+  return {
+    type: 'user',
+    message: {
+      role: 'user',
+      content: [{ type: 'text', text }],
+    },
+    parent_tool_use_id: null,
+    session_id: sessionId,
+  };
 }
 
 export interface AuthContext {
@@ -88,14 +103,42 @@ export class TaskRunner extends EventEmitter {
     const rec = this.records.get(taskId);
     if (!rec) return false;
     if (rec.summary.status !== 'running') return false;
+    rec.inputs?.close();
     rec.abort.abort();
     return true;
   }
 
   abortAll(): void {
     for (const rec of this.records.values()) {
-      if (rec.summary.status === 'running' && !rec.external) rec.abort.abort();
+      if (rec.summary.status === 'running' && !rec.external) {
+        rec.inputs?.close();
+        rec.abort.abort();
+      }
     }
+  }
+
+  /**
+   * Continue a Jarvis-owned task with a follow-up user message. Returns
+   * false if the task is unknown, external, or no longer accepting input
+   * (completed/aborted/errored).
+   */
+  sendMessage(taskId: string, text: string): boolean {
+    const rec = this.records.get(taskId);
+    if (!rec || rec.external) return false;
+    if (rec.summary.status !== 'running') return false;
+    if (!rec.inputs || rec.inputs.isClosed()) return false;
+    rec.inputs.push(userMessage(text, rec.summary.id));
+    // Echo as an event so the transcript reflects the user's reply
+    // immediately, before the SDK loops back with the assistant response.
+    this.recordEvent(rec, {
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'text', text }] },
+    } as unknown as SDKMessage);
+    // The agent is no longer awaiting — flip the meta so the UI hides the
+    // reply box and shows "running".
+    this.emit('status', { ...rec.summary, awaitingInput: false });
+    rec.summary = { ...rec.summary, awaitingInput: false };
+    return true;
   }
 
   /**
@@ -180,24 +223,26 @@ export class TaskRunner extends EventEmitter {
       costUsd: 0,
       inputPreview: req.prompt.slice(0, 240),
     };
+    const inputs = new AsyncMessageQueue();
+    inputs.push(userMessage(req.prompt, id));
     const record: TaskRecord = {
       summary,
       abort: new AbortController(),
       events: [],
       nextSeq: 0,
+      inputs,
     };
     this.records.set(id, record);
     insertTask(summary);
     this.emit('status', summary);
 
     // Fire-and-forget; never block main loop.
-    void this.run(record, req.prompt, skill);
+    void this.run(record, skill);
     return summary;
   }
 
   private async run(
     record: TaskRecord,
-    prompt: string,
     skill: SkillRecord | null,
   ): Promise<void> {
     const { id } = record.summary;
@@ -228,13 +273,27 @@ export class TaskRunner extends EventEmitter {
         }
       }
 
-      const stream = query({ prompt, options });
+      if (!record.inputs) {
+        throw new Error('Task has no input queue');
+      }
+      const stream = query({ prompt: record.inputs, options });
 
       for await (const msg of stream as AsyncIterable<SDKMessage>) {
         this.recordEvent(record, msg);
-        if ((msg as { type?: string }).type === 'result') {
-          const r = msg as unknown as { total_cost_usd?: number };
-          if (typeof r.total_cost_usd === 'number') cost = r.total_cost_usd;
+        const m = msg as { type?: string; total_cost_usd?: number };
+        if (m.type === 'result') {
+          if (typeof m.total_cost_usd === 'number') cost = m.total_cost_usd;
+          // End of one turn — the SDK is now waiting for the next user
+          // message from our queue. Flip the meta so the UI exposes a
+          // reply box.
+          record.summary = { ...record.summary, awaitingInput: true, costUsd: cost };
+          this.emit('status', record.summary);
+        } else if (m.type === 'assistant' || m.type === 'user') {
+          // New turn underway — clear the awaiting flag if it was set.
+          if (record.summary.awaitingInput) {
+            record.summary = { ...record.summary, awaitingInput: false };
+            this.emit('status', record.summary);
+          }
         }
       }
     } catch (err) {
@@ -246,12 +305,14 @@ export class TaskRunner extends EventEmitter {
         aborted,
       } as unknown as SDKMessage);
     } finally {
+      record.inputs?.close();
       const endedAt = Date.now();
       record.summary = {
         ...record.summary,
         status: finalStatus,
         endedAt,
         costUsd: cost,
+        awaitingInput: false,
       };
       updateTaskStatus(id, finalStatus, endedAt, cost);
       this.emit('status', record.summary);

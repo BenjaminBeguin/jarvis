@@ -101,6 +101,8 @@ const api = {
     ipcRenderer.invoke(IpcChannels.launchTask, req),
   abortTask: (taskId: string): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.abortTask, taskId),
+  sendTaskMessage: (taskId: string, text: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.sendTaskMessage, { taskId, text }),
   listTasks: (): Promise<TaskSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listTasks),
   getTaskHistory: (taskId: string): Promise<TaskEvent[]> =>

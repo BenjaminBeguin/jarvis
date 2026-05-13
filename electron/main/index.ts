@@ -314,6 +314,12 @@ function registerIpc(): void {
     runner.abort(taskId),
   );
 
+  ipcMain.handle(
+    IpcChannels.sendTaskMessage,
+    (_e, { taskId, text }: { taskId: string; text: string }) =>
+      runner.sendMessage(taskId, text),
+  );
+
   ipcMain.handle(IpcChannels.listTasks, () => {
     const live = runner.list();
     if (live.length > 0) return live;

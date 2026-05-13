@@ -191,7 +191,69 @@ export function TaskDetail({ task }: Props) {
         ))}
       </div>
       {isAwaiting && task.origin === 'external' && <QuickReply task={task} />}
+      {isAwaiting && task.origin !== 'external' && <SendReply task={task} />}
     </section>
+  );
+}
+
+function SendReply({ task }: { task: TaskSummary }) {
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    taRef.current?.focus();
+  }, [task.id]);
+
+  // Reset on task change.
+  useEffect(() => {
+    setText('');
+    setError(null);
+  }, [task.id]);
+
+  const send = async () => {
+    const value = text.trim();
+    if (!value) return;
+    setSending(true);
+    setError(null);
+    try {
+      const ok = await window.jarvis.sendTaskMessage(task.id, value);
+      if (!ok) {
+        setError("Couldn't send — task isn't accepting input anymore.");
+        return;
+      }
+      setText('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="detail__reply-dock detail__reply-dock--open">
+      <textarea
+        ref={taRef}
+        value={text}
+        rows={3}
+        placeholder="Reply to keep the conversation going. ⌘↵ to send."
+        disabled={sending}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            void send();
+          }
+        }}
+      />
+      {error && <div className="detail__reply-hint" style={{ color: 'var(--bad)' }}>{error}</div>}
+      <div className="detail__reply-actions">
+        <button onClick={() => void send()} disabled={sending || !text.trim()}>
+          {sending ? 'Sending…' : 'Send'}
+        </button>
+      </div>
+    </div>
   );
 }
 
