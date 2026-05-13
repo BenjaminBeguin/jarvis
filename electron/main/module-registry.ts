@@ -25,6 +25,7 @@ export class ModuleRegistry extends EventEmitter {
   private static readonly PAGED_MODULES = new Set([
     'quick-note',
     'meeting-recorder',
+    'send',
   ]);
 
   setContext(ctx: ModuleContext): void {

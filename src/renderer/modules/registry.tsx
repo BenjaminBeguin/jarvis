@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 
 import { MeetingsPage } from './MeetingsPage';
 import { QuickNotePage } from './QuickNotePage';
+import { SendPage } from './SendPage';
 
 /**
  * Maps module id → renderer page component. A module appears with a "View"
@@ -14,6 +15,7 @@ import { QuickNotePage } from './QuickNotePage';
 export const MODULE_PAGES: Record<string, ComponentType> = {
   'quick-note': QuickNotePage,
   'meeting-recorder': MeetingsPage,
+  send: SendPage,
 };
 
 export function getModulePage(id: string): ComponentType | null {
