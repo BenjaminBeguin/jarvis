@@ -1266,13 +1266,14 @@ button:disabled:hover {
   text-transform: uppercase;
 }
 
-/* ----- Routines --------------------------------------------------------- */
+/* ----- Routines (HUD-style cards) ---------------------------------------- */
 
 .routines {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 22px 26px;
+  padding: 22px 30px 36px;
   gap: 16px;
   overflow-y: auto;
 }
@@ -1282,15 +1283,16 @@ button:disabled:hover {
   justify-content: space-between;
   align-items: flex-end;
   gap: 16px;
+  margin-bottom: 4px;
 }
 
 .routines__header h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
   font-family: var(--mono);
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.32em;
   color: var(--accent);
   text-shadow: var(--accent-glow);
 }
@@ -1301,67 +1303,188 @@ button:disabled:hover {
   font-size: 12px;
 }
 
-.routines__list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.routines__section-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-top: 12px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
 }
 
-.routine {
+.routines__notice {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  padding: 18px 0;
+}
+
+.routines__notice code {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 1px 6px;
+  font-family: var(--mono);
+}
+
+.routines__preset-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.routines__preset {
+  background: rgba(10, 17, 24, 0.55);
+  border: 1px solid var(--border);
+  padding: 16px 16px 14px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: var(--sans);
+  font-size: 13px;
+  cursor: pointer;
+  min-height: 120px;
+}
+
+.routines__preset:hover {
+  border-color: var(--accent);
+  background: rgba(0, 212, 255, 0.04);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.routines__preset-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text);
+}
+
+.routines__preset-desc {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.routines__preset-cron {
+  margin-top: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.routines__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.routine-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(10, 17, 24, 0.6);
+  border: 1px solid var(--border);
+  padding: 16px 18px;
   position: relative;
+}
+
+.routine-card--off {
+  opacity: 0.6;
+}
+
+.routine-card__head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  padding: 16px 18px;
-  background: rgba(10, 17, 24, 0.6);
-  border: 1px solid var(--border);
-}
-
-.routine__title {
-  font-size: 13px;
-  color: var(--text);
-  font-family: var(--mono);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.routine__meta {
-  display: flex;
   gap: 12px;
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-top: 6px;
-  align-items: center;
 }
 
-.routine__cron {
+.routine-card__name {
   font-family: var(--mono);
-  background: rgba(0, 212, 255, 0.08);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text);
+}
+
+.routine-card__cron {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--accent);
-  padding: 2px 8px;
-  border-radius: 2px;
-  letter-spacing: 0.08em;
+  text-shadow: var(--accent-glow);
 }
 
-.routine__input-preview {
-  font-style: italic;
-}
-
-.routine__history {
+.routine-card__cron-raw {
   font-family: var(--mono);
   font-size: 10px;
   color: var(--text-faint);
-  margin-top: 6px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
-.routine__actions {
+.routine-card__input {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-dim);
+  border-left: 2px solid var(--border-strong);
+  padding-left: 10px;
+}
+
+.routine-card__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 4px 0 2px;
+}
+
+.routine-card__tools--empty {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-style: italic;
+}
+
+.tool-chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: rgba(0, 212, 255, 0.04);
+  border: 1px solid var(--border-strong);
+  padding: 2px 7px;
+  border-radius: 1px;
+}
+
+.tool-chip--mcp {
+  color: var(--good);
+  border-color: rgba(95, 255, 166, 0.35);
+  background: rgba(95, 255, 166, 0.06);
+}
+
+.routine-card__last {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.routine-card__actions {
   display: flex;
   gap: 6px;
-  align-items: center;
-  flex-shrink: 0;
+  margin-top: 4px;
 }
 
 .toggle {
@@ -1376,35 +1499,71 @@ button:disabled:hover {
   cursor: pointer;
 }
 
+/* Editor: floats over the routines list as a HUD-style panel */
+
+.routine-editor-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 4, 7, 0.55);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  padding: 40px;
+}
+
 .routine-editor {
+  width: min(640px, 100%);
+  background: rgba(10, 17, 24, 0.95);
+  border: 1px solid var(--border-strong);
+  padding: 22px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 18px;
-  background: rgba(10, 17, 24, 0.7);
-  border: 1px solid var(--border-strong);
-  position: relative;
+  gap: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), var(--accent-glow-soft);
+}
+
+.routine-editor__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .routine-editor h3 {
-  margin: 0 0 4px;
-  font-size: 12px;
+  margin: 0;
   font-family: var(--mono);
-  font-weight: 500;
-  letter-spacing: 0.18em;
+  font-size: 12px;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--accent);
   text-shadow: var(--accent-glow);
 }
 
+.routine-editor__close {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.routine-editor__close:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .routine-editor label {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   font-family: var(--mono);
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   color: var(--text-dim);
 }
 
@@ -1416,11 +1575,11 @@ button:disabled:hover {
 .routine-editor input,
 .routine-editor textarea,
 .routine-editor select {
-  background: rgba(0, 212, 255, 0.03);
-  border: 1px solid var(--border);
+  background: rgba(0, 212, 255, 0.04);
+  border: 1px solid var(--border-strong);
   color: var(--text);
   border-radius: 2px;
-  padding: 9px 10px;
+  padding: 10px 12px;
   font-size: 13px;
   font-family: var(--mono);
   outline: 0;
@@ -1439,17 +1598,29 @@ button:disabled:hover {
   box-shadow: var(--accent-glow-soft);
 }
 
+.routine-editor__cron-human {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  text-transform: none;
+}
+
+.routine-editor__skill-tools {
+  margin-top: 2px;
+}
+
 .routine-editor__error {
   color: var(--bad);
-  font-size: 11px;
   font-family: var(--mono);
+  font-size: 11px;
 }
 
 .routine-editor__actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 /* ----- Setup ------------------------------------------------------------ */
