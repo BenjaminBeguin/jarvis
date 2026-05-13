@@ -20,6 +20,7 @@ export const IpcChannels = {
   refreshSkills: 'skills:refresh',
 
   listMcpServers: 'mcp:list',
+  listClaudeMcps: 'mcp:listClaude',
 
   listModules: 'modules:list',
   dispatchIntent: 'modules:dispatchIntent',

@@ -35,6 +35,7 @@ import { quickNoteModule } from './modules/quick-note.js';
 import { sendModule } from './modules/send.js';
 import { skillSuggesterModule } from './modules/skill-suggester.js';
 import { statusModule } from './modules/status.js';
+import { listClaudeMcps } from './claude-mcp.js';
 import { parseIntent } from './intent-router.js';
 import { ProjectStore } from './projects.js';
 import { ReminderStore } from './reminders.js';
@@ -257,6 +258,10 @@ function registerIpc(): void {
   });
 
   ipcMain.handle(IpcChannels.listMcpServers, () => mcp.list());
+  ipcMain.handle(IpcChannels.listClaudeMcps, async () => {
+    const bin = claudeBinaryPath ?? '';
+    return listClaudeMcps(bin);
+  });
 
   ipcMain.handle(IpcChannels.listModules, () => modules.list());
   ipcMain.handle(

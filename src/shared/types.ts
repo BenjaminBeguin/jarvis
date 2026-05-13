@@ -115,6 +115,23 @@ export interface RoutineDef {
   nextRunAt: number | null;
 }
 
+/**
+ * An MCP server that Claude itself (Claude Code / Claude.ai connectors)
+ * knows about. Parsed from `claude mcp list`. Distinct from
+ * `McpServerSummary` which only reflects Jarvis-managed local stdio MCPs
+ * in ~/.jarvis/mcp.json.
+ */
+export interface ClaudeMcpEntry {
+  /** Short name after stripping the "claude.ai " or "plugin:foo:" prefix. */
+  name: string;
+  /** Original full name including prefix. */
+  fullName: string;
+  /** URL for remote connectors, command string for stdio MCPs. */
+  target: string;
+  status: 'connected' | 'needs-auth' | 'failed' | 'unknown';
+  source: 'claude.ai' | 'user' | 'plugin';
+}
+
 export interface McpServerSummary {
   id: string;
   type: 'stdio' | 'sse' | 'http';

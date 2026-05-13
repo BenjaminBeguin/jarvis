@@ -4,6 +4,7 @@ import { IpcChannels } from '@shared/ipc';
 import type {
   AppStatus,
   AuthMode,
+  ClaudeMcpEntry,
   DispatchIntentResult,
   JarvisFileEntry,
   LaunchTaskRequest,
@@ -73,6 +74,8 @@ const api = {
     ipcRenderer.invoke(IpcChannels.listMcpServers),
   onMcpServersChanged: (listener: Listener<McpServerSummary[]>): Unsubscribe =>
     subscribe(IpcChannels.listMcpServers, listener),
+  listClaudeMcps: (): Promise<ClaudeMcpEntry[]> =>
+    ipcRenderer.invoke(IpcChannels.listClaudeMcps),
 
   listModules: (): Promise<ModuleSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listModules),

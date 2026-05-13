@@ -1,20 +1,55 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-import type { McpServerSummary } from '../../shared/types';
+import type { ClaudeMcpEntry, McpServerSummary } from '../../shared/types';
 
 /**
  * "Channels" — the page behind the Send module. Documents how to wire each
  * supported channel's MCP and shows which ones are currently connected.
  * Keeping setup as inline docs so the user doesn't have to leave Jarvis to
  * figure out how to add a new mailbox or workspace.
+ *
+ * Connection status is the union of three sources:
+ *  - ~/.jarvis/mcp.json (Jarvis-managed stdio MCPs)
+ *  - `claude mcp list` (Claude-managed: claude.ai connectors + user-scoped
+ *    registrations via `claude mcp add`)
+ * A card is "connected" if any of those sees a matching name AND it's
+ * actually working (Claude.ai connectors include a status indicator).
  */
 export function SendPage() {
   const [servers, setServers] = useState<McpServerSummary[]>([]);
+  const [claudeMcps, setClaudeMcps] = useState<ClaudeMcpEntry[]>([]);
   useEffect(() => {
     void window.jarvis.listMcpServers().then(setServers);
     return window.jarvis.onMcpServersChanged(setServers);
   }, []);
-  const byId = (id: string) => servers.some((s) => s.id === id);
+  useEffect(() => {
+    const refresh = () => void window.jarvis.listClaudeMcps().then(setClaudeMcps);
+    refresh();
+    // `claude mcp list` shells out to the CLI — modest cost — but refresh
+    // periodically so a freshly-added MCP flips the badge without a page
+    // reload.
+    const id = setInterval(refresh, 20_000);
+    return () => clearInterval(id);
+  }, []);
+  const connectedClaude = useMemo(
+    () =>
+      new Set(
+        claudeMcps
+          .filter((m) => m.status === 'connected')
+          .map((m) => m.name.toLowerCase()),
+      ),
+    [claudeMcps],
+  );
+  /**
+   * A card is connected if:
+   *  - There's a Jarvis local MCP with that exact id (mcp.json), OR
+   *  - Claude knows about a server whose short name matches any of the
+   *    accepted aliases for the card (e.g. "gmail-personal" or "Gmail").
+   */
+  const isConnected = (...aliases: string[]) => {
+    if (aliases.some((a) => servers.some((s) => s.id === a))) return true;
+    return aliases.some((a) => connectedClaude.has(a.toLowerCase()));
+  };
   return (
     <div className="module-page">
       <header className="module-page__header">
@@ -31,7 +66,9 @@ export function SendPage() {
       <div className="channels">
         <ChannelCard
           name="Gmail · personal"
-          status={byId('gmail-personal') ? 'connected' : 'missing'}
+          status={
+            isConnected('gmail-personal', 'Gmail') ? 'connected' : 'missing'
+          }
           tool="gmail-personal"
         >
           <Steps>
@@ -90,7 +127,7 @@ npx -y @gongrzhe/server-gmail-autoauth-mcp auth`}</Pre>
 
         <ChannelCard
           name="Gmail · work"
-          status={byId('gmail-work') ? 'connected' : 'missing'}
+          status={isConnected('gmail-work') ? 'connected' : 'missing'}
           tool="gmail-work"
         >
           <p className="channels__hint">
@@ -124,7 +161,7 @@ npx -y @gongrzhe/server-gmail-autoauth-mcp auth`}</Pre>
 
         <ChannelCard
           name="Slack"
-          status={byId('slack') ? 'connected' : 'missing'}
+          status={isConnected('slack', 'Slack') ? 'connected' : 'missing'}
           tool="slack"
         >
           <Steps>
@@ -169,7 +206,7 @@ npx -y @gongrzhe/server-gmail-autoauth-mcp auth`}</Pre>
 
         <ChannelCard
           name="iMessage · macOS"
-          status={byId('imessage') ? 'connected' : 'optional'}
+          status={isConnected('imessage') ? 'connected' : 'optional'}
           tool="imessage"
         >
           <p className="channels__hint">
