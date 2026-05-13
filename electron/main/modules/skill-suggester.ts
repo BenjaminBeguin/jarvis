@@ -25,8 +25,8 @@ export const skillSuggesterModule: Module = {
         'Send recent prompts to Claude to find reusable patterns worth saving as skills',
       handler: (_input, ctx) => {
         const recent = ctx.listRecentTasks(MAX_RECENT);
-        // Filter to Jarvis-owned, completed-or-running tasks with a real
-        // prompt. External claude-code sessions get noisy, skip them.
+        // Filter to Jarvis-owned tasks with a real prompt. External
+        // claude-code sessions get noisy, skip them.
         const prompts = recent
           .filter(
             (t) =>
@@ -37,8 +37,14 @@ export const skillSuggesterModule: Module = {
           .map((t) => t.inputPreview.replace(/\s+/g, ' ').trim())
           .filter((p) => p.length > 0);
 
-        if (prompts.length < 3) {
-          return 'Not enough prompts yet — ask Jarvis a few more things first.';
+        if (prompts.length === 0) {
+          // Visible feedback — the palette swallows success-string returns,
+          // so a notification is the only way the user sees this.
+          ctx.notify(
+            'Skill suggester',
+            'No Jarvis-owned prompts yet. Ask Jarvis a few things first.',
+          );
+          return 'No prompts to analyze yet.';
         }
 
         const numbered = prompts
@@ -53,6 +59,12 @@ export const skillSuggesterModule: Module = {
           origin: 'palette',
         });
         ctx.showHud(t.id);
+        // Belt-and-suspenders: pop a quick notification too in case the HUD
+        // ends up hidden behind another app while the user looks for it.
+        ctx.notify(
+          'Skill suggester',
+          `Analyzing ${prompts.length} prompt${prompts.length === 1 ? '' : 's'} — opening HUD`,
+        );
         return `Analyzing ${prompts.length} prompts · #${t.id.slice(0, 6)}`;
       },
     },
