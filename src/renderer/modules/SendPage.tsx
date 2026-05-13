@@ -221,42 +221,40 @@ npx -y @gongrzhe/server-gmail-autoauth-mcp auth`}</Pre>
           status={isConnected('slack', 'Slack') ? 'connected' : 'missing'}
           tool="slack"
         >
+          <p className="channels__hint">
+            Recommended path: use the Claude.ai Slack connector — one-click
+            OAuth, no app to create, no token to manage, and messages go out
+            as you (not as a bot).
+          </p>
           <Steps>
             <Step>
-              <strong>Create a Slack app.</strong>{' '}
-              <ExtA href="https://api.slack.com/apps?new_app=1">api.slack.com/apps</ExtA>{' '}
-              → From scratch → name it (e.g. "Jarvis") → pick your workspace.
+              <strong>Open Claude's connector settings.</strong>{' '}
+              <ExtA href="https://claude.ai/settings/connectors">
+                claude.ai/settings/connectors
+              </ExtA>{' '}
+              — sign in with the same Claude account you use here.
             </Step>
             <Step>
-              <strong>Bot scopes.</strong> Left sidebar → <em>OAuth &
-              Permissions</em> → scroll to "Bot Token Scopes" → add at least:{' '}
-              <code>chat:write</code>, <code>users:read</code>,{' '}
-              <code>channels:read</code>, <code>im:write</code>,{' '}
-              <code>files:write</code> (for image uploads).
+              <strong>Connect Slack.</strong> Find <em>Slack</em> in the list
+              → Connect → log in to your workspace → Allow. That's it.
             </Step>
             <Step>
-              <strong>Install to workspace.</strong> Top of the same page →
-              "Install to Workspace" → approve. Copy the{' '}
-              <code>Bot User OAuth Token</code> (<code>xoxb-…</code>).
+              <strong>Verify from a terminal:</strong>
+              <Pre>{`claude mcp list | grep Slack`}</Pre>
+              You should see{' '}
+              <code>claude.ai Slack: ... ✓ Connected</code>. The SDK Jarvis
+              uses inherits this automatically — no <code>mcp.json</code>{' '}
+              edit needed.
             </Step>
             <Step>
-              <strong>Find your Team ID.</strong>{' '}
-              <ExtA href="https://slack.com">slack.com</ExtA> in browser →
-              Workspace settings, or read it from any channel URL (the{' '}
-              <code>T0XXXX</code> part).
-            </Step>
-            <Step>
-              <strong>Wire into Jarvis.</strong> Add to{' '}
-              <code>~/.jarvis/mcp.json</code>:
-              <Pre>{`"slack": {
-  "type": "stdio",
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-slack"],
-  "env": {
-    "SLACK_BOT_TOKEN": "xoxb-...",
-    "SLACK_TEAM_ID": "T0XXXX..."
-  }
-}`}</Pre>
+              <strong>Multiple workspaces?</strong> The Claude.ai connector
+              ties to one workspace at a time. For a second workspace, add a
+              local MCP via <code>claude mcp add</code> with a Slack bot
+              token (
+              <ExtA href="https://api.slack.com/apps?new_app=1">
+                api.slack.com/apps
+              </ExtA>
+              ). Or ping me and I'll write up the bot-token path.
             </Step>
           </Steps>
         </ChannelCard>
