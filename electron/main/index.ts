@@ -1,4 +1,4 @@
-import { app, globalShortcut, ipcMain, Notification } from 'electron';
+import { app, globalShortcut, ipcMain, Notification, systemPreferences } from 'electron';
 import {
   readFileSync,
   readdirSync,
@@ -206,6 +206,32 @@ function registerIpc(): void {
     (_e, rel: string): string => {
       const target = resolveSafe(rel);
       return readFileSync(target, 'utf8');
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.requestMicAccess,
+    async (): Promise<{ granted: boolean; status: string }> => {
+      if (process.platform !== 'darwin') {
+        return { granted: true, status: 'unrestricted' };
+      }
+      const status = systemPreferences.getMediaAccessStatus('microphone');
+      if (status === 'granted') return { granted: true, status };
+      // 'not-determined' triggers the system prompt; 'denied'/'restricted' won't.
+      const ok = await systemPreferences.askForMediaAccess('microphone');
+      const after = systemPreferences.getMediaAccessStatus('microphone');
+      return { granted: ok && after === 'granted', status: after };
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.micStatus,
+    (): { status: string } => {
+      const status =
+        process.platform === 'darwin'
+          ? systemPreferences.getMediaAccessStatus('microphone')
+          : 'unrestricted';
+      return { status };
     },
   );
 

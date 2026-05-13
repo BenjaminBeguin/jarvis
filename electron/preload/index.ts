@@ -69,6 +69,11 @@ const api = {
   readJarvisFile: (rel: string): Promise<string> =>
     ipcRenderer.invoke(IpcChannels.readJarvisFile, rel),
 
+  requestMicAccess: (): Promise<{ granted: boolean; status: string }> =>
+    ipcRenderer.invoke(IpcChannels.requestMicAccess),
+  micStatus: (): Promise<{ status: string }> =>
+    ipcRenderer.invoke(IpcChannels.micStatus),
+
   listRoutines: (): Promise<RoutineDef[]> =>
     ipcRenderer.invoke(IpcChannels.listRoutines),
   saveRoutine: (

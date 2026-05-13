@@ -7,7 +7,6 @@ import {
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
-import chokidar, { type FSWatcher } from 'chokidar';
 
 import type { TaskSummary } from '@shared/types';
 
@@ -19,8 +18,8 @@ const PROJECTS_ROOT = join(homedir(), '.claude', 'projects');
 const STARTUP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /** A session is "running" if its file was modified more recently than this. */
 const ACTIVE_THRESHOLD_MS = 5 * 60 * 1000;
-/** How often we sweep to flip stale sessions to "completed". */
-const SWEEP_INTERVAL_MS = 20 * 1000;
+/** How often we re-scan for new content, new sessions, and status changes. */
+const POLL_INTERVAL_MS = 1500;
 /** Trim title to a sensible width for the sidebar. */
 const TITLE_MAX_CHARS = 72;
 /** How many recent events we backfill so a clicked node has context. */
@@ -161,8 +160,7 @@ export class ClaudeCodeWatchModule implements Module {
   readonly version = '1.0.0';
 
   private ctx: ModuleContext | null = null;
-  private watcher: FSWatcher | null = null;
-  private sweep: ReturnType<typeof setInterval> | null = null;
+  private poll: ReturnType<typeof setInterval> | null = null;
   private readonly sessions = new Map<string, SessionState>();
 
   async onLoad(ctx: ModuleContext): Promise<void> {
@@ -172,27 +170,21 @@ export class ClaudeCodeWatchModule implements Module {
       return;
     }
 
-    // Initial scan: synchronous and fast — we just stat + register, no event replay.
+    // Initial pass: discover sessions modified within the window, set them up
+    // with position = EOF so we don't replay history into the registry.
     this.scanExisting();
 
-    // chokidar with ignoreInitial so we don't re-fire 'add' for everything we
-    // just scanned. New files appearing later still come through.
-    this.watcher = chokidar.watch(`${PROJECTS_ROOT}/**/*.jsonl`, {
-      ignoreInitial: true,
-      awaitWriteFinish: false,
-      depth: 3,
-    });
-    this.watcher.on('add', (p: string) => this.onAdd(p));
-    this.watcher.on('change', (p: string) => this.onChange(p));
-
-    this.sweep = setInterval(() => this.sweepStatus(), SWEEP_INTERVAL_MS);
+    // Pure interval polling. We previously tried chokidar (both native and
+    // usePolling) but it blew through macOS's file-descriptor limit on
+    // machines with many Claude Code projects — chokidar still holds dir
+    // watch handles even in polling mode. A 1.5s readdir+stat sweep over
+    // ~500 files is cheap and bounded.
+    this.poll = setInterval(() => this.scanAll(), POLL_INTERVAL_MS);
   }
 
   async onUnload(): Promise<void> {
-    if (this.sweep) clearInterval(this.sweep);
-    this.sweep = null;
-    await this.watcher?.close();
-    this.watcher = null;
+    if (this.poll) clearInterval(this.poll);
+    this.poll = null;
   }
 
   private scanExisting(): void {
@@ -273,29 +265,68 @@ export class ClaudeCodeWatchModule implements Module {
     });
   }
 
-  private onAdd(filePath: string): void {
-    if (this.sessions.has(filePath)) return;
-    try {
-      const stat = statSync(filePath);
-      const slug = basename(join(filePath, '..'));
-      this.ingest(filePath, slug, stat.size, stat.mtimeMs, stat.birthtimeMs);
-    } catch {
-      /* skip */
-    }
-  }
-
-  private onChange(filePath: string): void {
+  /**
+   * One pass over PROJECTS_ROOT: ingest any new session, tail bytes for any
+   * session whose file grew since we last looked, and reconcile running/idle
+   * status for everything we know about.
+   */
+  private scanAll(): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    let state = this.sessions.get(filePath);
-    if (!state) {
-      this.onAdd(filePath);
-      state = this.sessions.get(filePath);
-      if (!state) return;
+    let projects: string[];
+    try {
+      projects = readdirSync(PROJECTS_ROOT, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+    } catch {
+      return;
     }
-    this.tail(state);
-    ctx.updateExternalTaskStatus(state.taskId, 'running', null);
-    state.lastEventAt = Date.now();
+    const seen = new Set<string>();
+    const now = Date.now();
+
+    for (const slug of projects) {
+      const projDir = join(PROJECTS_ROOT, slug);
+      let files: string[];
+      try {
+        files = readdirSync(projDir).filter((f) => f.endsWith('.jsonl'));
+      } catch {
+        continue;
+      }
+      for (const f of files) {
+        const filePath = join(projDir, f);
+        seen.add(filePath);
+        let stat;
+        try {
+          stat = statSync(filePath);
+        } catch {
+          continue;
+        }
+        const existing = this.sessions.get(filePath);
+        if (!existing) {
+          if (now - stat.mtimeMs > STARTUP_WINDOW_MS) continue;
+          this.ingest(filePath, slug, stat.size, stat.mtimeMs, stat.birthtimeMs);
+          continue;
+        }
+        // Existing session — drain any new content.
+        if (stat.size > existing.position) {
+          this.tail(existing);
+          existing.lastEventAt = now;
+        }
+        const isActive = now - stat.mtimeMs < ACTIVE_THRESHOLD_MS;
+        ctx.updateExternalTaskStatus(
+          existing.taskId,
+          isActive ? 'running' : 'completed',
+          isActive ? null : stat.mtimeMs,
+        );
+      }
+    }
+
+    // Sessions whose file disappeared (rare — Claude Code doesn't usually
+    // delete its own logs): drop them from tracking. The TaskSummary stays
+    // in the registry until app restart, which is fine.
+    for (const [path] of this.sessions) {
+      if (!seen.has(path)) this.sessions.delete(path);
+    }
   }
 
   private tail(state: SessionState): void {
@@ -349,25 +380,6 @@ export class ClaudeCodeWatchModule implements Module {
     });
   }
 
-  private sweepStatus(): void {
-    const ctx = this.ctx;
-    if (!ctx) return;
-    const now = Date.now();
-    for (const state of this.sessions.values()) {
-      let mtime: number;
-      try {
-        mtime = statSync(state.filePath).mtimeMs;
-      } catch {
-        continue;
-      }
-      const isActive = now - mtime < ACTIVE_THRESHOLD_MS;
-      ctx.updateExternalTaskStatus(
-        state.taskId,
-        isActive ? 'running' : 'completed',
-        isActive ? null : mtime,
-      );
-    }
-  }
 }
 
 export const claudeCodeWatchModule = new ClaudeCodeWatchModule();

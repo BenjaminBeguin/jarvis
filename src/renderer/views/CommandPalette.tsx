@@ -139,8 +139,25 @@ export function CommandPalette() {
     inputRef.current?.focus();
   };
 
-  const startVoice = () => {
+  const startVoice = async () => {
     if (transcriberRef.current) return;
+    setError(null);
+    // Ask macOS for mic access up-front; without this the prompt may never
+    // appear in dev and Web Speech silently fails with a 'not-allowed' error.
+    try {
+      const perm = await window.jarvis.requestMicAccess();
+      if (!perm.granted) {
+        setError(
+          perm.status === 'denied'
+            ? 'Microphone denied. Enable in System Settings → Privacy → Microphone → Jarvis.'
+            : `Microphone unavailable (status: ${perm.status}).`,
+        );
+        return;
+      }
+    } catch (e) {
+      console.warn('mic permission probe failed', e);
+    }
+
     const t = createTranscriber({
       onPartial: (txt) => setPartial(txt),
       onFinal: (txt) => {
@@ -149,6 +166,19 @@ export function CommandPalette() {
       },
       onError: (msg) => {
         console.warn('voice error', msg);
+        // Web Speech reports a short code. Map the ones the user will hit
+        // most often into something diagnosable.
+        const friendly =
+          msg === 'network'
+            ? "Voice service unreachable (Web Speech in Electron is unreliable — we'll swap to local whisper.cpp next iteration)."
+            : msg === 'not-allowed'
+            ? 'Microphone access not granted yet.'
+            : msg === 'no-speech'
+            ? "Didn't hear anything — hold the mic button while speaking."
+            : msg === 'service-not-allowed'
+            ? "Browser blocked the speech service. Use macOS Dictation (System Settings → Keyboard → Dictation) for now."
+            : `Voice failed: ${msg}`;
+        setError(friendly);
         setListening(false);
       },
       onEnd: () => {
@@ -156,10 +186,18 @@ export function CommandPalette() {
         transcriberRef.current = null;
       },
     });
-    if (!t) return;
+    if (!t) {
+      setError('Voice not supported in this environment.');
+      return;
+    }
     transcriberRef.current = t;
-    t.start();
-    setListening(true);
+    try {
+      t.start();
+      setListening(true);
+    } catch (e) {
+      setError(`Voice start failed: ${e instanceof Error ? e.message : String(e)}`);
+      transcriberRef.current = null;
+    }
   };
 
   const stopVoice = () => {
