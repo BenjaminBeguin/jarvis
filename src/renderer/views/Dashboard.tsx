@@ -7,6 +7,7 @@ import type {
   TaskSummary,
 } from '../../shared/types';
 import { formatRelative } from './TaskList';
+import { toast } from './Toaster';
 import { useNow } from './useNow';
 
 interface Props {
@@ -166,14 +167,21 @@ export function Dashboard({ tasks, reminders, onSelectTask, onCancelReminder }: 
                     title="Accept — write to ~/.jarvis/skills"
                     onClick={async () => {
                       const r = await window.jarvis.acceptSkillSuggestion(s.id);
-                      if (!r.ok) alert(r.message ?? 'Could not accept.');
+                      if (!r.ok) {
+                        toast({ kind: 'error', message: r.message ?? 'Could not accept.' });
+                      } else {
+                        toast({ message: `Skill saved · ${s.name}` });
+                      }
                     }}
                   >
                     ✓
                   </button>
                   <button
                     title="Dismiss"
-                    onClick={() => void window.jarvis.dismissSkillSuggestion(s.id)}
+                    onClick={() => {
+                      void window.jarvis.dismissSkillSuggestion(s.id);
+                      toast({ kind: 'info', message: 'Suggestion dismissed' });
+                    }}
                   >
                     ×
                   </button>

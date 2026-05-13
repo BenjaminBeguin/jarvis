@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import type { RoutineDef, SkillSummary } from '../../shared/types';
+import { toast } from './Toaster';
 
 interface DraftRoutine {
   id?: string;
@@ -165,13 +166,20 @@ export function Routines(_: Props = {}) {
       await window.jarvis.saveRoutine(draft);
       setDraft(null);
       setError(null);
+      toast({ message: 'Routine saved' });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   };
 
-  const remove = (id: string) => void window.jarvis.deleteRoutine(id);
-  const runNow = (id: string) => void window.jarvis.runRoutineNow(id);
+  const remove = (id: string) => {
+    void window.jarvis.deleteRoutine(id);
+    toast({ kind: 'info', message: 'Routine deleted' });
+  };
+  const runNow = (id: string) => {
+    void window.jarvis.runRoutineNow(id);
+    toast({ message: 'Routine running…' });
+  };
   const toggle = async (r: RoutineDef) => {
     try {
       await window.jarvis.saveRoutine({ ...r, enabled: !r.enabled });

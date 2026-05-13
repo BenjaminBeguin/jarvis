@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { AppStatus, ModuleSummary, Reminder, TaskSummary } from '../../shared/types';
 import { getModulePage } from '../modules/registry';
 import { MeetingOverlay } from './MeetingOverlay';
+import { Toaster } from './Toaster';
 import { ModulesPage } from './ModulesPage';
 import { Observatory } from './Observatory';
 import { Routines } from './Routines';
@@ -256,6 +257,7 @@ export function Shell({ status }: Props) {
         )}
       </div>
       <MeetingOverlay />
+      <Toaster />
     </div>
   );
 }

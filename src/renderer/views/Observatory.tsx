@@ -11,6 +11,7 @@ import { Constellation } from './Constellation';
 import { Dashboard } from './Dashboard';
 import { TaskDetail } from './TaskDetail';
 import { TaskList } from './TaskList';
+import { toast } from './Toaster';
 
 type ViewMode = 'dashboard' | 'constellation' | 'list';
 
@@ -152,7 +153,10 @@ export function Observatory() {
             tasks={tasks}
             reminders={reminders}
             onSelectTask={setSelectedId}
-            onCancelReminder={(id) => void window.jarvis.cancelReminder(id)}
+            onCancelReminder={(id) => {
+              void window.jarvis.cancelReminder(id);
+              toast({ kind: 'info', message: 'Reminder cancelled' });
+            }}
           />
         ) : view === 'constellation' ? (
           <Constellation
@@ -166,8 +170,14 @@ export function Observatory() {
             }
             selectedId={selectedId}
             onSelect={setSelectedId}
-            onCancelReminder={(id) => void window.jarvis.cancelReminder(id)}
-            onFireReminderNow={(id) => void window.jarvis.fireReminderNow(id)}
+            onCancelReminder={(id) => {
+              void window.jarvis.cancelReminder(id);
+              toast({ kind: 'info', message: 'Reminder cancelled' });
+            }}
+            onFireReminderNow={(id) => {
+              void window.jarvis.fireReminderNow(id);
+              toast({ message: 'Running now…' });
+            }}
           />
         ) : (
           <TaskList

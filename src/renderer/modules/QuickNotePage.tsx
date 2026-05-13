@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import type { JarvisFileEntry } from '../../shared/types';
+import { toast } from '../views/Toaster';
 
 interface NoteEntry {
   time: string;
@@ -106,8 +107,10 @@ export function QuickNotePage() {
       const r = await window.jarvis.deleteNoteEntry(date, entry.fileIndex);
       if (!r.ok) {
         setError(r.message ?? 'Could not delete.');
+        toast({ kind: 'error', message: r.message ?? 'Could not delete note.' });
         return;
       }
+      toast({ kind: 'info', message: 'Note deleted' });
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
