@@ -4,66 +4,11 @@ import type {
   ModuleSummary,
   PaletteIntentSummary,
   SkillSummary,
-  TaskEvent,
-  TaskSummary,
   TranscribeProgress,
 } from '../../shared/types';
 import { AudioCapture } from '../voice/AudioCapture';
-import { MarkdownText } from './MarkdownText';
 
 interface PendingIntent extends PaletteIntentSummary {}
-
-/**
- * Boil the SDKMessage stream down to what the palette needs to render
- * inline: the running assistant text and the names of any tool calls so
- * we can show a small "running tool" hint. Skips system messages, raw
- * JSON, and tool_result dumps — those belong in the observatory panel,
- * not in the Jarvis-mode peek.
- */
-function statusLabel(status: string, lastTool: string | null): string {
-  switch (status) {
-    case 'thinking':
-      return 'thinking';
-    case 'streaming':
-      return lastTool ? `using ${lastTool}` : 'replying';
-    case 'awaiting':
-      return 'ready · reply to continue';
-    case 'done':
-      return 'done';
-    case 'errored':
-      return 'errored';
-    case 'aborted':
-      return 'aborted';
-    default:
-      return status;
-  }
-}
-
-function composeAnswer(events: TaskEvent[]): {
-  text: string;
-  toolCount: number;
-  lastTool: string | null;
-} {
-  let text = '';
-  let toolCount = 0;
-  let lastTool: string | null = null;
-  for (const e of events) {
-    const msg = e.msg as { type?: string; message?: { content?: unknown } } | undefined;
-    if (!msg) continue;
-    if (msg.type !== 'assistant') continue;
-    const content = msg.message?.content;
-    if (!Array.isArray(content)) continue;
-    for (const block of content as Array<Record<string, unknown>>) {
-      if (block['type'] === 'text' && typeof block['text'] === 'string') {
-        text += block['text'];
-      } else if (block['type'] === 'tool_use' && typeof block['name'] === 'string') {
-        toolCount++;
-        lastTool = block['name'];
-      }
-    }
-  }
-  return { text, toolCount, lastTool };
-}
 
 /**
  * Whisper emits placeholder tokens when audio is silent/unintelligible.
@@ -100,9 +45,6 @@ export function CommandPalette() {
   const [activeIntent, setActiveIntent] = useState<PendingIntent | null>(null);
   const [pickerIndex, setPickerIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  /** Once set, the palette renders the streamed response inline. */
-  const [activeTask, setActiveTask] = useState<TaskSummary | null>(null);
-  const [activeEvents, setActiveEvents] = useState<TaskEvent[]>([]);
   const captureRef = useRef<AudioCapture | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const paletteRef = useRef<HTMLDivElement>(null);
@@ -149,33 +91,6 @@ export function CommandPalette() {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-
-  // Stream events for the active task into the palette. Subscribe lazily
-  // when there's something to watch; tear down on unmount or task swap.
-  useEffect(() => {
-    if (!activeTask) return;
-    let cancelled = false;
-    setActiveEvents([]);
-    void window.jarvis.getTaskHistory(activeTask.id).then((evts) => {
-      if (!cancelled) setActiveEvents(evts);
-    });
-    const offE = window.jarvis.onTaskEvent(({ taskId, event }) => {
-      if (taskId !== activeTask.id) return;
-      setActiveEvents((prev) => {
-        if (prev.some((e) => e.seq === event.seq)) return prev;
-        return [...prev, event];
-      });
-    });
-    const offS = window.jarvis.onTaskStatus((summary) => {
-      if (summary.id !== activeTask.id) return;
-      setActiveTask(summary);
-    });
-    return () => {
-      cancelled = true;
-      offE();
-      offS();
-    };
-  }, [activeTask?.id]);
 
   const intents = useMemo<PaletteIntentSummary[]>(
     () => modules.flatMap((m) => m.intents),
@@ -238,25 +153,6 @@ export function CommandPalette() {
     const intentForCall = override.intent !== undefined ? override.intent : activeIntent;
     const skillForCall = override.skill !== undefined ? override.skill : activeSkill;
 
-    // While a task is active in the palette, plain text Enter (no skill /
-    // no intent / no override saying otherwise) becomes a follow-up to
-    // that task, not a new task. Voice routing handles the same case via
-    // routeVoiceCommand.
-    if (activeTask && !intentForCall && !skillForCall && !override.intent && !override.skill) {
-      if (!prompt) return;
-      try {
-        const ok = await window.jarvis.sendTaskMessage(activeTask.id, prompt);
-        if (!ok) {
-          setError("Couldn't send — task isn't accepting input.");
-          return;
-        }
-        setText('');
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-      return;
-    }
-
     if (intentForCall) {
       try {
         const result = await window.jarvis.dispatchIntent(
@@ -284,23 +180,13 @@ export function CommandPalette() {
       });
       setText('');
       setActiveSkill(null);
-      setActiveTask(summary);
+      // Pop the answer in the HUD instead of inline. The HUD owns the
+      // streaming view + reply controls; the palette goes back to being a
+      // pure input.
+      void window.jarvis.showAnswerHud(summary.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  };
-
-  const clearActiveTask = () => {
-    setActiveTask(null);
-    setActiveEvents([]);
-    setError(null);
-    setText('');
-    inputRef.current?.focus();
-  };
-
-  const openActiveInObservatory = () => {
-    void window.jarvis.openObservatory();
-    // Keep the active task — coming back to the palette will still show it.
   };
 
   const selectRow = (row: PickerRow) => {
@@ -380,23 +266,13 @@ export function CommandPalette() {
 
   /**
    * Voice route. Priority:
-   *   1. Active task in the palette → speak a follow-up, sendMessage.
-   *   2. Active skill or intent → submit using that.
-   *   3. First word matches a module intent prefix → route to that intent.
-   *   4. Free-form → launch a new task.
+   *   1. Active skill or intent → submit using that.
+   *   2. First word matches a module intent prefix → route to that intent.
+   *   3. Free-form → launch a new task.
+   *
+   * Voice replies to an existing task happen in the Answer HUD, not here.
    */
   const routeVoiceCommand = async (transcript: string) => {
-    if (activeTask) {
-      try {
-        const ok = await window.jarvis.sendTaskMessage(activeTask.id, transcript);
-        if (!ok) {
-          setError("Couldn't send — task isn't accepting input.");
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-      return;
-    }
     if (activeSkill) {
       setText(transcript);
       await dispatch({ text: transcript, origin: 'voice' });
@@ -429,8 +305,6 @@ export function CommandPalette() {
     ? 'Transcribing…'
     : downloadProgress?.status === 'downloading'
     ? `Loading whisper model ${downloadProgress.progress != null ? `· ${Math.round(downloadProgress.progress)}%` : ''}`
-    : activeTask
-    ? '↵ to reply · hold mic to dictate'
     : activeIntent
     ? activeIntent.placeholder ?? `${activeIntent.label}…`
     : activeSkill
@@ -438,20 +312,6 @@ export function CommandPalette() {
     : '/ to pick · ask anything';
 
   const displayValue = text;
-
-  // Distill the events stream into renderable answer chunks.
-  const answer = useMemo(() => composeAnswer(activeEvents), [activeEvents]);
-  const answerStatus = activeTask
-    ? activeTask.awaitingInput
-      ? 'awaiting'
-      : activeTask.status === 'running'
-      ? answer.text.length > 0 || answer.toolCount > 0
-        ? 'streaming'
-        : 'thinking'
-      : activeTask.status === 'completed'
-      ? 'done'
-      : activeTask.status
-    : null;
 
   return (
     <div className="palette palette-body" ref={paletteRef}>
@@ -544,39 +404,8 @@ export function CommandPalette() {
             <line x1="6" y1="9" x2="6" y2="11" stroke="currentColor" strokeLinecap="round" />
           </svg>
         </button>
-        <span className="hint">{activeTask ? '↵ reply' : '↵ exec'}</span>
+        <span className="hint">↵ exec</span>
       </div>
-      {activeTask && answerStatus && (
-        <div className={`palette__answer palette__answer--${answerStatus}`}>
-          <div className="palette__answer-bar">
-            <span className={`palette__answer-dot palette__answer-dot--${answerStatus}`} />
-            <span className="palette__answer-status">
-              {statusLabel(answerStatus, answer.lastTool)}
-            </span>
-            <div className="palette__answer-actions">
-              <button
-                onClick={openActiveInObservatory}
-                title="Open in observatory"
-              >
-                ↗ open
-              </button>
-              <button
-                onClick={clearActiveTask}
-                title="Discard and ask a new question"
-              >
-                × new
-              </button>
-            </div>
-          </div>
-          <div className="palette__answer-body">
-            {answer.text ? (
-              <MarkdownText>{answer.text}</MarkdownText>
-            ) : answerStatus === 'thinking' ? (
-              <div className="palette__answer-thinking">thinking…</div>
-            ) : null}
-          </div>
-        </div>
-      )}
       {downloadProgress?.status === 'downloading' && (
         <div className="palette__progress">
           downloading whisper model

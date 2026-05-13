@@ -47,10 +47,14 @@ import { setProgressEmitter, transcribePcm } from './transcribe.js';
 import { getRunningTasksCount, initTray, setRunningTasksCount } from './tray.js';
 import {
   broadcast,
+  getAnswerHudWindow,
+  hideAnswerHud,
   hidePalette,
   openObservatory,
   openPalette,
+  resizeAnswerHud,
   resizePalette,
+  showAnswerHud,
 } from './windows.js';
 
 const skills = new SkillStore();
@@ -174,6 +178,32 @@ function registerIpc(): void {
   ipcMain.handle(IpcChannels.resizePalette, (_e, height: number) => {
     if (typeof height === 'number' && Number.isFinite(height)) {
       resizePalette(height);
+    }
+  });
+  ipcMain.handle(IpcChannels.showAnswerHud, (_e, taskId: string) => {
+    if (typeof taskId !== 'string' || !taskId) return;
+    showAnswerHud();
+    // Tell the HUD renderer to start tracking this task. If the HUD just
+    // opened, the message is queued until after did-finish-load (Electron
+    // buffers webContents.send for us). We still send via the broadcaster
+    // so any future observers (devtools panes, etc.) see it too.
+    const hud = getAnswerHudWindow();
+    if (hud) {
+      if (hud.webContents.isLoading()) {
+        hud.webContents.once('did-finish-load', () => {
+          hud.webContents.send(IpcChannels.answerHudTrack, taskId);
+        });
+      } else {
+        hud.webContents.send(IpcChannels.answerHudTrack, taskId);
+      }
+    }
+  });
+  ipcMain.handle(IpcChannels.hideAnswerHud, () => {
+    hideAnswerHud();
+  });
+  ipcMain.handle(IpcChannels.resizeAnswerHud, (_e, height: number) => {
+    if (typeof height === 'number' && Number.isFinite(height)) {
+      resizeAnswerHud(height);
     }
   });
   ipcMain.handle(IpcChannels.openExternal, async (_e, url: string) => {

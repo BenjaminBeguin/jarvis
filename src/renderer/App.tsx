@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import type { AppStatus } from '../shared/types';
+import { AnswerHUD } from './views/AnswerHUD';
 import { CommandPalette } from './views/CommandPalette';
 import { Setup } from './views/Setup';
 import { Shell } from './views/Shell';
@@ -25,10 +26,11 @@ export function App() {
     };
   }, []);
 
-  // Add a body class for the palette window so the scanline overlay (which
-  // would render on top of the transparent frameless window) is suppressed.
+  // Add a body class for transparent frameless windows so the shell's
+  // scanline overlay (which would render on top of them) is suppressed.
   useEffect(() => {
-    if (route === '/palette') document.body.classList.add('palette-body');
+    const transparent = route === '/palette' || route === '/answer-hud';
+    if (transparent) document.body.classList.add('palette-body');
     else document.body.classList.remove('palette-body');
   }, [route]);
 
@@ -39,6 +41,11 @@ export function App() {
   if (route === '/palette') {
     if (!ready) return null;
     return <CommandPalette />;
+  }
+
+  if (route === '/answer-hud') {
+    if (!ready) return null;
+    return <AnswerHUD />;
   }
 
   if (!ready) return <Setup status={status} />;

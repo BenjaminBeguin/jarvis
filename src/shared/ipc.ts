@@ -10,6 +10,11 @@ export const IpcChannels = {
   resizePalette: 'app:resizePalette',
   openExternal: 'app:openExternal',
 
+  showAnswerHud: 'hud:show',
+  hideAnswerHud: 'hud:hide',
+  resizeAnswerHud: 'hud:resize',
+  answerHudTrack: 'hud:track',
+
   listSkills: 'skills:list',
   refreshSkills: 'skills:refresh',
 

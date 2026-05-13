@@ -48,6 +48,15 @@ const api = {
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.openExternal, url),
 
+  showAnswerHud: (taskId: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.showAnswerHud, taskId),
+  hideAnswerHud: (): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.hideAnswerHud),
+  resizeAnswerHud: (height: number): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.resizeAnswerHud, height),
+  onAnswerHudTrack: (listener: Listener<string>): Unsubscribe =>
+    subscribe(IpcChannels.answerHudTrack, listener),
+
   listSkills: (): Promise<SkillSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listSkills),
   refreshSkills: (): Promise<SkillSummary[]> =>

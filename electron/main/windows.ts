@@ -17,6 +17,7 @@ function loadRoute(win: BrowserWindow, route: string): void {
 
 let observatoryWindow: BrowserWindow | null = null;
 let paletteWindow: BrowserWindow | null = null;
+let answerHudWindow: BrowserWindow | null = null;
 
 export function openObservatory(): BrowserWindow {
   if (observatoryWindow && !observatoryWindow.isDestroyed()) {
@@ -120,4 +121,75 @@ export function resizePalette(targetHeight: number): void {
   const clamped = Math.max(80, Math.min(720, Math.round(targetHeight)));
   const [w] = paletteWindow.getSize();
   paletteWindow.setSize(w, clamped, false);
+}
+
+const HUD_WIDTH = 380;
+const HUD_INITIAL_HEIGHT = 140;
+const HUD_MARGIN = 16;
+
+/**
+ * Open (or focus) the always-on-top "Answer HUD" docked to the top-right
+ * of the primary display. The HUD owns its own state and renders the stack
+ * of unacknowledged answers; this just makes sure the window exists and
+ * is visible.
+ */
+export function showAnswerHud(): BrowserWindow {
+  if (answerHudWindow && !answerHudWindow.isDestroyed()) {
+    if (!answerHudWindow.isVisible()) answerHudWindow.show();
+    return answerHudWindow;
+  }
+  const display = screen.getPrimaryDisplay();
+  const x = display.workArea.x + display.workArea.width - HUD_WIDTH - HUD_MARGIN;
+  const y = display.workArea.y + HUD_MARGIN;
+  answerHudWindow = new BrowserWindow({
+    width: HUD_WIDTH,
+    height: HUD_INITIAL_HEIGHT,
+    x,
+    y,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    alwaysOnTop: true,
+    resizable: false,
+    movable: true,
+    skipTaskbar: true,
+    focusable: true,
+    show: false,
+    webPreferences: {
+      preload: preloadPath,
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  answerHudWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  answerHudWindow.on('ready-to-show', () => answerHudWindow?.show());
+  answerHudWindow.on('closed', () => {
+    answerHudWindow = null;
+  });
+  loadRoute(answerHudWindow, '/answer-hud');
+  return answerHudWindow;
+}
+
+export function hideAnswerHud(): void {
+  if (answerHudWindow && !answerHudWindow.isDestroyed()) answerHudWindow.hide();
+}
+
+/**
+ * Resize the HUD's height to fit the card stack. Re-anchor the top-right
+ * corner so it grows downward and stays glued to the right edge.
+ */
+export function resizeAnswerHud(targetHeight: number): void {
+  if (!answerHudWindow || answerHudWindow.isDestroyed()) return;
+  const clamped = Math.max(80, Math.min(900, Math.round(targetHeight)));
+  const [w] = answerHudWindow.getSize();
+  const display = screen.getPrimaryDisplay();
+  const x = display.workArea.x + display.workArea.width - w - HUD_MARGIN;
+  const y = display.workArea.y + HUD_MARGIN;
+  answerHudWindow.setBounds({ x, y, width: w, height: clamped }, false);
+}
+
+export function getAnswerHudWindow(): BrowserWindow | null {
+  return answerHudWindow && !answerHudWindow.isDestroyed() ? answerHudWindow : null;
 }
