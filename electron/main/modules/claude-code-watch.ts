@@ -109,8 +109,10 @@ function extractSessionContext(filePath: string): SessionContext {
   }
   const lines = raw.split('\n');
 
-  // Title: first user prompt anywhere in the head of the file.
-  for (const line of lines.slice(0, 60)) {
+  // Title: first user prompt anywhere in the file. Scan generously — some
+  // sessions have hundreds of system/init lines before the first enqueue.
+  let found = false;
+  for (const line of lines) {
     if (!line.trim()) continue;
     let parsed: unknown;
     try {
@@ -126,8 +128,16 @@ function extractSessionContext(filePath: string): SessionContext {
       e['content']
     ) {
       ctx.title = truncate(e['content']);
+      found = true;
       break;
     }
+  }
+  // Still no human prompt found (rare — pure tool-call sessions, or new
+  // sessions that haven't enqueued yet). Use a short session id instead of
+  // a generic placeholder so the constellation isn't 6 identical labels.
+  if (!found) {
+    const sid = basename(filePath, '.jsonl').slice(0, 8);
+    ctx.title = `session ${sid}`;
   }
 
   // Backfill: walk from the END, collect last N renderable events. Reverse at

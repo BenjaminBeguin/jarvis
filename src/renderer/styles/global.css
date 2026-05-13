@@ -837,18 +837,48 @@ button:disabled:hover {
   stroke-dasharray: 0;
 }
 
+/* Focus ring — the most recently launched Jarvis-owned task within the
+   focus window. Two staggered pulses outward so the user's eye lands on
+   "that's the one I just started" without scanning the whole ring. */
+.node__focus-ring {
+  fill: none;
+  stroke: var(--accent-strong);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 6px var(--accent-strong));
+  pointer-events: none;
+}
+
+.node__focus-ring--inner {
+  animation: focus-pulse 1.6s ease-out infinite;
+}
+
+.node__focus-ring--outer {
+  animation: focus-pulse 1.6s ease-out infinite;
+  animation-delay: 0.8s;
+}
+
+@keyframes focus-pulse {
+  0%   { r: 16; opacity: 0.9; stroke-width: 2; }
+  100% { r: 40; opacity: 0;   stroke-width: 0.5; }
+}
+
+.node--focus .node__disc {
+  stroke-width: 2;
+  filter: drop-shadow(0 0 10px var(--accent-strong));
+}
+
 /* Awaiting: the session's last event is from the assistant — user input owed.
-   Amber takes over the node so it pops out of the cyan field. */
+   The "!" badge and a softer amber glow signal the state without
+   overriding the origin color of the disc itself (cyan = jarvis task,
+   green = external agent), so you can still distinguish what kind of
+   thing is waiting. */
 .node--awaiting .node__disc {
-  stroke: var(--warn);
-  filter: drop-shadow(0 0 10px rgba(255, 180, 84, 0.7));
   opacity: 1;
   stroke-dasharray: 0;
+  filter: drop-shadow(0 0 8px rgba(255, 180, 84, 0.35));
 }
 
 .node--awaiting .node__pulse {
-  fill: var(--warn);
-  filter: drop-shadow(0 0 6px var(--warn));
   animation: node-pulse 1.4s ease-in-out infinite;
 }
 

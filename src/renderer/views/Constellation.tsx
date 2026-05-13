@@ -9,6 +9,8 @@ const RING_RADIUS = 260;
 const MAX_NODES = 12;
 /** External sessions that ended within this window still show as faded nodes. */
 const RECENCY_MS = 30 * 60 * 1000;
+/** Pulsing "you just launched this" focus ring lifetime. */
+const FOCUS_WINDOW_MS = 60 * 1000;
 
 interface NodePos {
   task: TaskSummary;
@@ -80,19 +82,24 @@ export function Constellation({ tasks, selectedId, onSelect }: Props) {
   const awaitingCount = visible.filter((t) => t.awaitingInput).length;
   const overflow = Math.max(0, tasks.filter(shouldDisplay).length - MAX_NODES);
 
-  // Group-key adjacency: if two visible nodes share a group, connect them.
-  const connections = useMemo(() => {
-    const edges: Array<{ a: NodePos; b: NodePos }> = [];
-    for (let i = 0; i < positions.length; i++) {
-      for (let j = i + 1; j < positions.length; j++) {
-        const a = positions[i]!;
-        const b = positions[j]!;
-        if (!a.task.groupKey || !b.task.groupKey) continue;
-        if (a.task.groupKey === b.task.groupKey) edges.push({ a, b });
-      }
-    }
-    return edges;
-  }, [positions]);
+  // Most-recently-launched Jarvis-owned task within the focus window —
+  // gets a pulsing ring so the user can find what they just kicked off.
+  const focusId = useMemo<string | null>(() => {
+    const now = Date.now();
+    const candidates = visible
+      .filter(
+        (t) =>
+          t.origin !== 'external' &&
+          now - t.startedAt < FOCUS_WINDOW_MS,
+      )
+      .sort((a, b) => b.startedAt - a.startedAt);
+    return candidates[0]?.id ?? null;
+  }, [visible]);
+
+  // Connection edges between same-group nodes used to draw here, but with
+  // claude-code-watch the only producer of groupKey, "same project"
+  // meshed every node together for no useful signal. Drop until we have
+  // real parent/child task relationships to render.
 
   return (
     <div
@@ -150,27 +157,6 @@ export function Constellation({ tasks, selectedId, onSelect }: Props) {
           ))}
         </g>
 
-        {/* Inter-node connections (shared groupKey). */}
-        <g className="constellation__edges">
-          {connections.map(({ a, b }, i) => {
-            const mid = {
-              x: (a.x + b.x) / 2,
-              y: (a.y + b.y) / 2,
-            };
-            // Pull the curve a little toward the center so chords look organic
-            // rather than straight pipes.
-            const pull = 0.7;
-            const cx = mid.x * pull + CENTER.x * (1 - pull);
-            const cy = mid.y * pull + CENTER.y * (1 - pull);
-            return (
-              <path
-                key={`edge-${i}`}
-                d={`M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`}
-                className="edge"
-              />
-            );
-          })}
-        </g>
 
         {/* Central core. */}
         <g className="core">
@@ -243,15 +229,22 @@ export function Constellation({ tasks, selectedId, onSelect }: Props) {
             const textAnchor =
               Math.cos(p.angle) > 0.2 ? 'start' : Math.cos(p.angle) < -0.2 ? 'end' : 'middle';
             const awaiting = !!p.task.awaitingInput;
+            const isFocus = p.task.id === focusId;
             return (
               <g
                 key={p.task.id}
-                className={`node node--${group}${p.isLive ? '' : ' node--idle'}${awaiting ? ' node--awaiting' : ''}${isSelected ? ' node--selected' : ''}`}
+                className={`node node--${group}${p.isLive ? '' : ' node--idle'}${awaiting ? ' node--awaiting' : ''}${isSelected ? ' node--selected' : ''}${isFocus ? ' node--focus' : ''}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelect(p.task.id);
                 }}
               >
+                {isFocus && (
+                  <>
+                    <circle cx={p.x} cy={p.y} r={22} className="node__focus-ring node__focus-ring--inner" />
+                    <circle cx={p.x} cy={p.y} r={22} className="node__focus-ring node__focus-ring--outer" />
+                  </>
+                )}
                 <circle cx={p.x} cy={p.y} r={30} fill="url(#node-glow)" />
                 <circle cx={p.x} cy={p.y} r={isSelected ? 14 : 10} className="node__disc" />
                 <circle cx={p.x} cy={p.y} r={5} className="node__pulse" />
