@@ -600,6 +600,11 @@ function registerIpc(): void {
   });
 }
 
+// Track previous awaitingInput per task id so we only fire the "ready for
+// your reply" notification on the false→true transition (not every status
+// tick while the task remains parked).
+const awaitingFlipped = new Map<string, boolean>();
+
 function wireRunnerEvents(): void {
   runner.on('event', (payload: { taskId: string; event: TaskEvent }) => {
     broadcast(IpcChannels.taskEvent, payload);
@@ -620,6 +625,45 @@ function wireRunnerEvents(): void {
     setRunningTasksCount(running);
     setAwaitingRepliesCount(awaiting);
     broadcast(IpcChannels.taskStatus, summary);
+
+    // Awaiting-input transition. Fire on false→true so each pause gets one
+    // ping (and a follow-up pause after the user replies pings again).
+    if (summary.origin !== 'external') {
+      const was = awaitingFlipped.get(summary.id) ?? false;
+      const now = !!summary.awaitingInput;
+      if (!was && now) {
+        try {
+          const preview =
+            summary.title.length > 80
+              ? `${summary.title.slice(0, 80)}…`
+              : summary.title;
+          const notif = new Notification({
+            title: 'Jarvis · ready for your reply',
+            body: preview,
+            silent: false,
+          });
+          notif.on('click', () => {
+            const win = openObservatory();
+            win.focus();
+            const send = () =>
+              win.webContents.send(IpcChannels.observatoryFocusTask, summary.id);
+            if (win.webContents.isLoading()) {
+              win.webContents.once('did-finish-load', send);
+            } else {
+              send();
+            }
+          });
+          notif.show();
+        } catch {
+          // Notifications can fail pre-permission; not fatal.
+        }
+      }
+      awaitingFlipped.set(summary.id, now);
+      if (summary.status === 'completed' || summary.status === 'errored') {
+        awaitingFlipped.delete(summary.id);
+      }
+    }
+
     if (
       summary.origin !== 'external' &&
       (summary.status === 'completed' || summary.status === 'errored')
