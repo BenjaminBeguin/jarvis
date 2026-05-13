@@ -290,7 +290,7 @@ const SAMPLE_MCP_CONFIG = `{
   "//": "Define MCP servers globally; skills opt-in via mcp-servers: [name].",
   "//": "Copy this file to ~/.jarvis/mcp.json (drop the trailing .example) and fill in your tokens.",
 
-  "//gmail": "Install once: npx @gongrzhe/server-gmail-autoauth-mcp. See README — you create a Google Cloud OAuth client, save the credentials JSON, then run the auth CLI ONCE PER ACCOUNT to mint a refresh token. Use a different GMAIL_CREDENTIALS_PATH for each account so accounts don't fight over the same token file.",
+  "//gmail": "The Gmail MCP looks for gcp-oauth.keys.json + credentials.json in its CWD. To run two accounts, give each its own folder (e.g. ~/.gmail-mcp-personal, ~/.gmail-mcp-work) each containing the same gcp-oauth.keys.json and a per-account credentials.json minted by running 'npx -y @gongrzhe/server-gmail-autoauth-mcp auth' from inside that folder.",
 
   "//slack": "Slack: https://github.com/modelcontextprotocol/servers/tree/main/src/slack. Create a Slack app, install to your workspace, copy the bot token (xoxb-...) and team id.",
 
@@ -299,21 +299,13 @@ const SAMPLE_MCP_CONFIG = `{
   "mcpServers": {
     "gmail-personal": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@gongrzhe/server-gmail-autoauth-mcp"],
-      "env": {
-        "GMAIL_CREDENTIALS_PATH": "~/.gmail-mcp/personal/credentials.json",
-        "GMAIL_TOKEN_PATH": "~/.gmail-mcp/personal/token.json"
-      }
+      "command": "sh",
+      "args": ["-c", "cd ~/.gmail-mcp-personal && exec npx -y @gongrzhe/server-gmail-autoauth-mcp"]
     },
     "gmail-work": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@gongrzhe/server-gmail-autoauth-mcp"],
-      "env": {
-        "GMAIL_CREDENTIALS_PATH": "~/.gmail-mcp/work/credentials.json",
-        "GMAIL_TOKEN_PATH": "~/.gmail-mcp/work/token.json"
-      }
+      "command": "sh",
+      "args": ["-c", "cd ~/.gmail-mcp-work && exec npx -y @gongrzhe/server-gmail-autoauth-mcp"]
     },
     "slack": {
       "type": "stdio",
