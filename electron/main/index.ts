@@ -356,8 +356,10 @@ function registerIpc(): void {
       ...req,
       origin: asTaskOrigin(req.origin),
     });
-    hidePalette();
-    openObservatory();
+    // Don't hide the palette or pop the observatory anymore — the renderer
+    // now streams the response inline in the palette ("Jarvis mode"). The
+    // user can explicitly switch to the observatory from there if they
+    // want the full view.
     return summary;
   });
 
