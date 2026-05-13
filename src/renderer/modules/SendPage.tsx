@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { ClaudeMcpEntry, McpServerSummary } from '../../shared/types';
+import type {
+  ClaudeMcpEntry,
+  McpServerSummary,
+  TaskSummary,
+} from '../../shared/types';
+import { formatRelative } from '../views/TaskList';
 
 /**
  * "Channels" — the page behind the Send module. Documents how to wire each
@@ -18,10 +23,32 @@ import type { ClaudeMcpEntry, McpServerSummary } from '../../shared/types';
 export function SendPage() {
   const [servers, setServers] = useState<McpServerSummary[]>([]);
   const [claudeMcps, setClaudeMcps] = useState<ClaudeMcpEntry[]>([]);
+  const [tasks, setTasks] = useState<TaskSummary[]>([]);
   useEffect(() => {
     void window.jarvis.listMcpServers().then(setServers);
     return window.jarvis.onMcpServersChanged(setServers);
   }, []);
+  useEffect(() => {
+    void window.jarvis.listTasks().then(setTasks);
+    const offStatus = window.jarvis.onTaskStatus((summary) => {
+      setTasks((prev) => {
+        const idx = prev.findIndex((t) => t.id === summary.id);
+        if (idx === -1) return [summary, ...prev];
+        const next = prev.slice();
+        next[idx] = summary;
+        return next;
+      });
+    });
+    return offStatus;
+  }, []);
+  const sendHistory = useMemo(
+    () =>
+      tasks
+        .filter((t) => t.skillId === 'send')
+        .sort((a, b) => b.startedAt - a.startedAt)
+        .slice(0, 30),
+    [tasks],
+  );
   useEffect(() => {
     const refresh = () => void window.jarvis.listClaudeMcps().then(setClaudeMcps);
     refresh();
@@ -62,6 +89,36 @@ export function SendPage() {
           </p>
         </div>
       </header>
+
+      {sendHistory.length > 0 && (
+        <section className="bracketed send-history">
+          <header className="send-history__head">
+            <h3>RECENT</h3>
+            <span className="send-history__hint">click to open in observatory</span>
+          </header>
+          <ol className="send-history__list">
+            {sendHistory.map((t) => (
+              <li key={t.id}>
+                <button
+                  className={`send-history__row send-history__row--${historyStatus(t)}`}
+                  onClick={() => void window.jarvis.openObservatory(t.id)}
+                  title={new Date(t.startedAt).toLocaleString()}
+                >
+                  <span
+                    className={`send-history__dot send-history__dot--${historyStatus(t)}`}
+                  />
+                  <span className="send-history__body">
+                    {previewLine(t)}
+                  </span>
+                  <span className="send-history__meta">
+                    {historyStatusLabel(t)} · {formatRelative(t.startedAt)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       <div className="channels">
         <ChannelCard
@@ -293,6 +350,27 @@ function Step({ children }: { children: React.ReactNode }) {
 
 function Pre({ children }: { children: React.ReactNode }) {
   return <pre className="channels__code">{children}</pre>;
+}
+
+function historyStatus(t: TaskSummary): 'sent' | 'awaiting' | 'errored' | 'running' {
+  if (t.status === 'errored' || t.status === 'aborted') return 'errored';
+  if (t.awaitingInput) return 'awaiting';
+  if (t.status === 'completed') return 'sent';
+  return 'running';
+}
+
+function historyStatusLabel(t: TaskSummary): string {
+  const s = historyStatus(t);
+  if (s === 'sent') return 'sent';
+  if (s === 'awaiting') return 'awaiting reply';
+  if (s === 'errored') return t.status;
+  return 'in progress';
+}
+
+function previewLine(t: TaskSummary): string {
+  const raw = (t.inputPreview || t.title || '').trim();
+  if (!raw) return 'untitled';
+  return raw.length > 100 ? `${raw.slice(0, 99)}…` : raw;
 }
 
 function ExtA({ href, children }: { href: string; children: React.ReactNode }) {

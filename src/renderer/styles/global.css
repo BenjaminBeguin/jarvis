@@ -2742,6 +2742,112 @@ button:disabled:hover {
   gap: 14px;
 }
 
+/* ----- Send history (recent /send tasks) ----- */
+
+.send-history {
+  padding: 12px 16px 14px;
+  margin-bottom: 14px;
+  background: rgba(4, 7, 11, 0.5);
+}
+
+.send-history__head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-strong);
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.send-history__head h3 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.send-history__hint {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--text-faint);
+}
+
+.send-history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.send-history__row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 120ms ease;
+}
+
+.send-history__row:hover {
+  background: rgba(0, 212, 255, 0.06);
+}
+
+.send-history__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--text-faint);
+}
+
+.send-history__dot--sent {
+  background: var(--good);
+  box-shadow: 0 0 5px rgba(95, 255, 166, 0.45);
+}
+
+.send-history__dot--running {
+  background: var(--accent);
+  box-shadow: 0 0 5px var(--accent);
+  animation: dashboard-dot-pulse 1.4s ease-in-out infinite;
+}
+
+.send-history__dot--awaiting {
+  background: var(--warn);
+  box-shadow: 0 0 5px rgba(255, 180, 84, 0.55);
+  animation: dashboard-dot-pulse 1.6s ease-in-out infinite;
+}
+
+.send-history__dot--errored {
+  background: var(--bad);
+}
+
+.send-history__body {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.send-history__meta {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
 /* ----- Channels page (send module) ----- */
 
 .channels {
