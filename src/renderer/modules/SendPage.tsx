@@ -242,10 +242,12 @@ npx -y @gongrzhe/server-gmail-autoauth-mcp auth`}</Pre>
           tool="slack"
         >
           <p className="channels__hint">
-            Jarvis tasks need a <strong>local</strong> Slack MCP — the
-            Claude.ai Slack connector works in Claude.ai chat and interactive
+            Jarvis tasks need a <strong>local</strong> Slack MCP. The
+            Claude.ai Slack connector works in Claude.ai chat / interactive
             Claude Code but does not propagate to Agent SDK subprocess
-            sessions (which is what /send uses).
+            sessions. We keep the Jarvis one in{' '}
+            <code>~/.jarvis/mcp.json</code> so it doesn't clash with the
+            Claude.ai connector you already have.
           </p>
           <Steps>
             <Step>
@@ -273,18 +275,27 @@ npx -y @gongrzhe/server-gmail-autoauth-mcp auth`}</Pre>
               channel URL (the <code>T0XXXXX</code> part).
             </Step>
             <Step>
-              <strong>Register with Claude (user scope).</strong>
-              <Pre>{`claude mcp add-json slack --scope user '{
+              <strong>Add to{' '}
+              <code>~/.jarvis/mcp.json</code></strong> under{' '}
+              <code>mcpServers</code>:
+              <Pre>{`"slack": {
+  "type": "stdio",
   "command": "npx",
   "args": ["-y", "@modelcontextprotocol/server-slack"],
   "env": {
     "SLACK_BOT_TOKEN": "xoxb-...",
     "SLACK_TEAM_ID": "T0XXXX..."
   }
-}'`}</Pre>
-              Verify with <code>claude mcp list | grep slack</code> — you
-              should see a new <code>slack</code> entry (separate from the{' '}
-              <code>claude.ai Slack</code> one) showing <code>✓ Connected</code>.
+}`}</Pre>
+              The file is watched, so changes pick up live. The send skill
+              uses <code>mcp-servers: ["*"]</code>, which means any server
+              in <code>mcp.json</code> is auto-available — no skill edits
+              needed.
+            </Step>
+            <Step>
+              <strong>Verify.</strong> This card should flip to{' '}
+              <code>CONNECTED</code> within ~20s. Then test:
+              <Pre>{`/send dm @yourself on slack: jarvis is wired`}</Pre>
             </Step>
           </Steps>
         </ChannelCard>

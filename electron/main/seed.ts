@@ -282,26 +282,15 @@ End with a single "Recommended first move" sentence. No fluff, no preamble.
 `;
 
 const SAMPLE_MCP_CONFIG = `{
-  "//": "Define MCP servers globally; skills opt-in via mcp-servers: [name].",
-  "//": "Copy this file to ~/.jarvis/mcp.json (drop the trailing .example) and fill in your tokens.",
+  "//": "Define MCP servers globally; skills opt-in via mcp-servers: [name] in their frontmatter, or 'mcp-servers: [\\"*\\"]' to inherit everything here. Copy this file to ~/.jarvis/mcp.json (drop the .example) and fill in tokens.",
 
-  "//gmail": "The Gmail MCP looks for gcp-oauth.keys.json + credentials.json in its CWD. To run two accounts, give each its own folder (e.g. ~/.gmail-mcp-personal, ~/.gmail-mcp-work) each containing the same gcp-oauth.keys.json and a per-account credentials.json minted by running 'npx -y @gongrzhe/server-gmail-autoauth-mcp auth' from inside that folder.",
+  "//slack": "Slack: create a Slack app at https://api.slack.com/apps, install to your workspace, copy the Bot User OAuth Token (xoxb-...) and Team ID. The claude.ai Slack connector does NOT propagate to Jarvis tasks — you need this local entry to use /send.",
 
-  "//slack": "Slack: https://github.com/modelcontextprotocol/servers/tree/main/src/slack. Create a Slack app, install to your workspace, copy the bot token (xoxb-...) and team id.",
+  "//gmail": "Two options. (A) Easiest: install via `claude mcp add gmail-personal -- sh -c 'cd ~/.gmail-mcp-personal && exec npx -y @gongrzhe/server-gmail-autoauth-mcp'` after running the GongRzhe auth flow once. (B) Or pin it here under mcpServers with the same sh-c command — same effect, scoped to Jarvis only.",
 
   "//linear": "Linear: see https://linear.app/changelog/2025-mcp or the @tacticlaunch/mcp-linear community server.",
 
   "mcpServers": {
-    "gmail-personal": {
-      "type": "stdio",
-      "command": "sh",
-      "args": ["-c", "cd ~/.gmail-mcp-personal && exec npx -y @gongrzhe/server-gmail-autoauth-mcp"]
-    },
-    "gmail-work": {
-      "type": "stdio",
-      "command": "sh",
-      "args": ["-c", "cd ~/.gmail-mcp-work && exec npx -y @gongrzhe/server-gmail-autoauth-mcp"]
-    },
     "slack": {
       "type": "stdio",
       "command": "npx",
