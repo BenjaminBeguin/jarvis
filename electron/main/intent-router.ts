@@ -8,9 +8,11 @@
  * get unwieldy. The signature here is stable so the upgrade is a drop-in.
  */
 
+import type { ReminderMode } from '@shared/types';
+
 export type ParsedIntent =
   | { kind: 'task'; body: string }
-  | { kind: 'reminder'; body: string; fireAt: number };
+  | { kind: 'reminder'; mode: ReminderMode; body: string; fireAt: number };
 
 const REMINDER_PREFIX = /^\s*(?:please\s+)?remind\s+me\s*(?:to\s+|that\s+|about\s+)?/i;
 
@@ -98,15 +100,14 @@ function parseTomorrowAt(input: string, now: Date): TimePhrase | null {
 function extractBody(input: string, phrase: TimePhrase): string {
   let body = input.slice(0, phrase.start) + input.slice(phrase.end);
   body = body.replace(REMINDER_PREFIX, '');
-  // Drop stray connectives created by removing the time phrase.
   body = body
-    .replace(/\s+(to|that|about)\s+$/i, '')
-    .replace(/^\s*(to|that|about)\s+/i, '')
+    // Strip leading/trailing connectives that "in 20 min, " leaves behind.
+    .replace(/^[\s,;:.]+/, '')
+    .replace(/[\s,;:.]+$/, '')
+    .replace(/^\s*(and|then|to|that|about)\s+/i, '')
+    .replace(/\s+(and|then|to|that|about)\s*$/i, '')
     .replace(/\s{2,}/g, ' ')
-    .trim()
-    // Trailing connectives like "... and" or comma-only fragments.
-    .replace(/[,;]\s*$/, '')
-    .replace(/\s+(and|then)$/i, '');
+    .trim();
   return body;
 }
 
@@ -114,18 +115,23 @@ export function parseIntent(input: string, now: Date = new Date()): ParsedIntent
   const trimmed = input.trim();
   if (!trimmed) return { kind: 'task', body: trimmed };
   const isReminder = REMINDER_PREFIX.test(trimmed);
-  // We accept time phrases even without the "remind me" prefix when the
-  // sentence is explicitly future-oriented — but for v0 require the prefix
-  // so we don't accidentally route a "check the build in 5 min" task as a
-  // reminder. Once intent routing is LLM-based, we lift this.
-  if (!isReminder) return { kind: 'task', body: trimmed };
 
   const phrase =
     parseTomorrowAt(trimmed, now) ?? parseAtClock(trimmed, now) ?? parseRelativeIn(trimmed);
   if (!phrase) return { kind: 'task', body: trimmed };
 
+  // Time phrase + any imperative-ish body → schedule it. False positives
+  // ("the bug that landed in 5 min builds") are recoverable: the user sees
+  // the "Scheduled · 14:05" confirmation notification immediately and can
+  // cancel by clicking the amber node on the constellation. False
+  // *negatives* would silently drop the action, which is worse.
   const fireAt = phrase.fireAt ?? now.getTime() + (phrase.delayMs ?? 0);
   const body = extractBody(trimmed, phrase);
   if (!body) return { kind: 'task', body: trimmed };
-  return { kind: 'reminder', body, fireAt };
+  return {
+    kind: 'reminder',
+    mode: isReminder ? 'reminder' : 'scheduled',
+    body,
+    fireAt,
+  };
 }

@@ -99,7 +99,8 @@ function fireCountdown(fireAt: number, now: number): string {
 
 function reminderLabel(r: Reminder, now: number): string {
   const head = r.body.length > 24 ? `${r.body.slice(0, 23)}…` : r.body;
-  return `${head}  ·  ${fireCountdown(r.fireAt, now)}`;
+  const tag = r.mode === 'scheduled' ? '⚡' : '⏰';
+  return `${tag} ${head}  ·  ${fireCountdown(r.fireAt, now)}`;
 }
 
 interface Props {

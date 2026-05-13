@@ -117,6 +117,26 @@ async function broadcastStatus(): Promise<AppStatus> {
   return status;
 }
 
+/**
+ * Show the Answer HUD and push a taskId into its stack. Used by both the
+ * palette IPC handler and the reminder fire handler — anything that wants a
+ * Claude task to surface to the user as a HUD card.
+ */
+function pushTaskToHud(taskId: string): void {
+  showAnswerHud();
+  const hud = getAnswerHudWindow();
+  if (!hud) return;
+  // If the HUD just opened, webContents.send before did-finish-load is
+  // dropped; gate on isLoading.
+  if (hud.webContents.isLoading()) {
+    hud.webContents.once('did-finish-load', () => {
+      hud.webContents.send(IpcChannels.answerHudTrack, taskId);
+    });
+  } else {
+    hud.webContents.send(IpcChannels.answerHudTrack, taskId);
+  }
+}
+
 function registerIpc(): void {
   ipcMain.handle(IpcChannels.appStatus, () => refreshAuth());
 
@@ -198,21 +218,7 @@ function registerIpc(): void {
   });
   ipcMain.handle(IpcChannels.showAnswerHud, (_e, taskId: string) => {
     if (typeof taskId !== 'string' || !taskId) return;
-    showAnswerHud();
-    // Tell the HUD renderer to start tracking this task. If the HUD just
-    // opened, the message is queued until after did-finish-load (Electron
-    // buffers webContents.send for us). We still send via the broadcaster
-    // so any future observers (devtools panes, etc.) see it too.
-    const hud = getAnswerHudWindow();
-    if (hud) {
-      if (hud.webContents.isLoading()) {
-        hud.webContents.once('did-finish-load', () => {
-          hud.webContents.send(IpcChannels.answerHudTrack, taskId);
-        });
-      } else {
-        hud.webContents.send(IpcChannels.answerHudTrack, taskId);
-      }
-    }
+    pushTaskToHud(taskId);
   });
   ipcMain.handle(IpcChannels.hideAnswerHud, () => {
     hideAnswerHud();
@@ -394,7 +400,11 @@ function registerIpc(): void {
       const prompt = typeof payload?.prompt === 'string' ? payload.prompt : '';
       const intent = parseIntent(prompt);
       if (intent.kind === 'reminder') {
-        const reminder = reminders.create({ body: intent.body, fireAt: intent.fireAt });
+        const reminder = reminders.create({
+          body: intent.body,
+          mode: intent.mode,
+          fireAt: intent.fireAt,
+        });
         try {
           const when = new Date(reminder.fireAt).toLocaleString(undefined, {
             hour: '2-digit',
@@ -402,11 +412,11 @@ function registerIpc(): void {
             day: 'numeric',
             month: 'short',
           });
-          new Notification({
-            title: `Reminder set · ${when}`,
-            body: reminder.body,
-            silent: true,
-          })
+          const title =
+            intent.mode === 'scheduled'
+              ? `Scheduled · ${when}`
+              : `Reminder set · ${when}`;
+          new Notification({ title, body: reminder.body, silent: true })
             .on('click', () => openObservatory())
             .show();
         } catch {
@@ -567,12 +577,17 @@ app.whenReady().then(async () => {
   // it focuses the spawned task in the observatory.
   reminders.setFireHandler((reminder) => {
     let firedTaskId: string | null = null;
+    // Different framings: reminders nudge the user; scheduled actions tell
+    // Claude to do the thing. Both end up as a normal task with full tool
+    // access — only the system framing differs.
+    const prompt =
+      reminder.mode === 'scheduled'
+        ? `It's the scheduled time you set earlier for this. Carry it out now using whatever tools fit (gh, slack, fs, etc.). If a precondition isn't met (e.g. "if Luca hasn't reviewed"), check first and skip the action accordingly. Task:\n\n${reminder.body}`
+        : `Earlier I asked you to remind me about this. Surface it clearly. If it's a question, answer it; if it's a task, propose the concrete next step.\n\n${reminder.body}`;
     try {
-      const t = runner.launch({
-        prompt: reminder.body,
-        origin: 'palette',
-      });
+      const t = runner.launch({ prompt, origin: 'palette' });
       firedTaskId = t.id;
+      pushTaskToHud(t.id);
     } catch (e) {
       console.error('Reminder fire failed:', e);
     }
@@ -580,11 +595,8 @@ app.whenReady().then(async () => {
     try {
       const preview =
         reminder.body.length > 80 ? `${reminder.body.slice(0, 80)}…` : reminder.body;
-      const notif = new Notification({
-        title: 'Reminder',
-        body: preview,
-        silent: false,
-      });
+      const title = reminder.mode === 'scheduled' ? 'Jarvis is on it' : 'Reminder';
+      const notif = new Notification({ title, body: preview, silent: false });
       notif.on('click', () => {
         if (firedTaskId) {
           const win = openObservatory();
@@ -600,6 +612,8 @@ app.whenReady().then(async () => {
           openObservatory();
         }
       });
+      // If the spawned task is also going to pop the HUD (always, since
+      // origin: 'palette'), we don't need this notification to dominate.
       notif.show();
     } catch {
       // Notifications can fail pre-permission; not fatal.

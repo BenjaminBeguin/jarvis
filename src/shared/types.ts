@@ -57,10 +57,19 @@ export interface SkillSummary {
 
 export type ReminderStatus = 'pending' | 'fired' | 'cancelled';
 
+/**
+ * `reminder` = user wants to be told. Notification is the point; the spawned
+ * task is a reflective Claude turn on the topic.
+ * `scheduled` = user wants Jarvis to *do* something at that time. Notification
+ * announces the action; the spawned task carries it out (gh, slack, etc.).
+ */
+export type ReminderMode = 'reminder' | 'scheduled';
+
 export interface Reminder {
   id: string;
   /** Original prompt the user gave (without the "remind me" / time wrapper). */
   body: string;
+  mode: ReminderMode;
   createdAt: number;
   fireAt: number;
   status: ReminderStatus;

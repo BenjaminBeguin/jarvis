@@ -4,11 +4,12 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { nanoid } from 'nanoid';
 
-import type { Reminder, ReminderStatus } from '@shared/types';
+import type { Reminder, ReminderMode, ReminderStatus } from '@shared/types';
 
 interface PersistedReminder {
   id: string;
   body: string;
+  mode?: ReminderMode;
   createdAt: number;
   fireAt: number;
   status?: ReminderStatus;
@@ -79,10 +80,11 @@ export class ReminderStore extends EventEmitter {
     return n;
   }
 
-  create(input: { body: string; fireAt: number }): Reminder {
+  create(input: { body: string; mode: ReminderMode; fireAt: number }): Reminder {
     const reminder: Reminder = {
       id: nanoid(8),
       body: input.body,
+      mode: input.mode,
       createdAt: Date.now(),
       fireAt: input.fireAt,
       status: 'pending',
@@ -197,6 +199,7 @@ export class ReminderStore extends EventEmitter {
       const r: Reminder = {
         id: item.id,
         body: item.body,
+        mode: item.mode ?? 'reminder',
         createdAt: item.createdAt,
         fireAt: item.fireAt,
         status: item.status ?? 'pending',
@@ -211,6 +214,7 @@ export class ReminderStore extends EventEmitter {
     const serialized = [...this.reminders.values()].map((r) => ({
       id: r.id,
       body: r.body,
+      mode: r.mode,
       createdAt: r.createdAt,
       fireAt: r.fireAt,
       status: r.status,
