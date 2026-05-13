@@ -81,7 +81,17 @@ export class McpConfigStore extends EventEmitter {
 
   resolve(ids: string[]): Record<string, McpServerConfig> {
     const out: Record<string, McpServerConfig> = {};
+    // '*' opts the skill into every server in ~/.jarvis/mcp.json so the
+    // user can add new ones without editing every skill that wants them.
+    // Useful for omnibus skills like `send` where the channel list is
+    // expected to grow.
+    if (ids.includes('*')) {
+      for (const [id, cfg] of this.servers.entries()) {
+        out[id] = cfg;
+      }
+    }
     for (const id of ids) {
+      if (id === '*') continue;
       const cfg = this.servers.get(id);
       if (cfg) out[id] = cfg;
     }

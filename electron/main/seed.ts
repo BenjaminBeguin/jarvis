@@ -158,6 +158,8 @@ description: Route a message to the right channel — Slack, Gmail (multi-accoun
 allowed-tools:
   - Read
   - mcp__*
+mcp-servers:
+  - "*"
 ---
 
 You help the user send a message to someone via the right channel.
