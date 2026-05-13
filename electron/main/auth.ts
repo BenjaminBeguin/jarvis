@@ -7,6 +7,7 @@ import type { AuthMode } from '@shared/types';
 
 interface PersistedConfig {
   authMode?: AuthMode;
+  disabledModules?: string[];
 }
 
 const CONFIG_PATH = join(homedir(), '.jarvis', 'config.json');
@@ -79,4 +80,13 @@ export function clearAuthMode(): void {
   const cfg = readConfig();
   delete cfg.authMode;
   writeConfig(cfg);
+}
+
+export function loadDisabledModules(): string[] {
+  const cfg = readConfig();
+  return Array.isArray(cfg.disabledModules) ? cfg.disabledModules : [];
+}
+
+export function saveDisabledModules(ids: string[]): void {
+  writeConfig({ ...readConfig(), disabledModules: ids });
 }

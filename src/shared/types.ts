@@ -79,12 +79,22 @@ export interface ModuleSummary {
   name: string;
   description: string;
   version: string;
+  enabled: boolean;
   intents: PaletteIntentSummary[];
+  /** A renderer-side page is available for this module (Notes for quick-note, etc.). */
+  hasPage: boolean;
 }
 
 export interface DispatchIntentResult {
   ok: boolean;
   message?: string;
+}
+
+export interface JarvisFileEntry {
+  name: string;
+  isDir: boolean;
+  mtimeMs: number;
+  sizeBytes: number;
 }
 
 export type AuthMode = 'subscription' | 'api-key';

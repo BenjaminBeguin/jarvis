@@ -31,6 +31,9 @@ export interface ModuleContext {
 /**
  * A palette intent. The palette routes `<prefix> <input>` to `handler(input)`.
  * Prefix must start with `/` and be a single token (no spaces).
+ *
+ * Handlers may return a short string that's surfaced to the user as a "what
+ * just happened" message (palette success badge, notification body).
  */
 export interface PaletteIntent {
   id: string;
@@ -38,7 +41,10 @@ export interface PaletteIntent {
   label: string;
   description?: string;
   placeholder?: string;
-  handler: (input: string, ctx: ModuleContext) => void | Promise<void>;
+  handler: (
+    input: string,
+    ctx: ModuleContext,
+  ) => void | string | Promise<void | string>;
 }
 
 /**

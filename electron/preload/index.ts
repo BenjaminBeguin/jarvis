@@ -5,6 +5,7 @@ import type {
   AppStatus,
   AuthMode,
   DispatchIntentResult,
+  JarvisFileEntry,
   LaunchTaskRequest,
   McpServerSummary,
   ModuleSummary,
@@ -58,8 +59,15 @@ const api = {
     input: string,
   ): Promise<DispatchIntentResult> =>
     ipcRenderer.invoke(IpcChannels.dispatchIntent, { moduleId, intentId, input }),
+  setModuleEnabled: (moduleId: string, enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.setModuleEnabled, { moduleId, enabled }),
   onModulesChanged: (listener: Listener<ModuleSummary[]>): Unsubscribe =>
     subscribe(IpcChannels.modulesChanged, listener),
+
+  listJarvisDir: (rel: string): Promise<JarvisFileEntry[]> =>
+    ipcRenderer.invoke(IpcChannels.listJarvisDir, rel),
+  readJarvisFile: (rel: string): Promise<string> =>
+    ipcRenderer.invoke(IpcChannels.readJarvisFile, rel),
 
   listRoutines: (): Promise<RoutineDef[]> =>
     ipcRenderer.invoke(IpcChannels.listRoutines),

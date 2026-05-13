@@ -36,7 +36,9 @@ export const quickNoteModule: Module = {
         mkdirSync(dirname(filePath), { recursive: true });
         const block = `\n## ${timeKey(now)}\n\n${text}\n`;
         appendFileSync(filePath, block, 'utf8');
-        ctx.notify('Note saved', filePath.replace(ctx.jarvisRoot, '~/.jarvis'));
+        const rel = filePath.replace(ctx.jarvisRoot, '~/.jarvis');
+        ctx.notify('Note saved', rel);
+        return `Saved · ${rel}`;
       },
     },
   ],

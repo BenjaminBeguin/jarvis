@@ -1,12 +1,18 @@
 import { app, globalShortcut, ipcMain, Notification } from 'electron';
+import {
+  readFileSync,
+  readdirSync,
+  statSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, normalize, relative, resolve } from 'node:path';
 
 import { IpcChannels } from '@shared/ipc';
 import type {
   AppStatus,
   AuthMode,
   DispatchIntentResult,
+  JarvisFileEntry,
   LaunchTaskRequest,
   TaskEvent,
   TaskSummary,
@@ -142,8 +148,65 @@ function registerIpc(): void {
     async (
       _e,
       { moduleId, intentId, input }: { moduleId: string; intentId: string; input: string },
-    ): Promise<DispatchIntentResult> =>
-      modules.dispatch(moduleId, intentId, input),
+    ): Promise<DispatchIntentResult> => {
+      const result = await modules.dispatch(moduleId, intentId, input);
+      // Hide the palette on success so the user has a clear "command landed"
+      // signal — the notification + reopening behavior takes over from here.
+      if (result.ok) hidePalette();
+      return result;
+    },
+  );
+  ipcMain.handle(
+    IpcChannels.setModuleEnabled,
+    async (_e, { moduleId, enabled }: { moduleId: string; enabled: boolean }) => {
+      await modules.setEnabled(moduleId, enabled);
+    },
+  );
+
+  const jarvisRoot = join(homedir(), '.jarvis');
+  const resolveSafe = (rel: string): string => {
+    const target = normalize(resolve(jarvisRoot, rel || '.'));
+    const within = relative(jarvisRoot, target);
+    if (within.startsWith('..') || within === '..') {
+      throw new Error(`Path escapes ~/.jarvis: ${rel}`);
+    }
+    return target;
+  };
+  ipcMain.handle(
+    IpcChannels.listJarvisDir,
+    (_e, rel: string): JarvisFileEntry[] => {
+      const target = resolveSafe(rel);
+      let entries: import('node:fs').Dirent[];
+      try {
+        entries = readdirSync(target, { withFileTypes: true });
+      } catch {
+        return [];
+      }
+      const out: JarvisFileEntry[] = [];
+      for (const entry of entries) {
+        if (entry.name.startsWith('.')) continue;
+        const full = join(target, entry.name);
+        try {
+          const stat = statSync(full);
+          out.push({
+            name: entry.name,
+            isDir: entry.isDirectory(),
+            mtimeMs: stat.mtimeMs,
+            sizeBytes: stat.size,
+          });
+        } catch {
+          // skip unreadable
+        }
+      }
+      return out;
+    },
+  );
+  ipcMain.handle(
+    IpcChannels.readJarvisFile,
+    (_e, rel: string): string => {
+      const target = resolveSafe(rel);
+      return readFileSync(target, 'utf8');
+    },
   );
 
   ipcMain.handle(IpcChannels.listRoutines, () => routines.list());

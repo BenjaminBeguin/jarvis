@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 
-import type { AppStatus } from '../../shared/types';
+import type { AppStatus, ModuleSummary } from '../../shared/types';
+import { getModulePage } from '../modules/registry';
+import { ModulesPage } from './ModulesPage';
 import { Observatory } from './Observatory';
 import { Routines } from './Routines';
 
-type Tab = 'observatory' | 'routines';
+type Tab = 'observatory' | 'routines' | 'modules';
 
 interface Props {
   status: AppStatus;
@@ -34,6 +36,8 @@ function Reticle() {
 
 export function Shell({ status }: Props) {
   const [tab, setTab] = useState<Tab>('observatory');
+  const [openModuleId, setOpenModuleId] = useState<string | null>(null);
+  const [openModule, setOpenModule] = useState<ModuleSummary | null>(null);
   const [switchOpen, setSwitchOpen] = useState(false);
   const [clock, setClock] = useState(() => formatClock(new Date()));
 
@@ -41,6 +45,33 @@ export function Shell({ status }: Props) {
     const id = setInterval(() => setClock(formatClock(new Date())), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Keep openModule in sync with the registry — handles "module disabled
+  // while its page is open" by closing the page automatically.
+  useEffect(() => {
+    if (!openModuleId) {
+      setOpenModule(null);
+      return;
+    }
+    let cancelled = false;
+    const sync = async () => {
+      const all = await window.jarvis.listModules();
+      if (cancelled) return;
+      const m = all.find((x) => x.id === openModuleId);
+      if (!m || !m.enabled || !m.hasPage) {
+        setOpenModuleId(null);
+        setOpenModule(null);
+      } else {
+        setOpenModule(m);
+      }
+    };
+    void sync();
+    const off = window.jarvis.onModulesChanged(() => void sync());
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [openModuleId]);
 
   const switchAuth = async (mode: 'subscription' | 'api-key') => {
     try {
@@ -52,8 +83,9 @@ export function Shell({ status }: Props) {
     }
   };
 
-  const badge =
-    status.authMode === 'subscription' ? 'subscription' : 'api key';
+  const badge = status.authMode === 'subscription' ? 'subscription' : 'api key';
+
+  const PageComponent = openModuleId ? getModulePage(openModuleId) : null;
 
   return (
     <div className="shell">
@@ -64,16 +96,31 @@ export function Shell({ status }: Props) {
         </div>
         <div className="shell__tabs">
           <button
-            className={`shell__tab${tab === 'observatory' ? ' shell__tab--active' : ''}`}
-            onClick={() => setTab('observatory')}
+            className={`shell__tab${tab === 'observatory' && !openModuleId ? ' shell__tab--active' : ''}`}
+            onClick={() => {
+              setTab('observatory');
+              setOpenModuleId(null);
+            }}
           >
             Observatory
           </button>
           <button
-            className={`shell__tab${tab === 'routines' ? ' shell__tab--active' : ''}`}
-            onClick={() => setTab('routines')}
+            className={`shell__tab${tab === 'routines' && !openModuleId ? ' shell__tab--active' : ''}`}
+            onClick={() => {
+              setTab('routines');
+              setOpenModuleId(null);
+            }}
           >
             Routines
+          </button>
+          <button
+            className={`shell__tab${tab === 'modules' && !openModuleId ? ' shell__tab--active' : ''}`}
+            onClick={() => {
+              setTab('modules');
+              setOpenModuleId(null);
+            }}
+          >
+            Modules
           </button>
         </div>
         <div className="shell__right">
@@ -121,8 +168,34 @@ export function Shell({ status }: Props) {
           </button>
         </div>
       </nav>
+
+      {openModuleId && PageComponent && (
+        <div className="shell__breadcrumb">
+          <button
+            onClick={() => {
+              setOpenModuleId(null);
+              setTab('modules');
+            }}
+            className="shell__breadcrumb-back"
+          >
+            ← Modules
+          </button>
+          <span className="shell__breadcrumb-name">
+            {openModule?.name ?? openModuleId}
+          </span>
+        </div>
+      )}
+
       <div className="shell__body">
-        {tab === 'observatory' ? <Observatory /> : <Routines />}
+        {openModuleId && PageComponent ? (
+          <PageComponent />
+        ) : tab === 'observatory' ? (
+          <Observatory />
+        ) : tab === 'routines' ? (
+          <Routines />
+        ) : (
+          <ModulesPage onOpenPage={(id) => setOpenModuleId(id)} />
+        )}
       </div>
     </div>
   );
