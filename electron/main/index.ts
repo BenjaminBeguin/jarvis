@@ -46,7 +46,13 @@ import {
 import { SkillStore } from './skill-store.js';
 import { asTaskOrigin, TaskRunner } from './task-runner.js';
 import { setProgressEmitter, transcribePcm } from './transcribe.js';
-import { getRunningTasksCount, initTray, setRunningTasksCount } from './tray.js';
+import {
+  getRunningTasksCount,
+  initTray,
+  setAwaitingRepliesCount,
+  setPendingRemindersCount,
+  setRunningTasksCount,
+} from './tray.js';
 import {
   broadcast,
   getAnswerHudWindow,
@@ -509,10 +515,15 @@ function wireRunnerEvents(): void {
   runner.on('status', (summary: TaskSummary) => {
     // Tray indicator counts only tasks Jarvis owns — external sessions cycle
     // between running/idle and would make the indicator meaningless.
-    const running = runner
-      .list()
-      .filter((t) => t.status === 'running' && t.origin !== 'external').length;
+    const tasks = runner.list();
+    const running = tasks.filter(
+      (t) => t.status === 'running' && t.origin !== 'external',
+    ).length;
+    const awaiting = tasks.filter(
+      (t) => t.awaitingInput && t.origin !== 'external',
+    ).length;
     setRunningTasksCount(running);
+    setAwaitingRepliesCount(awaiting);
     broadcast(IpcChannels.taskStatus, summary);
     if (
       summary.origin !== 'external' &&
@@ -658,7 +669,12 @@ app.whenReady().then(async () => {
   skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
   mcp.on('changed', (list) => broadcast(IpcChannels.listMcpServers, list));
   routines.on('changed', (list) => broadcast(IpcChannels.routinesChanged, list));
-  reminders.on('changed', (list) => broadcast(IpcChannels.remindersChanged, list));
+  reminders.on('changed', (list) => {
+    broadcast(IpcChannels.remindersChanged, list);
+    setPendingRemindersCount(reminders.pendingCount());
+  });
+  // Seed initial count after init().
+  setPendingRemindersCount(reminders.pendingCount());
   modules.on('changed', (list) => broadcast(IpcChannels.modulesChanged, list));
 
   setProgressEmitter((event) =>
