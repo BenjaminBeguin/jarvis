@@ -82,10 +82,11 @@ export function QuickNotePage() {
   const pushEntry = async (key: string, body: string) => {
     setPushing(key);
     try {
-      await window.jarvis.launchTask({
+      const summary = await window.jarvis.launchTask({
         prompt: `${PUSH_PROMPT_PREFIX}${body}`,
         origin: 'palette',
       });
+      void window.jarvis.showAnswerHud(summary.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

@@ -84,10 +84,11 @@ export function MeetingsPage() {
   const pushToClaude = async (file: MeetingFile) => {
     setPushing(file.name);
     try {
-      await window.jarvis.launchTask({
+      const summary = await window.jarvis.launchTask({
         prompt: `${PUSH_PROMPT_PREFIX}${file.body}`,
         origin: 'palette',
       });
+      void window.jarvis.showAnswerHud(summary.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

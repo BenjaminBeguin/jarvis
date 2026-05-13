@@ -30,6 +30,7 @@ import { ModuleRegistry } from './module-registry.js';
 import { claudeCodeWatchModule } from './modules/claude-code-watch.js';
 import { meetingRecorderModule, persistMeeting } from './modules/meeting-recorder.js';
 import { quickNoteModule } from './modules/quick-note.js';
+import { statusModule } from './modules/status.js';
 import { parseIntent } from './intent-router.js';
 import { ProjectStore } from './projects.js';
 import { ReminderStore } from './reminders.js';
@@ -370,12 +371,27 @@ function registerIpc(): void {
         sampleRate: payload.sampleRate,
         pcm: new Float32Array(payload.pcm),
       });
+      const relPath = `~/.jarvis/meetings/${filename}`;
       new Notification({
         title: 'Meeting saved',
-        body: `~/.jarvis/meetings/${filename}`,
+        body: relPath,
       })
         .on('click', () => openObservatory())
         .show();
+      // Auto-debrief: kick off a Claude task using the meeting-debrief skill,
+      // which reads the transcript file and rewrites it with structured
+      // Summary / Decisions / Action items / Open questions sections. Runs
+      // in the background; the user sees it in the dashboard.
+      try {
+        const debrief = runner.launch({
+          prompt: `Path: ~/.jarvis/meetings/${filename}\n\nRead this freshly recorded meeting transcript and restructure the file as the skill instructs.`,
+          skillId: 'meeting-debrief',
+          origin: 'routine',
+        });
+        pushTaskToHud(debrief.id);
+      } catch (e) {
+        console.error('Meeting auto-debrief failed to launch:', e);
+      }
       return { filename };
     },
   );
@@ -648,6 +664,7 @@ app.whenReady().then(async () => {
     },
     launchTask: (req) =>
       runner.launch({ ...req, origin: asTaskOrigin(req.origin) }),
+    showHud: (taskId) => pushTaskToHud(taskId),
     registerExternalTask: (summary) => runner.registerExternal(summary),
     recordExternalEvent: (taskId, msg) =>
       runner.recordExternalEvent(taskId, msg),
@@ -665,6 +682,7 @@ app.whenReady().then(async () => {
   await modules.register(quickNoteModule);
   await modules.register(claudeCodeWatchModule);
   await modules.register(meetingRecorderModule);
+  await modules.register(statusModule);
 
   skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
   mcp.on('changed', (list) => broadcast(IpcChannels.listMcpServers, list));

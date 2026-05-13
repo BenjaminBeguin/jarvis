@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -17,6 +17,99 @@ For each message:
 4. Propose one concrete next step or experiment they could run this week.
 
 Keep responses under 200 words. Push back where they're hand-waving.
+`;
+
+const MEETING_DEBRIEF_SKILL = `---
+name: meeting-debrief
+description: Post-meeting structuring — reads a transcript markdown file and rewrites it with Summary / Decisions / Action items / Open questions sections
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+---
+
+You are Jarvis structuring a freshly recorded meeting.
+
+The user will give you the path to a markdown file under ~/.jarvis/meetings/.
+The file has YAML frontmatter (title, started_at, duration_seconds) followed
+by a raw Whisper transcript. Your job:
+
+1. **Read** the file at the given path.
+2. **Edit** it in place: keep the existing frontmatter and the original
+   transcript exactly as-is (under a new "## Transcript" heading at the
+   bottom). Insert the following sections BEFORE the transcript:
+
+   - **## Summary** — 2-4 sentences. What was this meeting about? What was
+     accomplished?
+   - **## Key decisions** — bullets. If nothing was decided, say so explicitly
+     ("No firm decisions.").
+   - **## Action items** — bullets shaped \`[owner] action — by when\`. If no
+     owner was named, write \`[?]\`. If no deadline was set, omit "— by when".
+     If there are no action items, say "No action items."
+   - **## Open questions** — bullets of unresolved points worth following up.
+   - **## Topics** — short comma-separated tags.
+
+3. Use exactly these headings and order. Don't add a preface, don't add a
+   closing comment. Don't quote large chunks from the transcript — paraphrase.
+4. If the transcript is empty or just noise ("_no speech detected_", "thank
+   you", etc.), insert a single line under Summary noting that and leave the
+   other sections with "—".
+
+Do not invent attendees, decisions, or action items. If something isn't in
+the transcript, don't put it in the structured sections.
+`;
+
+const STATUS_SKILL = `---
+name: status
+description: 'What is happening right now' — read tasks/reminders/notes/meetings under ~/.jarvis and produce a tight status digest
+allowed-tools:
+  - Read
+  - Bash
+  - Glob
+---
+
+You are Jarvis producing a 'where am I' status report for the user.
+
+Look under \`~/.jarvis/\` for:
+- \`reminders.json\` — pending reminders (status: pending) and their fire times
+- \`notes/*.md\` — most recent 2-3 entries
+- \`meetings/*.md\` — most recent 1-2 files, pull their Summary if structured
+- \`jarvis.sqlite\` — skip; not useful in raw form
+
+Also run \`gh pr status\` if available (one-line per PR).
+
+Produce a markdown digest with these sections (skip a section if empty):
+
+## ⏰ Scheduled
+- One line per pending reminder/scheduled action, sorted by fire time.
+
+## ✎ Recent notes
+- Last 3 note entries, time + first 80 chars.
+
+## 🎙 Last meetings
+- Title + summary line.
+
+## 🐙 GitHub
+- gh pr status output, condensed.
+
+End with one sentence: 'Recommended next move: …'. Be specific. Keep the
+whole digest under 30 lines.
+`;
+
+const COMMIT_HELPER_SKILL = `---
+name: commit-helper
+description: Drafts a short commit message for the current working tree diff
+allowed-tools:
+  - Bash
+---
+
+You are drafting a commit message for the user.
+
+1. Run \`git status\` and \`git diff --cached\` (or \`git diff\` if nothing staged) to see the changes.
+2. Read the most recent ~5 commit messages with \`git log --oneline -5\` so the style matches.
+3. Return ONLY the proposed commit message — first line under 70 chars, optional body explaining the why, separated by a blank line. No preamble, no closing comment.
+
+If there's nothing to commit, say so in one line.
 `;
 
 const DAILY_BRIEF_SKILL = `---
@@ -81,6 +174,12 @@ function writeIfMissing(path: string, content: string): void {
   if (!existsSync(path)) writeFileSync(path, content, 'utf8');
 }
 
+function writeSkill(skillsRoot: string, name: string, body: string): void {
+  const dir = join(skillsRoot, name);
+  mkdirSync(dir, { recursive: true });
+  writeIfMissing(join(dir, 'SKILL.md'), body);
+}
+
 export function seedDefaultsIfEmpty(): void {
   const root = join(homedir(), '.jarvis');
   const skillsRoot = join(root, 'skills');
@@ -89,16 +188,12 @@ export function seedDefaultsIfEmpty(): void {
   writeIfMissing(join(root, 'mcp.json.example'), SAMPLE_MCP_CONFIG);
   writeIfMissing(join(root, 'projects.json.example'), SAMPLE_PROJECTS);
 
-  const hasAnySkill = readdirSync(skillsRoot, { withFileTypes: true }).some(
-    (e) => e.isDirectory(),
-  );
-  if (hasAnySkill) return;
-
-  const brainstormDir = join(skillsRoot, 'brainstorm');
-  mkdirSync(brainstormDir, { recursive: true });
-  writeIfMissing(join(brainstormDir, 'SKILL.md'), BRAINSTORM_SKILL);
-
-  const briefDir = join(skillsRoot, 'daily-brief');
-  mkdirSync(briefDir, { recursive: true });
-  writeIfMissing(join(briefDir, 'SKILL.md'), DAILY_BRIEF_SKILL);
+  // Each built-in skill seeds only if missing. New built-ins added in later
+  // versions show up automatically; user-authored skills are never touched.
+  // (To customize a built-in, edit the SKILL.md — we won't overwrite it.)
+  writeSkill(skillsRoot, 'brainstorm', BRAINSTORM_SKILL);
+  writeSkill(skillsRoot, 'daily-brief', DAILY_BRIEF_SKILL);
+  writeSkill(skillsRoot, 'meeting-debrief', MEETING_DEBRIEF_SKILL);
+  writeSkill(skillsRoot, 'status', STATUS_SKILL);
+  writeSkill(skillsRoot, 'commit-helper', COMMIT_HELPER_SKILL);
 }

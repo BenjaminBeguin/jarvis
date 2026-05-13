@@ -12,6 +12,8 @@ export interface ModuleContext {
   notify(title: string, body: string): void;
   /** Fire a Task into the runner. Useful when a module wants to chain into Claude. */
   launchTask(req: LaunchTaskRequest): TaskSummary;
+  /** Pop the answer HUD with a freshly-launched task so the user can watch it. */
+  showHud(taskId: string): void;
   /** Publish an observable entry the module is watching (not running). */
   registerExternalTask(summary: TaskSummary): void;
   /** Push a streamed event for a previously-registered external entry. */
