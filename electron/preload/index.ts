@@ -13,6 +13,7 @@ import type {
   SkillSummary,
   TaskEvent,
   TaskSummary,
+  TranscribeProgress,
 } from '@shared/types';
 
 type Listener<T> = (payload: T) => void;
@@ -73,6 +74,11 @@ const api = {
     ipcRenderer.invoke(IpcChannels.requestMicAccess),
   micStatus: (): Promise<{ status: string }> =>
     ipcRenderer.invoke(IpcChannels.micStatus),
+
+  transcribe: (pcm: ArrayBuffer): Promise<string> =>
+    ipcRenderer.invoke(IpcChannels.transcribeAudio, pcm),
+  onTranscribeProgress: (listener: Listener<TranscribeProgress>): Unsubscribe =>
+    subscribe(IpcChannels.transcribeProgress, listener),
 
   listRoutines: (): Promise<RoutineDef[]> =>
     ipcRenderer.invoke(IpcChannels.listRoutines),

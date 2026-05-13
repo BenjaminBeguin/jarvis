@@ -38,6 +38,7 @@ import {
 } from './secrets.js';
 import { SkillStore } from './skill-store.js';
 import { asTaskOrigin, TaskRunner } from './task-runner.js';
+import { setProgressEmitter, transcribePcm } from './transcribe.js';
 import { getRunningTasksCount, initTray, setRunningTasksCount } from './tray.js';
 import { broadcast, hidePalette, openObservatory, openPalette } from './windows.js';
 
@@ -235,6 +236,14 @@ function registerIpc(): void {
     },
   );
 
+  ipcMain.handle(
+    IpcChannels.transcribeAudio,
+    async (_e, payload: ArrayBuffer): Promise<string> => {
+      const pcm = new Float32Array(payload);
+      return transcribePcm(pcm);
+    },
+  );
+
   ipcMain.handle(IpcChannels.listRoutines, () => routines.list());
   ipcMain.handle(IpcChannels.saveRoutine, (_e, input) => routines.save(input));
   ipcMain.handle(IpcChannels.deleteRoutine, (_e, id: string) =>
@@ -372,6 +381,10 @@ app.whenReady().then(async () => {
   mcp.on('changed', (list) => broadcast(IpcChannels.listMcpServers, list));
   routines.on('changed', (list) => broadcast(IpcChannels.routinesChanged, list));
   modules.on('changed', (list) => broadcast(IpcChannels.modulesChanged, list));
+
+  setProgressEmitter((event) =>
+    broadcast(IpcChannels.transcribeProgress, event),
+  );
   registerIpc();
   wireRunnerEvents();
   initTray();

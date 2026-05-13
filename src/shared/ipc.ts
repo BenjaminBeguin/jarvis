@@ -22,6 +22,9 @@ export const IpcChannels = {
   requestMicAccess: 'media:requestMic',
   micStatus: 'media:micStatus',
 
+  transcribeAudio: 'audio:transcribe',
+  transcribeProgress: 'audio:progress',
+
   listRoutines: 'routines:list',
   saveRoutine: 'routines:save',
   deleteRoutine: 'routines:delete',

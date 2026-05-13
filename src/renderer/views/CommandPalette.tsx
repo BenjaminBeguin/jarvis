@@ -4,26 +4,24 @@ import type {
   ModuleSummary,
   PaletteIntentSummary,
   SkillSummary,
+  TranscribeProgress,
 } from '../../shared/types';
-import {
-  createTranscriber,
-  isVoiceSupported,
-  type VoiceTranscriber,
-} from '../voice/WebSpeechTranscriber';
+import { AudioCapture } from '../voice/AudioCapture';
 
 interface PendingIntent extends PaletteIntentSummary {}
 
 export function CommandPalette() {
   const [text, setText] = useState('');
   const [listening, setListening] = useState(false);
-  const [partial, setPartial] = useState('');
+  const [transcribing, setTranscribing] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<TranscribeProgress | null>(null);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [modules, setModules] = useState<ModuleSummary[]>([]);
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [activeIntent, setActiveIntent] = useState<PendingIntent | null>(null);
   const [pickerIndex, setPickerIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const transcriberRef = useRef<VoiceTranscriber | null>(null);
+  const captureRef = useRef<AudioCapture | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -31,9 +29,18 @@ export function CommandPalette() {
     void window.jarvis.listModules().then(setModules);
     const offS = window.jarvis.onSkillsChanged(setSkills);
     const offM = window.jarvis.onModulesChanged(setModules);
+    const offP = window.jarvis.onTranscribeProgress((event) => {
+      // Only render download/loading status while we're not idle.
+      if (event.status === 'ready' || event.status === 'done') {
+        setDownloadProgress(null);
+      } else {
+        setDownloadProgress(event);
+      }
+    });
     return () => {
       offS();
       offM();
+      offP();
     };
   }, []);
 
@@ -104,7 +111,6 @@ export function CommandPalette() {
           return;
         }
         setText('');
-        setPartial('');
         setActiveIntent(null);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -119,7 +125,6 @@ export function CommandPalette() {
         origin: 'palette',
       });
       setText('');
-      setPartial('');
       setActiveSkill(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -140,10 +145,8 @@ export function CommandPalette() {
   };
 
   const startVoice = async () => {
-    if (transcriberRef.current) return;
+    if (captureRef.current || transcribing) return;
     setError(null);
-    // Ask macOS for mic access up-front; without this the prompt may never
-    // appear in dev and Web Speech silently fails with a 'not-allowed' error.
     try {
       const perm = await window.jarvis.requestMicAccess();
       if (!perm.granted) {
@@ -158,61 +161,65 @@ export function CommandPalette() {
       console.warn('mic permission probe failed', e);
     }
 
-    const t = createTranscriber({
-      onPartial: (txt) => setPartial(txt),
-      onFinal: (txt) => {
-        setText((prev) => (prev ? `${prev} ${txt}` : txt));
-        setPartial('');
-      },
-      onError: (msg) => {
-        console.warn('voice error', msg);
-        // Web Speech reports a short code. Map the ones the user will hit
-        // most often into something diagnosable.
-        const friendly =
-          msg === 'network'
-            ? "Voice service unreachable (Web Speech in Electron is unreliable — we'll swap to local whisper.cpp next iteration)."
-            : msg === 'not-allowed'
-            ? 'Microphone access not granted yet.'
-            : msg === 'no-speech'
-            ? "Didn't hear anything — hold the mic button while speaking."
-            : msg === 'service-not-allowed'
-            ? "Browser blocked the speech service. Use macOS Dictation (System Settings → Keyboard → Dictation) for now."
-            : `Voice failed: ${msg}`;
-        setError(friendly);
-        setListening(false);
-      },
-      onEnd: () => {
-        setListening(false);
-        transcriberRef.current = null;
-      },
-    });
-    if (!t) {
-      setError('Voice not supported in this environment.');
+    const capture = new AudioCapture();
+    try {
+      await capture.start();
+    } catch (e) {
+      setError(`Mic open failed: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
-    transcriberRef.current = t;
-    try {
-      t.start();
-      setListening(true);
-    } catch (e) {
-      setError(`Voice start failed: ${e instanceof Error ? e.message : String(e)}`);
-      transcriberRef.current = null;
-    }
+    captureRef.current = capture;
+    setListening(true);
   };
 
-  const stopVoice = () => {
-    transcriberRef.current?.stop();
+  const stopVoice = async () => {
+    const capture = captureRef.current;
+    if (!capture) return;
+    captureRef.current = null;
+    setListening(false);
+    let result;
+    try {
+      result = await capture.stop();
+    } catch (e) {
+      setError(`Audio capture failed: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    // Less than ~0.3s of audio — almost certainly an accidental tap, not a
+    // real utterance. Skip the round-trip.
+    if (result.pcm.length < 16_000 * 0.3) {
+      setError("Didn't hear anything — hold the mic button while speaking.");
+      return;
+    }
+    setTranscribing(true);
+    try {
+      // ArrayBuffer transfers across IPC efficiently; new Float32Array views
+      // it directly in the main process without a copy.
+      const text = await window.jarvis.transcribe(result.pcm.buffer as ArrayBuffer);
+      if (!text) {
+        setError("Couldn't make out the audio. Try again with less background noise.");
+        return;
+      }
+      setText((prev) => (prev ? `${prev} ${text}` : text));
+    } catch (e) {
+      setError(`Transcribe failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setTranscribing(false);
+    }
   };
 
   const placeholder = listening
-    ? partial || 'Listening…'
+    ? 'Listening… release to transcribe'
+    : transcribing
+    ? 'Transcribing…'
+    : downloadProgress?.status === 'downloading'
+    ? `Loading whisper model ${downloadProgress.progress != null ? `· ${Math.round(downloadProgress.progress)}%` : ''}`
     : activeIntent
     ? activeIntent.placeholder ?? `${activeIntent.label}…`
     : activeSkill
     ? `${activeSkill.name} — add a prompt or press Enter`
     : '/ to pick · ask anything';
 
-  const displayValue = listening && partial ? partial : text;
+  const displayValue = text;
 
   return (
     <div className="palette palette-body">
@@ -284,24 +291,43 @@ export function CommandPalette() {
             }
           }}
         />
-        {isVoiceSupported() && (
-          <button
-            className={`mic${listening ? ' listening' : ''}`}
-            title={listening ? 'Stop listening' : 'Hold to dictate'}
-            onMouseDown={startVoice}
-            onMouseUp={stopVoice}
-            onMouseLeave={stopVoice}
-            aria-label="Toggle voice input"
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <rect x="4" y="2" width="4" height="6" rx="2" stroke="currentColor" />
-              <path d="M3 6.5C3 8 4 9 6 9C8 9 9 8 9 6.5" stroke="currentColor" strokeLinecap="round" />
-              <line x1="6" y1="9" x2="6" y2="11" stroke="currentColor" strokeLinecap="round" />
-            </svg>
-          </button>
-        )}
+        <button
+          className={`mic${listening ? ' listening' : ''}${transcribing ? ' transcribing' : ''}`}
+          title={
+            transcribing
+              ? 'Transcribing…'
+              : listening
+              ? 'Release to transcribe'
+              : 'Hold to dictate'
+          }
+          onMouseDown={() => void startVoice()}
+          onMouseUp={() => void stopVoice()}
+          onMouseLeave={() => void stopVoice()}
+          disabled={transcribing}
+          aria-label="Toggle voice input"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <rect x="4" y="2" width="4" height="6" rx="2" stroke="currentColor" />
+            <path d="M3 6.5C3 8 4 9 6 9C8 9 9 8 9 6.5" stroke="currentColor" strokeLinecap="round" />
+            <line x1="6" y1="9" x2="6" y2="11" stroke="currentColor" strokeLinecap="round" />
+          </svg>
+        </button>
         <span className="hint">↵ exec</span>
       </div>
+      {downloadProgress?.status === 'downloading' && (
+        <div className="palette__progress">
+          downloading whisper model
+          {downloadProgress.file ? ` · ${downloadProgress.file}` : ''}
+          {downloadProgress.progress != null && (
+            <span className="palette__progress-bar">
+              <span
+                className="palette__progress-fill"
+                style={{ width: `${Math.round(downloadProgress.progress)}%` }}
+              />
+            </span>
+          )}
+        </div>
+      )}
       {error && <div className="palette__error">{error}</div>}
       {pickerOpen && matches.length > 0 && (
         <div className="skill-picker">

@@ -97,6 +97,14 @@ export interface JarvisFileEntry {
   sizeBytes: number;
 }
 
+export interface TranscribeProgress {
+  status: 'downloading' | 'loading' | 'ready' | 'transcribing' | 'done';
+  file?: string;
+  progress?: number; // 0-100
+  loaded?: number;
+  total?: number;
+}
+
 export type AuthMode = 'subscription' | 'api-key';
 
 export interface AppStatus {
