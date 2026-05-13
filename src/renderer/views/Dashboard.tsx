@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { JarvisFileEntry, Reminder, TaskSummary } from '../../shared/types';
 import { formatRelative } from './TaskList';
+import { useNow } from './useNow';
 
 interface Props {
   tasks: TaskSummary[];
@@ -16,6 +17,8 @@ interface Props {
  * meeting + note files at a glance. Click anything to drill in.
  */
 export function Dashboard({ tasks, reminders, onSelectTask, onCancelReminder }: Props) {
+  // 30s tick so 'in 5m' / '3 min ago' labels stay accurate.
+  useNow(30_000);
   const live = useMemo(
     () =>
       tasks

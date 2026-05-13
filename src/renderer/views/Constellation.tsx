@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
 import type { Reminder, TaskSummary } from '../../shared/types';
+import { useNow } from './useNow';
 
 /* The SVG lives in a 1000×1000 viewBox; coordinates below are in that space. */
 const CENTER = { x: 500, y: 500 };
@@ -145,7 +146,8 @@ export function Constellation({
     () => layoutReminderRing(visibleReminders),
     [visibleReminders],
   );
-  const now = Date.now();
+  // 30s tick so '· 18m' countdowns stay roughly fresh without per-frame work.
+  const now = useNow(30_000);
 
   // Most-recently-launched Jarvis-owned task within the focus window —
   // gets a pulsing ring so the user can find what they just kicked off.
