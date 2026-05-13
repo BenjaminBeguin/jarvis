@@ -187,26 +187,64 @@ export class TaskRunner extends EventEmitter {
   }
 
   /**
-   * Continue a Jarvis-owned task with a follow-up user message. Returns
-   * false if the task is unknown, external, or no longer accepting input
-   * (completed/aborted/errored).
+   * Continue a Jarvis-owned task with a follow-up user message. Two paths:
+   *
+   *   1. Stream still alive (the multi-turn happy path) — push the message
+   *      onto the input queue, the SDK feeds it to claude on stdin.
+   *   2. Stream ended (the SDK closes after result in some configurations
+   *      we haven't fully pinned down — claude exits despite stdin staying
+   *      open). If we have an sdkSessionId from the previous turn, spawn
+   *      a fresh query with `resume: sessionId` so claude reloads the
+   *      conversation history and picks up where it left off. The same
+   *      TaskRecord stays selected, events keep flowing into it.
+   *
+   * Returns false only for unknown/external tasks or owned tasks that
+   * never got a session id (e.g. died before init).
    */
   sendMessage(taskId: string, text: string): boolean {
     const rec = this.records.get(taskId);
     if (!rec || rec.external) return false;
-    if (rec.summary.status !== 'running') return false;
-    if (!rec.inputs || rec.inputs.isClosed()) return false;
+
+    const queueAlive =
+      rec.summary.status === 'running' &&
+      rec.inputs &&
+      !rec.inputs.isClosed();
+
+    if (queueAlive) {
+      rec.inputs!.push(userMessage(text, rec.summary.id));
+      this.recordEvent(rec, {
+        type: 'user',
+        message: { role: 'user', content: [{ type: 'text', text }] },
+      } as unknown as SDKMessage);
+      this.emit('status', { ...rec.summary, awaitingInput: false });
+      rec.summary = { ...rec.summary, awaitingInput: false };
+      return true;
+    }
+
+    // Stream ended — restart as a fresh turn with resume.
+    if (!rec.sdkSessionId) return false;
+    const resumeId = rec.sdkSessionId;
+    const skill = rec.summary.skillId
+      ? this.skills?.get(rec.summary.skillId) ?? null
+      : null;
+    // Fresh queue + AbortController for the new turn.
+    rec.inputs = new AsyncMessageQueue();
     rec.inputs.push(userMessage(text, rec.summary.id));
-    // Echo as an event so the transcript reflects the user's reply
-    // immediately, before the SDK loops back with the assistant response.
+    rec.abort = new AbortController();
+    rec.summary = {
+      ...rec.summary,
+      status: 'running',
+      endedAt: null,
+      awaitingInput: false,
+    };
     this.recordEvent(rec, {
       type: 'user',
       message: { role: 'user', content: [{ type: 'text', text }] },
     } as unknown as SDKMessage);
-    // The agent is no longer awaiting — flip the meta so the UI hides the
-    // reply box and shows "running".
-    this.emit('status', { ...rec.summary, awaitingInput: false });
-    rec.summary = { ...rec.summary, awaitingInput: false };
+    this.emit('status', rec.summary);
+    // Resume the previous session id without forking — claude appends to
+    // the same JSONL it already wrote to, conversation continues cleanly.
+    void this.run(rec, skill, resumeId, false);
     return true;
   }
 
@@ -315,6 +353,7 @@ export class TaskRunner extends EventEmitter {
     record: TaskRecord,
     skill: SkillRecord | null,
     resumeSessionId?: string,
+    forkSession = true,
   ): Promise<void> {
     const { id } = record.summary;
     let cost = 0;
@@ -349,7 +388,7 @@ export class TaskRunner extends EventEmitter {
         // Options type may lag in published .d.ts versions.
         const o = options as unknown as Record<string, unknown>;
         o['resume'] = resumeSessionId;
-        o['forkSession'] = true;
+        if (forkSession) o['forkSession'] = true;
       }
       if (skill?.allowedTools.length) options.allowedTools = skill.allowedTools;
       if (skill?.model) options.model = skill.model;
@@ -366,12 +405,14 @@ export class TaskRunner extends EventEmitter {
         throw new Error('Task has no input queue');
       }
       const stream = query({ prompt: record.inputs, options });
+      console.log(`[task ${id}] starting query loop`);
 
       for await (const msg of stream as AsyncIterable<SDKMessage>) {
         this.recordEvent(record, msg);
-        const m = msg as { type?: string; total_cost_usd?: number };
+        const m = msg as { type?: string; subtype?: string; total_cost_usd?: number };
         if (m.type === 'result') {
           if (typeof m.total_cost_usd === 'number') cost = m.total_cost_usd;
+          console.log(`[task ${id}] result received, awaiting next user msg (queue closed: ${record.inputs?.isClosed()})`);
           // End of one turn — the SDK is now waiting for the next user
           // message from our queue. Flip the meta so the UI exposes a
           // reply box.
@@ -385,8 +426,10 @@ export class TaskRunner extends EventEmitter {
           }
         }
       }
+      console.log(`[task ${id}] query loop EXITED naturally (abort.aborted: ${record.abort.signal.aborted}, queue closed: ${record.inputs?.isClosed()})`);
     } catch (err) {
       const aborted = record.abort.signal.aborted;
+      console.log(`[task ${id}] query loop THREW`, err, `aborted: ${aborted}`);
       finalStatus = aborted ? 'aborted' : 'errored';
       this.recordEvent(record, {
         type: 'jarvis_error',
@@ -394,16 +437,30 @@ export class TaskRunner extends EventEmitter {
         aborted,
       } as unknown as SDKMessage);
     } finally {
+      console.log(`[task ${id}] finally: status=${finalStatus}, cost=${cost}, sdkSessionId=${record.sdkSessionId}`);
       record.inputs?.close();
       const endedAt = Date.now();
+
+      // If the SDK stream ended cleanly AND we know the session id, keep
+      // the task alive in an "awaiting" state — sendMessage() will spin up
+      // a fresh query() with resume: sessionId on the next reply. Without
+      // this, the SDK closing the stream after a single turn (which we've
+      // seen in production despite multi-turn streaming working in
+      // isolation) would lock the user out of further replies.
+      const canResume =
+        finalStatus === 'completed' && !!record.sdkSessionId;
+      const nextStatus: TaskStatus = canResume ? 'running' : finalStatus;
+      const nextAwaiting = canResume;
+      const nextEndedAt = canResume ? null : endedAt;
+
       record.summary = {
         ...record.summary,
-        status: finalStatus,
-        endedAt,
+        status: nextStatus,
+        endedAt: nextEndedAt,
         costUsd: cost,
-        awaitingInput: false,
+        awaitingInput: nextAwaiting,
       };
-      updateTaskStatus(id, finalStatus, endedAt, cost);
+      updateTaskStatus(id, nextStatus, nextEndedAt, cost);
       this.emit('status', record.summary);
     }
   }
