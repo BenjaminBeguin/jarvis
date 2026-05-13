@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import matter from 'gray-matter';
 
 const BRAINSTORM_SKILL = `---
 name: brainstorm
@@ -61,7 +62,7 @@ the transcript, don't put it in the structured sections.
 
 const STATUS_SKILL = `---
 name: status
-description: 'What is happening right now' — read tasks/reminders/notes/meetings under ~/.jarvis and produce a tight status digest
+description: "What is happening right now — read tasks/reminders/notes/meetings under ~/.jarvis and produce a tight status digest"
 allowed-tools:
   - Read
   - Bash
@@ -177,7 +178,21 @@ function writeIfMissing(path: string, content: string): void {
 function writeSkill(skillsRoot: string, name: string, body: string): void {
   const dir = join(skillsRoot, name);
   mkdirSync(dir, { recursive: true });
-  writeIfMissing(join(dir, 'SKILL.md'), body);
+  const path = join(dir, 'SKILL.md');
+  if (!existsSync(path)) {
+    writeFileSync(path, body, 'utf8');
+    return;
+  }
+  // Self-heal: if the on-disk file has unparseable YAML frontmatter (almost
+  // always a bug in a prior seed string, not an intentional user edit —
+  // a broken SKILL.md is useless to the runner either way), overwrite with
+  // the current known-good body. Catches earlier shipped versions of seeds
+  // that had quote-mismatched descriptions, etc.
+  try {
+    matter(readFileSync(path, 'utf8'));
+  } catch {
+    writeFileSync(path, body, 'utf8');
+  }
 }
 
 export function seedDefaultsIfEmpty(): void {
