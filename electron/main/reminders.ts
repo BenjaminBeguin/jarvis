@@ -109,6 +109,18 @@ export class ReminderStore extends EventEmitter {
     return true;
   }
 
+  /**
+   * Fire a pending reminder right now via the registered fire handler.
+   * Equivalent to its timer expiring this moment. Returns true if a fire
+   * was triggered (false if the reminder is missing or already fired/cancelled).
+   */
+  async fireNow(id: string): Promise<boolean> {
+    const r = this.reminders.get(id);
+    if (!r || r.status !== 'pending') return false;
+    await this.fire(id);
+    return true;
+  }
+
   remove(id: string): boolean {
     if (!this.reminders.has(id)) return false;
     this.clearTimer(id);

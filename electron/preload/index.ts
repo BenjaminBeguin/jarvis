@@ -146,6 +146,8 @@ const api = {
     ipcRenderer.invoke(IpcChannels.cancelReminder, id),
   removeReminder: (id: string): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.removeReminder, id),
+  fireReminderNow: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.fireReminderNow, id),
   onRemindersChanged: (listener: Listener<Reminder[]>): Unsubscribe =>
     subscribe(IpcChannels.remindersChanged, listener),
 

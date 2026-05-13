@@ -180,15 +180,25 @@ export function TaskDetail({ task, onSelectTask }: Props) {
 
   const rendered = events.map(renderEvent).filter((e): e is RenderedEvent => e !== null);
   const isAwaiting = !!task.awaitingInput;
-  const [showRaw, setShowRaw] = useState(false);
-  const systemCount = useMemo(
-    () => rendered.filter((e) => e.kind === 'system').length,
+  // 'compact' = just the reply the user cares about (user text + assistant
+  // text + final result + errors). Hides tool_use, tool_result, and system
+  // events — all the noise of the agentic loop. 'raw' = everything.
+  const [mode, setMode] = useState<'compact' | 'raw'>('compact');
+  const hiddenCount = useMemo(
+    () =>
+      rendered.filter(
+        (e) =>
+          e.kind === 'tool_use' || e.kind === 'tool_result' || e.kind === 'system',
+      ).length,
     [rendered],
   );
-  const visible = useMemo(
-    () => (showRaw ? rendered : rendered.filter((e) => e.kind !== 'system')),
-    [rendered, showRaw],
-  );
+  const visible = useMemo(() => {
+    if (mode === 'raw') return rendered;
+    return rendered.filter(
+      (e) =>
+        e.kind !== 'tool_use' && e.kind !== 'tool_result' && e.kind !== 'system',
+    );
+  }, [rendered, mode]);
 
   return (
     <section className="detail">
@@ -207,15 +217,20 @@ export function TaskDetail({ task, onSelectTask }: Props) {
         )}
       </header>
       {isAwaiting && <AwaitingBanner />}
-      {systemCount > 0 && (
+      {hiddenCount > 0 && (
         <div className="detail__filter-bar">
           <button
             className="detail__filter-toggle"
-            onClick={() => setShowRaw((v) => !v)}
+            onClick={() => setMode((m) => (m === 'compact' ? 'raw' : 'compact'))}
+            title={
+              mode === 'compact'
+                ? 'Show tool calls + system events'
+                : 'Hide intermediate steps; show only the reply'
+            }
           >
-            {showRaw
-              ? `Hide ${systemCount} system event${systemCount === 1 ? '' : 's'}`
-              : `Show ${systemCount} system event${systemCount === 1 ? '' : 's'}`}
+            {mode === 'compact'
+              ? `▸ Show ${hiddenCount} intermediate step${hiddenCount === 1 ? '' : 's'}`
+              : `▾ Hide ${hiddenCount} intermediate step${hiddenCount === 1 ? '' : 's'}`}
           </button>
         </div>
       )}

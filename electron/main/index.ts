@@ -413,6 +413,9 @@ function registerIpc(): void {
   ipcMain.handle(IpcChannels.removeReminder, (_e, id: string) =>
     reminders.remove(id),
   );
+  ipcMain.handle(IpcChannels.fireReminderNow, (_e, id: string) =>
+    reminders.fireNow(id),
+  );
 
   ipcMain.handle(IpcChannels.previewIntent, (_e, prompt: string) => {
     if (typeof prompt !== 'string') return { kind: 'task', body: '' };

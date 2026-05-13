@@ -152,6 +152,7 @@ export function Observatory() {
             selectedId={selectedId}
             onSelect={setSelectedId}
             onCancelReminder={(id) => void window.jarvis.cancelReminder(id)}
+            onFireReminderNow={(id) => void window.jarvis.fireReminderNow(id)}
           />
         ) : (
           <TaskList

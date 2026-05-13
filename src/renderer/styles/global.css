@@ -1800,6 +1800,75 @@ button:disabled:hover {
   fill: var(--warn);
 }
 
+/* Action menu for a reminder/scheduled node. Lives in an SVG
+   foreignObject so positioning matches viewBox coords; the inner
+   <div> takes care of looking like a real popover. */
+.reminder-menu-host {
+  overflow: visible;
+}
+
+.reminder-menu {
+  background: rgba(4, 7, 11, 0.94);
+  border: 1px solid rgba(255, 180, 84, 0.45);
+  border-radius: 2px;
+  padding: 8px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 180, 84, 0.04),
+    0 0 18px rgba(255, 180, 84, 0.18);
+  backdrop-filter: blur(12px) saturate(140%);
+  font-family: var(--mono);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: reminder-menu-in 140ms ease-out;
+}
+
+@keyframes reminder-menu-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.reminder-menu__title {
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--warn);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.reminder-menu__btn {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 5px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  text-align: left;
+  transition: color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.reminder-menu__btn:hover {
+  color: var(--accent-strong);
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.reminder-menu__btn--primary {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.reminder-menu__btn--primary:hover {
+  color: #fff;
+  border-color: var(--warn);
+  background: rgba(255, 180, 84, 0.12);
+  box-shadow: 0 0 12px rgba(255, 180, 84, 0.35);
+}
+
 .constellation__overflow,
 .constellation__standby {
   fill: var(--text-faint);

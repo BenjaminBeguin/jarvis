@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { JarvisFileEntry, Reminder, TaskSummary } from '../../shared/types';
 import type { MeetingState } from '../voice/MeetingRecorder';
@@ -158,6 +158,7 @@ interface Props {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onCancelReminder?: (id: string) => void;
+  onFireReminderNow?: (id: string) => void;
 }
 
 export function Constellation({
@@ -169,7 +170,31 @@ export function Constellation({
   selectedId,
   onSelect,
   onCancelReminder,
+  onFireReminderNow,
 }: Props) {
+  /** Action menu state for reminder/scheduled nodes. */
+  const [reminderMenu, setReminderMenu] = useState<{
+    id: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  // Close the menu on any outside click or Escape.
+  useEffect(() => {
+    if (!reminderMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setReminderMenu(null);
+    };
+    const onClick = () => setReminderMenu(null);
+    window.addEventListener('keydown', onKey);
+    // Defer so the same click that opened the menu doesn't immediately close it.
+    const t = setTimeout(() => window.addEventListener('click', onClick), 0);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      clearTimeout(t);
+      window.removeEventListener('click', onClick);
+    };
+  }, [reminderMenu]);
   const visible = useMemo(
     () =>
       tasks
@@ -492,9 +517,7 @@ export function Constellation({
                 className="reminder-node"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (onCancelReminder && confirm(`Cancel reminder: "${p.reminder.body}"?`)) {
-                    onCancelReminder(p.reminder.id);
-                  }
+                  setReminderMenu({ id: p.reminder.id, x: p.x, y: p.y });
                 }}
               >
                 <circle cx={p.x} cy={p.y} r={7} className="reminder-node__disc" />
@@ -512,6 +535,57 @@ export function Constellation({
             );
           })}
         </g>
+
+        {/* Reminder action menu (Run now / Cancel). Rendered as HTML
+            inside the SVG via foreignObject so buttons can hit-test
+            normally. Positioned slightly right + below the node. */}
+        {reminderMenu && (() => {
+          const r = reminders.find((x) => x.id === reminderMenu.id);
+          if (!r) return null;
+          const menuW = 200;
+          const menuH = 96;
+          // Clamp to viewBox so the menu doesn't fall off-screen.
+          const fx = Math.min(1000 - menuW - 8, reminderMenu.x + 12);
+          const fy = Math.min(1000 - menuH - 8, reminderMenu.y + 12);
+          return (
+            <foreignObject
+              x={fx}
+              y={fy}
+              width={menuW}
+              height={menuH}
+              className="reminder-menu-host"
+            >
+              <div
+                className="reminder-menu"
+                // Stop the outer "any click closes" handler from firing on
+                // the menu itself; only outside clicks should dismiss.
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="reminder-menu__title">
+                  {r.mode === 'scheduled' ? '⚡ scheduled' : '⏰ reminder'}
+                </div>
+                <button
+                  className="reminder-menu__btn reminder-menu__btn--primary"
+                  onClick={() => {
+                    onFireReminderNow?.(r.id);
+                    setReminderMenu(null);
+                  }}
+                >
+                  ▶ Run now
+                </button>
+                <button
+                  className="reminder-menu__btn"
+                  onClick={() => {
+                    onCancelReminder?.(r.id);
+                    setReminderMenu(null);
+                  }}
+                >
+                  × Cancel
+                </button>
+              </div>
+            </foreignObject>
+          );
+        })()}
 
         {overflow > 0 && (
           <text
