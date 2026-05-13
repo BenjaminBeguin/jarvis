@@ -81,10 +81,11 @@ export async function transcribePcm(pcm: Float32Array): Promise<string> {
   const w = await load();
   // Whisper expects 16kHz mono PCM as a Float32Array. The renderer is
   // already resampling, but the pipeline doesn't enforce — caller's responsibility.
+  // whisper-tiny.en is English-only and rejects task/language args.
+  // For multilingual support, swap MODEL_NAME to 'Xenova/whisper-tiny' (no .en).
   const result = await w(pcm, {
     sampling_rate: TARGET_SAMPLE_RATE,
     chunk_length_s: 30,
-    language: 'en',
   });
   emitProgress({ status: 'done' });
   const text = Array.isArray(result)

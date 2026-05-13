@@ -10,6 +10,30 @@ import { AudioCapture } from '../voice/AudioCapture';
 
 interface PendingIntent extends PaletteIntentSummary {}
 
+/**
+ * Whisper emits placeholder tokens when audio is silent/unintelligible.
+ * Strip them. Also: Whisper notoriously hallucinates "Thank you." for silent
+ * clips (it's all over its YouTube training data) — drop that, but only when
+ * it's the entire utterance. Longer phrases that happen to contain "thank
+ * you" are kept.
+ */
+function cleanTranscript(raw: string): string {
+  const stripped = raw
+    .replace(/\[\s*BLANK[_ ]AUDIO\s*\]/gi, '')
+    .replace(/\[\s*INAUDIBLE\s*\]/gi, '')
+    .replace(/\[\s*MUSIC\s*\]/gi, '')
+    .replace(/\(\s*silence\s*\)/gi, '')
+    .replace(/\(\s*music\s*\)/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const normalized = stripped.toLowerCase().replace(/[.!?,;:'"-]+$/, '').trim();
+  // Standalone hallucinations from silent or near-silent audio.
+  if (normalized === '' || normalized === 'thank you' || normalized === 'you') {
+    return '';
+  }
+  return stripped;
+}
+
 export function CommandPalette() {
   const [text, setText] = useState('');
   const [listening, setListening] = useState(false);
@@ -96,14 +120,24 @@ export function CommandPalette() {
     if (pickerIndex >= matches.length) setPickerIndex(0);
   }, [matches.length, pickerIndex]);
 
-  const dispatch = async () => {
+  interface DispatchOverride {
+    text?: string;
+    intent?: PaletteIntentSummary | null;
+    skill?: SkillSummary | null;
+    origin?: 'palette' | 'voice';
+  }
+
+  const dispatch = async (override: DispatchOverride = {}) => {
     setError(null);
-    const prompt = text.trim();
-    if (activeIntent) {
+    const prompt = (override.text ?? text).trim();
+    const intentForCall = override.intent !== undefined ? override.intent : activeIntent;
+    const skillForCall = override.skill !== undefined ? override.skill : activeSkill;
+
+    if (intentForCall) {
       try {
         const result = await window.jarvis.dispatchIntent(
-          activeIntent.moduleId,
-          activeIntent.id,
+          intentForCall.moduleId,
+          intentForCall.id,
           prompt,
         );
         if (!result.ok) {
@@ -117,12 +151,12 @@ export function CommandPalette() {
       }
       return;
     }
-    if (!prompt && !activeSkill) return;
+    if (!prompt && !skillForCall) return;
     try {
       await window.jarvis.launchTask({
-        prompt: prompt || (activeSkill ? 'Begin.' : ''),
-        skillId: activeSkill?.id ?? null,
-        origin: 'palette',
+        prompt: prompt || (skillForCall ? 'Begin.' : ''),
+        skillId: skillForCall?.id ?? null,
+        origin: override.origin ?? 'palette',
       });
       setText('');
       setActiveSkill(null);
@@ -192,19 +226,51 @@ export function CommandPalette() {
     }
     setTranscribing(true);
     try {
-      // ArrayBuffer transfers across IPC efficiently; new Float32Array views
-      // it directly in the main process without a copy.
-      const text = await window.jarvis.transcribe(result.pcm.buffer as ArrayBuffer);
-      if (!text) {
+      const raw = await window.jarvis.transcribe(result.pcm.buffer as ArrayBuffer);
+      const transcript = cleanTranscript(raw);
+      if (!transcript) {
         setError("Couldn't make out the audio. Try again with less background noise.");
         return;
       }
-      setText((prev) => (prev ? `${prev} ${text}` : text));
+      await routeVoiceCommand(transcript);
     } catch (e) {
       setError(`Transcribe failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setTranscribing(false);
     }
+  };
+
+  /**
+   * Voice route. If a skill or intent is already active, transcription just
+   * fills the prompt and submits. Otherwise we try to match the first word
+   * to a module intent ("note buy milk" → /note "buy milk") and fall back
+   * to launching a free-form task with whatever was said.
+   */
+  const routeVoiceCommand = async (transcript: string) => {
+    if (activeSkill) {
+      setText(transcript);
+      await dispatch({ text: transcript, origin: 'voice' });
+      return;
+    }
+    if (activeIntent) {
+      setText(transcript);
+      await dispatch({ text: transcript, origin: 'voice' });
+      return;
+    }
+    const tokens = transcript.split(/\s+/);
+    const firstWord = (tokens[0] ?? '').toLowerCase().replace(/[^a-z]/g, '');
+    const matchedIntent = intents.find(
+      (i) => i.prefix === `/${firstWord}` || i.id === firstWord,
+    );
+    if (matchedIntent) {
+      const rest = tokens.slice(1).join(' ').trim();
+      setText(rest);
+      setActiveIntent(matchedIntent);
+      await dispatch({ text: rest, intent: matchedIntent, origin: 'voice' });
+      return;
+    }
+    setText(transcript);
+    await dispatch({ text: transcript, origin: 'voice' });
   };
 
   const placeholder = listening
