@@ -7,6 +7,7 @@ export const IpcChannels = {
   setAuthMode: 'app:setAuthMode',
   openObservatory: 'app:openObservatory',
   openPalette: 'app:openPalette',
+  resizePalette: 'app:resizePalette',
 
   listSkills: 'skills:list',
   refreshSkills: 'skills:refresh',

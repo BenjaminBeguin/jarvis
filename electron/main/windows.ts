@@ -59,16 +59,23 @@ export function openPalette(): BrowserWindow {
   }
   const display = screen.getPrimaryDisplay();
   const width = 680;
-  const height = 360;
+  // Start tall enough to fit the input bar comfortably; the renderer calls
+  // resizePalette() to grow when the picker opens and shrink when it closes,
+  // so the visible footprint matches the content exactly.
+  const initialHeight = 110;
   paletteWindow = new BrowserWindow({
     width,
-    height,
+    height: initialHeight,
     x: Math.round(display.workArea.x + (display.workArea.width - width) / 2),
     y: Math.round(display.workArea.y + display.workArea.height * 0.22),
     frame: false,
     transparent: true,
-    vibrancy: 'under-window',
-    visualEffectState: 'active',
+    // No vibrancy: the empty area below the input was rendering as a giant
+    // frosted-white sheet over the desktop. Going fully transparent + dark
+    // glass on the input itself looks like a floating console panel
+    // instead of a window.
+    backgroundColor: '#00000000',
+    hasShadow: false,
     alwaysOnTop: true,
     resizable: false,
     movable: true,
@@ -102,4 +109,15 @@ export function broadcast(channel: string, payload: unknown): void {
 
 export function hidePalette(): void {
   if (paletteWindow && !paletteWindow.isDestroyed()) paletteWindow.hide();
+}
+
+/**
+ * Resize the palette window's height to fit its current content. Keeps the
+ * top edge anchored so the input bar doesn't jump as the picker expands.
+ */
+export function resizePalette(targetHeight: number): void {
+  if (!paletteWindow || paletteWindow.isDestroyed()) return;
+  const clamped = Math.max(80, Math.min(720, Math.round(targetHeight)));
+  const [w] = paletteWindow.getSize();
+  paletteWindow.setSize(w, clamped, false);
 }

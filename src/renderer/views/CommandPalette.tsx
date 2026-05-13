@@ -47,6 +47,7 @@ export function CommandPalette() {
   const [error, setError] = useState<string | null>(null);
   const captureRef = useRef<AudioCapture | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const paletteRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     void window.jarvis.listSkills().then(setSkills);
@@ -70,6 +71,25 @@ export function CommandPalette() {
 
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  // Resize the palette window to fit its content. ResizeObserver fires
+  // whenever the picker opens/closes, error appears, mic-progress shows,
+  // etc. — the window grows and shrinks in lockstep, so there's no big
+  // invisible-but-clickable empty area below the input.
+  useEffect(() => {
+    const el = paletteRef.current;
+    if (!el) return;
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      // Add a hair of padding so a 1px rounding error doesn't clip
+      // shadows or the bottom border of the picker.
+      void window.jarvis.resizePalette(Math.ceil(rect.height) + 4);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   const intents = useMemo<PaletteIntentSummary[]>(
@@ -288,7 +308,7 @@ export function CommandPalette() {
   const displayValue = text;
 
   return (
-    <div className="palette palette-body">
+    <div className="palette palette-body" ref={paletteRef}>
       <div className="palette__inner">
         <span className="palette__prompt" aria-hidden>›</span>
         {activeIntent && (

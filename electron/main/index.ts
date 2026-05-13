@@ -44,7 +44,13 @@ import { SkillStore } from './skill-store.js';
 import { asTaskOrigin, TaskRunner } from './task-runner.js';
 import { setProgressEmitter, transcribePcm } from './transcribe.js';
 import { getRunningTasksCount, initTray, setRunningTasksCount } from './tray.js';
-import { broadcast, hidePalette, openObservatory, openPalette } from './windows.js';
+import {
+  broadcast,
+  hidePalette,
+  openObservatory,
+  openPalette,
+  resizePalette,
+} from './windows.js';
 
 const skills = new SkillStore();
 const mcp = new McpConfigStore();
@@ -163,6 +169,11 @@ function registerIpc(): void {
   });
   ipcMain.handle(IpcChannels.openPalette, () => {
     openPalette();
+  });
+  ipcMain.handle(IpcChannels.resizePalette, (_e, height: number) => {
+    if (typeof height === 'number' && Number.isFinite(height)) {
+      resizePalette(height);
+    }
   });
 
   ipcMain.handle(IpcChannels.listSkills, () => skills.list());

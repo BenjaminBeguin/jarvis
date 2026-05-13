@@ -43,6 +43,8 @@ const api = {
     ipcRenderer.invoke(IpcChannels.openObservatory),
   openPalette: (): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.openPalette),
+  resizePalette: (height: number): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.resizePalette, height),
 
   listSkills: (): Promise<SkillSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listSkills),
