@@ -12,6 +12,7 @@ import type {
   Reminder,
   RoutePromptResult,
   RoutineDef,
+  SkillSuggestion,
   SkillSummary,
   TaskEvent,
   TaskSummary,
@@ -139,6 +140,20 @@ const api = {
     | { kind: 'task'; body: string }
     | { kind: 'reminder'; mode: 'reminder' | 'scheduled'; body: string; fireAt: number }
   > => ipcRenderer.invoke(IpcChannels.previewIntent, prompt),
+
+  listSkillSuggestions: (): Promise<SkillSuggestion[]> =>
+    ipcRenderer.invoke(IpcChannels.listSkillSuggestions),
+  acceptSkillSuggestion: (
+    id: string,
+  ): Promise<{ ok: boolean; message?: string; path?: string }> =>
+    ipcRenderer.invoke(IpcChannels.acceptSkillSuggestion, id),
+  dismissSkillSuggestion: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.dismissSkillSuggestion, id),
+  removeSkillSuggestion: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.removeSkillSuggestion, id),
+  onSkillSuggestionsChanged: (
+    listener: Listener<SkillSuggestion[]>,
+  ): Unsubscribe => subscribe(IpcChannels.skillSuggestionsChanged, listener),
 
   listReminders: (): Promise<Reminder[]> =>
     ipcRenderer.invoke(IpcChannels.listReminders),

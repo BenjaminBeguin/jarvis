@@ -30,12 +30,14 @@ import { ModuleRegistry } from './module-registry.js';
 import { claudeCodeWatchModule } from './modules/claude-code-watch.js';
 import { meetingRecorderModule, persistMeeting } from './modules/meeting-recorder.js';
 import { quickNoteModule } from './modules/quick-note.js';
+import { skillSuggesterModule } from './modules/skill-suggester.js';
 import { statusModule } from './modules/status.js';
 import { parseIntent } from './intent-router.js';
 import { ProjectStore } from './projects.js';
 import { ReminderStore } from './reminders.js';
 import { RoutineStore } from './routines.js';
 import { seedDefaultsIfEmpty } from './seed.js';
+import { SkillSuggestionStore } from './skill-suggestions.js';
 import {
   clearAnthropicApiKey,
   clearClaudeCodeOAuthToken,
@@ -73,6 +75,7 @@ const projects = new ProjectStore();
 const runner = new TaskRunner();
 const routines = new RoutineStore();
 const reminders = new ReminderStore();
+const skillSuggestions = new SkillSuggestionStore(join(homedir(), '.jarvis'));
 const modules = new ModuleRegistry();
 runner.setSkillStore(skills);
 runner.setMcpStore(mcp);
@@ -417,6 +420,19 @@ function registerIpc(): void {
     reminders.fireNow(id),
   );
 
+  ipcMain.handle(IpcChannels.listSkillSuggestions, () =>
+    skillSuggestions.list(),
+  );
+  ipcMain.handle(IpcChannels.acceptSkillSuggestion, (_e, id: string) =>
+    skillSuggestions.accept(id),
+  );
+  ipcMain.handle(IpcChannels.dismissSkillSuggestion, (_e, id: string) =>
+    skillSuggestions.dismiss(id),
+  );
+  ipcMain.handle(IpcChannels.removeSkillSuggestion, (_e, id: string) =>
+    skillSuggestions.remove(id),
+  );
+
   ipcMain.handle(IpcChannels.previewIntent, (_e, prompt: string) => {
     if (typeof prompt !== 'string') return { kind: 'task', body: '' };
     return parseIntent(prompt);
@@ -656,6 +672,7 @@ app.whenReady().then(async () => {
     }
   });
   reminders.init();
+  skillSuggestions.init();
 
   // Module foundation: every user-asked feature ships as a module that
   // registers here. Built-ins live in electron/main/modules/. External
@@ -674,6 +691,10 @@ app.whenReady().then(async () => {
     launchTask: (req) =>
       runner.launch({ ...req, origin: asTaskOrigin(req.origin) }),
     showHud: (taskId) => pushTaskToHud(taskId),
+    listRecentTasks: (limit) => {
+      const all = runner.list();
+      return typeof limit === 'number' ? all.slice(0, limit) : all;
+    },
     parseFreeTextIntent: (input: string) => parseIntent(input),
     createReminder: (input) => reminders.create(input),
     registerExternalTask: (summary) => runner.registerExternal(summary),
@@ -694,6 +715,7 @@ app.whenReady().then(async () => {
   await modules.register(claudeCodeWatchModule);
   await modules.register(meetingRecorderModule);
   await modules.register(statusModule);
+  await modules.register(skillSuggesterModule);
 
   skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
   mcp.on('changed', (list) => broadcast(IpcChannels.listMcpServers, list));
@@ -704,6 +726,23 @@ app.whenReady().then(async () => {
   });
   // Seed initial count after init().
   setPendingRemindersCount(reminders.pendingCount());
+
+  skillSuggestions.on('changed', (list) =>
+    broadcast(IpcChannels.skillSuggestionsChanged, list),
+  );
+  skillSuggestions.on('batch', ({ added }: { added: number }) => {
+    try {
+      new Notification({
+        title: 'Skill ideas',
+        body: `Jarvis proposed ${added} new skill${added === 1 ? '' : 's'} based on your recent prompts`,
+      })
+        .on('click', () => openObservatory())
+        .show();
+    } catch {
+      // Notifications can fail pre-permission; suggestions are still in
+      // the store, the user will see them in the dashboard.
+    }
+  });
   modules.on('changed', (list) => broadcast(IpcChannels.modulesChanged, list));
 
   setProgressEmitter((event) =>
@@ -729,6 +768,7 @@ app.on('before-quit', () => {
   void modules.unloadAll();
   routines.close();
   reminders.disposeAll();
+  skillSuggestions.close();
   skills.close();
   mcp.close();
   projects.close();

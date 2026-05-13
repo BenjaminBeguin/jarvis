@@ -155,6 +155,8 @@ interface Props {
   recentMeetings?: JarvisFileEntry[];
   /** Live meeting recorder state — pulses a RECORDING node when active. */
   meetingState?: MeetingState;
+  /** Pending skill-suggester proposals — shows a count line on the core. */
+  pendingSuggestionCount?: number;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onCancelReminder?: (id: string) => void;
@@ -167,6 +169,7 @@ export function Constellation({
   recentNotes = [],
   recentMeetings = [],
   meetingState,
+  pendingSuggestionCount = 0,
   selectedId,
   onSelect,
   onCancelReminder,
@@ -386,6 +389,20 @@ export function Constellation({
               textAnchor="middle"
             >
               {visibleReminders.length} SCHEDULED
+            </text>
+          )}
+          {pendingSuggestionCount > 0 && (
+            <text
+              x={CENTER.x}
+              y={
+                CENTER.y +
+                (awaitingCount > 0 ? 68 : 52) +
+                (visibleReminders.length > 0 ? 0 : -16)
+              }
+              className="core__suggestions"
+              textAnchor="middle"
+            >
+              {pendingSuggestionCount} SKILL IDEA{pendingSuggestionCount === 1 ? '' : 'S'}
             </text>
           )}
         </g>

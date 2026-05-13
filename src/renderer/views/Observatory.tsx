@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { JarvisFileEntry, Reminder, TaskSummary } from '../../shared/types';
+import type {
+  JarvisFileEntry,
+  Reminder,
+  SkillSuggestion,
+  TaskSummary,
+} from '../../shared/types';
 import { meetingRecorder, type MeetingState } from '../voice/MeetingRecorder';
 import { Constellation } from './Constellation';
 import { Dashboard } from './Dashboard';
@@ -15,6 +20,7 @@ export function Observatory() {
   const [recentNotes, setRecentNotes] = useState<JarvisFileEntry[]>([]);
   const [recentMeetings, setRecentMeetings] = useState<JarvisFileEntry[]>([]);
   const [meetingState, setMeetingState] = useState<MeetingState>(() => meetingRecorder.getState());
+  const [skillSuggestions, setSkillSuggestions] = useState<SkillSuggestion[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>('constellation');
 
@@ -86,6 +92,12 @@ export function Observatory() {
     return meetingRecorder.subscribe(setMeetingState);
   }, []);
 
+  // Skill suggestion count — surfaced on the constellation core.
+  useEffect(() => {
+    void window.jarvis.listSkillSuggestions().then(setSkillSuggestions);
+    return window.jarvis.onSkillSuggestionsChanged(setSkillSuggestions);
+  }, []);
+
   const selected = useMemo(
     () => tasks.find((t) => t.id === selectedId) ?? null,
     [tasks, selectedId],
@@ -149,6 +161,9 @@ export function Observatory() {
             recentNotes={recentNotes}
             recentMeetings={recentMeetings}
             meetingState={meetingState}
+            pendingSuggestionCount={
+              skillSuggestions.filter((s) => s.status === 'pending').length
+            }
             selectedId={selectedId}
             onSelect={setSelectedId}
             onCancelReminder={(id) => void window.jarvis.cancelReminder(id)}

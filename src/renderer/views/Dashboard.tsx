@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { JarvisFileEntry, Reminder, TaskSummary } from '../../shared/types';
+import type {
+  JarvisFileEntry,
+  Reminder,
+  SkillSuggestion,
+  TaskSummary,
+} from '../../shared/types';
 import { formatRelative } from './TaskList';
 import { useNow } from './useNow';
 
@@ -50,6 +55,18 @@ export function Dashboard({ tasks, reminders, onSelectTask, onCancelReminder }: 
 
   const [meetings, setMeetings] = useState<JarvisFileEntry[]>([]);
   const [notes, setNotes] = useState<JarvisFileEntry[]>([]);
+  const [suggestions, setSuggestions] = useState<SkillSuggestion[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    void window.jarvis.listSkillSuggestions().then(setSuggestions);
+    return window.jarvis.onSkillSuggestionsChanged(setSuggestions);
+  }, []);
+
+  const pendingSuggestions = useMemo(
+    () => suggestions.filter((s) => s.status === 'pending'),
+    [suggestions],
+  );
   useEffect(() => {
     const refresh = () => {
       void window.jarvis
@@ -121,6 +138,54 @@ export function Dashboard({ tasks, reminders, onSelectTask, onCancelReminder }: 
             </span>
           </button>
         ))}
+      </DashCard>
+
+      <DashCard
+        title="Skill ideas"
+        accent="cyan"
+        count={pendingSuggestions.length}
+        empty="Type /suggest-skills to scan your prompts for reusable patterns."
+      >
+        {pendingSuggestions.map((s) => {
+          const expanded = expandedId === s.id;
+          return (
+            <div key={s.id} className="dashboard__suggestion">
+              <div className="dashboard__suggestion-head">
+                <span className="dashboard__suggestion-name">{s.name}</span>
+                {s.frequency > 1 && (
+                  <span className="dashboard__suggestion-freq">×{s.frequency}</span>
+                )}
+                <div className="dashboard__suggestion-actions">
+                  <button
+                    title="Preview SKILL.md"
+                    onClick={() => setExpandedId(expanded ? null : s.id)}
+                  >
+                    {expanded ? '▾' : '▸'}
+                  </button>
+                  <button
+                    title="Accept — write to ~/.jarvis/skills"
+                    onClick={async () => {
+                      const r = await window.jarvis.acceptSkillSuggestion(s.id);
+                      if (!r.ok) alert(r.message ?? 'Could not accept.');
+                    }}
+                  >
+                    ✓
+                  </button>
+                  <button
+                    title="Dismiss"
+                    onClick={() => void window.jarvis.dismissSkillSuggestion(s.id)}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              <div className="dashboard__suggestion-desc">{s.description}</div>
+              {expanded && (
+                <pre className="dashboard__suggestion-body">{s.body}</pre>
+              )}
+            </div>
+          );
+        })}
       </DashCard>
 
       <DashCard

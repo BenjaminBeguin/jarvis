@@ -48,6 +48,12 @@ export const IpcChannels = {
   routePrompt: 'palette:routePrompt',
   previewIntent: 'palette:previewIntent',
 
+  listSkillSuggestions: 'skill-suggestions:list',
+  acceptSkillSuggestion: 'skill-suggestions:accept',
+  dismissSkillSuggestion: 'skill-suggestions:dismiss',
+  removeSkillSuggestion: 'skill-suggestions:remove',
+  skillSuggestionsChanged: 'skill-suggestions:changed',
+
   listReminders: 'reminders:list',
   cancelReminder: 'reminders:cancel',
   removeReminder: 'reminders:remove',

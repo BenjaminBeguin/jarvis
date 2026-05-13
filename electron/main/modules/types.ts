@@ -18,6 +18,8 @@ export interface ModuleContext {
   launchTask(req: LaunchTaskRequest): TaskSummary;
   /** Pop the answer HUD with a freshly-launched task so the user can watch it. */
   showHud(taskId: string): void;
+  /** Recent task summaries (newest first). Used by skill-suggester to feed Claude. */
+  listRecentTasks(limit?: number): TaskSummary[];
   /** Run the palette intent parser on free text. Returns a 'reminder' kind when the text has a time phrase. */
   parseFreeTextIntent(input: string): ParsedFreeTextIntent;
   /** Schedule a reminder / scheduled action. Same store the palette uses. */

@@ -1216,6 +1216,90 @@ button:disabled:hover {
   font-style: italic;
 }
 
+/* Skill suggestion row — name + description, expandable to show the
+   proposed SKILL.md body, with Accept / Dismiss inline. */
+.dashboard__suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.08);
+}
+
+.dashboard__suggestion:last-child {
+  border-bottom: 0;
+}
+
+.dashboard__suggestion-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.dashboard__suggestion-name {
+  color: var(--accent-strong);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard__suggestion-freq {
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.06em;
+}
+
+.dashboard__suggestion-actions {
+  display: flex;
+  gap: 3px;
+}
+
+.dashboard__suggestion-actions button {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 2px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.dashboard__suggestion-actions button:hover {
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}
+
+.dashboard__suggestion-desc {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+.dashboard__suggestion-body {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  padding: 8px;
+  max-height: 240px;
+  overflow: auto;
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
 /* List view inside the observatory */
 
 .task-list-view {
@@ -1604,6 +1688,15 @@ button:disabled:hover {
   font-size: 10px;
   letter-spacing: 0.24em;
   opacity: 0.78;
+}
+
+.core__suggestions {
+  fill: var(--accent);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  opacity: 0.85;
+  text-shadow: 0 0 4px rgba(0, 212, 255, 0.45);
 }
 
 /* Awaiting banner + quick-reply dock inside TaskDetail */

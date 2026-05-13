@@ -55,6 +55,23 @@ export interface SkillSummary {
   hasBody: boolean;
 }
 
+export type SkillSuggestionStatus = 'pending' | 'accepted' | 'dismissed';
+
+export interface SkillSuggestion {
+  id: string;
+  /** kebab-case directory name. */
+  name: string;
+  description: string;
+  /** Full SKILL.md content — frontmatter + body — ready to write verbatim. */
+  body: string;
+  /** Up to ~5 prompts from history that inspired this proposal. */
+  samplePrompts: string[];
+  /** How many similar prompts the analyzer counted. */
+  frequency: number;
+  createdAt: number;
+  status: SkillSuggestionStatus;
+}
+
 export type ReminderStatus = 'pending' | 'fired' | 'cancelled';
 
 /**
