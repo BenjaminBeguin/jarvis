@@ -2,16 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { Reminder, TaskSummary } from '../../shared/types';
 import { Constellation } from './Constellation';
+import { Dashboard } from './Dashboard';
 import { TaskDetail } from './TaskDetail';
 import { TaskList } from './TaskList';
 
-type ViewMode = 'constellation' | 'list';
+type ViewMode = 'dashboard' | 'constellation' | 'list';
 
 export function Observatory() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [view, setView] = useState<ViewMode>('constellation');
+  const [view, setView] = useState<ViewMode>('dashboard');
 
   useEffect(() => {
     void window.jarvis.listTasks().then(setTasks);
@@ -69,6 +70,13 @@ export function Observatory() {
     <div className="observatory">
       <div className="observatory__viewbar">
         <button
+          className={`observatory__view-btn${view === 'dashboard' ? ' observatory__view-btn--active' : ''}`}
+          onClick={() => setView('dashboard')}
+          title="Dashboard view"
+        >
+          ▦ dashboard
+        </button>
+        <button
           className={`observatory__view-btn${view === 'constellation' ? ' observatory__view-btn--active' : ''}`}
           onClick={() => setView('constellation')}
           title="Constellation view"
@@ -84,7 +92,14 @@ export function Observatory() {
         </button>
       </div>
       <div className="observatory__main">
-        {view === 'constellation' ? (
+        {view === 'dashboard' ? (
+          <Dashboard
+            tasks={tasks}
+            reminders={reminders}
+            onSelectTask={setSelectedId}
+            onCancelReminder={(id) => void window.jarvis.cancelReminder(id)}
+          />
+        ) : view === 'constellation' ? (
           <Constellation
             tasks={tasks}
             reminders={reminders}
