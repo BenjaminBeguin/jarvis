@@ -1,4 +1,8 @@
-import type { LaunchTaskRequest, TaskStatus, TaskSummary } from '@shared/types';
+import type { LaunchTaskRequest, Reminder, ReminderMode, TaskStatus, TaskSummary } from '@shared/types';
+
+export type ParsedFreeTextIntent =
+  | { kind: 'task'; body: string }
+  | { kind: 'reminder'; mode: ReminderMode; body: string; fireAt: number };
 
 /**
  * What a module receives at load time. Stays stable across the module's
@@ -14,6 +18,10 @@ export interface ModuleContext {
   launchTask(req: LaunchTaskRequest): TaskSummary;
   /** Pop the answer HUD with a freshly-launched task so the user can watch it. */
   showHud(taskId: string): void;
+  /** Run the palette intent parser on free text. Returns a 'reminder' kind when the text has a time phrase. */
+  parseFreeTextIntent(input: string): ParsedFreeTextIntent;
+  /** Schedule a reminder / scheduled action. Same store the palette uses. */
+  createReminder(input: { body: string; mode: ReminderMode; fireAt: number }): Reminder;
   /** Publish an observable entry the module is watching (not running). */
   registerExternalTask(summary: TaskSummary): void;
   /** Push a streamed event for a previously-registered external entry. */

@@ -671,6 +671,8 @@ app.whenReady().then(async () => {
     launchTask: (req) =>
       runner.launch({ ...req, origin: asTaskOrigin(req.origin) }),
     showHud: (taskId) => pushTaskToHud(taskId),
+    parseFreeTextIntent: (input: string) => parseIntent(input),
+    createReminder: (input) => reminders.create(input),
     registerExternalTask: (summary) => runner.registerExternal(summary),
     recordExternalEvent: (taskId, msg) =>
       runner.recordExternalEvent(taskId, msg),

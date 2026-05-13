@@ -37,6 +37,31 @@ export const quickNoteModule: Module = {
         const block = `\n## ${timeKey(now)}\n\n${text}\n`;
         appendFileSync(filePath, block, 'utf8');
         const rel = filePath.replace(ctx.jarvisRoot, '~/.jarvis');
+
+        // Smart-note: if the user wrote something with a time phrase
+        // ("remind me in 2h about X", "ping luca at 17:30 …"), also create
+        // a reminder/scheduled action. The note itself is always saved so
+        // the user keeps the original; the reminder gives them the wake-up.
+        const intent = ctx.parseFreeTextIntent(text);
+        if (intent.kind === 'reminder') {
+          const r = ctx.createReminder({
+            body: intent.body,
+            mode: intent.mode,
+            fireAt: intent.fireAt,
+          });
+          const when = new Date(r.fireAt).toLocaleString(undefined, {
+            hour: '2-digit',
+            minute: '2-digit',
+            day: 'numeric',
+            month: 'short',
+          });
+          ctx.notify(
+            intent.mode === 'scheduled' ? `Note · scheduled ${when}` : `Note · reminder ${when}`,
+            r.body,
+          );
+          return `Saved + ${intent.mode === 'scheduled' ? 'scheduled' : 'reminder'} · ${when}`;
+        }
+
         ctx.notify('Note saved', rel);
         return `Saved · ${rel}`;
       },
