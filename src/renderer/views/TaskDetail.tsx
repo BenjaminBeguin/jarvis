@@ -8,7 +8,7 @@ interface Props {
 
 interface RenderedEvent {
   key: string;
-  kind: 'text' | 'tool_use' | 'tool_result' | 'result' | 'error' | 'system';
+  kind: 'text' | 'user' | 'tool_use' | 'tool_result' | 'result' | 'error' | 'system';
   label: string;
   body: string;
 }
@@ -66,6 +66,19 @@ function renderEvent(event: TaskEvent): RenderedEvent | null {
             .join('\n\n'),
         };
       }
+      // Plain user text — the shape claude-code-watch produces from a
+      // queue-operation/enqueue line, and what the SDK emits when the
+      // user types a free-form prompt.
+      const text = content
+        .filter((c): c is { type: 'text'; text: string } => (c as { type?: string }).type === 'text')
+        .map((c) => c.text)
+        .join('');
+      if (text) {
+        return { key: `${event.seq}-user`, kind: 'user', label: 'user', body: text };
+      }
+    } else if (typeof content === 'string' && content) {
+      // Some SDK message shapes inline the prompt as a plain string.
+      return { key: `${event.seq}-user`, kind: 'user', label: 'user', body: content };
     }
     return null;
   }
@@ -167,6 +180,8 @@ export function TaskDetail({ task }: Props) {
                 ? 'event--result'
                 : e.kind === 'error'
                 ? 'event--error'
+                : e.kind === 'user'
+                ? 'event--user'
                 : ''
             }`}
           >
