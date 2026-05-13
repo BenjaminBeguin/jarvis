@@ -3009,6 +3009,16 @@ button:disabled:hover {
   border-color: rgba(255, 180, 84, 0.45);
 }
 
+/* "claude.ai only" — connected at the Claude.ai layer but not propagated
+   to subprocess Agent SDK sessions, so Jarvis tasks can't actually use it
+   until the user adds a local MCP. Distinct color so it doesn't read as
+   "connected" or "missing". */
+.channel-card__status--claude-ai-only {
+  color: var(--warn);
+  border-color: rgba(255, 180, 84, 0.35);
+  background: rgba(255, 180, 84, 0.04);
+}
+
 .channel-card__status--optional,
 .channel-card__status--planned {
   color: var(--text-faint);

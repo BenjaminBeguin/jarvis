@@ -58,25 +58,39 @@ export function SendPage() {
     const id = setInterval(refresh, 20_000);
     return () => clearInterval(id);
   }, []);
-  const connectedClaude = useMemo(
+  // "Local" = stdio MCPs the Agent SDK can actually invoke (registered via
+  // `claude mcp add` user-scoped, or in ~/.jarvis/mcp.json). These flow
+  // through settingSources to Jarvis tasks.
+  const connectedLocal = useMemo(
     () =>
       new Set(
         claudeMcps
-          .filter((m) => m.status === 'connected')
+          .filter((m) => m.status === 'connected' && m.source !== 'claude.ai')
           .map((m) => m.name.toLowerCase()),
       ),
     [claudeMcps],
   );
-  /**
-   * A card is connected if:
-   *  - There's a Jarvis local MCP with that exact id (mcp.json), OR
-   *  - Claude knows about a server whose short name matches any of the
-   *    accepted aliases for the card (e.g. "gmail-personal" or "Gmail").
-   */
+  // "Claude.ai" = remote HTTP connectors authenticated against your Claude
+  // account. They work in interactive Claude Code + claude.ai chat, but as
+  // of today they DO NOT propagate to Agent SDK subprocess sessions — so
+  // Jarvis tasks can't see them. We surface this as a separate badge so
+  // users aren't surprised when /send says "no Slack tool".
+  const connectedClaudeAi = useMemo(
+    () =>
+      new Set(
+        claudeMcps
+          .filter((m) => m.status === 'connected' && m.source === 'claude.ai')
+          .map((m) => m.name.toLowerCase()),
+      ),
+    [claudeMcps],
+  );
   const isConnected = (...aliases: string[]) => {
     if (aliases.some((a) => servers.some((s) => s.id === a))) return true;
-    return aliases.some((a) => connectedClaude.has(a.toLowerCase()));
+    return aliases.some((a) => connectedLocal.has(a.toLowerCase()));
   };
+  const isClaudeAiOnly = (...aliases: string[]) =>
+    !isConnected(...aliases) &&
+    aliases.some((a) => connectedClaudeAi.has(a.toLowerCase()));
   return (
     <div className="module-page">
       <header className="module-page__header">
@@ -218,43 +232,59 @@ npx -y @gongrzhe/server-gmail-autoauth-mcp auth`}</Pre>
 
         <ChannelCard
           name="Slack"
-          status={isConnected('slack', 'Slack') ? 'connected' : 'missing'}
+          status={
+            isConnected('slack', 'Slack')
+              ? 'connected'
+              : isClaudeAiOnly('slack', 'Slack')
+              ? 'claude-ai-only'
+              : 'missing'
+          }
           tool="slack"
         >
           <p className="channels__hint">
-            Recommended path: use the Claude.ai Slack connector — one-click
-            OAuth, no app to create, no token to manage, and messages go out
-            as you (not as a bot).
+            Jarvis tasks need a <strong>local</strong> Slack MCP — the
+            Claude.ai Slack connector works in Claude.ai chat and interactive
+            Claude Code but does not propagate to Agent SDK subprocess
+            sessions (which is what /send uses).
           </p>
           <Steps>
             <Step>
-              <strong>Open Claude's connector settings.</strong>{' '}
-              <ExtA href="https://claude.ai/settings/connectors">
-                claude.ai/settings/connectors
-              </ExtA>{' '}
-              — sign in with the same Claude account you use here.
-            </Step>
-            <Step>
-              <strong>Connect Slack.</strong> Find <em>Slack</em> in the list
-              → Connect → log in to your workspace → Allow. That's it.
-            </Step>
-            <Step>
-              <strong>Verify from a terminal:</strong>
-              <Pre>{`claude mcp list | grep Slack`}</Pre>
-              You should see{' '}
-              <code>claude.ai Slack: ... ✓ Connected</code>. The SDK Jarvis
-              uses inherits this automatically — no <code>mcp.json</code>{' '}
-              edit needed.
-            </Step>
-            <Step>
-              <strong>Multiple workspaces?</strong> The Claude.ai connector
-              ties to one workspace at a time. For a second workspace, add a
-              local MCP via <code>claude mcp add</code> with a Slack bot
-              token (
+              <strong>Create a Slack app.</strong>{' '}
               <ExtA href="https://api.slack.com/apps?new_app=1">
                 api.slack.com/apps
-              </ExtA>
-              ). Or ping me and I'll write up the bot-token path.
+              </ExtA>{' '}
+              → From scratch → name it <em>Jarvis</em> → pick your workspace.
+            </Step>
+            <Step>
+              <strong>Bot scopes.</strong> Left sidebar →{' '}
+              <em>OAuth & Permissions</em> → Bot Token Scopes → add:{' '}
+              <code>chat:write</code>, <code>chat:write.public</code>,{' '}
+              <code>im:write</code>, <code>users:read</code>,{' '}
+              <code>users:read.email</code>, <code>channels:read</code>,{' '}
+              <code>files:write</code>.
+            </Step>
+            <Step>
+              <strong>Install to workspace.</strong> Top of same page →
+              Install to Workspace → Allow. Copy the{' '}
+              <code>Bot User OAuth Token</code> (<code>xoxb-…</code>).
+            </Step>
+            <Step>
+              <strong>Get the Team ID.</strong> Read it from any Slack
+              channel URL (the <code>T0XXXXX</code> part).
+            </Step>
+            <Step>
+              <strong>Register with Claude (user scope).</strong>
+              <Pre>{`claude mcp add-json slack --scope user '{
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-slack"],
+  "env": {
+    "SLACK_BOT_TOKEN": "xoxb-...",
+    "SLACK_TEAM_ID": "T0XXXX..."
+  }
+}'`}</Pre>
+              Verify with <code>claude mcp list | grep slack</code> — you
+              should see a new <code>slack</code> entry (separate from the{' '}
+              <code>claude.ai Slack</code> one) showing <code>✓ Connected</code>.
             </Step>
           </Steps>
         </ChannelCard>
@@ -311,7 +341,7 @@ npx -y @gongrzhe/server-gmail-autoauth-mcp auth`}</Pre>
 
 interface ChannelCardProps {
   name: string;
-  status: 'connected' | 'missing' | 'optional' | 'planned';
+  status: 'connected' | 'claude-ai-only' | 'missing' | 'optional' | 'planned';
   tool: string;
   children: React.ReactNode;
 }
@@ -320,6 +350,8 @@ function ChannelCard({ name, status, children }: ChannelCardProps) {
   const label =
     status === 'connected'
       ? 'connected'
+      : status === 'claude-ai-only'
+      ? 'claude.ai only · not in jarvis'
       : status === 'missing'
       ? 'not set up'
       : status === 'optional'
