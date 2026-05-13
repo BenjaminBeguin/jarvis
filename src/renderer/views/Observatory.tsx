@@ -27,9 +27,14 @@ export function Observatory() {
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
       setSelectedId((id) => (id === taskId ? null : id));
     });
+    // Allow other windows (HUD ↗, main process) to focus a specific task.
+    const offFocus = window.jarvis.onObservatoryFocusTask((taskId) => {
+      setSelectedId(taskId);
+    });
     return () => {
       offStatus();
       offRemoved();
+      offFocus();
     };
   }, []);
 

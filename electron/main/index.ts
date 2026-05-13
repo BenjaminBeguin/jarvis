@@ -169,8 +169,21 @@ function registerIpc(): void {
     await broadcastStatus();
   });
 
-  ipcMain.handle(IpcChannels.openObservatory, () => {
-    openObservatory();
+  ipcMain.handle(IpcChannels.openObservatory, (_e, taskId?: string) => {
+    const win = openObservatory();
+    win.focus();
+    if (typeof taskId === 'string' && taskId) {
+      // Emit after the renderer has mounted; if it's already up, this is a
+      // no-op delay. Otherwise the message would land before subscriptions
+      // are set up.
+      const send = () =>
+        win.webContents.send(IpcChannels.observatoryFocusTask, taskId);
+      if (win.webContents.isLoading()) {
+        win.webContents.once('did-finish-load', send);
+      } else {
+        send();
+      }
+    }
   });
   ipcMain.handle(IpcChannels.openPalette, () => {
     openPalette();

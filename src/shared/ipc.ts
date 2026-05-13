@@ -6,6 +6,7 @@ export const IpcChannels = {
   clearSubscriptionToken: 'app:clearSubscriptionToken',
   setAuthMode: 'app:setAuthMode',
   openObservatory: 'app:openObservatory',
+  observatoryFocusTask: 'observatory:focusTask',
   openPalette: 'app:openPalette',
   resizePalette: 'app:resizePalette',
   openExternal: 'app:openExternal',

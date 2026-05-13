@@ -136,6 +136,10 @@ const HUD_MARGIN = 16;
 export function showAnswerHud(): BrowserWindow {
   if (answerHudWindow && !answerHudWindow.isDestroyed()) {
     if (!answerHudWindow.isVisible()) answerHudWindow.show();
+    // Bring it to the front without stealing keyboard focus — the user is
+    // probably still typing in the palette. focus() would steal; show()
+    // alone is enough on top-most windows.
+    answerHudWindow.moveTop();
     return answerHudWindow;
   }
   const display = screen.getPrimaryDisplay();

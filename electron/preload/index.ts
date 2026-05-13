@@ -39,8 +39,10 @@ const api = {
   setAuthMode: (mode: AuthMode): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.setAuthMode, mode),
 
-  openObservatory: (): Promise<void> =>
-    ipcRenderer.invoke(IpcChannels.openObservatory),
+  openObservatory: (taskId?: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.openObservatory, taskId),
+  onObservatoryFocusTask: (listener: Listener<string>): Unsubscribe =>
+    subscribe(IpcChannels.observatoryFocusTask, listener),
   openPalette: (): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.openPalette),
   resizePalette: (height: number): Promise<void> =>

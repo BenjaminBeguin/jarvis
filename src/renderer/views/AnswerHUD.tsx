@@ -281,7 +281,7 @@ function AnswerCard({ card, onAck }: AnswerCardProps) {
   };
 
   const open = () => {
-    void window.jarvis.openObservatory();
+    void window.jarvis.openObservatory(card.taskId);
   };
 
   return (
