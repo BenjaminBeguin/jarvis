@@ -286,7 +286,7 @@ const SAMPLE_MCP_CONFIG = `{
 
   "//slack": "Slack: create a Slack app at https://api.slack.com/apps, install to your workspace, copy the Bot User OAuth Token (xoxb-...) and Team ID. The claude.ai Slack connector does NOT propagate to Jarvis tasks — you need this local entry to use /send.",
 
-  "//gmail": "Two options. (A) Easiest: install via `claude mcp add gmail-personal -- sh -c 'cd ~/.gmail-mcp-personal && exec npx -y @gongrzhe/server-gmail-autoauth-mcp'` after running the GongRzhe auth flow once. (B) Or pin it here under mcpServers with the same sh-c command — same effect, scoped to Jarvis only.",
+  "//gmail": "Two options. (A) Easiest: install via 'claude mcp add gmail-personal --scope user -- sh -c \\"cd ~/.gmail-mcp-personal && exec npx -y @gongrzhe/server-gmail-autoauth-mcp\\"' after running the GongRzhe auth flow once. (B) Or pin it here under mcpServers with the same sh-c command — same effect, scoped to Jarvis only.",
 
   "//linear": "Linear: see https://linear.app/changelog/2025-mcp or the @tacticlaunch/mcp-linear community server.",
 
