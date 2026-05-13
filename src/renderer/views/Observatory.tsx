@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { Reminder, TaskSummary } from '../../shared/types';
+import type { JarvisFileEntry, Reminder, TaskSummary } from '../../shared/types';
+import { meetingRecorder, type MeetingState } from '../voice/MeetingRecorder';
 import { Constellation } from './Constellation';
 import { Dashboard } from './Dashboard';
 import { TaskDetail } from './TaskDetail';
@@ -11,8 +12,11 @@ type ViewMode = 'dashboard' | 'constellation' | 'list';
 export function Observatory() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [recentNotes, setRecentNotes] = useState<JarvisFileEntry[]>([]);
+  const [recentMeetings, setRecentMeetings] = useState<JarvisFileEntry[]>([]);
+  const [meetingState, setMeetingState] = useState<MeetingState>(() => meetingRecorder.getState());
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [view, setView] = useState<ViewMode>('dashboard');
+  const [view, setView] = useState<ViewMode>('constellation');
 
   useEffect(() => {
     void window.jarvis.listTasks().then(setTasks);
@@ -41,6 +45,45 @@ export function Observatory() {
       offFocus();
       offReminders();
     };
+  }, []);
+
+  // Pull recent notes + meetings for the constellation. Lightweight poll so
+  // we don't need a per-module file-watch IPC; 30s is fine for files the
+  // user just wrote.
+  useEffect(() => {
+    const refresh = () => {
+      void window.jarvis
+        .listJarvisDir('notes')
+        .then((entries) =>
+          setRecentNotes(
+            entries
+              .filter((e) => !e.isDir && e.name.endsWith('.md'))
+              .sort((a, b) => b.mtimeMs - a.mtimeMs)
+              .slice(0, 6),
+          ),
+        )
+        .catch(() => setRecentNotes([]));
+      void window.jarvis
+        .listJarvisDir('meetings')
+        .then((entries) =>
+          setRecentMeetings(
+            entries
+              .filter((e) => !e.isDir && e.name.endsWith('.md'))
+              .sort((a, b) => b.mtimeMs - a.mtimeMs)
+              .slice(0, 4),
+          ),
+        )
+        .catch(() => setRecentMeetings([]));
+    };
+    refresh();
+    const t = setInterval(refresh, 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Subscribe to the in-process meeting recorder so the map can show a
+  // pulsing "RECORDING" node while audio is being captured.
+  useEffect(() => {
+    return meetingRecorder.subscribe(setMeetingState);
   }, []);
 
   const selected = useMemo(
@@ -103,6 +146,9 @@ export function Observatory() {
           <Constellation
             tasks={tasks}
             reminders={reminders}
+            recentNotes={recentNotes}
+            recentMeetings={recentMeetings}
+            meetingState={meetingState}
             selectedId={selectedId}
             onSelect={setSelectedId}
             onCancelReminder={(id) => void window.jarvis.cancelReminder(id)}

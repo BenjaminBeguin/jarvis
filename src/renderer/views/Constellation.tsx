@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
-import type { Reminder, TaskSummary } from '../../shared/types';
+import type { JarvisFileEntry, Reminder, TaskSummary } from '../../shared/types';
+import type { MeetingState } from '../voice/MeetingRecorder';
 import { useNow } from './useNow';
 
 /* The SVG lives in a 1000×1000 viewBox; coordinates below are in that space. */
@@ -8,8 +9,10 @@ const CENTER = { x: 500, y: 500 };
 const CORE_RADIUS = 56;
 const RING_RADIUS = 260;
 const REMINDER_RING_RADIUS = 360;
-const MAX_NODES = 12;
+const ARTIFACT_RING_RADIUS = 440;
+const MAX_NODES = 18;
 const MAX_REMINDERS = 8;
+const MAX_ARTIFACTS = 10;
 /** External sessions that ended within this window still show as faded nodes. */
 const RECENCY_MS = 30 * 60 * 1000;
 /** Pulsing "you just launched this" focus ring lifetime. */
@@ -104,9 +107,54 @@ function reminderLabel(r: Reminder, now: number): string {
   return `${tag} ${head}  ·  ${fireCountdown(r.fireAt, now)}`;
 }
 
+/**
+ * "Artifacts" = quick-jot evidence that work is happening — recent notes
+ * and recent meetings. They sit on the outer-outer orbit as tiny dots with
+ * a glyph + short label, so the brain view shows everything the user
+ * touched recently, not just what's running right now.
+ */
+type Artifact =
+  | { kind: 'note'; name: string; mtimeMs: number }
+  | { kind: 'meeting'; name: string; mtimeMs: number };
+
+interface ArtifactNodePos {
+  artifact: Artifact;
+  x: number;
+  y: number;
+  angle: number;
+}
+
+function layoutArtifactRing(arts: Artifact[]): ArtifactNodePos[] {
+  const n = Math.max(1, arts.length);
+  return arts.map((artifact, i) => {
+    const step = (2 * Math.PI) / n;
+    // Offset so artifact ring doesn't perfectly align with the reminder ring.
+    const angle = -Math.PI / 2 + step / 3 + i * step;
+    return {
+      artifact,
+      angle,
+      x: CENTER.x + Math.cos(angle) * ARTIFACT_RING_RADIUS,
+      y: CENTER.y + Math.sin(angle) * ARTIFACT_RING_RADIUS,
+    };
+  });
+}
+
+function artifactLabel(a: Artifact): string {
+  const tag = a.kind === 'note' ? '✎' : '🎙';
+  const head = a.name.replace(/\.md$/, '').replace(/^[\d-T]+(-)/, '');
+  const trimmed = head.length > 20 ? `${head.slice(0, 19)}…` : head;
+  return `${tag} ${trimmed}`;
+}
+
 interface Props {
   tasks: TaskSummary[];
   reminders: Reminder[];
+  /** Recent note files (mtime-sorted desc, capped by caller). */
+  recentNotes?: JarvisFileEntry[];
+  /** Recent meeting files (mtime-sorted desc, capped by caller). */
+  recentMeetings?: JarvisFileEntry[];
+  /** Live meeting recorder state — pulses a RECORDING node when active. */
+  meetingState?: MeetingState;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onCancelReminder?: (id: string) => void;
@@ -115,6 +163,9 @@ interface Props {
 export function Constellation({
   tasks,
   reminders,
+  recentNotes = [],
+  recentMeetings = [],
+  meetingState,
   selectedId,
   onSelect,
   onCancelReminder,
@@ -146,6 +197,27 @@ export function Constellation({
     () => layoutReminderRing(visibleReminders),
     [visibleReminders],
   );
+
+  // Recent notes + meetings on the outer-outer orbit. Merged + sorted so the
+  // freshest sit closer to the start (top).
+  const visibleArtifacts = useMemo<Artifact[]>(() => {
+    const merged: Artifact[] = [
+      ...recentNotes.map(
+        (n): Artifact => ({ kind: 'note', name: n.name, mtimeMs: n.mtimeMs }),
+      ),
+      ...recentMeetings.map(
+        (m): Artifact => ({ kind: 'meeting', name: m.name, mtimeMs: m.mtimeMs }),
+      ),
+    ];
+    return merged
+      .sort((a, b) => b.mtimeMs - a.mtimeMs)
+      .slice(0, MAX_ARTIFACTS);
+  }, [recentNotes, recentMeetings]);
+  const artifactPositions = useMemo(
+    () => layoutArtifactRing(visibleArtifacts),
+    [visibleArtifacts],
+  );
+
   // 30s tick so '· 18m' countdowns stay roughly fresh without per-frame work.
   const now = useNow(30_000);
 
@@ -352,6 +424,53 @@ export function Constellation({
                   dominantBaseline="middle"
                 >
                   {label}
+                </text>
+              </g>
+            );
+          })}
+        </g>
+
+        {/* Active meeting recording — sits between the core and the task
+            ring, pulsing red so it can't be missed. Only rendered while
+            audio is actively being captured. */}
+        {meetingState?.active && (
+          <g className="recording-node">
+            <circle cx={CENTER.x} cy={CENTER.y - 170} r={24} className="recording-node__halo" />
+            <circle cx={CENTER.x} cy={CENTER.y - 170} r={9} className="recording-node__disc" />
+            <text
+              x={CENTER.x}
+              y={CENTER.y - 195}
+              textAnchor="middle"
+              className="recording-node__label"
+            >
+              ● REC{meetingState.title ? ` · ${meetingState.title.slice(0, 22)}` : ''}
+            </text>
+          </g>
+        )}
+
+        {/* Recent notes + meetings — outer-outer orbit. Subtle, not
+            clickable, just shows "things the user touched recently". */}
+        <g className="constellation__artifacts">
+          {artifactPositions.map((p) => {
+            const labelOffset = 22;
+            const lx = CENTER.x + Math.cos(p.angle) * (ARTIFACT_RING_RADIUS + labelOffset);
+            const ly = CENTER.y + Math.sin(p.angle) * (ARTIFACT_RING_RADIUS + labelOffset);
+            const textAnchor =
+              Math.cos(p.angle) > 0.2 ? 'start' : Math.cos(p.angle) < -0.2 ? 'end' : 'middle';
+            return (
+              <g
+                key={`art-${p.artifact.kind}-${p.artifact.name}`}
+                className={`artifact-node artifact-node--${p.artifact.kind}`}
+              >
+                <circle cx={p.x} cy={p.y} r={3} className="artifact-node__dot" />
+                <text
+                  x={lx}
+                  y={ly}
+                  textAnchor={textAnchor}
+                  dominantBaseline="middle"
+                  className="artifact-node__label"
+                >
+                  {artifactLabel(p.artifact)}
                 </text>
               </g>
             );
