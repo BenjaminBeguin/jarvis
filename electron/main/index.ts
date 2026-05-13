@@ -29,6 +29,7 @@ import { McpConfigStore } from './mcp-config.js';
 import { ModuleRegistry } from './module-registry.js';
 import { claudeCodeWatchModule } from './modules/claude-code-watch.js';
 import { quickNoteModule } from './modules/quick-note.js';
+import { ProjectStore } from './projects.js';
 import { RoutineStore } from './routines.js';
 import { seedDefaultsIfEmpty } from './seed.js';
 import {
@@ -47,11 +48,13 @@ import { broadcast, hidePalette, openObservatory, openPalette } from './windows.
 
 const skills = new SkillStore();
 const mcp = new McpConfigStore();
+const projects = new ProjectStore();
 const runner = new TaskRunner();
 const routines = new RoutineStore();
 const modules = new ModuleRegistry();
 runner.setSkillStore(skills);
 runner.setMcpStore(mcp);
+runner.setProjectStore(projects);
 routines.setRunner(runner);
 
 let claudeBinaryPath: string | null = null;
@@ -388,6 +391,7 @@ app.whenReady().then(async () => {
   seedDefaultsIfEmpty();
   skills.init();
   mcp.init();
+  projects.init();
   routines.init();
 
   // Module foundation: every user-asked feature ships as a module that
@@ -446,6 +450,7 @@ app.on('before-quit', () => {
   routines.close();
   skills.close();
   mcp.close();
+  projects.close();
   closeDatabase();
 });
 

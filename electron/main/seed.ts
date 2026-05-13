@@ -63,6 +63,20 @@ const SAMPLE_MCP_CONFIG = `{
 }
 `;
 
+const SAMPLE_PROJECTS = `{
+  "//": "Tell Jarvis about your projects so it can resolve 'the X project' or 'PR 340 on cs ai'. Aliases are case-insensitive substrings; the agent uses them when you reference a project by nickname.",
+  "projects": [
+    {
+      "name": "Example",
+      "aliases": ["example", "ex"],
+      "path": "~/Code/example",
+      "repo": "github.com/yourorg/example",
+      "description": "what this project is"
+    }
+  ]
+}
+`;
+
 function writeIfMissing(path: string, content: string): void {
   if (!existsSync(path)) writeFileSync(path, content, 'utf8');
 }
@@ -73,6 +87,7 @@ export function seedDefaultsIfEmpty(): void {
   mkdirSync(skillsRoot, { recursive: true });
 
   writeIfMissing(join(root, 'mcp.json.example'), SAMPLE_MCP_CONFIG);
+  writeIfMissing(join(root, 'projects.json.example'), SAMPLE_PROJECTS);
 
   const hasAnySkill = readdirSync(skillsRoot, { withFileTypes: true }).some(
     (e) => e.isDirectory(),

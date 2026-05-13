@@ -65,6 +65,19 @@ export interface McpServerSummary {
   url?: string;
 }
 
+export interface ProjectDef {
+  /** Canonical name — what the user typically says/types. */
+  name: string;
+  /** Fuzzy match strings the user might say ("cs ai", "csai", …). */
+  aliases: string[];
+  /** Absolute path on disk; resolved against home if it starts with ~. */
+  path?: string;
+  /** GitHub repo identifier ("owner/name") or full URL. */
+  repo?: string;
+  /** One-line description that helps the agent decide relevance. */
+  description?: string;
+}
+
 export interface PaletteIntentSummary {
   id: string;
   moduleId: string;

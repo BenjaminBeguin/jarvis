@@ -13,20 +13,29 @@ import type {
 import { AsyncMessageQueue } from './async-message-queue.js';
 import { appendTaskEvent, insertTask, updateTaskStatus } from './db.js';
 import type { McpConfigStore } from './mcp-config.js';
+import type { ProjectStore } from './projects.js';
 import type { SkillRecord, SkillStore } from './skill-store.js';
 
 const DEFAULT_SYSTEM_PROMPT = `You are Jarvis, the user's personal AI operating layer running through Claude Code.
 
 You have a full toolbox — Bash, Read, Write, Edit, Glob, Grep, WebSearch, WebFetch, plus any MCP servers the user has configured. Use them. Don't bluff with disclaimers when a tool can give you a real answer.
 
-Quick heuristics:
-- Time / date / system info → run \`date\`, \`uname -a\`, \`uptime\` via Bash.
-- Current events, recent news, anything time-sensitive → WebSearch. If the user names a specific URL or asks "what does that page say" → WebFetch.
-- Anything in the user's filesystem → Read / Glob / Grep first, don't ask them to paste.
-- Multi-step tasks → just do them. Skip "should I…" preludes when the next step is obvious.
+Shell commands you should reach for via Bash (assume they're installed and authenticated unless you actually hit an error):
+- \`gh\` — GitHub CLI. PR/issue/comment/actions work goes through this. Examples:
+  \`gh pr view 340 --repo owner/name\`, \`gh pr view 340 --comments\`,
+  \`gh issue list --repo owner/name --state open\`, \`gh run list\`.
+- \`git\` — status, log, diff, branches for any local repo.
+- \`date\` / \`uname -a\` / \`uptime\` — clock, OS, system.
+- \`curl\` / \`jq\` — quick HTTP or JSON shaping.
+
+Heuristics:
+- Pull requests, issues, comments, actions, releases → \`gh\` (cd into the project path first if you have one).
+- Anything time-sensitive or "current" → WebSearch / WebFetch.
+- Anything in the user's filesystem → Read / Glob / Grep. Don't ask them to paste.
+- Multi-step → just do them. Skip "should I…" preludes when the next step is obvious.
 
 Style:
-- Tight. Skip restatements of the question. Skip closing offers ("let me know if…").
+- Tight. Skip restatements of the question and closing offers ("let me know if…").
 - When you used a tool, mention the source/command inline so the user can verify.
 - Honest about uncertainty when it actually exists, but never as a substitute for trying a tool.`;
 
@@ -65,6 +74,7 @@ export class TaskRunner extends EventEmitter {
   private readonly records = new Map<string, TaskRecord>();
   private skills: SkillStore | null = null;
   private mcp: McpConfigStore | null = null;
+  private projects: ProjectStore | null = null;
   private auth: AuthContext = { mode: 'subscription' };
 
   setSkillStore(store: SkillStore): void {
@@ -75,8 +85,48 @@ export class TaskRunner extends EventEmitter {
     this.mcp = store;
   }
 
+  setProjectStore(store: ProjectStore): void {
+    this.projects = store;
+  }
+
   setAuth(ctx: AuthContext): void {
     this.auth = ctx;
+  }
+
+  /**
+   * Build the system prompt for a task: base (skill body or Jarvis default)
+   * + appended live context (today's date + the user's tracked projects).
+   * Appending rather than templating means skills with their own prompts
+   * still get the same situational awareness for free.
+   */
+  private composeSystemPrompt(skill: SkillRecord | null): string {
+    const base = skill?.hasBody ? skill.body : DEFAULT_SYSTEM_PROMPT;
+    const now = new Date();
+    const dateLine = `Today: ${now.toLocaleDateString(undefined, {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })}.`;
+
+    const sections: string[] = [base, dateLine];
+
+    const projects = this.projects?.list() ?? [];
+    if (projects.length > 0) {
+      const lines = projects.map((p) => {
+        const bits: string[] = [`- ${p.name}`];
+        if (p.aliases.length) bits.push(`(aliases: ${p.aliases.join(', ')})`);
+        if (p.repo) bits.push(`repo: ${p.repo}`);
+        if (p.path) bits.push(`path: ${p.path}`);
+        if (p.description) bits.push(`— ${p.description}`);
+        return bits.join(' ');
+      });
+      sections.push(
+        `The user's tracked projects (resolve fuzzy references like "the X project" via aliases):\n${lines.join('\n')}`,
+      );
+    }
+
+    return sections.join('\n\n');
   }
 
   private buildEnv(): Record<string, string> {
@@ -261,7 +311,7 @@ export class TaskRunner extends EventEmitter {
     let cost = 0;
     let finalStatus: TaskStatus = 'completed';
     try {
-      const systemPrompt = skill?.hasBody ? skill.body : DEFAULT_SYSTEM_PROMPT;
+      const systemPrompt = this.composeSystemPrompt(skill);
       const options: Parameters<typeof query>[0]['options'] = {
         abortController: record.abort,
         permissionMode: 'bypassPermissions',
