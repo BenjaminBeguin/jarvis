@@ -84,23 +84,30 @@ function renderEvent(event: TaskEvent): RenderedEvent | null {
   }
 
   if (msg.type === 'result') {
-    const r = msg as { result?: string; total_cost_usd?: number; duration_ms?: number };
+    // The full assistant text already streamed via 'assistant' events
+    // earlier in the loop — the result message just terminates the turn
+    // and carries the cost/duration metadata. Render that as a thin
+    // footer line instead of repeating the body.
+    const r = msg as { total_cost_usd?: number; duration_ms?: number };
+    const dur = r.duration_ms ?? 0;
+    const cost = r.total_cost_usd ?? 0;
     return {
       key: `${event.seq}-final`,
       kind: 'result',
-      label: 'result',
-      body: [
-        r.result ?? '',
-        `\n— ${r.duration_ms ?? 0}ms · $${(r.total_cost_usd ?? 0).toFixed(4)}`,
-      ].join(''),
+      label: 'turn complete',
+      body: `${dur}ms · $${cost.toFixed(4)}`,
     };
   }
 
   if (msg.type === 'system') {
+    // System events (init, api_retry, etc.) are diagnostic noise for the
+    // typical user. Render them but tag with kind:'system' so the panel
+    // can hide them behind a toggle.
+    const m = msg as { subtype?: string };
     return {
       key: `${event.seq}-sys`,
       kind: 'system',
-      label: 'system',
+      label: m.subtype ? `system · ${m.subtype}` : 'system',
       body: JSON.stringify(msg, null, 2),
     };
   }
@@ -148,6 +155,15 @@ export function TaskDetail({ task }: Props) {
 
   const rendered = events.map(renderEvent).filter((e): e is RenderedEvent => e !== null);
   const isAwaiting = !!task.awaitingInput;
+  const [showRaw, setShowRaw] = useState(false);
+  const systemCount = useMemo(
+    () => rendered.filter((e) => e.kind === 'system').length,
+    [rendered],
+  );
+  const visible = useMemo(
+    () => (showRaw ? rendered : rendered.filter((e) => e.kind !== 'system')),
+    [rendered, showRaw],
+  );
 
   return (
     <section className="detail">
@@ -166,11 +182,23 @@ export function TaskDetail({ task }: Props) {
         )}
       </header>
       {isAwaiting && <AwaitingBanner />}
+      {systemCount > 0 && (
+        <div className="detail__filter-bar">
+          <button
+            className="detail__filter-toggle"
+            onClick={() => setShowRaw((v) => !v)}
+          >
+            {showRaw
+              ? `Hide ${systemCount} system event${systemCount === 1 ? '' : 's'}`
+              : `Show ${systemCount} system event${systemCount === 1 ? '' : 's'}`}
+          </button>
+        </div>
+      )}
       <div className="detail__body" ref={bodyRef}>
-        {rendered.length === 0 && (
+        {visible.length === 0 && (
           <div className="empty">Waiting for output…</div>
         )}
-        {rendered.map((e) => (
+        {visible.map((e) => (
           <div
             key={e.key}
             className={`event ${
@@ -182,6 +210,8 @@ export function TaskDetail({ task }: Props) {
                 ? 'event--error'
                 : e.kind === 'user'
                 ? 'event--user'
+                : e.kind === 'system'
+                ? 'event--system'
                 : ''
             }`}
           >
