@@ -10,6 +10,25 @@ import { AudioCapture } from '../voice/AudioCapture';
 
 interface PendingIntent extends PaletteIntentSummary {}
 
+function formatScheduleHint(fireAt: number): string {
+  const diff = fireAt - Date.now();
+  if (diff <= 0) return 'now';
+  const m = Math.round(diff / 60_000);
+  if (m < 1) return 'in <1m';
+  if (m < 60) return `in ${m}m`;
+  const h = m / 60;
+  if (h < 24) {
+    const round = Math.round(h * 10) / 10;
+    return Number.isInteger(round) ? `in ${round.toFixed(0)}h` : `in ${round}h`;
+  }
+  const target = new Date(fireAt);
+  return target.toLocaleString(undefined, {
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 /**
  * Whisper emits placeholder tokens when audio is silent/unintelligible.
  * Strip them. Also: Whisper notoriously hallucinates "Thank you." for silent
@@ -45,6 +64,11 @@ export function CommandPalette() {
   const [activeIntent, setActiveIntent] = useState<PendingIntent | null>(null);
   const [pickerIndex, setPickerIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  /** Inline hint when the current text parses to a scheduled action/reminder. */
+  const [schedulePreview, setSchedulePreview] = useState<{
+    mode: 'reminder' | 'scheduled';
+    fireAt: number;
+  } | null>(null);
   const captureRef = useRef<AudioCapture | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const paletteRef = useRef<HTMLDivElement>(null);
@@ -96,6 +120,32 @@ export function CommandPalette() {
     () => modules.flatMap((m) => m.intents),
     [modules],
   );
+
+  // Debounced preview: when the user is typing free text (no skill, no
+  // intent, no slash), ask main whether it would route as a reminder /
+  // scheduled action. Show a subtle hint when yes — so the user sees the
+  // schedule *before* hitting Enter.
+  useEffect(() => {
+    if (activeSkill || activeIntent || text.startsWith('/') || !text.trim()) {
+      setSchedulePreview(null);
+      return;
+    }
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      void window.jarvis.previewIntent(text).then((r) => {
+        if (cancelled) return;
+        if (r.kind === 'reminder') {
+          setSchedulePreview({ mode: r.mode, fireAt: r.fireAt });
+        } else {
+          setSchedulePreview(null);
+        }
+      });
+    }, 180);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [text, activeSkill, activeIntent]);
 
   // If the user types a full intent prefix as the first word, promote it to
   // an active intent chip so Enter dispatches it (don't open the skill picker).
@@ -418,7 +468,16 @@ export function CommandPalette() {
             <line x1="6" y1="9" x2="6" y2="11" stroke="currentColor" strokeLinecap="round" />
           </svg>
         </button>
-        <span className="hint">↵ exec</span>
+        <span className="hint">
+          {schedulePreview ? (
+            <span className="palette__schedule-hint" title="Press Enter to schedule">
+              {schedulePreview.mode === 'scheduled' ? '⚡' : '⏰'}{' '}
+              {formatScheduleHint(schedulePreview.fireAt)}
+            </span>
+          ) : (
+            '↵ exec'
+          )}
+        </span>
       </div>
       {downloadProgress?.status === 'downloading' && (
         <div className="palette__progress">

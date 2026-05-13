@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import type { AppStatus, ModuleSummary } from '../../shared/types';
+import type { AppStatus, ModuleSummary, Reminder, TaskSummary } from '../../shared/types';
 import { getModulePage } from '../modules/registry';
 import { MeetingOverlay } from './MeetingOverlay';
 import { ModulesPage } from './ModulesPage';
@@ -41,10 +41,45 @@ export function Shell({ status }: Props) {
   const [openModule, setOpenModule] = useState<ModuleSummary | null>(null);
   const [switchOpen, setSwitchOpen] = useState(false);
   const [clock, setClock] = useState(() => formatClock(new Date()));
+  const [runningCount, setRunningCount] = useState(0);
+  const [awaitingCount, setAwaitingCount] = useState(0);
+  const [scheduledCount, setScheduledCount] = useState(0);
 
   useEffect(() => {
     const id = setInterval(() => setClock(formatClock(new Date())), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  // Keep the global status pill in sync across tabs. Pulls counts on mount
+  // then subscribes for updates.
+  useEffect(() => {
+    const tally = (tasks: TaskSummary[]) => {
+      setRunningCount(
+        tasks.filter((t) => t.status === 'running' && t.origin !== 'external')
+          .length,
+      );
+      setAwaitingCount(tasks.filter((t) => t.awaitingInput).length);
+    };
+    void window.jarvis.listTasks().then(tally);
+    void window.jarvis
+      .listReminders()
+      .then((rs: Reminder[]) =>
+        setScheduledCount(rs.filter((r) => r.status === 'pending').length),
+      );
+    const offStatus = window.jarvis.onTaskStatus(() => {
+      void window.jarvis.listTasks().then(tally);
+    });
+    const offRemoved = window.jarvis.onTaskRemoved(() => {
+      void window.jarvis.listTasks().then(tally);
+    });
+    const offRem = window.jarvis.onRemindersChanged((rs: Reminder[]) =>
+      setScheduledCount(rs.filter((r) => r.status === 'pending').length),
+    );
+    return () => {
+      offStatus();
+      offRemoved();
+      offRem();
+    };
   }, []);
 
   // Keep openModule in sync with the registry — handles "module disabled
@@ -125,6 +160,25 @@ export function Shell({ status }: Props) {
           </button>
         </div>
         <div className="shell__right">
+          {(runningCount > 0 || awaitingCount > 0 || scheduledCount > 0) && (
+            <div className="shell__status-pill" title="Live counts">
+              {runningCount > 0 && (
+                <span className="shell__status-item shell__status-item--live">
+                  ● {runningCount}
+                </span>
+              )}
+              {awaitingCount > 0 && (
+                <span className="shell__status-item shell__status-item--awaiting">
+                  ◐ {awaitingCount}
+                </span>
+              )}
+              {scheduledCount > 0 && (
+                <span className="shell__status-item shell__status-item--scheduled">
+                  ⏰ {scheduledCount}
+                </span>
+              )}
+            </div>
+          )}
           <div className="shell__clock">
             <span className="dot" />
             {clock}

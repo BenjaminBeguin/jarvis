@@ -279,6 +279,16 @@ export function Constellation({
               {awaitingCount} AWAITING REPLY
             </text>
           )}
+          {visibleReminders.length > 0 && (
+            <text
+              x={CENTER.x}
+              y={CENTER.y + (awaitingCount > 0 ? 52 : 36)}
+              className="core__scheduled"
+              textAnchor="middle"
+            >
+              {visibleReminders.length} SCHEDULED
+            </text>
+          )}
         </g>
 
         {/* Nodes (agents). */}

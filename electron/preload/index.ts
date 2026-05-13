@@ -133,6 +133,12 @@ const api = {
     options?: { origin?: 'palette' | 'voice' },
   ): Promise<RoutePromptResult> =>
     ipcRenderer.invoke(IpcChannels.routePrompt, { prompt, origin: options?.origin }),
+  previewIntent: (
+    prompt: string,
+  ): Promise<
+    | { kind: 'task'; body: string }
+    | { kind: 'reminder'; mode: 'reminder' | 'scheduled'; body: string; fireAt: number }
+  > => ipcRenderer.invoke(IpcChannels.previewIntent, prompt),
 
   listReminders: (): Promise<Reminder[]> =>
     ipcRenderer.invoke(IpcChannels.listReminders),

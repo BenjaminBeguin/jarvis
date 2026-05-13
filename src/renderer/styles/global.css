@@ -239,6 +239,14 @@ button:disabled:hover {
   flex-shrink: 0;
 }
 
+/* Inline preview when the typed text parses to a scheduled action.
+   Picks up the warn color so the user sees "this will fire later" at
+   a glance, without taking real estate from the input. */
+.palette__schedule-hint {
+  color: var(--warn);
+  text-shadow: 0 0 6px rgba(255, 180, 84, 0.45);
+}
+
 .palette__error {
   -webkit-app-region: no-drag;
   background: rgba(255, 85, 119, 0.08);
@@ -846,6 +854,39 @@ button:disabled:hover {
   letter-spacing: 0.12em;
   min-width: 7ch;
   text-align: right;
+}
+
+/* Global "what's happening" pill in the shell header. Shows running,
+   awaiting-reply, and scheduled counts at a glance from any tab. */
+.shell__status-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: rgba(0, 212, 255, 0.04);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.shell__status-item {
+  color: var(--text-dim);
+}
+
+.shell__status-item--live {
+  color: var(--accent);
+  text-shadow: 0 0 4px rgba(0, 212, 255, 0.4);
+}
+
+.shell__status-item--awaiting {
+  color: var(--warn);
+  text-shadow: 0 0 4px rgba(255, 180, 84, 0.4);
+}
+
+.shell__status-item--scheduled {
+  color: var(--warn);
+  opacity: 0.85;
 }
 
 .shell__clock .dot {
@@ -1545,6 +1586,14 @@ button:disabled:hover {
   font-size: 11px;
   letter-spacing: 0.24em;
   text-shadow: 0 0 6px rgba(255, 180, 84, 0.55);
+}
+
+.core__scheduled {
+  fill: var(--warn);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  opacity: 0.78;
 }
 
 /* Awaiting banner + quick-reply dock inside TaskDetail */

@@ -46,6 +46,7 @@ export const IpcChannels = {
   routinesChanged: 'routines:changed',
 
   routePrompt: 'palette:routePrompt',
+  previewIntent: 'palette:previewIntent',
 
   listReminders: 'reminders:list',
   cancelReminder: 'reminders:cancel',

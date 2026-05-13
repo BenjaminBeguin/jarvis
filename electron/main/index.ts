@@ -413,6 +413,11 @@ function registerIpc(): void {
     reminders.remove(id),
   );
 
+  ipcMain.handle(IpcChannels.previewIntent, (_e, prompt: string) => {
+    if (typeof prompt !== 'string') return { kind: 'task', body: '' };
+    return parseIntent(prompt);
+  });
+
   ipcMain.handle(
     IpcChannels.routePrompt,
     async (
