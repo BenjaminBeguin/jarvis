@@ -33,8 +33,11 @@ import { RoutineStore } from './routines.js';
 import { seedDefaultsIfEmpty } from './seed.js';
 import {
   clearAnthropicApiKey,
+  clearClaudeCodeOAuthToken,
   getAnthropicApiKey,
+  getClaudeCodeOAuthToken,
   setAnthropicApiKey,
+  setClaudeCodeOAuthToken,
 } from './secrets.js';
 import { SkillStore } from './skill-store.js';
 import { asTaskOrigin, TaskRunner } from './task-runner.js';
@@ -56,12 +59,14 @@ let claudeBinaryPath: string | null = null;
 async function refreshAuth(): Promise<AppStatus> {
   const apiKey = await getAnthropicApiKey();
   const hasApiKey = !!apiKey;
+  const subscriptionToken = await getClaudeCodeOAuthToken();
+  const hasSubscriptionToken = !!subscriptionToken;
   claudeBinaryPath = detectClaudeBinary();
   let mode = loadAuthMode();
-  // Auto-pick: subscription if the user's claude CLI is logged in,
-  // else api-key if they've configured one, else null (show Setup).
+  // Auto-pick: subscription if the CLI + a setup-token are present, else
+  // api-key if a key is on file, else null (show Setup).
   if (!mode) {
-    if (claudeBinaryPath) mode = 'subscription';
+    if (claudeBinaryPath && hasSubscriptionToken) mode = 'subscription';
     else if (hasApiKey) mode = 'api-key';
   }
   // If they picked subscription but the binary disappeared, fall back.
@@ -77,11 +82,13 @@ async function refreshAuth(): Promise<AppStatus> {
     mode: mode ?? 'subscription',
     apiKey: apiKey ?? null,
     claudeBinaryPath,
+    claudeOauthToken: mode === 'subscription' ? subscriptionToken : null,
   });
 
   return {
     authMode: mode,
     hasApiKey,
+    hasSubscriptionToken,
     claudeBinaryPath,
     version: app.getVersion(),
   };
@@ -112,6 +119,21 @@ function registerIpc(): void {
     await broadcastStatus();
   });
 
+  ipcMain.handle(IpcChannels.setSubscriptionToken, async (_e, value: string) => {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      throw new Error('Subscription token cannot be empty');
+    }
+    await setClaudeCodeOAuthToken(value.trim());
+    saveAuthMode('subscription');
+    await broadcastStatus();
+  });
+
+  ipcMain.handle(IpcChannels.clearSubscriptionToken, async () => {
+    await clearClaudeCodeOAuthToken();
+    clearAuthMode();
+    await broadcastStatus();
+  });
+
   ipcMain.handle(IpcChannels.setAuthMode, async (_e, mode: AuthMode) => {
     if (mode !== 'subscription' && mode !== 'api-key') {
       throw new Error(`Invalid auth mode: ${String(mode)}`);
@@ -119,6 +141,11 @@ function registerIpc(): void {
     if (mode === 'subscription' && !claudeBinaryPath) {
       throw new Error(
         'Claude Code CLI not found. Install it from claude.ai/download or run `claude login`.',
+      );
+    }
+    if (mode === 'subscription' && !(await getClaudeCodeOAuthToken())) {
+      throw new Error(
+        'Run `claude setup-token` in Terminal, then paste the token here.',
       );
     }
     if (mode === 'api-key' && !(await getAnthropicApiKey())) {
@@ -264,6 +291,14 @@ function registerIpc(): void {
     if (status.authMode === 'subscription' && !status.claudeBinaryPath) {
       throw new Error(
         'Claude Code CLI not found. Run `claude login` or switch to API-key mode.',
+      );
+    }
+    // Token is loaded by refreshAuth above; if missing, the spawned claude
+    // will 401 — fail loudly with the recovery path.
+    if (status.authMode === 'subscription' && !status.hasSubscriptionToken) {
+      throw new Error(
+        'No subscription token configured. Run `claude setup-token` in a ' +
+          'terminal, then paste the token in Setup — or switch to API-key mode.',
       );
     }
     const summary = runner.launch({

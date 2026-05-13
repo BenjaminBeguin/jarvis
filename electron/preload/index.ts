@@ -32,6 +32,10 @@ const api = {
     ipcRenderer.invoke(IpcChannels.setApiKey, value),
   clearApiKey: (): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.clearApiKey),
+  setSubscriptionToken: (value: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.setSubscriptionToken, value),
+  clearSubscriptionToken: (): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.clearSubscriptionToken),
   setAuthMode: (mode: AuthMode): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.setAuthMode, mode),
 

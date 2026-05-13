@@ -139,12 +139,15 @@ export function Shell({ status }: Props) {
             {switchOpen && (
               <div className="shell__auth-menu">
                 <button
-                  disabled={!status.claudeBinaryPath}
+                  disabled={!status.claudeBinaryPath || !status.hasSubscriptionToken}
                   onClick={() => void switchAuth('subscription')}
                 >
                   Subscription
                   {!status.claudeBinaryPath && (
                     <span className="shell__auth-hint">claude CLI not found</span>
+                  )}
+                  {status.claudeBinaryPath && !status.hasSubscriptionToken && (
+                    <span className="shell__auth-hint">no setup-token saved</span>
                   )}
                 </button>
                 <button

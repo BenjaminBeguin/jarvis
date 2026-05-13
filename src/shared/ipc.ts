@@ -2,6 +2,8 @@ export const IpcChannels = {
   appStatus: 'app:status',
   setApiKey: 'app:setApiKey',
   clearApiKey: 'app:clearApiKey',
+  setSubscriptionToken: 'app:setSubscriptionToken',
+  clearSubscriptionToken: 'app:clearSubscriptionToken',
   setAuthMode: 'app:setAuthMode',
   openObservatory: 'app:openObservatory',
   openPalette: 'app:openPalette',

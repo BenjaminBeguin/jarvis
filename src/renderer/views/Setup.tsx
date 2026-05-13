@@ -6,27 +6,18 @@ interface Props {
   status: AppStatus;
 }
 
+type Mode = 'choose' | 'api-key' | 'subscription-token';
+
 export function Setup({ status }: Props) {
-  const [mode, setMode] = useState<'choose' | 'api-key'>('choose');
+  const [mode, setMode] = useState<Mode>('choose');
   const [apiKey, setApiKey] = useState('');
+  const [subToken, setSubToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setError(null);
   }, [mode]);
-
-  const pickSubscription = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await window.jarvis.setAuthMode('subscription');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const saveApiKey = async () => {
     if (!apiKey.trim()) return;
@@ -35,6 +26,20 @@ export function Setup({ status }: Props) {
     try {
       await window.jarvis.setApiKey(apiKey);
       setApiKey('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveSubscriptionToken = async () => {
+    if (!subToken.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await window.jarvis.setSubscriptionToken(subToken);
+      setSubToken('');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -77,6 +82,49 @@ export function Setup({ status }: Props) {
     );
   }
 
+  if (mode === 'subscription-token') {
+    return (
+      <div className="setup">
+        <h2>Connect your Claude subscription</h2>
+        <p>
+          In a terminal, run:
+        </p>
+        <pre className="setup__cmd">claude setup-token</pre>
+        <p>
+          It opens a browser to authorize your Claude.ai account and prints
+          a long-lived token. Paste it here. Stored in your macOS Keychain
+          and only used to spawn the <code>claude</code> CLI from Jarvis.
+        </p>
+        <div className="row">
+          <input
+            type="password"
+            autoFocus
+            placeholder="sk-ant-oat… (output of claude setup-token)"
+            value={subToken}
+            onChange={(e) => setSubToken(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void saveSubscriptionToken();
+            }}
+          />
+          <button
+            onClick={saveSubscriptionToken}
+            disabled={busy || !subToken.trim()}
+          >
+            Save
+          </button>
+        </div>
+        <button
+          className="setup__link"
+          onClick={() => setMode('choose')}
+          disabled={busy}
+        >
+          ← back
+        </button>
+        {error && <p className="setup__error">{error}</p>}
+      </div>
+    );
+  }
+
   const hasClaude = !!status.claudeBinaryPath;
 
   return (
@@ -86,7 +134,7 @@ export function Setup({ status }: Props) {
       <div className="setup__cards">
         <button
           className={`setup__card${hasClaude ? ' setup__card--recommended' : ' setup__card--disabled'}`}
-          onClick={pickSubscription}
+          onClick={() => setMode('subscription-token')}
           disabled={!hasClaude || busy}
         >
           <div className="setup__card-title">
@@ -97,7 +145,7 @@ export function Setup({ status }: Props) {
           </div>
           <div className="setup__card-desc">
             {hasClaude
-              ? `Tasks route through your installed claude CLI and bill against your Claude.ai subscription quota.`
+              ? `Tasks route through your installed claude CLI and bill against your Claude.ai subscription quota. Requires a one-time setup-token paste.`
               : 'Claude Code CLI not detected. Install it from claude.ai/download and run `claude login`, then come back.'}
           </div>
           {status.claudeBinaryPath && (

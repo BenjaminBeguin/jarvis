@@ -110,6 +110,7 @@ export type AuthMode = 'subscription' | 'api-key';
 export interface AppStatus {
   authMode: AuthMode | null;
   hasApiKey: boolean;
+  hasSubscriptionToken: boolean;
   claudeBinaryPath: string | null;
   version: string;
 }

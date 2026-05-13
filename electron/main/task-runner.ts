@@ -30,6 +30,8 @@ export interface AuthContext {
   mode: AuthMode;
   apiKey?: string | null;
   claudeBinaryPath?: string | null;
+  /** OAuth token from Claude Code's Keychain, used in subscription mode. */
+  claudeOauthToken?: string | null;
 }
 
 export class TaskRunner extends EventEmitter {
@@ -58,8 +60,16 @@ export class TaskRunner extends EventEmitter {
       if (typeof v === 'string') base[k] = v;
     }
     delete base['ANTHROPIC_API_KEY'];
+    delete base['CLAUDE_CODE_OAUTH_TOKEN'];
+
     if (this.auth.mode === 'api-key' && this.auth.apiKey) {
       base['ANTHROPIC_API_KEY'] = this.auth.apiKey;
+    } else if (this.auth.mode === 'subscription' && this.auth.claudeOauthToken) {
+      // The spawned claude binary normally reads its own Keychain item, but
+      // when invoked from Electron the access is denied silently. We pass
+      // the token via env so the SDK / CLI authenticates without touching
+      // Keychain from the child process.
+      base['CLAUDE_CODE_OAUTH_TOKEN'] = this.auth.claudeOauthToken;
     }
     return isStringRecord(base) ? base : {};
   }

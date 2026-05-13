@@ -46,7 +46,9 @@ export function App() {
 }
 
 function isReady(status: AppStatus): boolean {
-  if (status.authMode === 'subscription') return !!status.claudeBinaryPath;
+  if (status.authMode === 'subscription') {
+    return !!status.claudeBinaryPath && status.hasSubscriptionToken;
+  }
   if (status.authMode === 'api-key') return status.hasApiKey;
   return false;
 }

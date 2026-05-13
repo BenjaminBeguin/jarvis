@@ -2118,6 +2118,27 @@ button:disabled:hover {
   margin: 0;
 }
 
+.setup__cmd {
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 13px;
+  border-radius: 2px;
+  text-shadow: var(--accent-glow);
+}
+
+.setup p code {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 1px 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
 /* Scrollbar — slim and on-theme */
 
 ::-webkit-scrollbar {
