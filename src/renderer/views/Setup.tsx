@@ -35,6 +35,13 @@ export function Setup({ status }: Props) {
 
   const saveSubscriptionToken = async () => {
     if (!subToken.trim()) return;
+    if (typeof window.jarvis.setSubscriptionToken !== 'function') {
+      setError(
+        'Stale preload detected — quit `pnpm dev` (Ctrl-C) and restart it. ' +
+          'The Electron window was opened before this feature shipped.',
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
