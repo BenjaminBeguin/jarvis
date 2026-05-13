@@ -3,10 +3,14 @@ import { useEffect, useMemo, useState } from 'react';
 import type { TaskSummary } from '../../shared/types';
 import { Constellation } from './Constellation';
 import { TaskDetail } from './TaskDetail';
+import { TaskList } from './TaskList';
+
+type ViewMode = 'constellation' | 'list';
 
 export function Observatory() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [view, setView] = useState<ViewMode>('constellation');
 
   useEffect(() => {
     void window.jarvis.listTasks().then(setTasks);
@@ -47,11 +51,37 @@ export function Observatory() {
 
   return (
     <div className="observatory">
-      <Constellation
-        tasks={tasks}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
-      />
+      <div className="observatory__viewbar">
+        <button
+          className={`observatory__view-btn${view === 'constellation' ? ' observatory__view-btn--active' : ''}`}
+          onClick={() => setView('constellation')}
+          title="Constellation view"
+        >
+          ◉ map
+        </button>
+        <button
+          className={`observatory__view-btn${view === 'list' ? ' observatory__view-btn--active' : ''}`}
+          onClick={() => setView('list')}
+          title="List view"
+        >
+          ☰ list
+        </button>
+      </div>
+      <div className="observatory__main">
+        {view === 'constellation' ? (
+          <Constellation
+            tasks={tasks}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
+        ) : (
+          <TaskList
+            tasks={tasks}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
+        )}
+      </div>
       <aside
         className={`observatory__panel${selected ? ' observatory__panel--open' : ''}`}
       >
@@ -65,7 +95,7 @@ export function Observatory() {
             >
               ×
             </button>
-            <TaskDetail task={selected} />
+            <TaskDetail task={selected} onSelectTask={setSelectedId} />
           </>
         )}
       </aside>

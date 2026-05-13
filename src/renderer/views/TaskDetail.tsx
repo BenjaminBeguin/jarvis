@@ -1,9 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { TaskEvent, TaskSummary } from '../../shared/types';
+import { formatRelative } from './TaskList';
 
 interface Props {
   task: TaskSummary;
+  /** Lets reply paths swap to a freshly-created task (e.g. fork resume). */
+  onSelectTask?: (id: string) => void;
+}
+
+function formatTime(ts: number): string {
+  const d = new Date(ts);
+  const today = new Date();
+  const sameDay =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
+  if (sameDay) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 interface RenderedEvent {
@@ -11,11 +27,14 @@ interface RenderedEvent {
   kind: 'text' | 'user' | 'tool_use' | 'tool_result' | 'result' | 'error' | 'system';
   label: string;
   body: string;
+  /** Timestamp from the wire event, ms epoch. */
+  ts: number;
 }
 
 function renderEvent(event: TaskEvent): RenderedEvent | null {
   const msg = event.msg as { type?: string } & Record<string, unknown>;
   if (!msg || typeof msg !== 'object') return null;
+  const ts = event.ts;
 
   if (msg.type === 'assistant') {
     const content = (msg['message'] as { content?: unknown })?.content;
@@ -36,10 +55,11 @@ function renderEvent(event: TaskEvent): RenderedEvent | null {
           body: tools
             .map((t) => `${t.name}\n${JSON.stringify(t.input, null, 2)}`)
             .join('\n\n'),
+          ts,
         };
       }
       if (text) {
-        return { key: `${event.seq}-text`, kind: 'text', label: 'assistant', body: text };
+        return { key: `${event.seq}-text`, kind: 'text', label: 'assistant', body: text, ts };
       }
     }
     return null;
@@ -64,6 +84,7 @@ function renderEvent(event: TaskEvent): RenderedEvent | null {
                 : JSON.stringify(r.content, null, 2),
             )
             .join('\n\n'),
+          ts,
         };
       }
       // Plain user text — the shape claude-code-watch produces from a
@@ -74,11 +95,11 @@ function renderEvent(event: TaskEvent): RenderedEvent | null {
         .map((c) => c.text)
         .join('');
       if (text) {
-        return { key: `${event.seq}-user`, kind: 'user', label: 'user', body: text };
+        return { key: `${event.seq}-user`, kind: 'user', label: 'user', body: text, ts };
       }
     } else if (typeof content === 'string' && content) {
       // Some SDK message shapes inline the prompt as a plain string.
-      return { key: `${event.seq}-user`, kind: 'user', label: 'user', body: content };
+      return { key: `${event.seq}-user`, kind: 'user', label: 'user', body: content, ts };
     }
     return null;
   }
@@ -96,6 +117,7 @@ function renderEvent(event: TaskEvent): RenderedEvent | null {
       kind: 'result',
       label: 'turn complete',
       body: `${dur}ms · $${cost.toFixed(4)}`,
+      ts,
     };
   }
 
@@ -109,6 +131,7 @@ function renderEvent(event: TaskEvent): RenderedEvent | null {
       kind: 'system',
       label: m.subtype ? `system · ${m.subtype}` : 'system',
       body: JSON.stringify(msg, null, 2),
+      ts,
     };
   }
 
@@ -118,13 +141,14 @@ function renderEvent(event: TaskEvent): RenderedEvent | null {
       kind: 'error',
       label: msg['aborted'] ? 'aborted' : 'error',
       body: String(msg['error'] ?? ''),
+      ts,
     };
   }
 
   return null;
 }
 
-export function TaskDetail({ task }: Props) {
+export function TaskDetail({ task, onSelectTask }: Props) {
   const [events, setEvents] = useState<TaskEvent[]>([]);
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -170,8 +194,8 @@ export function TaskDetail({ task }: Props) {
       <header className="detail__header">
         <div className="detail__title">
           <h2>{task.title}</h2>
-          <div className="meta">
-            {task.status} · {task.origin} · {new Date(task.startedAt).toLocaleString()}
+          <div className="meta" title={new Date(task.startedAt).toLocaleString()}>
+            {task.status} · {task.origin} · started {formatRelative(task.startedAt)}
             {task.costUsd > 0 && ` · $${task.costUsd.toFixed(4)}`}
           </div>
         </div>
@@ -215,14 +239,108 @@ export function TaskDetail({ task }: Props) {
                 : ''
             }`}
           >
-            <div className="event__kind">{e.label}</div>
+            <div className="event__kind">
+              <span>{e.label}</span>
+              <span className="event__time" title={new Date(e.ts).toLocaleString()}>
+                {formatTime(e.ts)}
+              </span>
+            </div>
             <div className="event__text">{e.body}</div>
           </div>
         ))}
       </div>
-      {isAwaiting && task.origin === 'external' && <QuickReply task={task} />}
+      {isAwaiting && task.origin === 'external' && (
+        <ContinueExternal task={task} onForked={onSelectTask} />
+      )}
       {isAwaiting && task.origin !== 'external' && <SendReply task={task} />}
     </section>
+  );
+}
+
+/**
+ * "Continue here": forks the external claude session into a Jarvis-owned
+ * task with full history. After this, the user can chat back-and-forth
+ * inside Jarvis instead of switching to their terminal. The original
+ * terminal session stays untouched — forkSession gives the resumed
+ * conversation a new session id so the JSONLs don't collide.
+ */
+function ContinueExternal({
+  task,
+  onForked,
+}: {
+  task: TaskSummary;
+  onForked?: (newId: string) => void;
+}) {
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    taRef.current?.focus();
+  }, [task.id]);
+
+  useEffect(() => {
+    setText('');
+    setError(null);
+  }, [task.id]);
+
+  const send = async () => {
+    const value = text.trim();
+    if (!value) return;
+    if (!task.id.startsWith('cc-')) {
+      setError('Cannot resume this task — unknown source format.');
+      return;
+    }
+    const sessionId = task.id.slice('cc-'.length);
+    setSending(true);
+    setError(null);
+    try {
+      const summary = await window.jarvis.launchTask({
+        prompt: value,
+        origin: 'palette',
+        resumeSessionId: sessionId,
+      });
+      setText('');
+      onForked?.(summary.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="detail__reply-dock detail__reply-dock--open">
+      <textarea
+        ref={taRef}
+        value={text}
+        rows={3}
+        placeholder="Continue this conversation in Jarvis. ⌘↵ to send."
+        disabled={sending}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            void send();
+          }
+        }}
+      />
+      {error && (
+        <div className="detail__reply-hint" style={{ color: 'var(--bad)' }}>
+          {error}
+        </div>
+      )}
+      <div className="detail__reply-hint">
+        Forks this session into a Jarvis-owned task with the full history.
+        The terminal session stays untouched.
+      </div>
+      <div className="detail__reply-actions">
+        <button onClick={() => void send()} disabled={sending || !text.trim()}>
+          {sending ? 'Forking…' : 'Continue here'}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -296,84 +414,3 @@ function AwaitingBanner() {
   );
 }
 
-function QuickReply({ task }: { task: TaskSummary }) {
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState('');
-  const [copied, setCopied] = useState(false);
-  const taRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (open) taRef.current?.focus();
-  }, [open]);
-
-  // Reset when the selected task changes.
-  useEffect(() => {
-    setOpen(false);
-    setText('');
-    setCopied(false);
-  }, [task.id]);
-
-  const send = async () => {
-    const value = text.trim();
-    if (!value) return;
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => {
-        setCopied(false);
-        setOpen(false);
-        setText('');
-      }, 1100);
-    } catch {
-      // No clipboard access (very rare in Electron); leave text in box.
-    }
-  };
-
-  if (!open) {
-    return (
-      <div className="detail__reply-dock">
-        <button className="detail__reply-open" onClick={() => setOpen(true)}>
-          ✎ Compose reply → clipboard
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="detail__reply-dock detail__reply-dock--open">
-      <textarea
-        ref={taRef}
-        value={text}
-        rows={3}
-        placeholder="Type your reply. ⌘↵ to copy to clipboard."
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            void send();
-          } else if (e.key === 'Escape') {
-            setOpen(false);
-            setText('');
-          }
-        }}
-      />
-      <div className="detail__reply-actions">
-        <button
-          onClick={() => {
-            setOpen(false);
-            setText('');
-          }}
-        >
-          Cancel
-        </button>
-        <button onClick={() => void send()} disabled={!text.trim()}>
-          {copied ? '✓ Copied' : 'Copy to clipboard'}
-        </button>
-      </div>
-      <div className="detail__reply-hint">
-        Paste into the Claude Code terminal that owns this session — Jarvis
-        can't write into a running process directly.
-      </div>
-    </div>
-  );
-}

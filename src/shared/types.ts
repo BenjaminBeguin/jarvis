@@ -35,6 +35,13 @@ export interface LaunchTaskRequest {
   skillId?: string | null;
   prompt: string;
   origin?: TaskOrigin;
+  /**
+   * Session ID to fork-resume — picks up an existing claude session's
+   * history and continues it as a new Jarvis-owned task (multi-turn).
+   * Used to "take over" an external Claude Code session in Jarvis without
+   * disturbing the original terminal session.
+   */
+  resumeSessionId?: string;
 }
 
 export interface SkillSummary {

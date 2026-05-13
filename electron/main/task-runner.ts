@@ -275,10 +275,11 @@ export class TaskRunner extends EventEmitter {
     const now = Date.now();
     const skill = req.skillId ? this.skills?.get(req.skillId) ?? null : null;
     const skillId = skill?.id ?? null;
+    const titlePrefix = req.resumeSessionId ? '↪ ' : '';
     const summary: TaskSummary = {
       id,
       skillId,
-      title: deriveTitle(req.prompt, skill),
+      title: `${titlePrefix}${deriveTitle(req.prompt, skill)}`,
       status: 'running',
       origin: req.origin ?? 'palette',
       startedAt: now,
@@ -300,13 +301,14 @@ export class TaskRunner extends EventEmitter {
     this.emit('status', summary);
 
     // Fire-and-forget; never block main loop.
-    void this.run(record, skill);
+    void this.run(record, skill, req.resumeSessionId);
     return summary;
   }
 
   private async run(
     record: TaskRecord,
     skill: SkillRecord | null,
+    resumeSessionId?: string,
   ): Promise<void> {
     const { id } = record.summary;
     let cost = 0;
@@ -335,6 +337,13 @@ export class TaskRunner extends EventEmitter {
         this.auth.claudeBinaryPath
       ) {
         options.pathToClaudeCodeExecutable = this.auth.claudeBinaryPath;
+      }
+      if (resumeSessionId) {
+        // Cast: forkSession+resume are documented but the SDK's exported
+        // Options type may lag in published .d.ts versions.
+        const o = options as unknown as Record<string, unknown>;
+        o['resume'] = resumeSessionId;
+        o['forkSession'] = true;
       }
       if (skill?.allowedTools.length) options.allowedTools = skill.allowedTools;
       if (skill?.model) options.model = skill.model;
