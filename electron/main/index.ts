@@ -465,6 +465,17 @@ function registerGlobalShortcut(): void {
 
 app.setName('Jarvis');
 
+// Single-instance lock. Belt-and-suspenders against stale Electron mains
+// from old `pnpm dev` runs grabbing the global shortcut. If we can't get
+// the lock, just exit — `predev` (in package.json) already pkilled stale
+// processes, but a race or an unrelated electron-vite child could still
+// double-launch.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => openPalette());
+}
+
 app.whenReady().then(async () => {
   // macOS: keep app alive in tray even when no windows are open.
   if (process.platform === 'darwin' && app.dock) app.dock.hide();
