@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import type { RoutineDef } from '../../shared/types';
+
 import { MarkdownText } from './MarkdownText';
 import { toast } from './Toaster';
 
@@ -9,6 +11,15 @@ interface DigestKind {
   description: string;
   skillId: string;
   schedule?: string;
+}
+
+/**
+ * A briefing kind is auto-generated when there's a routine with this
+ * id pointing at the kind's skill. Stable per-kind so toggling on/off
+ * is idempotent.
+ */
+function routineIdForKind(kindId: string): string {
+  return `briefing-${kindId}`;
 }
 
 interface DigestFile {
@@ -41,6 +52,7 @@ export function Briefings() {
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [content, setContent] = useState<string>('');
   const [generating, setGenerating] = useState(false);
+  const [routines, setRoutines] = useState<RoutineDef[]>([]);
 
   useEffect(() => {
     void window.jarvis.listBriefingKinds().then((list) => {
@@ -49,6 +61,12 @@ export function Briefings() {
         setActiveKind((cur) => cur ?? list[0]!.id);
       }
     });
+  }, []);
+
+  // Track routines so we can show + edit the schedule for each kind.
+  useEffect(() => {
+    void window.jarvis.listRoutines().then(setRoutines);
+    return window.jarvis.onRoutinesChanged(setRoutines);
   }, []);
 
   // Refresh files when the active kind changes OR when a generation
@@ -115,28 +133,41 @@ export function Briefings() {
           Generated digests with citations. Pulled from meetings, PRs,
           Linear, notes. Each kind is a skill + a routine.
         </p>
-        {kinds.map((k) => (
-          <button
-            key={k.id}
-            className={`briefings__kind${k.id === activeKind ? ' briefings__kind--active' : ''}`}
-            onClick={() => setActiveKind(k.id)}
-          >
-            <div className="briefings__kind-label">{k.label}</div>
-            <div className="briefings__kind-desc">{k.description}</div>
-            {k.schedule && (
-              <div className="briefings__kind-schedule">
-                suggested cron: <code>{k.schedule}</code>
+        {kinds.map((k) => {
+          const r = routines.find((x) => x.id === routineIdForKind(k.id));
+          const scheduled = r?.enabled === true;
+          return (
+            <button
+              key={k.id}
+              className={`briefings__kind${k.id === activeKind ? ' briefings__kind--active' : ''}`}
+              onClick={() => setActiveKind(k.id)}
+            >
+              <div className="briefings__kind-label">
+                {scheduled && <span className="briefings__kind-on-dot" title="Scheduled auto-generation" />}
+                {k.label}
               </div>
-            )}
-          </button>
-        ))}
+              <div className="briefings__kind-desc">{k.description}</div>
+              <div className="briefings__kind-schedule">
+                {scheduled ? (
+                  <>
+                    auto: <code>{r.cron}</code>
+                  </>
+                ) : (
+                  <>
+                    not scheduled · suggested <code>{k.schedule ?? '—'}</code>
+                  </>
+                )}
+              </div>
+            </button>
+          );
+        })}
       </aside>
 
       <main className="briefings__main">
         {!activeKind && (
           <div className="briefings__placeholder">Pick a kind on the left.</div>
         )}
-        {activeKind && (
+        {activeKind && activeKindMeta && (
           <>
             <header className="briefings__main-head">
               <div>
@@ -156,6 +187,11 @@ export function Briefings() {
                 {generating ? 'Launching…' : '✨ Generate now'}
               </button>
             </header>
+
+            <SchedulePanel
+              kind={activeKindMeta}
+              routine={routines.find((r) => r.id === routineIdForKind(activeKindMeta.id)) ?? null}
+            />
 
             <div className="briefings__panes">
               <aside className="briefings__files">
@@ -204,4 +240,215 @@ export function Briefings() {
       </main>
     </section>
   );
+}
+
+/**
+ * Schedule strip — toggles auto-generation, shows the cron + last run,
+ * and lets the user edit the schedule inline. Backed by the routine
+ * with id `briefing-<kindId>`.
+ */
+function SchedulePanel({
+  kind,
+  routine,
+}: {
+  kind: DigestKind;
+  routine: RoutineDef | null;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [cronDraft, setCronDraft] = useState(routine?.cron ?? kind.schedule ?? '');
+  const [busy, setBusy] = useState(false);
+
+  // Keep the draft in sync if the routine changes externally (e.g.
+  // user-edited routines.json by hand).
+  useEffect(() => {
+    if (!editing) setCronDraft(routine?.cron ?? kind.schedule ?? '');
+  }, [routine, kind.schedule, editing]);
+
+  const enabled = routine?.enabled === true;
+  const id = routineIdForKind(kind.id);
+
+  const enable = async () => {
+    setBusy(true);
+    try {
+      await window.jarvis.saveRoutine({
+        id,
+        skillId: kind.skillId,
+        cron: routine?.cron ?? kind.schedule ?? '0 8 * * *',
+        input: `Generate the ${kind.label.toLowerCase()} now and save it under ~/.jarvis/briefings/${kind.id}/.`,
+        enabled: true,
+      });
+      toast({ message: `Scheduled · ${kind.label}` });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disable = async () => {
+    if (!confirm(`Stop scheduling "${kind.label}"? The routine will be deleted; generated files stay.`)) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await window.jarvis.deleteRoutine(id);
+      toast({ message: `Scheduling off · ${kind.label}` });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveCron = async () => {
+    const next = cronDraft.trim();
+    if (!next) {
+      toast({ kind: 'error', message: 'Cron expression is required' });
+      return;
+    }
+    setBusy(true);
+    try {
+      await window.jarvis.saveRoutine({
+        id,
+        skillId: kind.skillId,
+        cron: next,
+        input: routine?.input ?? `Generate the ${kind.label.toLowerCase()}.`,
+        enabled: routine?.enabled ?? true,
+      });
+      setEditing(false);
+      toast({ message: `Schedule updated · ${next}` });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runNow = async () => {
+    setBusy(true);
+    try {
+      await window.jarvis.runRoutineNow(id);
+      toast({ message: 'Routine fired' });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!routine) {
+    return (
+      <div className="briefings__schedule">
+        <div className="briefings__schedule-status">
+          <span className="briefings__schedule-dot briefings__schedule-dot--off" />
+          <span className="briefings__schedule-label">Not scheduled</span>
+          <span className="briefings__schedule-hint">
+            suggested: <code>{kind.schedule ?? '0 8 * * *'}</code>
+          </span>
+        </div>
+        <button
+          className="briefings__schedule-primary"
+          onClick={() => void enable()}
+          disabled={busy}
+          title="Add a routine that fires this skill on the suggested cron"
+        >
+          Enable schedule
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="briefings__schedule">
+      <div className="briefings__schedule-status">
+        <span
+          className={`briefings__schedule-dot${enabled ? ' briefings__schedule-dot--on' : ' briefings__schedule-dot--off'}`}
+        />
+        <span className="briefings__schedule-label">
+          {enabled ? 'Scheduled' : 'Disabled'}
+        </span>
+        {editing ? (
+          <input
+            className="briefings__schedule-input"
+            value={cronDraft}
+            onChange={(e) => setCronDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void saveCron();
+              if (e.key === 'Escape') {
+                setEditing(false);
+                setCronDraft(routine.cron);
+              }
+            }}
+            spellCheck={false}
+            autoFocus
+            placeholder="0 8 * * *"
+          />
+        ) : (
+          <code className="briefings__schedule-cron" title="Cron expression">
+            {routine.cron}
+          </code>
+        )}
+        <span className="briefings__schedule-hint">
+          {routine.lastRunAt
+            ? `last run ${formatRelative(routine.lastRunAt)}`
+            : 'never run'}
+        </span>
+      </div>
+      <div className="briefings__schedule-actions">
+        {editing ? (
+          <>
+            <button onClick={() => setEditing(false)} disabled={busy}>
+              Cancel
+            </button>
+            <button
+              className="briefings__schedule-primary"
+              onClick={() => void saveCron()}
+              disabled={busy}
+            >
+              Save
+            </button>
+          </>
+        ) : (
+          <>
+            <button onClick={() => void runNow()} disabled={busy} title="Fire the routine right now">
+              Run now
+            </button>
+            <button onClick={() => setEditing(true)} disabled={busy}>
+              Edit cron
+            </button>
+            <button
+              className="briefings__schedule-danger"
+              onClick={() => void disable()}
+              disabled={busy}
+            >
+              Stop
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatRelative(ms: number): string {
+  const diff = Date.now() - ms;
+  if (diff < 60_000) return 'just now';
+  const m = Math.round(diff / 60_000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  return `${d}d ago`;
 }

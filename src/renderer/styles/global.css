@@ -1981,6 +1981,18 @@ button:disabled:hover {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.briefings__kind-on-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--good);
+  box-shadow: 0 0 5px var(--good);
+  flex-shrink: 0;
 }
 
 .briefings__kind-desc {
@@ -2069,6 +2081,141 @@ button:disabled:hover {
 .briefings__generate:disabled {
   opacity: 0.5;
   cursor: progress;
+}
+
+/* Per-kind schedule control strip, sits between main-head and the
+   files/content panes. Encodes the "routine for this kind" state. */
+.briefings__schedule {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 28px;
+  border-bottom: 1px solid var(--border-strong);
+  background: rgba(4, 7, 11, 0.5);
+  flex-wrap: wrap;
+}
+
+.briefings__schedule-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.briefings__schedule-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.briefings__schedule-dot--on {
+  background: var(--good);
+  box-shadow: 0 0 6px var(--good);
+}
+
+.briefings__schedule-dot--off {
+  background: var(--text-faint);
+}
+
+.briefings__schedule-label {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+}
+
+.briefings__schedule-cron {
+  background: rgba(0, 212, 255, 0.06);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-size: 11px;
+}
+
+.briefings__schedule-input {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 2px;
+  width: 140px;
+}
+
+.briefings__schedule-input:focus {
+  outline: none;
+  box-shadow: var(--accent-glow-soft);
+}
+
+.briefings__schedule-hint {
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.briefings__schedule-hint code {
+  color: var(--accent);
+  background: transparent;
+}
+
+.briefings__schedule-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.briefings__schedule-actions button {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.briefings__schedule-actions button:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.briefings__schedule-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.briefings__schedule-primary {
+  background: transparent;
+  border: 1px solid var(--accent) !important;
+  color: var(--accent) !important;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 4px 12px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.briefings__schedule-primary:hover:not(:disabled) {
+  background: rgba(0, 212, 255, 0.08);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.briefings__schedule-danger {
+  color: var(--bad) !important;
+}
+
+.briefings__schedule-danger:hover:not(:disabled) {
+  border-color: var(--bad) !important;
+  box-shadow: 0 0 6px rgba(255, 80, 80, 0.3);
 }
 
 .briefings__panes {
