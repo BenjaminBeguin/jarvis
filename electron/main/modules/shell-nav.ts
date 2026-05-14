@@ -11,7 +11,7 @@ import type { Module } from './types.js';
 const CHANNEL = 'shell:navigate';
 
 interface NavPayload {
-  tab: 'observatory' | 'routines' | 'integrations' | 'modules';
+  tab: 'observatory' | 'projects' | 'routines' | 'integrations' | 'modules';
   moduleId?: string;
 }
 
@@ -57,6 +57,23 @@ export const shellNavModule: Module = {
       handler: (_input, ctx) => {
         ctx.broadcast(CHANNEL, { tab: 'observatory' } as NavPayload);
         return 'Opening observatory';
+      },
+    },
+    {
+      id: 'projects',
+      prefix: '/open-projects',
+      label: 'Open Projects',
+      description: 'Project memory + scoped notes/meetings',
+      verbalTriggers: [
+        'open projects',
+        'show projects',
+        'open project memory',
+        'show project memory',
+        'show memory',
+      ],
+      handler: (_input, ctx) => {
+        ctx.broadcast(CHANNEL, { tab: 'projects' } as NavPayload);
+        return 'Opening projects';
       },
     },
     {

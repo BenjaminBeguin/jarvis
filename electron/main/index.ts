@@ -442,6 +442,31 @@ function registerIpc(): void {
     },
   );
 
+  ipcMain.handle(IpcChannels.listProjects, () => projects.list());
+  ipcMain.handle(
+    IpcChannels.listProjectMemory,
+    (_e, project: string) => projectMemory.list(project),
+  );
+  ipcMain.handle(
+    IpcChannels.readProjectMemory,
+    (_e, payload: { project: string; file: string }) =>
+      projectMemory.read(payload.project, payload.file),
+  );
+  ipcMain.handle(
+    IpcChannels.writeProjectMemory,
+    (
+      _e,
+      payload: { project: string; file: string; content: string },
+    ) => {
+      projectMemory.write(payload.project, payload.file, payload.content);
+    },
+  );
+  ipcMain.handle(
+    IpcChannels.deleteProjectMemory,
+    (_e, payload: { project: string; file: string }) =>
+      projectMemory.remove(payload.project, payload.file),
+  );
+
   // Delete a single timestamped entry from a daily notes/<date>.md file.
   // The note file is a sequence of `## HH:MM\n\n<body>\n` blocks appended
   // over the day; we re-parse, drop the one at `fileIndex` (top-down

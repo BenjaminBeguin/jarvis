@@ -36,6 +36,12 @@ export const IpcChannels = {
 
   listJarvisDir: 'fs:listJarvisDir',
   readJarvisFile: 'fs:readJarvisFile',
+
+  listProjects: 'projects:list',
+  listProjectMemory: 'projects:listMemory',
+  readProjectMemory: 'projects:readMemory',
+  writeProjectMemory: 'projects:writeMemory',
+  deleteProjectMemory: 'projects:deleteMemory',
   deleteNoteEntry: 'notes:deleteEntry',
 
   requestMicAccess: 'media:requestMic',

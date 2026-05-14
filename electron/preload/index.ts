@@ -13,6 +13,8 @@ import type {
   McpServerInput,
   McpServerSummary,
   ModuleSummary,
+  ProjectDef,
+  ProjectMemoryFile,
   Reminder,
   RoutePromptResult,
   RoutineDef,
@@ -52,7 +54,7 @@ const api = {
     subscribe(IpcChannels.observatoryFocusTask, listener),
   onShellNavigate: (
     listener: Listener<{
-      tab?: 'observatory' | 'routines' | 'integrations' | 'modules';
+      tab?: 'observatory' | 'projects' | 'routines' | 'integrations' | 'modules';
       moduleId?: string;
     }>,
   ): Unsubscribe => subscribe(IpcChannels.shellNavigate, listener),
@@ -118,6 +120,25 @@ const api = {
     ipcRenderer.invoke(IpcChannels.listJarvisDir, rel),
   readJarvisFile: (rel: string): Promise<string> =>
     ipcRenderer.invoke(IpcChannels.readJarvisFile, rel),
+
+  listProjects: (): Promise<ProjectDef[]> =>
+    ipcRenderer.invoke(IpcChannels.listProjects),
+  listProjectMemory: (project: string): Promise<ProjectMemoryFile[]> =>
+    ipcRenderer.invoke(IpcChannels.listProjectMemory, project),
+  readProjectMemory: (project: string, file: string): Promise<string> =>
+    ipcRenderer.invoke(IpcChannels.readProjectMemory, { project, file }),
+  writeProjectMemory: (
+    project: string,
+    file: string,
+    content: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.writeProjectMemory, {
+      project,
+      file,
+      content,
+    }),
+  deleteProjectMemory: (project: string, file: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.deleteProjectMemory, { project, file }),
   deleteNoteEntry: (
     date: string,
     fileIndex: number,

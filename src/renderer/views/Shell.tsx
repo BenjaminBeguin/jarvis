@@ -4,12 +4,13 @@ import type { AppStatus, ModuleSummary, Reminder, TaskSummary } from '../../shar
 import { getModulePage } from '../modules/registry';
 import { Integrations } from './integrations/Integrations';
 import { MeetingOverlay } from './MeetingOverlay';
+import { Projects } from './projects/Projects';
 import { Toaster } from './Toaster';
 import { ModulesPage } from './ModulesPage';
 import { Observatory } from './Observatory';
 import { Routines } from './Routines';
 
-type Tab = 'observatory' | 'routines' | 'integrations' | 'modules';
+type Tab = 'observatory' | 'projects' | 'routines' | 'integrations' | 'modules';
 
 interface Props {
   status: AppStatus;
@@ -60,7 +61,7 @@ export function Shell({ status }: Props) {
   // without an IPC round-trip.
   useEffect(() => {
     const applyNav = (payload: {
-      tab?: 'observatory' | 'routines' | 'integrations' | 'modules';
+      tab?: 'observatory' | 'projects' | 'routines' | 'integrations' | 'modules';
       moduleId?: string;
     }) => {
       if (payload.tab) setTab(payload.tab);
@@ -173,6 +174,15 @@ export function Shell({ status }: Props) {
             }}
           >
             Observatory
+          </button>
+          <button
+            className={`shell__tab${tab === 'projects' && !openModuleId ? ' shell__tab--active' : ''}`}
+            onClick={() => {
+              setTab('projects');
+              setOpenModuleId(null);
+            }}
+          >
+            Projects
           </button>
           <button
             className={`shell__tab${tab === 'routines' && !openModuleId ? ' shell__tab--active' : ''}`}
@@ -306,6 +316,8 @@ export function Shell({ status }: Props) {
           <PageComponent />
         ) : tab === 'observatory' ? (
           <Observatory />
+        ) : tab === 'projects' ? (
+          <Projects />
         ) : tab === 'routines' ? (
           <Routines />
         ) : tab === 'integrations' ? (

@@ -182,6 +182,14 @@ export interface McpServerSummary {
   url?: string;
 }
 
+export interface ProjectMemoryFile {
+  name: string;
+  /** Absolute path on disk — exposed so the renderer can show it. */
+  path: string;
+  mtimeMs: number;
+  sizeBytes: number;
+}
+
 export interface ProjectDef {
   /** Canonical name — what the user typically says/types. */
   name: string;
