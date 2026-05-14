@@ -158,23 +158,21 @@ export const CATALOG: CatalogEntry[] = [
   {
     id: 'github',
     name: 'GitHub',
-    description: 'Read PRs / issues / files via the official server',
+    description: "Search repos / read files / list issues via the gh CLI's existing auth",
     aliases: ['github', 'GitHub'],
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-github'],
-    fields: [
-      {
-        key: 'GITHUB_PERSONAL_ACCESS_TOKEN',
-        label: 'Personal Access Token',
-        placeholder: 'ghp_… or github_pat_…',
-        kind: 'secret',
-        required: true,
-        hint: 'Classic or fine-grained PAT — scope it to the repos you want to read.',
-      },
+    // Reuse `gh auth token` at spawn time so the MCP rides the user's
+    // existing `gh auth login` — no separate PAT needed, and the token
+    // refreshes whenever they re-run gh auth. Falls back to whatever the
+    // user has in GITHUB_PERSONAL_ACCESS_TOKEN if `gh` isn't installed.
+    command: 'sh',
+    args: [
+      '-c',
+      'GITHUB_PERSONAL_ACCESS_TOKEN="$(gh auth token 2>/dev/null || echo "${GITHUB_PERSONAL_ACCESS_TOKEN:-}")" exec npx -y @modelcontextprotocol/server-github',
     ],
-    setupUrl: 'https://github.com/settings/tokens',
+    fields: [],
+    setupUrl: 'https://cli.github.com/',
     setupNotes:
-      'Create a token at github.com/settings/tokens. For PR review workflows the gh CLI is usually enough — this is for richer programmatic access (search, file contents, etc).',
+      "Uses your existing gh CLI auth — run `gh auth login` in a terminal first if you haven't. No PAT needed. Note: for PR review / commit / branch workflows you probably don't need this MCP at all — the agent's Bash tool can call `gh` directly. This MCP shines for richer programmatic access (search across repos, raw API, file contents).",
   },
   {
     id: 'filesystem',
