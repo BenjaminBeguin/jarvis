@@ -397,6 +397,16 @@ function ApiPanel() {
           <code>POST /v1/reminders</code> — schedule
         </li>
       </ul>
+
+      <h4 className="settings__subhead">Want more inbox sources?</h4>
+      <p className="settings__hint">
+        Drop a skill at <code>~/.jarvis/skills/&lt;name&gt;/SKILL.md</code> that
+        writes <code>InboxItem[]</code> JSON to{' '}
+        <code>~/.jarvis/inbox/&lt;name&gt;.json</code>, then add a routine
+        to fire it on a schedule. Built-in patterns:{' '}
+        <code>slack-inbox</code>, <code>linear-inbox</code>,{' '}
+        <code>calendar-today</code>. Full pattern in <code>docs/scenarios.md</code>.
+      </p>
     </div>
   );
 }

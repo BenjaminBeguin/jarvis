@@ -1677,9 +1677,27 @@ button:disabled:hover {
   font-family: var(--mono);
   font-size: 12px;
   color: var(--text-faint);
-  padding: 40px 0;
+  padding: 40px 16px;
   text-align: center;
   letter-spacing: 0.04em;
+  line-height: 1.65;
+  max-width: 540px;
+  margin: 0 auto;
+}
+
+.inbox__empty code {
+  background: rgba(0, 212, 255, 0.06);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+  border-radius: 2px;
+  color: var(--accent);
+  font-size: 10px;
+  text-transform: none;
+}
+
+.inbox__hint--inline {
+  display: inline;
+  font-size: 11px;
 }
 
 .inbox__group {
@@ -2105,6 +2123,15 @@ button:disabled:hover {
   text-align: center;
   letter-spacing: 0.04em;
   line-height: 1.6;
+}
+
+.briefings__empty code {
+  background: rgba(0, 212, 255, 0.06);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+  border-radius: 2px;
+  color: var(--accent);
+  font-size: 10px;
 }
 
 /* ----- Observatory: constellation + slide-in transcript panel ----------- */

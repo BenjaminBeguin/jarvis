@@ -161,9 +161,13 @@ export function Briefings() {
               <aside className="briefings__files">
                 {files.length === 0 && (
                   <div className="briefings__empty">
-                    Nothing generated yet. Hit "Generate now" to produce
-                    the first one, or wire a routine on the suggested
-                    cron.
+                    Nothing generated yet.
+                    <br />
+                    <br />
+                    Click <strong>✨ Generate now</strong> to produce the
+                    first one, or wire a routine in{' '}
+                    <code>~/.jarvis/routines.json</code> on the suggested
+                    cron above.
                   </div>
                 )}
                 {files.map((f) => (

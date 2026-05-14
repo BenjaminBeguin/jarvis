@@ -181,6 +181,29 @@ export function Inbox() {
         <div className="inbox__empty">
           You're caught up. The inbox aggregates PRs, comments, reminders,
           and failed routines.
+          <br />
+          <br />
+          <span className="inbox__hint inbox__hint--inline">
+            Want more sources (Slack, Linear, calendar)? Drop a skill at{' '}
+            <code>~/.jarvis/skills/&lt;name&gt;/SKILL.md</code> that writes{' '}
+            <code>~/.jarvis/inbox/&lt;name&gt;.json</code> and add a routine.
+            See <code>docs/scenarios.md</code> for the pattern.
+          </span>
+        </div>
+      )}
+
+      {items.length > 0 && filteredItems.length === 0 && (
+        <div className="inbox__empty">
+          {filterByScope && activeProject ? (
+            <>
+              Nothing tagged with <strong>{activeProject}</strong> right now.{' '}
+              <br />
+              {items.length} item{items.length === 1 ? '' : 's'} are showing in
+              other scopes — click the filter chip to clear and see them.
+            </>
+          ) : (
+            'Filter hides everything.'
+          )}
         </div>
       )}
 
