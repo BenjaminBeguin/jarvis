@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { JarvisFileEntry, Reminder, TaskSummary } from '../../shared/types';
 import type { MeetingState } from '../voice/MeetingRecorder';
@@ -182,6 +182,81 @@ export function Constellation({
     y: number;
   } | null>(null);
 
+  /** Pan + zoom transform on the SVG viewport. Scroll = zoom, drag = pan. */
+  const [view, setView] = useState({ scale: 1, tx: 0, ty: 0 });
+  const svgRef = useRef<SVGSVGElement>(null);
+  const panRef = useRef<{ startX: number; startY: number; tx: number; ty: number } | null>(null);
+
+  /**
+   * Wheel = zoom anchored at the cursor so the point under the mouse stays
+   * fixed (Figma-style). Clamp to a friendly range so it can't go wild.
+   */
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      // Mouse in viewBox-space (account for current transform):
+      const vx = ((e.clientX - rect.left) / rect.width) * 1000;
+      const vy = ((e.clientY - rect.top) / rect.height) * 1000;
+      setView((v) => {
+        const factor = Math.exp(-e.deltaY * 0.0015);
+        const next = Math.max(0.4, Math.min(4, v.scale * factor));
+        if (next === v.scale) return v;
+        // Keep the point under the cursor fixed.
+        const k = next / v.scale;
+        return {
+          scale: next,
+          tx: vx - (vx - v.tx) * k,
+          ty: vy - (vy - v.ty) * k,
+        };
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const onPanStart = (e: React.MouseEvent) => {
+    // Only pan when dragging on empty space (background click, not on a node).
+    if (e.target !== e.currentTarget && !(e.target as Element).classList?.contains('constellation__pan-bg')) {
+      return;
+    }
+    if (e.button !== 0) return;
+    e.preventDefault();
+    panRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      tx: view.tx,
+      ty: view.ty,
+    };
+  };
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const start = panRef.current;
+      if (!start) return;
+      const el = svgRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      // Convert pixel delta → viewBox delta.
+      const dx = ((e.clientX - start.startX) / rect.width) * 1000;
+      const dy = ((e.clientY - start.startY) / rect.height) * 1000;
+      setView((v) => ({ ...v, tx: start.tx + dx, ty: start.ty + dy }));
+    };
+    const onUp = () => {
+      panRef.current = null;
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, []);
+
+  const resetView = () => setView({ scale: 1, tx: 0, ty: 0 });
+
   // Close the menu on any outside click or Escape.
   useEffect(() => {
     if (!reminderMenu) return;
@@ -276,10 +351,21 @@ export function Constellation({
       }}
     >
       <svg
+        ref={svgRef}
         viewBox="0 0 1000 1000"
         preserveAspectRatio="xMidYMid meet"
-        className="constellation__svg"
-        onClick={() => onSelect(null)}
+        className={`constellation__svg${panRef.current ? ' constellation__svg--panning' : ''}`}
+        onMouseDown={onPanStart}
+        onDoubleClick={(e) => {
+          // Reset view only when the user double-clicks empty space (not a
+          // node or the core).
+          if (
+            e.target === e.currentTarget ||
+            (e.target as Element).classList?.contains('constellation__pan-bg')
+          ) {
+            resetView();
+          }
+        }}
       >
         <defs>
           <radialGradient id="core-glow" cx="50%" cy="50%" r="50%">
@@ -295,6 +381,28 @@ export function Constellation({
             <feGaussianBlur stdDeviation="4" />
           </filter>
         </defs>
+
+        {/* Pan-catcher background — transparent, full viewport. Picks up
+            drag events on empty space so the user can pan the whole map
+            without having to find an exact pixel gap between rings. */}
+        <rect
+          x={-2000}
+          y={-2000}
+          width={5000}
+          height={5000}
+          fill="transparent"
+          className="constellation__pan-bg"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect(null);
+          }}
+        />
+
+        {/* Everything below is wrapped in the pan/zoom transform group. */}
+        <g
+          transform={`translate(${view.tx} ${view.ty}) scale(${view.scale})`}
+          style={{ transformOrigin: '0 0' }}
+        >
 
         {/* Ambient starfield — pure decoration. */}
         <g className="constellation__stars">
@@ -625,7 +733,32 @@ export function Constellation({
             STANDBY · ⌘⇧J TO DEPLOY
           </text>
         )}
+        </g>{/* end pan/zoom transform group */}
       </svg>
+      <div className="constellation__controls">
+        <button
+          onClick={() => setView((v) => ({ ...v, scale: Math.max(0.4, v.scale / 1.2) }))}
+          title="Zoom out"
+          aria-label="Zoom out"
+        >
+          −
+        </button>
+        <button
+          onClick={resetView}
+          title="Reset view (or double-click empty space)"
+          aria-label="Reset"
+          className="constellation__controls-reset"
+        >
+          {Math.round(view.scale * 100)}%
+        </button>
+        <button
+          onClick={() => setView((v) => ({ ...v, scale: Math.min(4, v.scale * 1.2) }))}
+          title="Zoom in"
+          aria-label="Zoom in"
+        >
+          +
+        </button>
+      </div>
     </div>
   );
 }

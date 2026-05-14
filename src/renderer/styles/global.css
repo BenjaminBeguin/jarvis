@@ -1485,7 +1485,65 @@ button:disabled:hover {
   width: 100%;
   height: 100%;
   display: block;
-  cursor: crosshair;
+  cursor: grab;
+}
+
+.constellation__svg--panning,
+.constellation__svg:active {
+  cursor: grabbing;
+}
+
+.constellation__pan-bg {
+  /* The transparent pan-catcher rect under everything. Pointer events on
+     it pick up empty-space clicks for pan + deselect; the cursor is
+     handled by the parent SVG. */
+  cursor: inherit;
+}
+
+/* Floating zoom controls (bottom-right of the constellation). */
+.constellation__controls {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 13px;
+  background: rgba(4, 7, 11, 0.85);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  padding: 4px;
+  backdrop-filter: blur(8px);
+}
+
+.constellation__controls button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 14px;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 2px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.constellation__controls button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.constellation__controls-reset {
+  width: auto !important;
+  padding: 0 10px !important;
+  font-size: 11px !important;
+  letter-spacing: 0.12em;
+  color: var(--text-faint) !important;
+  min-width: 52px;
 }
 
 .constellation__stars circle {
@@ -2601,6 +2659,239 @@ button:disabled:hover {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 14px;
+}
+
+/* Section title between page tiles and the background-watcher list. */
+.modules-page__section-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 16px 0 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+/* Top tier — modules with their own page get a large card you click
+   anywhere on. Designed as a tile to feel like an app launcher. */
+.modules-page__pages {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.module-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px 18px;
+  background: rgba(4, 7, 11, 0.55);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.module-tile::before {
+  /* Subtle scanline / texture so each tile reads as its own surface. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 212, 255, 0.02) 0px,
+    rgba(0, 212, 255, 0.02) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.module-tile:hover {
+  border-color: var(--accent);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 212, 255, 0.08),
+    0 0 24px rgba(0, 212, 255, 0.18);
+  transform: translateY(-1px);
+}
+
+.module-tile:focus-visible {
+  outline: 0;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.32);
+}
+
+.module-tile--off {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.module-tile--off:hover {
+  border-color: var(--border-strong);
+  box-shadow: none;
+  transform: none;
+}
+
+.module-tile__glyph {
+  font-size: 30px;
+  line-height: 1;
+  color: var(--accent);
+  text-shadow:
+    0 0 14px rgba(0, 212, 255, 0.55),
+    0 0 4px rgba(0, 212, 255, 0.45);
+  align-self: flex-start;
+}
+
+.module-tile--off .module-tile__glyph {
+  color: var(--text-faint);
+  text-shadow: none;
+}
+
+.module-tile__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.module-tile__name {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0;
+}
+
+.module-tile__id {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+.module-tile__desc {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.module-tile__intents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.intent-chip--more {
+  color: var(--text-faint);
+}
+
+.module-tile__cta {
+  margin-top: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  align-self: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.module-tile__cta span {
+  font-size: 14px;
+  transition: transform 160ms ease;
+}
+
+.module-tile:hover .module-tile__cta span {
+  transform: translateX(4px);
+}
+
+.module-tile--off .module-tile__cta {
+  color: var(--text-faint);
+}
+
+/* Background watchers — compact rows with the glyph + toggle. */
+.modules-page__bg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.module-bg-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(4, 7, 11, 0.35);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+}
+
+.module-bg-row--off {
+  opacity: 0.55;
+}
+
+.module-bg-row__glyph {
+  font-size: 18px;
+  color: var(--text-dim);
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.module-bg-row__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.module-bg-row__name {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+
+.module-bg-row__id {
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+  margin-left: 6px;
+}
+
+.module-bg-row__desc {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.module-bg-row__intents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.intent-chip--inline {
+  background: transparent;
+  border-color: var(--border-strong);
+  font-size: 10px;
 }
 
 .module-card {

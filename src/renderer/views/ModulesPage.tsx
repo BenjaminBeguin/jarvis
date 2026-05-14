@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { ModuleSummary } from '../../shared/types';
 
@@ -6,6 +6,12 @@ interface Props {
   onOpenPage: (moduleId: string) => void;
 }
 
+/**
+ * Two-tier layout: modules with their own page get large, fully-clickable
+ * tiles at the top (the primary surface — these are where the user actually
+ * lives day to day). Background watchers / modules without pages drop into
+ * a compact strip below — toggles + intent chips, no oversized affordance.
+ */
 export function ModulesPage({ onOpenPage }: Props) {
   const [modules, setModules] = useState<ModuleSummary[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -29,71 +35,188 @@ export function ModulesPage({ onOpenPage }: Props) {
     }
   };
 
+  const withPages = useMemo(
+    () => modules.filter((m) => m.hasPage),
+    [modules],
+  );
+  const background = useMemo(
+    () => modules.filter((m) => !m.hasPage),
+    [modules],
+  );
+
   return (
     <section className="modules-page">
       <header className="modules-page__header">
         <div>
           <h2>MODULES</h2>
           <p>
-            Self-contained features. Drop a new one under{' '}
-            <code>electron/main/modules/</code> and it shows up here.
+            Self-contained features. Cards with a screen are at the top —
+            click to open. Background watchers are below.
           </p>
         </div>
       </header>
 
       {error && <div className="modules-page__error">{error}</div>}
 
-      <div className="modules-page__grid">
-        {modules.map((m) => (
-          <article
-            key={m.id}
-            className={`bracketed module-card${m.enabled ? '' : ' module-card--off'}`}
-          >
-            <header className="module-card__head">
-              <div className="module-card__name">{m.name}</div>
-              <label className="toggle" title={m.enabled ? 'Disable' : 'Enable'}>
-                <input
-                  type="checkbox"
-                  checked={m.enabled}
-                  disabled={busy === m.id}
-                  onChange={() => void toggle(m)}
-                />
-                {m.enabled ? 'on' : 'off'}
-              </label>
-            </header>
-            <div className="module-card__id">{m.id} · v{m.version}</div>
-            <div className="module-card__desc">{m.description}</div>
+      {withPages.length > 0 && (
+        <div className="modules-page__pages">
+          {withPages.map((m) => (
+            <ModulePageTile
+              key={m.id}
+              module={m}
+              busy={busy === m.id}
+              onOpen={() => onOpenPage(m.id)}
+              onToggle={() => void toggle(m)}
+            />
+          ))}
+        </div>
+      )}
 
-            {m.intents.length > 0 && (
-              <div className="module-card__intents">
-                <div className="module-card__section-label">Palette</div>
-                <div className="module-card__intent-list">
-                  {m.intents.map((i) => (
-                    <span key={i.id} className="intent-chip">
-                      <span className="intent-chip__prefix">{i.prefix}</span>
-                      <span className="intent-chip__label">{i.label}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {m.intents.length === 0 && m.enabled && (
-              <div className="module-card__intents module-card__intents--none">
-                No palette intents · runs as a background watcher
-              </div>
-            )}
-
-            {m.hasPage && (
-              <div className="module-card__actions">
-                <button onClick={() => onOpenPage(m.id)} disabled={!m.enabled}>
-                  Open page →
-                </button>
-              </div>
-            )}
-          </article>
-        ))}
-      </div>
+      {background.length > 0 && (
+        <>
+          <h3 className="modules-page__section-title">Background watchers</h3>
+          <div className="modules-page__bg-list">
+            {background.map((m) => (
+              <ModuleBackgroundRow
+                key={m.id}
+                module={m}
+                busy={busy === m.id}
+                onToggle={() => void toggle(m)}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </section>
   );
 }
+
+interface ModuleTileProps {
+  module: ModuleSummary;
+  busy: boolean;
+  onOpen: () => void;
+  onToggle: () => void;
+}
+
+function ModulePageTile({ module: m, busy, onOpen, onToggle }: ModuleTileProps) {
+  const glyph = MODULE_GLYPHS[m.id] ?? '◇';
+  return (
+    <article
+      className={`module-tile${m.enabled ? '' : ' module-tile--off'}`}
+      onClick={() => m.enabled && onOpen()}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          if (m.enabled) onOpen();
+        }
+      }}
+    >
+      <div className="module-tile__glyph">{glyph}</div>
+      <header className="module-tile__head">
+        <div>
+          <div className="module-tile__name">{m.name}</div>
+          <div className="module-tile__id">{m.id} · v{m.version}</div>
+        </div>
+        <label
+          className="toggle"
+          title={m.enabled ? 'Disable' : 'Enable'}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            checked={m.enabled}
+            disabled={busy}
+            onChange={onToggle}
+          />
+          {m.enabled ? 'on' : 'off'}
+        </label>
+      </header>
+      <p className="module-tile__desc">{m.description}</p>
+
+      {m.intents.length > 0 && (
+        <div className="module-tile__intents">
+          {m.intents.slice(0, 4).map((i) => (
+            <span key={i.id} className="intent-chip">
+              <span className="intent-chip__prefix">{i.prefix}</span>
+            </span>
+          ))}
+          {m.intents.length > 4 && (
+            <span className="intent-chip intent-chip--more">
+              +{m.intents.length - 4}
+            </span>
+          )}
+        </div>
+      )}
+
+      <div className="module-tile__cta">
+        Open <span aria-hidden>→</span>
+      </div>
+    </article>
+  );
+}
+
+interface ModuleBgProps {
+  module: ModuleSummary;
+  busy: boolean;
+  onToggle: () => void;
+}
+
+function ModuleBackgroundRow({ module: m, busy, onToggle }: ModuleBgProps) {
+  const glyph = MODULE_GLYPHS[m.id] ?? '◇';
+  return (
+    <article
+      className={`module-bg-row${m.enabled ? '' : ' module-bg-row--off'}`}
+    >
+      <span className="module-bg-row__glyph">{glyph}</span>
+      <div className="module-bg-row__main">
+        <div className="module-bg-row__name">
+          {m.name}{' '}
+          <span className="module-bg-row__id">
+            {m.id} · v{m.version}
+          </span>
+        </div>
+        <div className="module-bg-row__desc">{m.description}</div>
+        {m.intents.length > 0 && (
+          <div className="module-bg-row__intents">
+            {m.intents.map((i) => (
+              <span key={i.id} className="intent-chip intent-chip--inline">
+                <span className="intent-chip__prefix">{i.prefix}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <label
+        className="toggle"
+        title={m.enabled ? 'Disable' : 'Enable'}
+      >
+        <input
+          type="checkbox"
+          checked={m.enabled}
+          disabled={busy}
+          onChange={onToggle}
+        />
+        {m.enabled ? 'on' : 'off'}
+      </label>
+    </article>
+  );
+}
+
+/**
+ * Per-module glyph for the tile. Keeps the visual quick to scan without
+ * resorting to images (which would need to be theme-aware). Falls back to
+ * a generic ◇ for any new module we haven't picked one for.
+ */
+const MODULE_GLYPHS: Record<string, string> = {
+  'quick-note': '✎',
+  'meeting-recorder': '🎙',
+  send: '↗',
+  'pr-workflows': '⎇',
+  status: '⊙',
+  'skill-suggester': '✦',
+  'shell': '⌘',
+  'shell-nav': '◈',
+  'claude-code-watch': '◉',
+};
