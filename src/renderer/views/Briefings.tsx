@@ -130,8 +130,10 @@ export function Briefings() {
       <aside className="briefings__rail">
         <h2 className="briefings__rail-head">BRIEFINGS</h2>
         <p className="briefings__rail-hint">
-          Generated digests with citations. Pulled from meetings, PRs,
-          Linear, notes. Each kind is a skill + a routine.
+          Generated digests with citations. Each kind below is a{' '}
+          <strong>skill</strong> (the prompt that pulls from meetings,
+          PRs, Linear, notes) plus a <strong>routine</strong> (the
+          schedule). Files land at <code>~/.jarvis/briefings/&lt;kind&gt;/</code>.
         </p>
         {kinds.map((k) => {
           const r = routines.find((x) => x.id === routineIdForKind(k.id));
@@ -348,6 +350,12 @@ function SchedulePanel({
     }
   };
 
+  const jumpToRoutines = () => {
+    window.dispatchEvent(
+      new CustomEvent('jarvis:navigate', { detail: { tab: 'routines' } }),
+    );
+  };
+
   if (!routine) {
     return (
       <div className="briefings__schedule">
@@ -355,7 +363,8 @@ function SchedulePanel({
           <span className="briefings__schedule-dot briefings__schedule-dot--off" />
           <span className="briefings__schedule-label">Not scheduled</span>
           <span className="briefings__schedule-hint">
-            suggested: <code>{kind.schedule ?? '0 8 * * *'}</code>
+            suggested: <code>{kind.schedule ?? '0 8 * * *'}</code> · uses skill{' '}
+            <code>{kind.skillId}</code>
           </span>
         </div>
         <button
@@ -404,6 +413,14 @@ function SchedulePanel({
           {routine.lastRunAt
             ? `last run ${formatRelative(routine.lastRunAt)}`
             : 'never run'}
+          {' · '}
+          <button
+            className="briefings__schedule-link"
+            onClick={jumpToRoutines}
+            title={`Routine id: ${routine.id} · open Routines tab`}
+          >
+            routine: {routine.id}
+          </button>
         </span>
       </div>
       <div className="briefings__schedule-actions">

@@ -281,6 +281,7 @@ interface CardProps {
 }
 
 function RoutineCard({ routine, skill, onEdit, onRemove, onRunNow, onToggle }: CardProps) {
+  const purpose = derivePurpose(routine);
   return (
     <article className={`bracketed routine-card${routine.enabled ? '' : ' routine-card--off'}`}>
       <div className="routine-card__head">
@@ -293,8 +294,31 @@ function RoutineCard({ routine, skill, onEdit, onRemove, onRunNow, onToggle }: C
         </label>
       </div>
 
+      {purpose && (
+        <button
+          className={`routine-card__purpose routine-card__purpose--${purpose.kind}`}
+          onClick={() => {
+            window.dispatchEvent(
+              new CustomEvent('jarvis:navigate', {
+                detail: purpose.tab ? { tab: purpose.tab } : null,
+              }),
+            );
+          }}
+          title={`Jump to ${purpose.label} in the ${purpose.tab ?? 'app'} tab`}
+        >
+          <span className="routine-card__purpose-dot" />
+          {purpose.label}
+        </button>
+      )}
+
       <div className="routine-card__cron">{humanCron(routine.cron)}</div>
       <div className="routine-card__cron-raw">{routine.cron}</div>
+
+      {routine.condition && (
+        <div className="routine-card__condition" title="Watch condition — fires only when this shell command produces non-empty stdout">
+          watch · <code>{routine.condition}</code>
+        </div>
+      )}
 
       {routine.input && (
         <div className="routine-card__input">“{routine.input}”</div>
@@ -316,6 +340,36 @@ function RoutineCard({ routine, skill, onEdit, onRemove, onRunNow, onToggle }: C
       </div>
     </article>
   );
+}
+
+/**
+ * Tag a routine with what it actually drives, so the user understands
+ * the wiring at a glance. Matches by id prefix / skillId pattern —
+ * stable across renames because the matching keys are stable.
+ */
+interface RoutinePurpose {
+  kind: 'briefing' | 'inbox' | 'freeform';
+  label: string;
+  tab?: 'briefings' | 'inbox';
+}
+
+function derivePurpose(r: RoutineDef): RoutinePurpose | null {
+  if (r.id.startsWith('briefing-')) {
+    const kindId = r.id.slice('briefing-'.length);
+    return {
+      kind: 'briefing',
+      label: `Briefing · ${kindId}`,
+      tab: 'briefings',
+    };
+  }
+  if (r.skillId.endsWith('-inbox') || r.skillId === 'calendar-today') {
+    return {
+      kind: 'inbox',
+      label: `Inbox source · ${r.skillId}`,
+      tab: 'inbox',
+    };
+  }
+  return { kind: 'freeform', label: 'Freeform' };
 }
 
 function ToolChips({ skill }: { skill: SkillSummary | undefined }) {
