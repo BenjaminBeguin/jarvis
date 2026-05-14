@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 
 import type { AppStatus, ModuleSummary, Reminder, TaskSummary } from '../../shared/types';
 import { getModulePage } from '../modules/registry';
+import { Integrations } from './integrations/Integrations';
 import { MeetingOverlay } from './MeetingOverlay';
 import { Toaster } from './Toaster';
 import { ModulesPage } from './ModulesPage';
 import { Observatory } from './Observatory';
 import { Routines } from './Routines';
 
-type Tab = 'observatory' | 'routines' | 'modules';
+type Tab = 'observatory' | 'routines' | 'integrations' | 'modules';
 
 interface Props {
   status: AppStatus;
@@ -151,6 +152,15 @@ export function Shell({ status }: Props) {
             Routines
           </button>
           <button
+            className={`shell__tab${tab === 'integrations' && !openModuleId ? ' shell__tab--active' : ''}`}
+            onClick={() => {
+              setTab('integrations');
+              setOpenModuleId(null);
+            }}
+          >
+            Integrations
+          </button>
+          <button
             className={`shell__tab${tab === 'modules' && !openModuleId ? ' shell__tab--active' : ''}`}
             onClick={() => {
               setTab('modules');
@@ -252,6 +262,8 @@ export function Shell({ status }: Props) {
           <Observatory />
         ) : tab === 'routines' ? (
           <Routines />
+        ) : tab === 'integrations' ? (
+          <Integrations />
         ) : (
           <ModulesPage onOpenPage={(id) => setOpenModuleId(id)} />
         )}

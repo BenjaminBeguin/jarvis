@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
@@ -77,6 +77,49 @@ export class McpConfigStore extends EventEmitter {
         url: cfg.type !== 'stdio' ? cfg.url : undefined,
       }))
       .sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  /**
+   * Insert (or overwrite) a server entry. Persists the full file with the
+   * other entries preserved. chokidar will pick up the change and emit
+   * 'changed' on next reload — no need to do it inline.
+   */
+  upsert(id: string, cfg: McpServerConfig): void {
+    if (!/^[a-z0-9][a-z0-9_-]*$/i.test(id)) {
+      throw new Error(
+        `Invalid MCP server id "${id}". Use letters, digits, '-', '_'.`,
+      );
+    }
+    this.servers.set(id, cfg);
+    this.writeAll();
+  }
+
+  remove(id: string): boolean {
+    if (!this.servers.has(id)) return false;
+    this.servers.delete(id);
+    this.writeAll();
+    return true;
+  }
+
+  /** Read the on-disk file verbatim — used by the renderer to show it. */
+  rawFileContents(): string | null {
+    if (!existsSync(this.path)) return null;
+    try {
+      return readFileSync(this.path, 'utf8');
+    } catch {
+      return null;
+    }
+  }
+
+  private writeAll(): void {
+    mkdirSync(dirname(this.path), { recursive: true });
+    const out: RawConfig = { mcpServers: {} };
+    // Sort keys so diffs are stable across edits.
+    const ids = [...this.servers.keys()].sort();
+    for (const id of ids) {
+      out.mcpServers![id] = this.servers.get(id)!;
+    }
+    writeFileSync(this.path, JSON.stringify(out, null, 2), 'utf8');
   }
 
   resolve(ids: string[]): Record<string, McpServerConfig> {

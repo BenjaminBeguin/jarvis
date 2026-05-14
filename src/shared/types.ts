@@ -134,6 +134,24 @@ export interface ClaudeMcpEntry {
   source: 'claude.ai' | 'user' | 'plugin';
 }
 
+export type McpServerKind = 'stdio' | 'sse' | 'http';
+
+export interface McpServerInput {
+  /** Server id — lowercase, kebab-case. */
+  id: string;
+  type: McpServerKind;
+  /** stdio: the command to run; remote: ignored. */
+  command?: string;
+  /** stdio args (already split). */
+  args?: string[];
+  /** stdio env vars. */
+  env?: Record<string, string>;
+  /** sse / http remote URL. */
+  url?: string;
+  /** sse / http headers. */
+  headers?: Record<string, string>;
+}
+
 export interface McpServerSummary {
   id: string;
   type: 'stdio' | 'sse' | 'http';

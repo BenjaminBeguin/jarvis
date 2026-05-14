@@ -8,6 +8,7 @@ import type {
   DispatchIntentResult,
   JarvisFileEntry,
   LaunchTaskRequest,
+  McpServerInput,
   McpServerSummary,
   ModuleSummary,
   Reminder,
@@ -76,6 +77,13 @@ const api = {
     subscribe(IpcChannels.listMcpServers, listener),
   listClaudeMcps: (): Promise<ClaudeMcpEntry[]> =>
     ipcRenderer.invoke(IpcChannels.listClaudeMcps),
+  addMcpServer: (input: McpServerInput): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.addMcpServer, input),
+  removeMcpServer: (id: string): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.removeMcpServer, id),
+  readMcpFile: (): Promise<{ path: string; contents: string | null }> =>
+    ipcRenderer.invoke(IpcChannels.readMcpFile),
+  revealMcpFile: (): Promise<void> => ipcRenderer.invoke(IpcChannels.revealMcpFile),
 
   listModules: (): Promise<ModuleSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listModules),
