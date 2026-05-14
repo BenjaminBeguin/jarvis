@@ -321,6 +321,231 @@ misunderstood snippet.
   ask before editing.
 `;
 
+const PR_REVIEW_QUEUE_SKILL = `---
+name: pr-review-queue
+description: Walk through PRs awaiting my review and post structured feedback on each
+allowed-tools:
+  - Read
+  - Bash
+  - Glob
+  - Grep
+  - mcp__*
+---
+
+You help the user clear their PR review queue. Lean on \`gh\` for everything;
+don't open browser tabs in your reply.
+
+## Find the queue
+
+\`\`\`
+gh pr list --search "review-requested:@me is:open" --state open --json number,title,headRepository,headRepositoryOwner,url,author,createdAt
+\`\`\`
+
+If empty, say so in one line and stop. Otherwise enumerate:
+
+\`\`\`
+1. #<num> · <owner>/<repo> · <title>  — by @author · <age>
+…
+\`\`\`
+
+## For each PR (one at a time)
+
+The user may give you feedback hints in the prompt — examples:
+"focus on tests", "be strict about types", "ignore style nits, only flag
+real bugs". Carry those across every PR in the batch.
+
+1. **Pull the context.** \`gh pr view <num> --repo <owner>/<repo>\` for
+   description + checks. \`gh pr diff <num> --repo <owner>/<repo>\` for
+   the change. If the diff is huge (>1000 lines), say so and offer to
+   focus on a subset.
+2. **Read smartly.** You don't need to copy the diff into your message.
+   Note: which files changed, the shape of the change, anything you can
+   tell from the PR description vs the actual diff.
+3. **Draft a review.** Structure as:
+       \`\`\`
+       ## Summary
+       <one paragraph: what does this change, is it a sound approach?>
+
+       ## Strengths
+       - bullet
+       - bullet
+
+       ## Issues
+       - <file>:<line> — <one-sentence concern + suggestion>
+       - …
+
+       ## Verdict
+       APPROVE / REQUEST_CHANGES / COMMENT
+       \`\`\`
+   Be specific. If you'd APPROVE, say so confidently. If you'd
+   REQUEST_CHANGES, the issues list must be substantive — not style
+   nits. If you'd COMMENT, you're flagging questions, not blocking.
+
+4. **Show the draft and wait for explicit "post" / "skip" / "edit"**.
+   Never post a review without confirmation — this lands in the
+   author's notifications and is permanent.
+
+5. **On "post":** use \`gh pr review <num> --repo <owner>/<repo>\` with
+   the appropriate flag (\`--approve\` / \`--request-changes\` /
+   \`--comment\`) and \`--body\` containing the review body.
+
+6. **Move to the next PR.** Re-confirm at the top of each so the user
+   can pause if they need to context-switch.
+
+## Hard rules
+
+- Never approve a PR you'd flag as REQUEST_CHANGES just to clear the
+  queue. If you're not sure, COMMENT and ask the author.
+- Never post inline line comments without explicit user OK on the
+  individual line — those are hard to retract.
+- Don't merge anything. Don't dismiss other reviewers' reviews.
+- If a PR has CI failures, flag them in Summary but don't block on
+  them — that's the author's problem, not the reviewer's.
+`;
+
+const PR_ADDRESS_COMMENTS_SKILL = `---
+name: pr-address-comments
+description: Rebase one of my open PRs from main, fix every review comment, reply to each, push
+allowed-tools:
+  - Read
+  - Edit
+  - Write
+  - Bash
+  - Glob
+  - Grep
+  - mcp__*
+---
+
+You take a PR (mine, with review comments) and work it down to zero
+unresolved threads. The shape is: rebase → understand → fix → reply →
+commit → push.
+
+## Pick the PR
+
+If the prompt has a PR number or URL, use it. Otherwise:
+
+\`\`\`
+gh pr list --author @me --state open --json number,title,headRepository,headRepositoryOwner,url,reviewDecision,comments
+\`\`\`
+
+Enumerate and ask which one. If only one open PR, suggest it but
+still confirm.
+
+## Resolve the repo + branch
+
+\`\`\`
+gh pr view <num> --repo <owner>/<repo> --json headRefName,headRepository,baseRefName
+\`\`\`
+
+Resolve the local clone via \`~/.jarvis/projects.json\` if the repo
+is registered, otherwise ask where the local checkout lives.
+
+## Rebase
+
+1. \`cd\` to the local repo path.
+2. Verify clean working tree (\`git status\`). If dirty, STOP and ask.
+3. Fetch + rebase onto the latest base branch:
+       \`\`\`
+       git fetch origin
+       git checkout <headRefName>
+       git pull --rebase origin <baseRefName>
+       \`\`\`
+   If conflicts surface, list the files and ask the user how to
+   proceed. Never \`-Xtheirs\` or \`-Xours\` automatically.
+
+## Collect comments
+
+\`\`\`
+gh api repos/<owner>/<repo>/pulls/<num>/comments --paginate
+\`\`\`
+
+Filter to threads that are NOT resolved (the API field varies by
+GitHub plan; if you can't tell, treat all as unresolved and rely on
+the user to skip). For each comment capture: id, path, line, body,
+author.
+
+Also pull general review comments (not inline):
+
+\`\`\`
+gh api repos/<owner>/<repo>/issues/<num>/comments --paginate
+\`\`\`
+
+Group inline comments by file. Output a short plan:
+
+\`\`\`
+## Plan
+- src/foo.ts:42 — rename misleading var [from @reviewer]
+- src/bar.ts:108 — early-return instead of nested if [from @reviewer]
+- (general) clarify rollout sequence in description [from @reviewer]
+…
+\`\`\`
+
+**Wait for "go"** before editing anything. This is the guardrail
+against acting on a misread comment.
+
+## Apply fixes
+
+For each item:
+1. Read the file at the line. Understand what the reviewer wants.
+2. Make the edit with Edit/Write.
+3. If you're not confident the comment is actionable, leave a TODO
+   in the code and explain why in the reply — don't fake-fix.
+
+When all edits are done, run the project's typecheck / lint /
+quick tests if discoverable (\`pnpm typecheck\`, \`npm run lint\`,
+\`pnpm test\`, …). Fix anything that breaks; report what you can't.
+
+## Commit + push
+
+One tight commit. Subject line mentions "review feedback" or
+similar; body lists which comments you addressed (so it's a real
+paper trail):
+
+\`\`\`
+git add -A
+git commit -m "review feedback: <one-liner>" -m "$(cat <<'EOF'
+- src/foo.ts:42 — renamed X to Y
+- src/bar.ts:108 — refactored to early-return
+EOF
+)"
+git push
+\`\`\`
+
+Never force-push. If a rebase rewrote history, ask the user
+before pushing — they may need to coordinate with their team.
+
+## Reply to each comment
+
+Use the GitHub API to reply in-thread (so the reply nests under the
+original comment, not as a fresh comment):
+
+\`\`\`
+gh api -X POST \\
+  repos/<owner>/<repo>/pulls/<num>/comments/<comment-id>/replies \\
+  -f body="Addressed in <commit-sha>: <one-line summary of fix>"
+\`\`\`
+
+Or, for general PR comments:
+
+\`\`\`
+gh api -X POST repos/<owner>/<repo>/issues/<num>/comments \\
+  -f body="..."
+\`\`\`
+
+Tone: brief, no apology theatre. "Done — switched to early return."
+Not "Great point, thank you so much! I have refactored…"
+
+## Hard rules
+
+- Never merge the PR.
+- Never force-push.
+- Never resolve a thread you didn't actually address — the reply
+  must reference a real commit/change.
+- If the comment is asking for a change you disagree with, surface
+  that to the user instead of silently doing it.
+- Don't touch unrelated code; review feedback only.
+`;
+
 const COMMIT_HELPER_SKILL = `---
 name: commit-helper
 description: Drafts a short commit message for the current working tree diff
@@ -452,4 +677,6 @@ export function seedDefaultsIfEmpty(): void {
   writeSkill(skillsRoot, 'skill-author', SKILL_AUTHOR_SKILL);
   writeSkill(skillsRoot, 'send', SEND_SKILL);
   writeSkill(skillsRoot, 'ticket-to-pr', TICKET_TO_PR_SKILL);
+  writeSkill(skillsRoot, 'pr-review-queue', PR_REVIEW_QUEUE_SKILL);
+  writeSkill(skillsRoot, 'pr-address-comments', PR_ADDRESS_COMMENTS_SKILL);
 }

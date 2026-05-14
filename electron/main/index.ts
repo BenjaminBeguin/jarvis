@@ -31,6 +31,7 @@ import { McpConfigStore } from './mcp-config.js';
 import { ModuleRegistry } from './module-registry.js';
 import { claudeCodeWatchModule } from './modules/claude-code-watch.js';
 import { meetingRecorderModule, persistMeeting } from './modules/meeting-recorder.js';
+import { prWorkflowsModule } from './modules/pr-workflows.js';
 import { quickNoteModule } from './modules/quick-note.js';
 import { sendModule } from './modules/send.js';
 import { skillSuggesterModule } from './modules/skill-suggester.js';
@@ -838,6 +839,7 @@ app.whenReady().then(async () => {
   await modules.register(statusModule);
   await modules.register(skillSuggesterModule);
   await modules.register(sendModule);
+  await modules.register(prWorkflowsModule);
 
   skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
   mcp.on('changed', (list) => broadcast(IpcChannels.listMcpServers, list));
