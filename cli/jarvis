@@ -199,16 +199,30 @@ const COMMANDS = {
     }
   },
 
+  async ask(args) {
+    // Synchronous Q&A: launch + attach + return. Like running `jarvis
+    // run --attach` but tighter UX — no task id surfaced unless you ask.
+    const flags = parseFlags(args);
+    const prompt = flags._.join(' ').trim();
+    if (!prompt) die('Usage: jarvis ask "<question>" [--skill <skill-id>]');
+    const body = { prompt };
+    if (flags.skill) body.skillId = flags.skill;
+    const task = await request('POST', '/v1/tasks', body);
+    if (flags.verbose) console.error(`[task ${task.id}]`);
+    await COMMANDS.attach([task.id]);
+  },
+
   async help() {
     console.log(`jarvis — terminal client for the Jarvis HTTP API
 
-  jarvis status                   health check
-  jarvis run "<prompt>"           launch a task (--skill X, --attach)
+  jarvis ask "<question>"         launch + tail to completion (sync)
+  jarvis run "<prompt>"           launch a task, return id (--skill, --attach)
   jarvis intent "<prompt>"        route through the palette intent parser
                                   (handles "remind me in 2h …", etc.)
   jarvis tasks                    list recent tasks
   jarvis inbox                    show inbox items grouped by source
   jarvis attach <task-id>         tail a running task's event stream
+  jarvis status                   health check
   jarvis help                     this message
 
 Token is read from Keychain (account: ${KEYCHAIN_ACCOUNT}).

@@ -39,12 +39,22 @@ Settings → API shows.
 
 Health check + version.
 
+### `jarvis ask "<question>" [--skill X]`
+
+Synchronous Q&A — launches a task, tails the stream, exits when done.
+Drop-in for any "ask the agent and get an answer" workflow.
+
+```sh
+jarvis ask "what time is it in Tokyo right now"
+jarvis ask "summarise the diff at HEAD" --skill commit-helper
+```
+
 ### `jarvis run "<prompt>" [--skill X] [--attach]`
 
 Launch a task with a free-text prompt. Returns the task id immediately.
+Use `ask` for the synchronous shorthand.
 
 ```sh
-jarvis run "summarise the diff at HEAD"
 jarvis run "draft a slack reply to luca" --skill send
 jarvis run "review PR https://github.com/foo/bar/pull/42" --skill pr-review-queue --attach
 ```
