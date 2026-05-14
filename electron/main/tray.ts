@@ -2,7 +2,9 @@ import { Menu, Tray, nativeImage } from 'electron';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { openObservatory, openPalette, showAnswerHud } from './windows.js';
+import { IpcChannels } from '@shared/ipc';
+
+import { broadcast, openObservatory, openPalette, showAnswerHud } from './windows.js';
 
 type AbortHandler = () => void;
 let abortAllHandler: AbortHandler | null = null;
@@ -52,8 +54,23 @@ function rebuildMenu(): void {
     items.push({ label: `⏰ ${pendingReminders} scheduled`, enabled: false });
   }
   if (items.length > 0) items.push({ type: 'separator' });
+  // Tab shortcuts — broadcast shellNavigate so the renderer switches tab
+  // after openObservatory brings the window forward.
+  const openWithTab = (tab: 'observatory' | 'inbox' | 'briefings') => {
+    const win = openObservatory();
+    win.focus();
+    const send = () => broadcast(IpcChannels.shellNavigate, { tab });
+    if (win.webContents.isLoading()) {
+      win.webContents.once('did-finish-load', send);
+    } else {
+      send();
+    }
+  };
   items.push(
-    { label: 'Open Observatory', click: () => openObservatory() },
+    { label: 'Open Observatory', click: () => openWithTab('observatory') },
+    { label: 'Open Inbox', click: () => openWithTab('inbox') },
+    { label: 'Open Briefings', click: () => openWithTab('briefings') },
+    { type: 'separator' },
     { label: 'Open Palette  ⌘⇧J', click: () => openPalette() },
     { label: 'Show Answer HUD', click: () => showAnswerHud() },
   );
