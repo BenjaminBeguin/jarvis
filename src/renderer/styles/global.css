@@ -4207,6 +4207,186 @@ button:disabled:hover {
   padding: 3px 10px;
 }
 
+/* Per-tool row with "test" trigger */
+.integration-card__tool-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 6px 8px;
+  border-radius: 2px;
+}
+
+.integration-card__tool-row:hover {
+  background: rgba(0, 212, 255, 0.04);
+}
+
+.integration-card__tool-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.integration-card__tool-head code {
+  flex: 1;
+}
+
+.integration-card__tool-test {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  padding: 2px 8px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.integration-card__tool-test:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Inline playground form */
+.tool-playground {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: rgba(4, 7, 11, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: meeting-sel-in 140ms ease-out;
+}
+
+.tool-playground__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.tool-playground__head button {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  padding: 2px 8px;
+}
+
+.tool-playground__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tool-playground__field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.tool-playground__field > span {
+  color: var(--text-dim);
+}
+
+.tool-playground__type {
+  color: var(--text-faint);
+  font-size: 9px;
+  margin-left: 4px;
+}
+
+.tool-playground__req {
+  color: var(--bad);
+}
+
+.tool-playground__field input,
+.tool-playground__field textarea,
+.tool-playground__field select,
+.tool-playground__raw {
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 8px;
+  border-radius: 2px;
+  outline: 0;
+  resize: vertical;
+}
+
+.tool-playground__field textarea {
+  min-height: 60px;
+}
+
+.tool-playground__raw {
+  width: 100%;
+  min-height: 80px;
+  white-space: pre;
+  user-select: text;
+}
+
+.tool-playground__field input:focus,
+.tool-playground__field textarea:focus,
+.tool-playground__raw:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.2);
+}
+
+.tool-playground__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tool-playground__actions button {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 5px 14px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: transparent;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.tool-playground__actions button:hover {
+  background: rgba(0, 212, 255, 0.08);
+}
+
+.tool-playground__meta {
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+
+.tool-playground__result {
+  margin: 0;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  padding: 8px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  user-select: text;
+  cursor: text;
+}
+
+.tool-playground__result--error {
+  border-color: rgba(255, 85, 119, 0.45);
+  color: var(--bad);
+}
+
 .integration-card--connected {
   border-color: rgba(95, 255, 166, 0.28);
   box-shadow: inset 0 0 0 1px rgba(95, 255, 166, 0.05);

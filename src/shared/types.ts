@@ -136,6 +136,16 @@ export interface McpProbeResult {
   message?: string;
 }
 
+export interface McpInvokeResult {
+  ok: boolean;
+  /** Raw MCP `tools/call` result content (array of content blocks). */
+  content?: unknown;
+  /** Server flagged the result as an error (isError: true). */
+  isError?: boolean;
+  durationMs?: number;
+  message?: string;
+}
+
 export interface ClaudeMcpEntry {
   /** Short name after stripping the "claude.ai " or "plugin:foo:" prefix. */
   name: string;

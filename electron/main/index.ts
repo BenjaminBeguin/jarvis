@@ -37,6 +37,7 @@ import { sendModule } from './modules/send.js';
 import { skillSuggesterModule } from './modules/skill-suggester.js';
 import { statusModule } from './modules/status.js';
 import { listClaudeMcps } from './claude-mcp.js';
+import { invokeMcpTool } from './mcp-invoke.js';
 import { probeMcpTools } from './mcp-probe.js';
 import { parseIntent } from './intent-router.js';
 import { ProjectStore } from './projects.js';
@@ -345,6 +346,28 @@ function registerIpc(): void {
     }
     return probeMcpTools(mcp, id);
   });
+
+  ipcMain.handle(
+    IpcChannels.invokeMcpTool,
+    async (
+      _e,
+      payload: { id: string; toolName: string; args: Record<string, unknown> },
+    ) => {
+      if (
+        !payload ||
+        typeof payload.id !== 'string' ||
+        typeof payload.toolName !== 'string'
+      ) {
+        return { ok: false, message: 'Invalid invoke payload.' };
+      }
+      return invokeMcpTool(
+        mcp,
+        payload.id,
+        payload.toolName,
+        payload.args ?? {},
+      );
+    },
+  );
 
   ipcMain.handle(IpcChannels.listModules, () => modules.list());
   ipcMain.handle(

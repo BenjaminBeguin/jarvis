@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type {
   ClaudeMcpEntry,
+  McpInvokeResult,
   McpServerSummary,
   McpToolSummary,
 } from '../../../shared/types';
@@ -299,16 +300,7 @@ function CatalogCard({
               {tools && tools.length > 0 && (
                 <ul>
                   {tools.map((t) => (
-                    <li key={t.name}>
-                      <code>{t.name}</code>
-                      {t.description && (
-                        <span className="integration-card__tools-desc">
-                          {t.description.length > 140
-                            ? `${t.description.slice(0, 139)}…`
-                            : t.description}
-                        </span>
-                      )}
-                    </li>
+                    <ToolRow key={t.name} entryId={entry.id} tool={t} />
                   ))}
                 </ul>
               )}
@@ -572,6 +564,246 @@ function CustomForm({ onClose, onSaved }: CustomFormProps) {
         </button>
       </footer>
     </form>
+  );
+}
+
+/**
+ * A single tool entry in the integration card. Collapsed by default —
+ * shows name + description. "Test" expands the inline playground form
+ * derived from the tool's inputSchema.
+ */
+function ToolRow({ entryId, tool }: { entryId: string; tool: McpToolSummary }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="integration-card__tool-row">
+      <div className="integration-card__tool-head">
+        <code>{tool.name}</code>
+        <button
+          className="integration-card__tool-test"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? '▾ close' : '▸ test'}
+        </button>
+      </div>
+      {tool.description && (
+        <span className="integration-card__tools-desc">
+          {tool.description.length > 180
+            ? `${tool.description.slice(0, 179)}…`
+            : tool.description}
+        </span>
+      )}
+      {open && <ToolPlayground entryId={entryId} tool={tool} />}
+    </li>
+  );
+}
+
+interface SchemaProp {
+  type?: string | string[];
+  description?: string;
+  enum?: unknown[];
+  default?: unknown;
+  items?: unknown;
+}
+
+function isSchemaProp(v: unknown): v is SchemaProp {
+  return !!v && typeof v === 'object';
+}
+
+/**
+ * Schema-driven form: walks tool.inputSchema.properties and renders one
+ * field per property. Falls back to a raw JSON textarea for unknown
+ * shapes. Submits via window.jarvis.invokeMcpTool, shows the result inline.
+ */
+function ToolPlayground({
+  entryId,
+  tool,
+}: {
+  entryId: string;
+  tool: McpToolSummary;
+}) {
+  const schema = tool.inputSchema as
+    | {
+        type?: string;
+        properties?: Record<string, SchemaProp>;
+        required?: string[];
+      }
+    | undefined;
+  const properties = schema?.properties && typeof schema.properties === 'object'
+    ? schema.properties
+    : null;
+  const required = Array.isArray(schema?.required) ? schema!.required! : [];
+
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    if (properties) {
+      for (const [k, p] of Object.entries(properties)) {
+        if (!isSchemaProp(p)) continue;
+        if (p.default !== undefined) init[k] = String(p.default);
+      }
+    }
+    return init;
+  });
+  const [rawJson, setRawJson] = useState('{}');
+  const [useRaw, setUseRaw] = useState(!properties);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<McpInvokeResult | null>(null);
+
+  const buildArgs = (): { args: Record<string, unknown> } | { error: string } => {
+    if (useRaw) {
+      try {
+        const parsed = JSON.parse(rawJson || '{}');
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return { args: parsed as Record<string, unknown> };
+        }
+        return { error: 'Raw JSON must be an object.' };
+      } catch (e) {
+        return {
+          error: `Bad JSON: ${e instanceof Error ? e.message : String(e)}`,
+        };
+      }
+    }
+    const args: Record<string, unknown> = {};
+    if (properties) {
+      for (const [k, p] of Object.entries(properties)) {
+        const raw = values[k];
+        if (raw === undefined || raw === '') {
+          if (required.includes(k)) {
+            return { error: `${k} is required.` };
+          }
+          continue;
+        }
+        const t = Array.isArray(p.type) ? p.type[0] : p.type;
+        if (t === 'number' || t === 'integer') {
+          const n = Number(raw);
+          if (!Number.isFinite(n)) {
+            return { error: `${k} must be a number.` };
+          }
+          args[k] = t === 'integer' ? Math.trunc(n) : n;
+        } else if (t === 'boolean') {
+          args[k] = raw === 'true' || raw === '1';
+        } else if (t === 'array' || t === 'object') {
+          try {
+            args[k] = JSON.parse(raw);
+          } catch {
+            return { error: `${k} must be valid JSON (${t}).` };
+          }
+        } else {
+          args[k] = raw;
+        }
+      }
+    }
+    return { args };
+  };
+
+  const submit = async () => {
+    const built = buildArgs();
+    if ('error' in built) {
+      toast({ kind: 'error', message: built.error });
+      return;
+    }
+    setSubmitting(true);
+    setResult(null);
+    try {
+      const r = await window.jarvis.invokeMcpTool(entryId, tool.name, built.args);
+      setResult(r);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="tool-playground">
+      <header className="tool-playground__head">
+        <span>Inputs</span>
+        {properties && (
+          <button onClick={() => setUseRaw((v) => !v)}>
+            {useRaw ? 'form' : 'raw JSON'}
+          </button>
+        )}
+      </header>
+      {useRaw || !properties ? (
+        <textarea
+          className="tool-playground__raw"
+          value={rawJson}
+          onChange={(e) => setRawJson(e.target.value)}
+          placeholder="{}"
+          spellCheck={false}
+        />
+      ) : (
+        <div className="tool-playground__fields">
+          {Object.entries(properties).map(([k, p]) => {
+            const t = Array.isArray(p.type) ? p.type[0] : p.type;
+            const isMultiline =
+              (typeof p.description === 'string' && p.description.length > 60) ||
+              t === 'object' ||
+              t === 'array';
+            return (
+              <label key={k} className="tool-playground__field">
+                <span>
+                  {k}
+                  {required.includes(k) && (
+                    <span className="tool-playground__req"> *</span>
+                  )}
+                  <span className="tool-playground__type"> · {t ?? 'any'}</span>
+                </span>
+                {isMultiline ? (
+                  <textarea
+                    value={values[k] ?? ''}
+                    onChange={(e) =>
+                      setValues({ ...values, [k]: e.target.value })
+                    }
+                    placeholder={p.description ?? ''}
+                    spellCheck={false}
+                  />
+                ) : t === 'boolean' ? (
+                  <select
+                    value={values[k] ?? ''}
+                    onChange={(e) =>
+                      setValues({ ...values, [k]: e.target.value })
+                    }
+                  >
+                    <option value="">—</option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+                ) : (
+                  <input
+                    type={t === 'number' || t === 'integer' ? 'number' : 'text'}
+                    value={values[k] ?? ''}
+                    onChange={(e) =>
+                      setValues({ ...values, [k]: e.target.value })
+                    }
+                    placeholder={p.description ?? ''}
+                  />
+                )}
+              </label>
+            );
+          })}
+        </div>
+      )}
+      <footer className="tool-playground__actions">
+        <button onClick={() => void submit()} disabled={submitting}>
+          {submitting ? 'Running…' : '▶ Run'}
+        </button>
+        {result && (
+          <span className="tool-playground__meta">
+            {result.durationMs != null && `${result.durationMs}ms`}
+            {result.isError && ' · server flagged isError'}
+          </span>
+        )}
+      </footer>
+      {result && (
+        <pre
+          className={`tool-playground__result${
+            !result.ok || result.isError ? ' tool-playground__result--error' : ''
+          }`}
+        >
+          {result.ok
+            ? JSON.stringify(result.content ?? null, null, 2)
+            : `Error: ${result.message ?? 'unknown'}`}
+        </pre>
+      )}
+    </div>
   );
 }
 
