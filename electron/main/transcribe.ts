@@ -23,7 +23,10 @@ type Transcriber = (audio: Float32Array, options?: unknown) => Promise<{ text: s
 // Language is left UNSET so Whisper auto-detects per audio chunk. Task is
 // always 'transcribe' (never 'translate') so output stays in the spoken
 // language rather than being force-translated to English.
-const MODEL_NAME = 'Xenova/whisper-tiny';
+// whisper-small (~466MB, q8 quantized): meaningful quality jump over tiny,
+// especially for accented English / French / mixed-language meetings. First
+// run downloads + caches under ~/.jarvis/models/; subsequent loads are fast.
+const MODEL_NAME = 'Xenova/whisper-small';
 const TARGET_SAMPLE_RATE = 16_000;
 const TASK = 'transcribe';
 
