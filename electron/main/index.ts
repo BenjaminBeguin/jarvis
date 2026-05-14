@@ -848,7 +848,11 @@ if (!app.requestSingleInstanceLock()) {
 
 app.whenReady().then(async () => {
   // macOS: keep app alive in tray even when no windows are open.
-  if (process.platform === 'darwin' && app.dock) app.dock.hide();
+  // Show in the Dock + Cmd+Tab. The tray icon is still always there, but
+  // the user wanted a "real app" feel — appears in App Switcher, can be
+  // brought forward with Cmd+Tab, has a proper window-list menu. The
+  // tray icon stays the always-on entry point.
+  if (process.platform === 'darwin' && app.dock) void app.dock.show();
 
   initDatabase();
   await refreshAuth();

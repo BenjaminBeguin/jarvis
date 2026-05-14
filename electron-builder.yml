@@ -18,7 +18,10 @@ mac:
   entitlementsInherit: resources/entitlements.mac.plist
   extendInfo:
     NSMicrophoneUsageDescription: Jarvis uses the microphone for voice commands.
-    LSUIElement: true
+    # LSUIElement: true would hide the app from the Dock + Cmd+Tab.
+    # We surface it as a real app so the user can alt-tab to it and see it
+    # in their window manager. The tray icon stays as the always-on entry.
+    LSUIElement: false
 dmg:
   sign: false
 publish: null
