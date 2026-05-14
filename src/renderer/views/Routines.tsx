@@ -225,30 +225,70 @@ export function Routines(_: Props = {}) {
         </>
       )}
 
-      <SectionLabel>
-        Active{routines.length > 0 ? ` · ${routines.length}` : ''}
-      </SectionLabel>
       {routines.length === 0 && skills.length > 0 && !draft && (
-        <div className="routines__notice">
-          No routines yet. Pick a recommended preset above, or hit + New.
-        </div>
+        <>
+          <SectionLabel>Active</SectionLabel>
+          <div className="routines__notice routines__notice--empty">
+            No active routines. Three ways to add one:
+            <ul>
+              <li>
+                Pick a <strong>recommended preset</strong> above for a quick
+                free-text recurring task.
+              </li>
+              <li>
+                Open the{' '}
+                <button
+                  className="routines__inline-link"
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent('jarvis:navigate', {
+                        detail: { tab: 'briefings' },
+                      }),
+                    )
+                  }
+                >
+                  Briefings tab
+                </button>{' '}
+                and click <strong>Enable schedule</strong> on a kind (daily
+                recap, weekly retro, today's focus) — that creates a routine
+                here automatically.
+              </li>
+              <li>
+                Want an inbox source on a schedule (Slack / Linear /
+                calendar)? See <code>docs/scenarios.md</code> — same pattern,
+                you author a skill and add a routine.
+              </li>
+              <li>
+                Or hit <strong>+ New routine</strong> for total control.
+              </li>
+            </ul>
+          </div>
+        </>
       )}
-      <div className="routines__grid">
-        {routines.map((r) => {
-          const skill = skillsById.get(r.skillId);
-          return (
-            <RoutineCard
-              key={r.id}
-              routine={r}
-              skill={skill}
-              onEdit={() => edit(r)}
-              onRemove={() => remove(r.id)}
-              onRunNow={() => runNow(r.id)}
-              onToggle={() => void toggle(r)}
-            />
-          );
-        })}
-      </div>
+
+      {groupRoutinesByPurpose(routines).map(({ purpose, label, items }) => (
+        <div key={purpose} className="routines__group">
+          <SectionLabel>
+            {label} · {items.length}
+          </SectionLabel>
+          <div className="routines__grid">
+            {items.map((r) => {
+              const skill = skillsById.get(r.skillId);
+              return (
+                <RoutineCard
+                  key={r.id}
+                  routine={r}
+                  skill={skill}
+                  onEdit={() => edit(r)}
+                  onRemove={() => remove(r.id)}
+                  onRunNow={() => runNow(r.id)}
+                  onToggle={() => void toggle(r)}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ))}
 
       {draft && (
         <RoutineEditor
@@ -370,6 +410,30 @@ function derivePurpose(r: RoutineDef): RoutinePurpose | null {
     };
   }
   return { kind: 'freeform', label: 'Freeform' };
+}
+
+/**
+ * Bucket routines into groups for display. Stable section order:
+ * briefings first (they feed the daily-driver Briefings tab), then
+ * inbox sources, then freeform. Empty buckets get filtered out.
+ */
+function groupRoutinesByPurpose(
+  routines: RoutineDef[],
+): { purpose: 'briefing' | 'inbox' | 'freeform'; label: string; items: RoutineDef[] }[] {
+  const briefings: RoutineDef[] = [];
+  const inbox: RoutineDef[] = [];
+  const freeform: RoutineDef[] = [];
+  for (const r of routines) {
+    const p = derivePurpose(r)?.kind ?? 'freeform';
+    if (p === 'briefing') briefings.push(r);
+    else if (p === 'inbox') inbox.push(r);
+    else freeform.push(r);
+  }
+  return [
+    { purpose: 'briefing' as const, label: 'Briefings · feeds the Briefings tab', items: briefings },
+    { purpose: 'inbox' as const, label: 'Inbox sources · feeds the Inbox tab', items: inbox },
+    { purpose: 'freeform' as const, label: 'Freeform · standalone tasks', items: freeform },
+  ].filter((g) => g.items.length > 0);
 }
 
 function ToolChips({ skill }: { skill: SkillSummary | undefined }) {
