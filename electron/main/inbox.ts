@@ -35,8 +35,10 @@ export interface InboxSource {
 export class InboxStore extends EventEmitter {
   private sources: InboxSource[] = [];
   private items: InboxItem[] = [];
+  private knownIds = new Set<string>();
   private refreshing = false;
   private lastRefreshedAt = 0;
+  private autoTimer: NodeJS.Timeout | null = null;
 
   register(source: InboxSource): void {
     const i = this.sources.findIndex((s) => s.name === source.name);
@@ -54,6 +56,40 @@ export class InboxStore extends EventEmitter {
 
   isRefreshing(): boolean {
     return this.refreshing;
+  }
+
+  /**
+   * Background poll. Runs refresh() every `intervalMs`. The first refresh
+   * fires after a 5-second delay so the renderer can mount + fetch the
+   * cached list first (and we don't compete with the manual on-mount
+   * refresh). Subsequent ticks emit a 'new-items' event with the freshly
+   * appeared items so bootstrap can fire a native notification.
+   *
+   * Safe to call multiple times — cancels any prior timer.
+   */
+  startAutoRefresh(intervalMs: number): void {
+    this.stopAutoRefresh();
+    if (intervalMs <= 0 || !Number.isFinite(intervalMs)) return;
+    const tick = async () => {
+      try {
+        await this.refresh();
+      } catch (err) {
+        console.warn('Inbox auto-refresh failed:', err);
+      }
+    };
+    // First tick after a short delay; then on the regular cadence.
+    this.autoTimer = setTimeout(() => {
+      void tick();
+      this.autoTimer = setInterval(() => void tick(), intervalMs);
+    }, 5_000);
+  }
+
+  stopAutoRefresh(): void {
+    if (this.autoTimer) {
+      clearTimeout(this.autoTimer);
+      clearInterval(this.autoTimer);
+      this.autoTimer = null;
+    }
   }
 
   /**
@@ -78,9 +114,21 @@ export class InboxStore extends EventEmitter {
           console.warn(`Inbox source "${source.name}" failed:`, r.reason);
         }
       }
-      this.items = all.sort(byPriority);
+      const sorted = all.sort(byPriority);
+      // Compute new-items diff. First refresh after launch seeds the
+      // baseline silently — we don't want to spam a notification with
+      // every existing PR just because Jarvis booted.
+      const firstRefresh = this.lastRefreshedAt === 0;
+      const fresh = firstRefresh
+        ? []
+        : sorted.filter((it) => !this.knownIds.has(it.id));
+      this.knownIds = new Set(sorted.map((it) => it.id));
+      this.items = sorted;
       this.lastRefreshedAt = Date.now();
       this.emit('changed', this.items);
+      if (fresh.length > 0) {
+        this.emit('new-items', fresh);
+      }
       return this.items;
     } finally {
       this.refreshing = false;

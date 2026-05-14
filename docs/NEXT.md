@@ -158,6 +158,13 @@ later — preferences become per-user.
 
 ### P3 — Standing watches (event-driven routines) ⭐
 
+**Status (2026-05):** Partial — proactive inbox shipped. The
+InboxStore auto-refreshes every 5 minutes and fires a native
+notification when new items appear since the previous tick.
+Delivers the "Jarvis tells me when there's something to look at"
+headline. The full **user-authorable watch routines** described
+below remain to do.
+
 **Problem.** Routines fire on cron only. There's no way to
 express "when X happens, run Y." Which is the substrate for
 every proactive feature.

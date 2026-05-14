@@ -425,6 +425,45 @@ app.whenReady().then(async () => {
   inbox.on('refreshing', (flag: boolean) =>
     broadcast(IpcChannels.inboxRefreshing, flag),
   );
+  // Proactive Jarvis: ping the user once when new inbox items appear since
+  // the previous refresh. Grouped — one notification for N items, not N
+  // notifications. Click jumps to the Inbox tab.
+  inbox.on('new-items', (fresh: import('@shared/types').InboxItem[]) => {
+    if (fresh.length === 0) return;
+    try {
+      const bySrc = new Map<string, number>();
+      for (const it of fresh) bySrc.set(it.source, (bySrc.get(it.source) ?? 0) + 1);
+      const parts: string[] = [];
+      for (const [src, n] of bySrc) {
+        const label =
+          src === 'pr-review' ? 'PR review' :
+          src === 'pr-comments' ? 'PR comment' :
+          src === 'reminders' ? 'reminder' :
+          src === 'failed-routines' ? 'failed routine' :
+          src;
+        parts.push(`${n} ${label}${n === 1 ? '' : 's'}`);
+      }
+      const body = parts.join(' · ');
+      new Notification({ title: 'Jarvis · new in inbox', body, silent: false })
+        .on('click', () => {
+          const win = openObservatory();
+          win.focus();
+          const send = () =>
+            win.webContents.send(IpcChannels.shellNavigate, { tab: 'inbox' });
+          if (win.webContents.isLoading()) {
+            win.webContents.once('did-finish-load', send);
+          } else {
+            send();
+          }
+        })
+        .show();
+    } catch {
+      // Notifications can fail pre-permission; not fatal.
+    }
+  });
+  // Refresh the inbox every 5 minutes in the background. First tick is
+  // delayed 5s so the renderer's on-mount refresh wins the race.
+  inbox.startAutoRefresh(5 * 60 * 1000);
 
   setProgressEmitter((event) =>
     broadcast(IpcChannels.transcribeProgress, event),
@@ -478,5 +517,6 @@ app.on('before-quit', () => {
   mcp.close();
   projects.close();
   preferences.close();
+  inbox.stopAutoRefresh();
   closeDatabase();
 });
