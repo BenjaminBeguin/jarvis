@@ -7,6 +7,7 @@ import type {
   ClaudeMcpEntry,
   DispatchIntentResult,
   JarvisFileEntry,
+  CostSummary,
   InboxItem,
   LaunchTaskRequest,
   McpInvokeResult,
@@ -73,6 +74,8 @@ const api = {
     sessionId: string,
   ): Promise<{ ok: boolean; message?: string }> =>
     ipcRenderer.invoke(IpcChannels.openInClaudeDesktop, sessionId),
+  costSummary: (): Promise<CostSummary> =>
+    ipcRenderer.invoke(IpcChannels.costSummary),
 
   showAnswerHud: (taskId: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.showAnswerHud, taskId),

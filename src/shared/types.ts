@@ -225,6 +225,25 @@ export interface ProjectInput {
 }
 
 /**
+ * Cost rollup for the Dashboard. Sums Jarvis-launched tasks only — external
+ * Claude Code mirror sessions don't count (Jarvis didn't pay for them).
+ */
+export interface CostSummary {
+  /** Spend since local midnight today, USD. */
+  today: number;
+  /** Spend over the last 7 calendar days, USD. */
+  last7days: number;
+  /** Spend since the 1st of the current month, USD. */
+  thisMonth: number;
+  /** Top 3 skills by total cost over the last 30 days. */
+  topSkills: {
+    skillId: string | null;
+    totalUsd: number;
+    taskCount: number;
+  }[];
+}
+
+/**
  * One row in the Inbox. Built by InboxSource implementations in main and
  * shipped to the renderer for the daily-driver triage list. Optional
  * `action` lets the user dispatch a skill / prompt with one click.

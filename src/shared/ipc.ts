@@ -54,6 +54,7 @@ export const IpcChannels = {
   preferencesChanged: 'preferences:changed',
 
   openInClaudeDesktop: 'tasks:openInClaudeDesktop',
+  costSummary: 'tasks:costSummary',
 
   listInbox: 'inbox:list',
   refreshInbox: 'inbox:refresh',

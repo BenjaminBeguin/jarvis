@@ -1580,6 +1580,65 @@ button:disabled:hover {
   transition: background 120ms ease;
 }
 
+/* Cost rollup card — three big stats + top-skills mini-list. */
+.dashboard__cost-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 4px 4px;
+  font-family: var(--mono);
+}
+
+.dashboard__cost-label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.dashboard__cost-value {
+  font-size: 13px;
+  color: var(--accent);
+  text-shadow: var(--accent-glow);
+}
+
+.dashboard__cost-skills {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dashboard__cost-skills-head {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-faint);
+  margin-bottom: 2px;
+}
+
+.dashboard__cost-skill {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
+.dashboard__cost-skill-name {
+  color: var(--text);
+}
+
+.dashboard__cost-skill-meta {
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
 .dashboard__row:hover {
   background: rgba(0, 212, 255, 0.06);
 }

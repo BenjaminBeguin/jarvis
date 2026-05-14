@@ -152,3 +152,65 @@ export function getTaskEvents(taskId: string): TaskEvent[] {
     msg: JSON.parse(r.payload),
   }));
 }
+
+interface SkillCostRow {
+  skill_id: string | null;
+  total: number;
+  task_count: number;
+}
+
+/**
+ * Aggregate cost summary for the dashboard. Returns:
+ *   - today: sum since local midnight
+ *   - last7days: sum over the last 7 calendar days
+ *   - thisMonth: sum since the 1st of the current month
+ *   - topSkills: top 3 skills by total cost over the last 30 days
+ * External-origin tasks (claude-code mirrors) are excluded — their cost
+ * is unknown to Jarvis (Claude Code spends, not us).
+ */
+export function getCostSummary(): {
+  today: number;
+  last7days: number;
+  thisMonth: number;
+  topSkills: { skillId: string | null; totalUsd: number; taskCount: number }[];
+} {
+  const db = getDb();
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const thirtyDaysAgo = now.getTime() - 30 * 24 * 60 * 60 * 1000;
+
+  const sum = (since: number): number => {
+    const row = db
+      .prepare<[number], { total: number | null }>(
+        `SELECT COALESCE(SUM(cost_usd), 0) AS total
+         FROM tasks
+         WHERE started_at >= ? AND origin != 'external'`,
+      )
+      .get(since);
+    return row?.total ?? 0;
+  };
+
+  const topSkills = db
+    .prepare<[number], SkillCostRow>(
+      `SELECT skill_id, SUM(cost_usd) AS total, COUNT(*) AS task_count
+       FROM tasks
+       WHERE started_at >= ? AND origin != 'external' AND cost_usd > 0
+       GROUP BY skill_id
+       ORDER BY total DESC
+       LIMIT 3`,
+    )
+    .all(thirtyDaysAgo);
+
+  return {
+    today: sum(startOfToday),
+    last7days: sum(sevenDaysAgo),
+    thisMonth: sum(startOfMonth),
+    topSkills: topSkills.map((r) => ({
+      skillId: r.skill_id,
+      totalUsd: r.total,
+      taskCount: r.task_count,
+    })),
+  };
+}

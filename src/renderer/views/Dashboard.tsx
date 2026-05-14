@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import type {
+  CostSummary,
   JarvisFileEntry,
   Reminder,
   SkillSuggestion,
@@ -58,6 +59,15 @@ export function Dashboard({ tasks, reminders, onSelectTask, onCancelReminder }: 
   const [notes, setNotes] = useState<JarvisFileEntry[]>([]);
   const [suggestions, setSuggestions] = useState<SkillSuggestion[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [cost, setCost] = useState<CostSummary | null>(null);
+
+  // Cost is cheap to compute (single SQLite query) but only worth
+  // refreshing after a task completes / errors. Re-fetch on every change
+  // to the live or awaiting lists — that's our proxy for "something
+  // ended."
+  useEffect(() => {
+    void window.jarvis.costSummary().then(setCost).catch(() => setCost(null));
+  }, [tasks.length]);
 
   useEffect(() => {
     void window.jarvis.listSkillSuggestions().then(setSuggestions);
@@ -140,6 +150,8 @@ export function Dashboard({ tasks, reminders, onSelectTask, onCancelReminder }: 
           </button>
         ))}
       </DashCard>
+
+      <CostCard cost={cost} />
 
       <DashCard
         title="Skill ideas"
@@ -304,4 +316,67 @@ function DashCard({ title, accent, count, empty, children }: CardProps) {
       </div>
     </section>
   );
+}
+
+/**
+ * Cost rollup card. Three big numbers (today / 7d / month) + top 3 skills
+ * by 30-day spend so the user can spot which skill is eating the budget.
+ * Excludes external Claude Code mirror sessions (Jarvis didn't pay).
+ */
+function CostCard({ cost }: { cost: CostSummary | null }) {
+  return (
+    <section className="dashboard__card dashboard__card--dim">
+      <header className="dashboard__card-head">
+        <span className="dashboard__card-title">Cost</span>
+        <span className="dashboard__card-count">
+          {cost ? fmtUsd(cost.thisMonth) : '—'}
+        </span>
+      </header>
+      <div className="dashboard__card-body">
+        {cost ? (
+          <>
+            <div className="dashboard__cost-row">
+              <span className="dashboard__cost-label">Today</span>
+              <span className="dashboard__cost-value">{fmtUsd(cost.today)}</span>
+            </div>
+            <div className="dashboard__cost-row">
+              <span className="dashboard__cost-label">7 days</span>
+              <span className="dashboard__cost-value">{fmtUsd(cost.last7days)}</span>
+            </div>
+            <div className="dashboard__cost-row">
+              <span className="dashboard__cost-label">This month</span>
+              <span className="dashboard__cost-value">{fmtUsd(cost.thisMonth)}</span>
+            </div>
+            {cost.topSkills.length > 0 && (
+              <div className="dashboard__cost-skills">
+                <div className="dashboard__cost-skills-head">Top skills · 30d</div>
+                {cost.topSkills.map((s) => (
+                  <div
+                    key={s.skillId ?? '__free'}
+                    className="dashboard__cost-skill"
+                  >
+                    <span className="dashboard__cost-skill-name">
+                      {s.skillId ?? 'free-text'}
+                    </span>
+                    <span className="dashboard__cost-skill-meta">
+                      {fmtUsd(s.totalUsd)} · {s.taskCount} run
+                      {s.taskCount === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="dashboard__empty">No spend yet.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function fmtUsd(n: number): string {
+  if (n < 0.01) return n === 0 ? '$0.00' : '<$0.01';
+  if (n < 1) return `$${n.toFixed(3)}`;
+  return `$${n.toFixed(2)}`;
 }

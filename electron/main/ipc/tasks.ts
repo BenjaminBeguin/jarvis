@@ -3,7 +3,7 @@ import { ipcMain } from 'electron';
 import { IpcChannels } from '@shared/ipc';
 import type { LaunchTaskRequest } from '@shared/types';
 
-import { getTaskEvents, listRecentTasks } from '../db.js';
+import { getCostSummary, getTaskEvents, listRecentTasks } from '../db.js';
 import { asTaskOrigin } from '../task-runner.js';
 import type { IpcDeps } from './types.js';
 
@@ -61,4 +61,6 @@ export function registerTasksIpc({
     const live = runner.getEvents(taskId);
     return live.length > 0 ? live : getTaskEvents(taskId);
   });
+
+  ipcMain.handle(IpcChannels.costSummary, () => getCostSummary());
 }
