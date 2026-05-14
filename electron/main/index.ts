@@ -14,6 +14,7 @@ import {
   prAddressCommentsInboxSource,
   prReviewQueueInboxSource,
   remindersInboxSource,
+  userInboxSource,
 } from './inbox-sources/index.js';
 import { registerAllIpc } from './ipc/index.js';
 import { McpConfigStore } from './mcp-config.js';
@@ -100,6 +101,10 @@ inbox.register(remindersInboxSource(reminders));
 inbox.register(failedRoutinesInboxSource());
 inbox.register(prReviewQueueInboxSource);
 inbox.register(prAddressCommentsInboxSource);
+// User-authored scenarios — reads JSON files under ~/.jarvis/inbox/
+// that any skill / routine can write to. The Slack inbox skill is the
+// canonical first example.
+inbox.register(userInboxSource);
 
 runner.setSkillStore(skills);
 runner.setMcpStore(mcp);

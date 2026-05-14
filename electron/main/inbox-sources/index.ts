@@ -4,3 +4,4 @@ export {
   prReviewQueueInboxSource,
 } from './gh.js';
 export { remindersInboxSource } from './reminders.js';
+export { userInboxSource } from './user.js';

@@ -17,6 +17,7 @@ import prAddressComments from './skills/pr-address-comments.js';
 import prReviewQueue from './skills/pr-review-queue.js';
 import send from './skills/send.js';
 import skillAuthor from './skills/skill-author.js';
+import slackInbox from './skills/slack-inbox.js';
 import status from './skills/status.js';
 import ticketToPr from './skills/ticket-to-pr.js';
 
@@ -35,6 +36,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'pr-review-queue', body: prReviewQueue },
   { name: 'send', body: send },
   { name: 'skill-author', body: skillAuthor },
+  { name: 'slack-inbox', body: slackInbox },
   { name: 'status', body: status },
   { name: 'ticket-to-pr', body: ticketToPr },
 ];
