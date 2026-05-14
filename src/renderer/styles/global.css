@@ -1951,6 +1951,89 @@ button:disabled:hover {
   cursor: progress;
 }
 
+/* "Action already fired" badge that replaces the action button. Composed
+   of a wide pill (status + Open) and a small ✕ to clear the binding. */
+.inbox__row-actioned {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.inbox__row-actioned-main {
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.inbox__row-actioned-main:hover {
+  color: var(--text);
+  background: rgba(0, 212, 255, 0.04);
+}
+
+.inbox__row-actioned-clear {
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--border-strong);
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 0 7px;
+  cursor: pointer;
+}
+
+.inbox__row-actioned-clear:hover {
+  color: var(--bad);
+  background: rgba(255, 80, 80, 0.06);
+}
+
+.inbox__row-actioned--running .inbox__row-actioned-main {
+  color: var(--accent);
+}
+
+.inbox__row-actioned--running {
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.inbox__row-actioned--completed .inbox__row-actioned-main {
+  color: var(--good);
+}
+
+.inbox__row-actioned--completed {
+  border-color: var(--good);
+}
+
+.inbox__row-actioned--errored .inbox__row-actioned-main {
+  color: var(--bad);
+}
+
+.inbox__row-actioned--errored {
+  border-color: var(--bad);
+}
+
+.inbox__row-actioned--awaiting .inbox__row-actioned-main {
+  color: var(--warn);
+  animation: inbox-actioned-pulse 1.6s ease-in-out infinite;
+}
+
+.inbox__row-actioned--awaiting {
+  border-color: var(--warn);
+  box-shadow: 0 0 8px rgba(255, 196, 80, 0.25);
+}
+
+@keyframes inbox-actioned-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 .inbox__row-dismiss {
   position: relative;
 }

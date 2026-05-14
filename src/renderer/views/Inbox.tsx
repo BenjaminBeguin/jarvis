@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { InboxItem } from '../../shared/types';
+import type { InboxItem, TaskStatus } from '../../shared/types';
 import { toast } from './Toaster';
 
 /**
@@ -11,12 +11,50 @@ import { toast } from './Toaster';
  * fresh in the background.
  */
 const ACTIVE_PROJECT_KEY = 'jarvis.activeProject';
+const ACTIONED_KEY = 'jarvis.inbox.actioned';
 
 function readActiveProject(): string | null {
   try {
     return window.localStorage.getItem(ACTIVE_PROJECT_KEY) || null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * One entry per inbox item the user has clicked an action on. Lets us
+ * disable the action button + show a status link to the running task
+ * instead of letting the user fire the same skill again.
+ *
+ * Persisted to localStorage so a page reload doesn't lose the binding.
+ * Orphan entries (whose item is no longer in the inbox) get cleaned
+ * on every inbox refresh.
+ */
+interface ActionState {
+  taskId: string;
+  actionedAt: number;
+  status: TaskStatus;
+  awaitingInput?: boolean;
+}
+
+type ActionedMap = Record<string, ActionState>;
+
+function loadActioned(): ActionedMap {
+  try {
+    const raw = window.localStorage.getItem(ACTIONED_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveActioned(map: ActionedMap): void {
+  try {
+    window.localStorage.setItem(ACTIONED_KEY, JSON.stringify(map));
+  } catch {
+    // localStorage full / disabled — non-fatal, state is only cosmetic
   }
 }
 
@@ -29,6 +67,57 @@ export function Inbox() {
     readActiveProject(),
   );
   const [filterByScope, setFilterByScope] = useState(false);
+  const [actioned, setActioned] = useState<ActionedMap>(() => loadActioned());
+
+  // Persist any change to the action map.
+  useEffect(() => {
+    saveActioned(actioned);
+  }, [actioned]);
+
+  // Subscribe to task status updates from main — when one of our
+  // actioned items' bound task changes state, update the entry so
+  // the row badge reflects "running" → "completed" / "errored".
+  useEffect(() => {
+    return window.jarvis.onTaskStatus((summary) => {
+      setActioned((prev) => {
+        let next: ActionedMap | null = null;
+        for (const [itemId, a] of Object.entries(prev)) {
+          if (a.taskId !== summary.id) continue;
+          if (
+            a.status === summary.status &&
+            (a.awaitingInput ?? false) === (summary.awaitingInput ?? false)
+          ) {
+            return prev;
+          }
+          if (!next) next = { ...prev };
+          next[itemId] = {
+            ...a,
+            status: summary.status,
+            awaitingInput: summary.awaitingInput,
+          };
+        }
+        return next ?? prev;
+      });
+    });
+  }, []);
+
+  // Drop action bindings for items that are no longer in the inbox.
+  // The accuracy filter (PR replied to / resolved) makes items vanish
+  // on refresh; their bindings would otherwise pile up forever.
+  useEffect(() => {
+    if (items.length === 0) return;
+    const liveIds = new Set(items.map((it) => it.id));
+    setActioned((prev) => {
+      let next: ActionedMap | null = null;
+      for (const id of Object.keys(prev)) {
+        if (!liveIds.has(id)) {
+          if (!next) next = { ...prev };
+          delete next[id];
+        }
+      }
+      return next ?? prev;
+    });
+  }, [items]);
 
   useEffect(() => {
     // 1. Fetch cached list immediately (instant render with stale data).
@@ -214,7 +303,29 @@ export function Inbox() {
           </h3>
           <ul className="inbox__list">
             {rows.map((item) => (
-              <InboxRow key={item.id} item={item} />
+              <InboxRow
+                key={item.id}
+                item={item}
+                action={actioned[item.id]}
+                onActioned={(taskId) =>
+                  setActioned((prev) => ({
+                    ...prev,
+                    [item.id]: {
+                      taskId,
+                      actionedAt: Date.now(),
+                      status: 'running',
+                    },
+                  }))
+                }
+                onClearAction={() =>
+                  setActioned((prev) => {
+                    if (!(item.id in prev)) return prev;
+                    const next = { ...prev };
+                    delete next[item.id];
+                    return next;
+                  })
+                }
+              />
             ))}
           </ul>
         </section>
@@ -223,7 +334,17 @@ export function Inbox() {
   );
 }
 
-function InboxRow({ item }: { item: InboxItem }) {
+function InboxRow({
+  item,
+  action,
+  onActioned,
+  onClearAction,
+}: {
+  item: InboxItem;
+  action: ActionState | undefined;
+  onActioned: (taskId: string) => void;
+  onClearAction: () => void;
+}) {
   const [acting, setActing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   // "Starting soon" — fireAt within 10 min (matches the proximity
@@ -242,6 +363,7 @@ function InboxRow({ item }: { item: InboxItem }) {
         skillId: item.action.skillId,
         origin: 'palette',
       });
+      onActioned(summary.id);
       void window.jarvis.showAnswerHud(summary.id);
     } catch (e) {
       toast({
@@ -251,6 +373,11 @@ function InboxRow({ item }: { item: InboxItem }) {
     } finally {
       setActing(false);
     }
+  };
+
+  const openActionedTask = () => {
+    if (!action) return;
+    void window.jarvis.showAnswerHud(action.taskId);
   };
 
   const open = () => {
@@ -312,7 +439,7 @@ function InboxRow({ item }: { item: InboxItem }) {
             Open
           </button>
         )}
-        {item.action && (
+        {item.action && !action && (
           <button
             className="inbox__row-primary"
             onClick={() => void act()}
@@ -321,6 +448,13 @@ function InboxRow({ item }: { item: InboxItem }) {
           >
             {acting ? 'Launching…' : item.action.label}
           </button>
+        )}
+        {action && (
+          <ActionedBadge
+            action={action}
+            onOpen={openActionedTask}
+            onClear={onClearAction}
+          />
         )}
         <div className="inbox__row-dismiss">
           <button
@@ -358,6 +492,58 @@ function InboxRow({ item }: { item: InboxItem }) {
         </div>
       </div>
     </li>
+  );
+}
+
+/**
+ * Replaces the action button once the user has clicked it. Shows the
+ * current status of the spawned task + a link to open the Answer HUD
+ * so the user can see what the agent is doing. Re-fire is intentionally
+ * not exposed here — the same skill on the same item would just
+ * duplicate work. Clear (✕) drops the binding for retry.
+ */
+function ActionedBadge({
+  action,
+  onOpen,
+  onClear,
+}: {
+  action: ActionState;
+  onOpen: () => void;
+  onClear: () => void;
+}) {
+  const running = action.status === 'running' || action.status === 'queued';
+  const awaiting = action.awaitingInput === true;
+  const label = awaiting
+    ? '⏸ Awaiting reply'
+    : running
+      ? '⟳ Running…'
+      : action.status === 'completed'
+        ? '✓ Done'
+        : action.status === 'errored'
+          ? '⚠ Failed'
+          : action.status === 'aborted'
+            ? '— Aborted'
+            : action.status;
+
+  return (
+    <div
+      className={`inbox__row-actioned inbox__row-actioned--${running ? 'running' : action.status}${awaiting ? ' inbox__row-actioned--awaiting' : ''}`}
+    >
+      <button
+        className="inbox__row-actioned-main"
+        onClick={onOpen}
+        title={`Task ${action.taskId} · click to open`}
+      >
+        {label} · Open
+      </button>
+      <button
+        className="inbox__row-actioned-clear"
+        onClick={onClear}
+        title="Clear this binding so you can re-fire the action"
+      >
+        ✕
+      </button>
+    </div>
   );
 }
 
