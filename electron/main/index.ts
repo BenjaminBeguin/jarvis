@@ -102,8 +102,8 @@ userContext.register(recentTaskProvider(runner));
 // context (e.g. Slack DM count, Linear assignments) once registered.
 inbox.register(remindersInboxSource(reminders));
 inbox.register(failedRoutinesInboxSource());
-inbox.register(prReviewQueueInboxSource);
-inbox.register(prAddressCommentsInboxSource);
+inbox.register(prReviewQueueInboxSource(projects));
+inbox.register(prAddressCommentsInboxSource(projects));
 // User-authored scenarios — reads JSON files under ~/.jarvis/inbox/
 // that any skill / routine can write to. The Slack inbox skill is the
 // canonical first example.

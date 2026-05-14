@@ -10,11 +10,25 @@ import { toast } from './Toaster';
  * via the manual refresh button; future P3 standing-watches will keep it
  * fresh in the background.
  */
+const ACTIVE_PROJECT_KEY = 'jarvis.activeProject';
+
+function readActiveProject(): string | null {
+  try {
+    return window.localStorage.getItem(ACTIVE_PROJECT_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
 export function Inbox() {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeProject, setActiveProject] = useState<string | null>(() =>
+    readActiveProject(),
+  );
+  const [filterByScope, setFilterByScope] = useState(false);
 
   useEffect(() => {
     // 1. Fetch cached list immediately (instant render with stale data).
@@ -33,6 +47,28 @@ export function Inbox() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Track active project changes — same wiring as the palette uses.
+  useEffect(() => {
+    const sync = () => setActiveProject(readActiveProject());
+    sync();
+    const onChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { project: string | null };
+      setActiveProject(detail?.project ?? null);
+    };
+    window.addEventListener('jarvis:active-project-changed', onChange);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener('jarvis:active-project-changed', onChange);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+
+  // Reset the filter toggle when scope clears — the toggle only makes
+  // sense when there's something to filter by.
+  useEffect(() => {
+    if (!activeProject) setFilterByScope(false);
+  }, [activeProject]);
+
   const doRefresh = async () => {
     setError(null);
     try {
@@ -42,7 +78,13 @@ export function Inbox() {
     }
   };
 
-  const grouped = useMemo(() => groupBySource(items), [items]);
+  const filteredItems = useMemo(() => {
+    if (!filterByScope || !activeProject) return items;
+    return items.filter((it) => it.project === activeProject);
+  }, [items, filterByScope, activeProject]);
+
+  const grouped = useMemo(() => groupBySource(filteredItems), [filteredItems]);
+  const hiddenCount = items.length - filteredItems.length;
 
   return (
     <section className="inbox">
@@ -52,22 +94,44 @@ export function Inbox() {
           <div className="inbox__hint">
             {items.length === 0 && !refreshing
               ? 'Nothing waiting on you.'
-              : `${items.length} item${items.length === 1 ? '' : 's'}${
+              : `${filteredItems.length} of ${items.length} item${items.length === 1 ? '' : 's'}${
                   lastRefreshedAt
                     ? ` · refreshed ${formatRelative(lastRefreshedAt)}`
                     : ''
                 }`}
           </div>
         </div>
-        <button
-          className="inbox__refresh"
-          onClick={() => void doRefresh()}
-          disabled={refreshing}
-          title="Re-run every inbox source"
-        >
-          {refreshing ? 'Refreshing…' : 'Refresh'}
-        </button>
+        <div className="inbox__head-actions">
+          {activeProject && (
+            <button
+              className={`inbox__scope-filter${filterByScope ? ' inbox__scope-filter--on' : ''}`}
+              onClick={() => setFilterByScope((v) => !v)}
+              title={
+                filterByScope
+                  ? `Showing only "${activeProject}" items. Click to show all.`
+                  : `Filter to "${activeProject}" items only.`
+              }
+            >
+              {filterByScope ? `✓ ${activeProject}` : `Filter: ${activeProject}`}
+            </button>
+          )}
+          <button
+            className="inbox__refresh"
+            onClick={() => void doRefresh()}
+            disabled={refreshing}
+            title="Re-run every inbox source"
+          >
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
       </header>
+      {filterByScope && hiddenCount > 0 && (
+        <div className="inbox__hint inbox__filter-hint">
+          {hiddenCount} item{hiddenCount === 1 ? '' : 's'} hidden (not tagged
+          with project · only PR sources tag items today; user-defined
+          sources can set <code>project</code> per item).
+        </div>
+      )}
 
       {error && <div className="inbox__error">{error}</div>}
 

@@ -1585,6 +1585,44 @@ button:disabled:hover {
   letter-spacing: 0.04em;
 }
 
+.inbox__head-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.inbox__scope-filter {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 6px 12px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.inbox__scope-filter:hover {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.inbox__scope-filter--on {
+  color: var(--warn);
+  border-color: var(--warn);
+  background: rgba(255, 196, 80, 0.06);
+  box-shadow: 0 0 6px rgba(255, 196, 80, 0.25);
+}
+
+.inbox__filter-hint {
+  padding: 6px 14px;
+  border-left: 2px solid var(--warn);
+  background: rgba(255, 196, 80, 0.04);
+  margin: 0;
+}
+
 .inbox__refresh {
   background: transparent;
   border: 1px solid var(--accent);
