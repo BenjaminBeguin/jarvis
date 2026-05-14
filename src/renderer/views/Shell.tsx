@@ -55,12 +55,27 @@ export function Shell({ status }: Props) {
 
   // Verbal nav: the shell-nav module fires shell:navigate when the user
   // says "open settings", "show observatory", etc. Switch the tab + module
-  // page state to match.
+  // page state to match. We also listen for a renderer-side window event
+  // ('jarvis:navigate') so views like Constellation can request nav
+  // without an IPC round-trip.
   useEffect(() => {
-    return window.jarvis.onShellNavigate((payload) => {
+    const applyNav = (payload: {
+      tab?: 'observatory' | 'routines' | 'integrations' | 'modules';
+      moduleId?: string;
+    }) => {
       if (payload.tab) setTab(payload.tab);
       setOpenModuleId(payload.moduleId ?? null);
-    });
+    };
+    const offIpc = window.jarvis.onShellNavigate(applyNav);
+    const onWindow = (e: Event) => {
+      const detail = (e as CustomEvent).detail as Parameters<typeof applyNav>[0];
+      if (detail) applyNav(detail);
+    };
+    window.addEventListener('jarvis:navigate', onWindow);
+    return () => {
+      offIpc();
+      window.removeEventListener('jarvis:navigate', onWindow);
+    };
   }, []);
 
   // Keep the global status pill in sync across tabs. Pulls counts on mount

@@ -1920,6 +1920,15 @@ button:disabled:hover {
   opacity: 1;
 }
 
+.artifact-node:hover .artifact-node__dot {
+  r: 5;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.recording-node:hover .recording-node__halo {
+  opacity: 0.95;
+}
+
 /* Active meeting recording — pulsing red blob between core and task ring. */
 .recording-node__halo {
   fill: rgba(255, 85, 119, 0.18);

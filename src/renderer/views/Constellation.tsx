@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { JarvisFileEntry, Reminder, TaskSummary } from '../../shared/types';
-import type { MeetingState } from '../voice/MeetingRecorder';
+import { meetingRecorder, type MeetingState } from '../voice/MeetingRecorder';
 import { useNow } from './useNow';
+
+/**
+ * Renderer-side nav helper. Dispatches a window event the Shell listens
+ * for to switch tab + module page. Same shape as the IPC shellNavigate
+ * channel but without the IPC hop (renderer → renderer).
+ */
+function navigateShell(detail: { tab?: string; moduleId?: string }): void {
+  window.dispatchEvent(new CustomEvent('jarvis:navigate', { detail }));
+}
 
 /* The SVG lives in a 1000×1000 viewBox; coordinates below are in that space. */
 const CENTER = { x: 500, y: 500 };
@@ -603,7 +612,16 @@ export function Constellation({
             ring, pulsing red so it can't be missed. Only rendered while
             audio is actively being captured. */}
         {meetingState?.active && (
-          <g className="recording-node">
+          <g
+            className="recording-node"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (confirm(`Stop recording "${meetingState.title ?? 'meeting'}"?`)) {
+                void meetingRecorder.stop();
+              }
+            }}
+            style={{ cursor: 'pointer' }}
+          >
             <circle cx={CENTER.x} cy={CENTER.y - 170} r={24} className="recording-node__halo" />
             <circle cx={CENTER.x} cy={CENTER.y - 170} r={9} className="recording-node__disc" />
             <text
@@ -630,7 +648,21 @@ export function Constellation({
               <g
                 key={`art-${p.artifact.kind}-${p.artifact.name}`}
                 className={`artifact-node artifact-node--${p.artifact.kind}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigateShell({
+                    tab: 'modules',
+                    moduleId:
+                      p.artifact.kind === 'note'
+                        ? 'quick-note'
+                        : 'meeting-recorder',
+                  });
+                }}
+                style={{ cursor: 'pointer' }}
               >
+                {/* Wider invisible hit target so the user doesn't have to
+                    pixel-hunt the 3px dot. */}
+                <circle cx={p.x} cy={p.y} r={14} fill="transparent" />
                 <circle cx={p.x} cy={p.y} r={3} className="artifact-node__dot" />
                 <text
                   x={lx}
