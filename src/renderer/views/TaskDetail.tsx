@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TaskEvent, TaskSummary } from '../../shared/types';
 import { MarkdownText } from './MarkdownText';
 import { formatRelative } from './TaskList';
+import { toast } from './Toaster';
 
 interface Props {
   task: TaskSummary;
@@ -209,6 +210,9 @@ export function TaskDetail({ task, onSelectTask }: Props) {
             {task.status} · {task.origin} · started {formatRelative(task.startedAt)}
             {task.costUsd > 0 && ` · $${task.costUsd.toFixed(4)}`}
           </div>
+          {task.sdkSessionId && task.origin !== 'external' && (
+            <SessionAffordances task={task} />
+          )}
         </div>
         {task.status === 'running' && task.origin !== 'external' && (
           <button onClick={() => void window.jarvis.abortTask(task.id)}>
@@ -432,6 +436,67 @@ function AwaitingBanner() {
     <div className="detail__awaiting">
       <span className="detail__awaiting-glyph">!</span>
       <span>Agent is waiting for your input</span>
+    </div>
+  );
+}
+
+/**
+ * Inline footer that lets the user jump from a Jarvis task into the same
+ * conversation in Claude Code (CLI or Desktop). Subscription-mode tasks ARE
+ * Claude Code sessions on disk — Desktop already lists them in Recents.
+ */
+function SessionAffordances({ task }: { task: TaskSummary }) {
+  if (!task.sdkSessionId) return null;
+  const sessionId = task.sdkSessionId;
+  const resumeCmd = `claude --resume ${sessionId}`;
+  // Pre-warn when the user might collide with Jarvis still writing. We don't
+  // block the action — they may know what they're doing — but a confirm is
+  // a cheap guard against the foot-gun of two writers on one session.
+  const isLive = task.status === 'running' || task.status === 'queued';
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(resumeCmd);
+      toast({ message: 'Copied — paste in any terminal to resume' });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
+  const openInDesktop = async () => {
+    if (isLive) {
+      const ok = confirm(
+        'This task is still running in Jarvis. Opening it in Claude Code Desktop ' +
+          "while it's live can corrupt the session. Open anyway?",
+      );
+      if (!ok) return;
+    }
+    const res = await window.jarvis.openInClaudeDesktop(sessionId);
+    if (res.ok) {
+      toast({
+        message:
+          'Opened Claude Code — if Desktop didn\'t jump to the session, find it in Recents.',
+      });
+    } else {
+      toast({
+        kind: 'error',
+        message: res.message ?? 'Failed to open Claude Code Desktop',
+      });
+    }
+  };
+
+  return (
+    <div className="detail__session-row" title={`session ${sessionId}`}>
+      <code className="detail__session-id">{sessionId.slice(0, 8)}…</code>
+      <button onClick={() => void copy()} title={`Copy "${resumeCmd}" to clipboard`}>
+        Copy resume command
+      </button>
+      <button onClick={() => void openInDesktop()} title="Open this session in Claude Code Desktop">
+        Open in Claude Code
+      </button>
     </div>
   );
 }

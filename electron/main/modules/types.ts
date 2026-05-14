@@ -7,6 +7,8 @@ import type {
   TaskSummary,
 } from '@shared/types';
 
+import type { UserContextProvider } from '../user-context.js';
+
 export type ParsedFreeTextIntent =
   | { kind: 'task'; body: string }
   | { kind: 'reminder'; mode: ReminderMode; body: string; fireAt: number };
@@ -70,6 +72,14 @@ export interface ModuleContext {
    * side state (the meeting recorder kicks off audio capture this way).
    */
   broadcast(channel: string, payload?: unknown): void;
+  /**
+   * Add a provider to the ambient user-context block that's prepended to
+   * every task's system prompt. Examples: calendar event in progress,
+   * currently-open app, weather. Provider's `build()` is called on every
+   * task launch, so keep it cheap (cache where possible). Re-registering
+   * by the same `name` replaces the previous instance.
+   */
+  registerContextProvider(provider: UserContextProvider): void;
 }
 
 /**

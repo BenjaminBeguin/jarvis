@@ -38,11 +38,21 @@ export const IpcChannels = {
   readJarvisFile: 'fs:readJarvisFile',
 
   listProjects: 'projects:list',
+  createProject: 'projects:create',
+  setActiveProject: 'projects:setActive',
+  projectsChanged: 'projects:changed',
   listProjectMemory: 'projects:listMemory',
   readProjectMemory: 'projects:readMemory',
   writeProjectMemory: 'projects:writeMemory',
   deleteProjectMemory: 'projects:deleteMemory',
   deleteNoteEntry: 'notes:deleteEntry',
+
+  readPreferences: 'preferences:read',
+  writePreferences: 'preferences:write',
+  revealPreferences: 'preferences:reveal',
+  preferencesChanged: 'preferences:changed',
+
+  openInClaudeDesktop: 'tasks:openInClaudeDesktop',
 
   requestMicAccess: 'media:requestMic',
   micStatus: 'media:micStatus',

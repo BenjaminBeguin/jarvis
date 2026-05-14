@@ -3,8 +3,12 @@ import { useEffect, useState } from 'react';
 import type { AppStatus, ModuleSummary, Reminder, TaskSummary } from '../../shared/types';
 import { getModulePage } from '../modules/registry';
 import { Integrations } from './integrations/Integrations';
+import { Logo } from './Logo';
 import { MeetingOverlay } from './MeetingOverlay';
+import { PreferencesDialog } from './PreferencesDialog';
+import { NewProjectDialog } from './projects/NewProjectDialog';
 import { Projects } from './projects/Projects';
+import { ScopePicker } from './projects/ScopePicker';
 import { Toaster } from './Toaster';
 import { ModulesPage } from './ModulesPage';
 import { Observatory } from './Observatory';
@@ -23,26 +27,64 @@ function formatClock(d: Date): string {
   return `${hh}:${mm}:${ss}`;
 }
 
-function Reticle() {
-  return (
-    <svg className="shell__reticle" viewBox="0 0 14 14">
-      <circle cx="7" cy="7" r="6" />
-      <g className="ring--spin">
-        <circle cx="7" cy="7" r="3" />
-        <line x1="7" y1="0" x2="7" y2="2" />
-        <line x1="7" y1="12" x2="7" y2="14" />
-        <line x1="0" y1="7" x2="2" y2="7" />
-        <line x1="12" y1="7" x2="14" y2="7" />
-      </g>
-    </svg>
-  );
-}
-
 export function Shell({ status }: Props) {
   const [tab, setTab] = useState<Tab>('observatory');
   const [openModuleId, setOpenModuleId] = useState<string | null>(null);
   const [openModule, setOpenModule] = useState<ModuleSummary | null>(null);
   const [moduleList, setModuleList] = useState<ModuleSummary[]>([]);
+  /**
+   * Active project scope. When set, free-text palette dispatches auto-
+   * prefix with "<alias>:", notes/meetings default to that project,
+   * and skills get the project memory loaded. Persisted to localStorage
+   * so it survives a restart.
+   */
+  const [activeProject, setActiveProject] = useState<string | null>(() => {
+    try {
+      return window.localStorage.getItem('jarvis.activeProject') || null;
+    } catch {
+      return null;
+    }
+  });
+  const [projectList, setProjectList] = useState<{ name: string; aliases: string[] }[]>([]);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [newProjectInitial, setNewProjectInitial] = useState<string>('');
+  const [prefsOpen, setPrefsOpen] = useState(false);
+
+  useEffect(() => {
+    const apply = (list: { name: string; aliases: string[] }[]) =>
+      setProjectList(list.map((p) => ({ name: p.name, aliases: p.aliases })));
+    void window.jarvis.listProjects().then(apply);
+    return window.jarvis.onProjectsChanged(apply);
+  }, []);
+
+  // Module that wants to open the dialog (e.g. the /new-project palette
+  // intent broadcasts shell:open-new-project on this BrowserWindow's IPC).
+  useEffect(() => {
+    const onOpen = () => setNewProjectOpen(true);
+    window.addEventListener('jarvis:open-new-project', onOpen);
+    return () => window.removeEventListener('jarvis:open-new-project', onOpen);
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (activeProject) {
+        window.localStorage.setItem('jarvis.activeProject', activeProject);
+      } else {
+        window.localStorage.removeItem('jarvis.activeProject');
+      }
+    } catch {
+      // ignore
+    }
+    // Push to main so it lands in every task's user-context block.
+    void window.jarvis.setActiveProject(activeProject);
+    // Broadcast to the palette window (different BrowserWindow) so it
+    // picks up the scope.
+    window.dispatchEvent(
+      new CustomEvent('jarvis:active-project-changed', {
+        detail: { project: activeProject },
+      }),
+    );
+  }, [activeProject]);
   const [switchOpen, setSwitchOpen] = useState(false);
   const [clock, setClock] = useState(() => formatClock(new Date()));
   const [runningCount, setRunningCount] = useState(0);
@@ -63,9 +105,16 @@ export function Shell({ status }: Props) {
     const applyNav = (payload: {
       tab?: 'observatory' | 'projects' | 'routines' | 'integrations' | 'modules';
       moduleId?: string;
+      action?: 'open-new-project';
+      initial?: string;
     }) => {
       if (payload.tab) setTab(payload.tab);
-      setOpenModuleId(payload.moduleId ?? null);
+      if (payload.tab) setOpenModuleId(payload.moduleId ?? null);
+      else if (payload.moduleId !== undefined) setOpenModuleId(payload.moduleId);
+      if (payload.action === 'open-new-project') {
+        setNewProjectInitial(payload.initial ?? '');
+        setNewProjectOpen(true);
+      }
     };
     const offIpc = window.jarvis.onShellNavigate(applyNav);
     const onWindow = (e: Event) => {
@@ -162,8 +211,8 @@ export function Shell({ status }: Props) {
     <div className="shell">
       <nav className="shell__nav">
         <div className="shell__brand">
-          <Reticle />
-          JARVIS
+          <Logo />
+          <span className="shell__brand-text">JARVIS</span>
         </div>
         <div className="shell__tabs">
           <button
@@ -213,6 +262,12 @@ export function Shell({ status }: Props) {
           </button>
         </div>
         <div className="shell__right">
+          <ScopePicker
+            projects={projectList}
+            active={activeProject}
+            onChange={setActiveProject}
+            onCreate={() => setNewProjectOpen(true)}
+          />
           {(runningCount > 0 || awaitingCount > 0 || scheduledCount > 0) && (
             <div className="shell__status-pill" title="Live counts">
               {runningCount > 0 && (
@@ -236,6 +291,13 @@ export function Shell({ status }: Props) {
             <span className="dot" />
             {clock}
           </div>
+          <button
+            className="shell__prefs-btn"
+            onClick={() => setPrefsOpen(true)}
+            title="Edit your preferences — applied to every task"
+          >
+            prefs
+          </button>
           <div className="shell__auth">
             <button
               className="shell__auth-badge"
@@ -280,18 +342,9 @@ export function Shell({ status }: Props) {
         </div>
       </nav>
 
-      {openModuleId && PageComponent && (
+      {moduleList.some((m) => m.hasPage && m.enabled) && (
         <div className="shell__subnav">
-          <button
-            onClick={() => {
-              setOpenModuleId(null);
-              setTab('modules');
-            }}
-            className="shell__subnav-back"
-            title="Back to all modules"
-          >
-            ← All modules
-          </button>
+          <span className="shell__subnav-label">Pages</span>
           <div className="shell__subnav-tabs">
             {moduleList
               .filter((m) => m.hasPage && m.enabled)
@@ -301,13 +354,33 @@ export function Shell({ status }: Props) {
                   className={`shell__subnav-tab${
                     m.id === openModuleId ? ' shell__subnav-tab--active' : ''
                   }`}
-                  onClick={() => setOpenModuleId(m.id)}
+                  onClick={() => {
+                    if (m.id === openModuleId) {
+                      // Already open — toggle back to the modules grid.
+                      setOpenModuleId(null);
+                      setTab('modules');
+                    } else {
+                      setOpenModuleId(m.id);
+                    }
+                  }}
                   title={m.description}
                 >
                   {m.name}
                 </button>
               ))}
           </div>
+          {openModuleId && (
+            <button
+              onClick={() => {
+                setOpenModuleId(null);
+                setTab('modules');
+              }}
+              className="shell__subnav-back"
+              title="Back to all modules"
+            >
+              ← All
+            </button>
+          )}
         </div>
       )}
 
@@ -327,6 +400,13 @@ export function Shell({ status }: Props) {
         )}
       </div>
       <MeetingOverlay />
+      <NewProjectDialog
+        open={newProjectOpen}
+        onClose={() => setNewProjectOpen(false)}
+        onCreated={(def) => setActiveProject(def.name)}
+        initialName={newProjectInitial}
+      />
+      <PreferencesDialog open={prefsOpen} onClose={() => setPrefsOpen(false)} />
       <Toaster />
     </div>
   );

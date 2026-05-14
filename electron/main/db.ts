@@ -26,6 +26,10 @@ const MIGRATIONS = [
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
   );`,
   `CREATE INDEX IF NOT EXISTS idx_tasks_started_at ON tasks(started_at DESC);`,
+  // P12: store the Claude Code session id so a TaskDetail loaded from
+  // history can still offer the "Open in Claude Code Desktop" / "Copy
+  // resume command" buttons after a restart.
+  `ALTER TABLE tasks ADD COLUMN sdk_session_id TEXT;`,
 ];
 
 let db: DatabaseType | null = null;
@@ -38,7 +42,18 @@ export function initDatabase(): DatabaseType {
   db = new Database(path);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
-  for (const sql of MIGRATIONS) db.exec(sql);
+  for (const sql of MIGRATIONS) {
+    try {
+      db.exec(sql);
+    } catch (err) {
+      // SQLite has no `ADD COLUMN IF NOT EXISTS` — re-runs of an additive
+      // migration legitimately throw "duplicate column" once the column
+      // is in place. CREATE / INDEX statements use IF NOT EXISTS so they
+      // don't reach here. Anything else, rethrow loudly.
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!/duplicate column name/i.test(msg)) throw err;
+    }
+  }
   return db;
 }
 
@@ -57,10 +72,13 @@ export function closeDatabase(): void {
 export function insertTask(task: TaskSummary): void {
   getDb()
     .prepare(
-      `INSERT INTO tasks (id, skill_id, title, status, origin, started_at, ended_at, cost_usd, input_preview)
-       VALUES (@id, @skillId, @title, @status, @origin, @startedAt, @endedAt, @costUsd, @inputPreview)`,
+      `INSERT INTO tasks (id, skill_id, title, status, origin, started_at, ended_at, cost_usd, input_preview, sdk_session_id)
+       VALUES (@id, @skillId, @title, @status, @origin, @startedAt, @endedAt, @costUsd, @inputPreview, @sdkSessionId)`,
     )
-    .run(task);
+    .run({
+      ...task,
+      sdkSessionId: task.sdkSessionId ?? null,
+    });
 }
 
 export function updateTaskStatus(
@@ -68,12 +86,13 @@ export function updateTaskStatus(
   status: TaskStatus,
   endedAt: number | null,
   costUsd: number,
+  sdkSessionId?: string | null,
 ): void {
   getDb()
     .prepare(
-      `UPDATE tasks SET status = ?, ended_at = ?, cost_usd = ? WHERE id = ?`,
+      `UPDATE tasks SET status = ?, ended_at = ?, cost_usd = ?, sdk_session_id = COALESCE(?, sdk_session_id) WHERE id = ?`,
     )
-    .run(status, endedAt, costUsd, id);
+    .run(status, endedAt, costUsd, sdkSessionId ?? null, id);
 }
 
 export function appendTaskEvent(taskId: string, event: TaskEvent): void {
@@ -94,6 +113,7 @@ interface TaskRow {
   ended_at: number | null;
   cost_usd: number;
   input_preview: string;
+  sdk_session_id: string | null;
 }
 
 function rowToTask(row: TaskRow): TaskSummary {
@@ -107,6 +127,7 @@ function rowToTask(row: TaskRow): TaskSummary {
     endedAt: row.ended_at,
     costUsd: row.cost_usd,
     inputPreview: row.input_preview,
+    sdkSessionId: row.sdk_session_id,
   };
 }
 

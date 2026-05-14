@@ -23,6 +23,15 @@ export interface TaskSummary {
    * amber on the constellation so it stands out from busy/idle.
    */
   awaitingInput?: boolean;
+  /**
+   * The Claude Code session id assigned by the spawned `claude` subprocess
+   * (subscription mode only — populated after the first SDK `system/init`
+   * event). Lets the user `claude --resume <id>` from a terminal, or jump
+   * into Claude Code Desktop where the session already lives in Recents.
+   * Null in api-key mode since the SDK talks to the API directly with no
+   * Claude Code session record on disk.
+   */
+  sdkSessionId?: string | null;
 }
 
 export interface TaskEvent {
@@ -200,6 +209,15 @@ export interface ProjectDef {
   /** GitHub repo identifier ("owner/name") or full URL. */
   repo?: string;
   /** One-line description that helps the agent decide relevance. */
+  description?: string;
+}
+
+/** Payload for creating a new project from the UI. */
+export interface ProjectInput {
+  name: string;
+  aliases?: string[];
+  path?: string;
+  repo?: string;
   description?: string;
 }
 

@@ -7,6 +7,7 @@ import type {
 import { MarkdownText } from '../MarkdownText';
 import { formatRelative } from '../TaskList';
 import { toast } from '../Toaster';
+import { NewProjectDialog } from './NewProjectDialog';
 
 /**
  * Project memory visualization. Each project becomes a glowing core
@@ -29,14 +30,17 @@ export function Projects() {
   const [content, setContent] = useState<string>('');
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [newOpen, setNewOpen] = useState(false);
 
   useEffect(() => {
-    void window.jarvis.listProjects().then((list) => {
+    const apply = (list: ProjectDef[]) => {
       setProjects(list);
-      if (!activeProject && list.length > 0) {
-        setActiveProject(list[0]!.name);
+      if (list.length > 0) {
+        setActiveProject((cur) => cur ?? list[0]!.name);
       }
-    });
+    };
+    void window.jarvis.listProjects().then(apply);
+    return window.jarvis.onProjectsChanged(apply);
   }, []);
 
   // Per-project memory counts for the picker badges.
@@ -129,7 +133,16 @@ export function Projects() {
     <section className="projects">
       <aside className="projects__rail">
         <header className="projects__rail-head">
-          <h2>PROJECTS</h2>
+          <div className="projects__rail-head-row">
+            <h2>PROJECTS</h2>
+            <button
+              className="projects__new-btn"
+              onClick={() => setNewOpen(true)}
+              title="Add a project to ~/.jarvis/projects.json"
+            >
+              + New
+            </button>
+          </div>
           <p>
             Persistent memory grows here as agents work on each codebase.
             Markdown, editable.
@@ -137,9 +150,8 @@ export function Projects() {
         </header>
         {projects.length === 0 && (
           <div className="projects__empty">
-            No projects yet. Edit{' '}
-            <code>~/.jarvis/projects.json</code> (or copy the{' '}
-            <code>.example</code>) and they'll show up here.
+            No projects yet. Hit <strong>+ New</strong> above or edit{' '}
+            <code>~/.jarvis/projects.json</code> directly.
           </div>
         )}
         <ul className="projects__list">
@@ -257,6 +269,11 @@ export function Projects() {
           </aside>
         )}
       </main>
+      <NewProjectDialog
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        onCreated={(def) => setActiveProject(def.name)}
+      />
     </section>
   );
 }

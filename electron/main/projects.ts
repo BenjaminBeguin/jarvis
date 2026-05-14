@@ -1,10 +1,10 @@
 import { EventEmitter } from 'node:events';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 
-import type { ProjectDef } from '@shared/types';
+import type { ProjectDef, ProjectInput } from '@shared/types';
 
 interface PersistedProject {
   name?: string;
@@ -72,6 +72,53 @@ export class ProjectStore extends EventEmitter {
 
   list(): ProjectDef[] {
     return this.projects;
+  }
+
+  /**
+   * Append a project to projects.json. Writes the file back as a clean JSON
+   * object (we lose comments in the original file, but this format is
+   * user-edited rarely once seeded). Throws on duplicate name (case-insensitive)
+   * or invalid name.
+   */
+  create(input: ProjectInput): ProjectDef {
+    const name = input.name.trim();
+    if (!name) throw new Error('Project name is required');
+    const lower = name.toLowerCase();
+    if (this.projects.some((p) => p.name.toLowerCase() === lower)) {
+      throw new Error(`Project "${name}" already exists`);
+    }
+    const aliases = (input.aliases ?? [])
+      .map((a) => a.trim())
+      .filter((a) => a.length > 0);
+    // Auto-add a short alias (lowercase, no spaces) when the user didn't
+    // bother typing one — most palette flows match against aliases.
+    const auto = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (auto && auto !== lower && !aliases.includes(auto)) {
+      aliases.push(auto);
+    }
+    const def: ProjectDef = {
+      name,
+      aliases,
+      path: input.path?.trim() || undefined,
+      repo: input.repo?.trim() || undefined,
+      description: input.description?.trim() || undefined,
+    };
+    const next: PersistedFile = {
+      projects: [...this.projects, def].map((p) => ({
+        name: p.name,
+        aliases: p.aliases,
+        path: p.path,
+        repo: p.repo,
+        description: p.description,
+      })),
+    };
+    mkdirSync(dirname(this.path), { recursive: true });
+    writeFileSync(this.path, JSON.stringify(next, null, 2) + '\n', 'utf8');
+    // The chokidar watcher will pick this up and emit 'changed', but apply
+    // it eagerly too so the caller's next list() is correct.
+    this.projects = [...this.projects, def];
+    this.emit('changed', this.projects);
+    return def;
   }
 
   /**

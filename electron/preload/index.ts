@@ -14,6 +14,7 @@ import type {
   McpServerSummary,
   ModuleSummary,
   ProjectDef,
+  ProjectInput,
   ProjectMemoryFile,
   Reminder,
   RoutePromptResult,
@@ -56,6 +57,8 @@ const api = {
     listener: Listener<{
       tab?: 'observatory' | 'projects' | 'routines' | 'integrations' | 'modules';
       moduleId?: string;
+      action?: 'open-new-project';
+      initial?: string;
     }>,
   ): Unsubscribe => subscribe(IpcChannels.shellNavigate, listener),
   openPalette: (): Promise<void> =>
@@ -64,6 +67,10 @@ const api = {
     ipcRenderer.invoke(IpcChannels.resizePalette, height),
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.openExternal, url),
+  openInClaudeDesktop: (
+    sessionId: string,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.openInClaudeDesktop, sessionId),
 
   showAnswerHud: (taskId: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.showAnswerHud, taskId),
@@ -123,6 +130,12 @@ const api = {
 
   listProjects: (): Promise<ProjectDef[]> =>
     ipcRenderer.invoke(IpcChannels.listProjects),
+  createProject: (input: ProjectInput): Promise<ProjectDef> =>
+    ipcRenderer.invoke(IpcChannels.createProject, input),
+  setActiveProject: (name: string | null): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.setActiveProject, name),
+  onProjectsChanged: (listener: Listener<ProjectDef[]>): Unsubscribe =>
+    subscribe(IpcChannels.projectsChanged, listener),
   listProjectMemory: (project: string): Promise<ProjectMemoryFile[]> =>
     ipcRenderer.invoke(IpcChannels.listProjectMemory, project),
   readProjectMemory: (project: string, file: string): Promise<string> =>
@@ -144,6 +157,15 @@ const api = {
     fileIndex: number,
   ): Promise<{ ok: boolean; message?: string }> =>
     ipcRenderer.invoke(IpcChannels.deleteNoteEntry, { date, fileIndex }),
+
+  readPreferences: (): Promise<{ path: string; contents: string }> =>
+    ipcRenderer.invoke(IpcChannels.readPreferences),
+  writePreferences: (contents: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.writePreferences, contents),
+  revealPreferences: (): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.revealPreferences),
+  onPreferencesChanged: (listener: Listener<string>): Unsubscribe =>
+    subscribe(IpcChannels.preferencesChanged, listener),
 
   requestMicAccess: (): Promise<{ granted: boolean; status: string }> =>
     ipcRenderer.invoke(IpcChannels.requestMicAccess),

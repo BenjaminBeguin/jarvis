@@ -11,8 +11,11 @@ import type { Module } from './types.js';
 const CHANNEL = 'shell:navigate';
 
 interface NavPayload {
-  tab: 'observatory' | 'projects' | 'routines' | 'integrations' | 'modules';
+  tab?: 'observatory' | 'projects' | 'routines' | 'integrations' | 'modules';
   moduleId?: string;
+  action?: 'open-new-project';
+  /** Free-text payload that accompanies an action (e.g. pre-filled name). */
+  initial?: string;
 }
 
 export const shellNavModule: Module = {
@@ -152,6 +155,27 @@ export const shellNavModule: Module = {
           moduleId: 'send',
         } as NavPayload);
         return 'Opening channels';
+      },
+    },
+    {
+      id: 'new-project',
+      prefix: '/new-project',
+      label: 'New project',
+      description: 'Add a project to ~/.jarvis/projects.json',
+      placeholder: 'Optional name — fills the form for you',
+      verbalTriggers: [
+        'new project',
+        'create project',
+        'add a project',
+        'add new project',
+      ],
+      handler: (input, ctx) => {
+        const initial = input.trim();
+        ctx.broadcast(CHANNEL, {
+          action: 'open-new-project',
+          initial: initial || undefined,
+        } as NavPayload);
+        return 'Opening new project dialog';
       },
     },
   ],

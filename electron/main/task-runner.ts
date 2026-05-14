@@ -15,7 +15,9 @@ import { AsyncMessageQueue } from './async-message-queue.js';
 import { appendTaskEvent, insertTask, updateTaskStatus } from './db.js';
 import type { McpConfigStore } from './mcp-config.js';
 import type { ProjectStore } from './projects.js';
+import type { PreferencesStore } from './preferences-store.js';
 import type { SkillRecord, SkillStore } from './skill-store.js';
+import type { UserContextStore } from './user-context.js';
 
 const DEFAULT_SYSTEM_PROMPT = `You are Jarvis, the user's personal AI operating layer running through Claude Code.
 
@@ -82,6 +84,8 @@ export class TaskRunner extends EventEmitter {
   private skills: SkillStore | null = null;
   private mcp: McpConfigStore | null = null;
   private projects: ProjectStore | null = null;
+  private userContext: UserContextStore | null = null;
+  private preferences: PreferencesStore | null = null;
   private auth: AuthContext = { mode: 'subscription' };
 
   setSkillStore(store: SkillStore): void {
@@ -96,43 +100,44 @@ export class TaskRunner extends EventEmitter {
     this.projects = store;
   }
 
+  setUserContextStore(store: UserContextStore): void {
+    this.userContext = store;
+  }
+
+  setPreferencesStore(store: PreferencesStore): void {
+    this.preferences = store;
+  }
+
   setAuth(ctx: AuthContext): void {
     this.auth = ctx;
   }
 
   /**
-   * Build the system prompt for a task: base (skill body or Jarvis default)
-   * + appended live context (today's date + the user's tracked projects).
+   * Build the system prompt for a task. Order:
+   *   1. Skill body (or default Jarvis prompt) — the task's framing.
+   *   2. The user's preferences — their hard rules + how-I-work overlay.
+   *   3. Ambient context block — time, active project, recent task.
+   *
    * Appending rather than templating means skills with their own prompts
-   * still get the same situational awareness for free.
+   * still get the same preferences + context for free.
    */
-  private composeSystemPrompt(skill: SkillRecord | null): string {
+  private async composeSystemPrompt(skill: SkillRecord | null): Promise<string> {
     const base = skill?.hasBody ? skill.body : DEFAULT_SYSTEM_PROMPT;
-    const now = new Date();
-    const dateLine = `Today: ${now.toLocaleDateString(undefined, {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })}.`;
-
-    const sections: string[] = [base, dateLine];
-
-    const projects = this.projects?.list() ?? [];
-    if (projects.length > 0) {
-      const lines = projects.map((p) => {
-        const bits: string[] = [`- ${p.name}`];
-        if (p.aliases.length) bits.push(`(aliases: ${p.aliases.join(', ')})`);
-        if (p.repo) bits.push(`repo: ${p.repo}`);
-        if (p.path) bits.push(`path: ${p.path}`);
-        if (p.description) bits.push(`— ${p.description}`);
-        return bits.join(' ');
-      });
-      sections.push(
-        `The user's tracked projects (resolve fuzzy references like "the X project" via aliases):\n${lines.join('\n')}`,
-      );
+    const sections: string[] = [base];
+    if (this.preferences) {
+      const prefs = this.preferences.read().trim();
+      if (prefs) {
+        // The user's preferences.md already contains a top-level `#
+        // Preferences` heading; nest under `##` to avoid two h1s in the
+        // prompt. Slice off the user's heading line if present.
+        const body = prefs.replace(/^#\s+Preferences\s*\n+/i, '');
+        sections.push(`## User preferences\n${body}`);
+      }
     }
-
+    if (this.userContext) {
+      const block = await this.userContext.build();
+      if (block) sections.push(`## Current context\n${block}`);
+    }
     return sections.join('\n\n');
   }
 
@@ -369,7 +374,7 @@ export class TaskRunner extends EventEmitter {
     let cost = 0;
     let finalStatus: TaskStatus = 'completed';
     try {
-      const systemPrompt = this.composeSystemPrompt(skill);
+      const systemPrompt = await this.composeSystemPrompt(skill);
       const options: Parameters<typeof query>[0]['options'] = {
         abortController: record.abort,
         permissionMode: 'bypassPermissions',
@@ -498,6 +503,17 @@ export class TaskRunner extends EventEmitter {
         !record.sdkSessionId
       ) {
         record.sdkSessionId = m.session_id;
+        record.summary.sdkSessionId = m.session_id;
+        // Persist + emit so TaskDetail can light up its "Open in Claude
+        // Code Desktop" buttons the moment the session id lands.
+        updateTaskStatus(
+          record.summary.id,
+          record.summary.status,
+          record.summary.endedAt,
+          record.summary.costUsd,
+          m.session_id,
+        );
+        this.emit('status', record.summary);
         const mirrorId = `cc-${m.session_id}`;
         if (this.records.has(mirrorId)) this.removeExternal(mirrorId);
       }

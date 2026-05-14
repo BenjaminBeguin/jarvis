@@ -3,10 +3,21 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ModuleSummary,
   PaletteIntentSummary,
+  ProjectDef,
   SkillSummary,
   TranscribeProgress,
 } from '../../shared/types';
 import { AudioCapture } from '../voice/AudioCapture';
+
+const ACTIVE_PROJECT_KEY = 'jarvis.activeProject';
+
+function readActiveProject(): string | null {
+  try {
+    return window.localStorage.getItem(ACTIVE_PROJECT_KEY) || null;
+  } catch {
+    return null;
+  }
+}
 
 interface PendingIntent extends PaletteIntentSummary {}
 
@@ -101,6 +112,10 @@ export function CommandPalette() {
   const [downloadProgress, setDownloadProgress] = useState<TranscribeProgress | null>(null);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [modules, setModules] = useState<ModuleSummary[]>([]);
+  const [projects, setProjects] = useState<ProjectDef[]>([]);
+  const [activeProject, setActiveProject] = useState<string | null>(() =>
+    readActiveProject(),
+  );
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [activeIntent, setActiveIntent] = useState<PendingIntent | null>(null);
   const [pickerIndex, setPickerIndex] = useState(0);
@@ -125,6 +140,7 @@ export function CommandPalette() {
   useEffect(() => {
     void window.jarvis.listSkills().then(setSkills);
     void window.jarvis.listModules().then(setModules);
+    void window.jarvis.listProjects().then(setProjects);
     const offS = window.jarvis.onSkillsChanged(setSkills);
     const offM = window.jarvis.onModulesChanged(setModules);
     const offP = window.jarvis.onTranscribeProgress((event) => {
@@ -144,6 +160,21 @@ export function CommandPalette() {
 
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  // Re-read the active project every time the palette window is shown
+  // (window 'focus' fires on each Cmd+Shift+J open). localStorage 'storage'
+  // events don't fire in the same BrowserWindow that wrote them, so we rely
+  // on focus for the cross-window sync.
+  useEffect(() => {
+    const sync = () => setActiveProject(readActiveProject());
+    sync();
+    window.addEventListener('focus', sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener('focus', sync);
+      window.removeEventListener('storage', sync);
+    };
   }, []);
 
   // Cycle placeholder hints while idle. Stops once the user starts typing
@@ -179,6 +210,31 @@ export function CommandPalette() {
     () => modules.flatMap((m) => m.intents),
     [modules],
   );
+
+  // Shortest available alias for the active project. Notes / meetings parse
+  // a leading "<alias>:" — using the shortest alias keeps the prefix tidy.
+  const activeAlias = useMemo<string | null>(() => {
+    if (!activeProject) return null;
+    const def = projects.find((p) => p.name === activeProject);
+    if (!def) return null;
+    const candidates = [def.name, ...def.aliases];
+    return candidates
+      .slice()
+      .sort((a, b) => a.length - b.length)[0] ?? null;
+  }, [activeProject, projects]);
+
+  // Does the raw text already start with a project alias? If so we don't
+  // double-prefix when auto-scoping.
+  const hasInlineProjectPrefix = (raw: string): boolean => {
+    const m = raw.match(/^\s*([a-z0-9][a-z0-9 _-]{0,40}):\s/i);
+    if (!m) return false;
+    const candidate = m[1].toLowerCase().trim();
+    return projects.some(
+      (p) =>
+        p.name.toLowerCase() === candidate ||
+        p.aliases.some((a) => a.toLowerCase() === candidate),
+    );
+  };
 
   // Debounced preview: when the user is typing free text (no skill, no
   // intent, no slash), ask main whether it would route as a reminder /
@@ -258,9 +314,22 @@ export function CommandPalette() {
 
   const dispatch = async (override: DispatchOverride = {}) => {
     setError(null);
-    const prompt = (override.text ?? text).trim();
+    const promptRaw = (override.text ?? text).trim();
     const intentForCall = override.intent !== undefined ? override.intent : activeIntent;
     const skillForCall = override.skill !== undefined ? override.skill : activeSkill;
+    // Inject "<alias>: " when an active project is set, the user didn't
+    // already type a project prefix, and the destination is a project-aware
+    // intent or a free-text route.
+    const projectAwareIntent =
+      intentForCall != null &&
+      ['quick-note', 'meeting-recorder'].includes(intentForCall.moduleId);
+    const shouldScope =
+      activeAlias != null &&
+      promptRaw.length > 0 &&
+      !hasInlineProjectPrefix(promptRaw) &&
+      (intentForCall == null || projectAwareIntent) &&
+      skillForCall == null;
+    const prompt = shouldScope ? `${activeAlias}: ${promptRaw}` : promptRaw;
     // Reset history navigation on any successful dispatch.
     setHistoryIndex(-1);
     if (prompt) pushHistory(prompt);
@@ -447,6 +516,28 @@ export function CommandPalette() {
     <div className="palette palette-body" ref={paletteRef}>
       <div className="palette__inner">
         <span className="palette__prompt" aria-hidden>›</span>
+        {activeAlias && !activeIntent && !activeSkill && (
+          <span
+            className="skill-chip skill-chip--project"
+            title={`Scoped to ${activeProject}. Switch in the shell header.`}
+          >
+            {activeAlias}
+            <button
+              className="skill-chip__remove"
+              onClick={() => {
+                try {
+                  window.localStorage.removeItem(ACTIVE_PROJECT_KEY);
+                } catch {
+                  // ignore
+                }
+                setActiveProject(null);
+              }}
+              title="Clear project scope for this prompt"
+            >
+              ×
+            </button>
+          </span>
+        )}
         {activeIntent && (
           <span className="skill-chip skill-chip--intent">
             {activeIntent.label}

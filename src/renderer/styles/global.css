@@ -698,6 +698,13 @@ button:disabled:hover {
   text-shadow: 0 0 8px rgba(95, 255, 166, 0.5);
 }
 
+.skill-chip--project {
+  background: rgba(255, 196, 80, 0.10);
+  color: var(--warn);
+  border-color: var(--warn);
+  text-shadow: 0 0 8px rgba(255, 196, 80, 0.45);
+}
+
 .skill-chip__remove {
   background: transparent;
   border: 0;
@@ -821,26 +828,34 @@ button:disabled:hover {
   text-shadow: var(--accent-glow);
 }
 
-.shell__reticle {
-  width: 14px;
-  height: 14px;
+.shell__logo {
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
+  filter: drop-shadow(0 0 6px rgba(0, 212, 255, 0.45));
 }
 
-.shell__reticle circle,
-.shell__reticle line {
-  stroke: var(--accent);
-  stroke-width: 1;
-  fill: none;
+.shell__logo-spin {
+  transform-origin: 14px 14px;
+  animation: jarvis-logo-spin 14s linear infinite;
 }
 
-.shell__reticle .ring--spin {
-  transform-origin: center;
-  animation: reticle-spin 6s linear infinite;
+.shell__logo-ring {
+  transform-origin: 14px 14px;
+  animation: jarvis-logo-breathe 4.8s ease-in-out infinite;
 }
 
-@keyframes reticle-spin {
+@keyframes jarvis-logo-spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes jarvis-logo-breathe {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+
+.shell__brand-text {
+  font-weight: 500;
 }
 
 .shell__tabs {
@@ -888,6 +903,130 @@ button:disabled:hover {
   letter-spacing: 0.12em;
   min-width: 7ch;
   text-align: right;
+}
+
+/* Active-project scope picker — the global "what am I working on" filter
+   that lives in the shell header. Pulses gently when a scope is active so
+   the user can't lose track of which project notes/meetings will land in. */
+.shell__scope {
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+
+.shell__scope-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.shell__scope-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.shell__scope-btn--active {
+  border-color: var(--warn);
+  color: var(--warn);
+  background: rgba(255, 196, 80, 0.06);
+  text-shadow: 0 0 8px rgba(255, 196, 80, 0.45);
+}
+
+.shell__scope-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  box-shadow: 0 0 4px currentColor;
+}
+
+.shell__scope-btn--active .shell__scope-dot {
+  background: var(--warn);
+  animation: scope-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes scope-pulse {
+  0%, 100% { box-shadow: 0 0 4px var(--warn); }
+  50% { box-shadow: 0 0 10px var(--warn); }
+}
+
+.shell__scope-label {
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell__scope-caret {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.shell__scope-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  background: rgba(4, 7, 11, 0.94);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  z-index: 20;
+}
+
+.shell__scope-item {
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-left: 2px solid transparent;
+}
+
+.shell__scope-item:hover {
+  background: rgba(0, 212, 255, 0.06);
+  border-left-color: var(--accent);
+}
+
+.shell__scope-item--active {
+  color: var(--warn);
+  border-left-color: var(--warn);
+  background: rgba(255, 196, 80, 0.06);
+}
+
+.shell__scope-item-hint {
+  color: var(--text-dim);
+  font-size: 10px;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.shell__scope-empty {
+  padding: 10px;
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.04em;
 }
 
 /* Global "what's happening" pill in the shell header. Shows running,
@@ -1013,6 +1152,81 @@ button:disabled:hover {
   border: 1px solid var(--border);
   padding: 4px 8px;
   border-radius: 2px;
+}
+
+.shell__prefs-btn {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.shell__prefs-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+/* Preferences modal — reuses the project-dialog base styles. */
+.preferences-dialog {
+  width: min(720px, calc(100% - 60px));
+}
+
+.preferences-dialog__path {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+.preferences-dialog__body {
+  gap: 10px;
+}
+
+.preferences-dialog__hint {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.preferences-dialog__hint code,
+.preferences-dialog__hint kbd {
+  background: rgba(0, 212, 255, 0.06);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+}
+
+.preferences-dialog__textarea {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  padding: 12px 14px;
+  border-radius: 2px;
+  min-height: 360px;
+  resize: vertical;
+  tab-size: 2;
+}
+
+.preferences-dialog__textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
 }
 
 .shell__body {
@@ -2324,6 +2538,48 @@ button:disabled:hover {
   text-transform: uppercase;
 }
 
+/* Claude Code jump affordances — only present on subscription-mode tasks
+   that have an sdkSessionId. Compact row, monospace, sits under the meta. */
+.detail__session-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  flex-wrap: wrap;
+}
+
+.detail__session-id {
+  background: rgba(0, 212, 255, 0.06);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.detail__session-row button {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.detail__session-row button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
 .detail__body {
   overflow-y: auto;
   padding: 18px 24px;
@@ -2600,6 +2856,15 @@ button:disabled:hover {
   font-size: 11px;
 }
 
+.shell__subnav-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
 .shell__subnav-back {
   background: transparent;
   border: 1px solid var(--border-strong);
@@ -2611,6 +2876,7 @@ button:disabled:hover {
   border-radius: 2px;
   cursor: pointer;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .shell__subnav-back:hover {
@@ -4248,6 +4514,13 @@ button:disabled:hover {
   background: rgba(4, 7, 11, 0.4);
 }
 
+.projects__rail-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .projects__rail-head h2 {
   margin: 0 0 4px;
   font-family: var(--mono);
@@ -4255,6 +4528,181 @@ button:disabled:hover {
   letter-spacing: 0.32em;
   color: var(--accent);
   text-shadow: var(--accent-glow);
+}
+
+.projects__new-btn {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.projects__new-btn:hover {
+  background: rgba(0, 212, 255, 0.10);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.shell__scope-item--new {
+  border-top: 1px solid var(--border-strong);
+  margin-top: 4px;
+  color: var(--accent);
+}
+
+.shell__scope-item--new:hover {
+  background: rgba(0, 212, 255, 0.08);
+  border-left-color: var(--accent);
+}
+
+.project-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 4, 7, 0.62);
+  backdrop-filter: blur(6px);
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+
+.project-dialog {
+  width: min(480px, calc(100% - 60px));
+  background: rgba(7, 11, 15, 0.95);
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), var(--accent-glow-soft);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 60px);
+}
+
+.project-dialog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.project-dialog__head h2 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.28em;
+  color: var(--accent);
+  text-shadow: var(--accent-glow);
+}
+
+.project-dialog__close {
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.project-dialog__close:hover {
+  color: var(--text);
+}
+
+.project-dialog__body {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.project-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.project-dialog__field > span {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.project-dialog__field input {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 2px;
+}
+
+.project-dialog__field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.project-dialog__field small {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.project-dialog__error {
+  color: var(--bad);
+  font-family: var(--mono);
+  font-size: 11px;
+  border-left: 2px solid var(--bad);
+  padding-left: 8px;
+}
+
+.project-dialog__foot {
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--border-strong);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.project-dialog__foot button {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.project-dialog__foot button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.project-dialog__foot button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.project-dialog__primary {
+  color: var(--accent) !important;
+  border-color: var(--accent) !important;
+  text-shadow: var(--accent-glow);
+}
+
+.project-dialog__primary:hover:not(:disabled) {
+  background: rgba(0, 212, 255, 0.10);
+  box-shadow: var(--accent-glow-soft);
 }
 
 .projects__rail-head p {
