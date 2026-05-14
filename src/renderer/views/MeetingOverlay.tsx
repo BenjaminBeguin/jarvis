@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import type { SkillSummary } from '../../shared/types';
 import {
   meetingRecorder,
   type MeetingState,
 } from '../voice/MeetingRecorder';
+import { toast } from './Toaster';
 
 function formatDuration(ms: number): string {
   const total = Math.floor(ms / 1000);
@@ -26,6 +28,79 @@ export function MeetingOverlay() {
   const [now, setNow] = useState(Date.now());
   const [expanded, setExpanded] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
+  /** Currently-selected text inside the transcript (null when no selection). */
+  const [selection, setSelection] = useState<{
+    text: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [skills, setSkills] = useState<SkillSummary[]>([]);
+
+  useEffect(() => {
+    void window.jarvis.listSkills().then(setSkills);
+    return window.jarvis.onSkillsChanged(setSkills);
+  }, []);
+
+  // Listen for selection changes inside the transcript. When the user
+  // releases the mouse with a non-empty selection, surface a floating
+  // "act on this" button anchored to the selection's bottom-right.
+  const checkSelection = useCallback(() => {
+    const root = transcriptRef.current;
+    if (!root) return;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) {
+      setSelection(null);
+      setPickerOpen(false);
+      return;
+    }
+    const range = sel.getRangeAt(0);
+    if (!root.contains(range.commonAncestorContainer)) {
+      // Selection is outside the transcript — ignore.
+      return;
+    }
+    const text = sel.toString().trim();
+    if (!text) {
+      setSelection(null);
+      return;
+    }
+    const rect = range.getBoundingClientRect();
+    setSelection({ text, x: rect.right, y: rect.bottom });
+    setPickerOpen(false);
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener('selectionchange', checkSelection);
+    return () => document.removeEventListener('selectionchange', checkSelection);
+  }, [checkSelection]);
+
+  const dispatchToSkill = async (skill: SkillSummary) => {
+    if (!selection) return;
+    const transcriptSoFar = state.liveChunks.map((c) => c.text).join(' ');
+    const prompt =
+      `[MEETING SELECTION]\nFrom meeting "${state.title ?? 'untitled'}" (currently recording).\n\n` +
+      `### Highlighted excerpt\n${selection.text}\n\n` +
+      `### Full transcript so far (for context, may be partial)\n${transcriptSoFar || '_(no other speech yet)_'}\n\n` +
+      `Act on the highlighted excerpt as the skill instructs.`;
+    try {
+      const t = await window.jarvis.launchTask({
+        prompt,
+        skillId: skill.id,
+        origin: 'palette',
+      });
+      void window.jarvis.showAnswerHud(t.id);
+      toast({ message: `Working on it · ${skill.name}` });
+      // Clear selection so the action button doesn't linger.
+      window.getSelection()?.removeAllRanges();
+      setSelection(null);
+      setPickerOpen(false);
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
 
   // Concatenate chunks for a flowing transcript; preserve breaks every
   // few chunks so the eye gets paragraph anchors.
@@ -121,6 +196,20 @@ export function MeetingOverlay() {
               )}
             </div>
           )}
+          {expanded && selection && (
+            <SelectionAction
+              anchor={selection}
+              skills={skills}
+              open={pickerOpen}
+              onOpen={() => setPickerOpen(true)}
+              onPick={(s) => void dispatchToSkill(s)}
+              onCancel={() => {
+                setPickerOpen(false);
+                window.getSelection()?.removeAllRanges();
+                setSelection(null);
+              }}
+            />
+          )}
         </>
       )}
       {state.finishing && (
@@ -130,6 +219,85 @@ export function MeetingOverlay() {
       )}
       {state.error && !state.active && !state.finishing && (
         <div className="meeting-overlay__error">{state.error}</div>
+      )}
+    </div>
+  );
+}
+
+interface SelectionActionProps {
+  anchor: { text: string; x: number; y: number };
+  skills: SkillSummary[];
+  open: boolean;
+  onOpen: () => void;
+  onPick: (skill: SkillSummary) => void;
+  onCancel: () => void;
+}
+
+/**
+ * Floating "act on this" affordance anchored to the bottom-right of the
+ * current transcript selection. Click → expands to a skill picker. Picking
+ * a skill fires it with the highlighted text + transcript context.
+ *
+ * Positioning is in viewport coords (position: fixed) since the user can
+ * scroll inside the transcript panel.
+ */
+function SelectionAction({
+  anchor,
+  skills,
+  open,
+  onOpen,
+  onPick,
+  onCancel,
+}: SelectionActionProps) {
+  // Clamp so the picker doesn't fall off-screen if the selection is near
+  // the right edge.
+  const x = Math.min(anchor.x, window.innerWidth - 280);
+  const y = Math.min(anchor.y + 6, window.innerHeight - 320);
+  const visibleSkills = skills
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <div
+      className="meeting-selection"
+      style={{ left: `${x}px`, top: `${y}px` }}
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      {!open ? (
+        <div className="meeting-selection__buttons">
+          <button
+            className="meeting-selection__btn meeting-selection__btn--primary"
+            onClick={onOpen}
+          >
+            ⚡ Act on selection
+          </button>
+          <button className="meeting-selection__btn" onClick={onCancel}>
+            ×
+          </button>
+        </div>
+      ) : (
+        <div className="meeting-selection__picker">
+          <header>Pick a skill</header>
+          <ul>
+            {visibleSkills.map((s) => (
+              <li key={s.id}>
+                <button onClick={() => onPick(s)}>
+                  <span className="meeting-selection__skill-name">{s.name}</span>
+                  {s.description && (
+                    <span className="meeting-selection__skill-desc">
+                      {s.description}
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+            {visibleSkills.length === 0 && (
+              <li className="meeting-selection__empty">No skills available.</li>
+            )}
+          </ul>
+          <footer>
+            <button onClick={onCancel}>cancel</button>
+          </footer>
+        </div>
       )}
     </div>
   );

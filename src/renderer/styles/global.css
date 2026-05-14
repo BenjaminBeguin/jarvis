@@ -3334,6 +3334,145 @@ button:disabled:hover {
   font-style: italic;
 }
 
+/* Floating "act on selection" affordance + skill picker shown when the
+   user highlights text in the live transcript. Position is fixed in the
+   viewport so it tracks the selection even as the transcript scrolls. */
+.meeting-selection {
+  position: fixed;
+  z-index: 250;
+  font-family: var(--mono);
+  animation: meeting-sel-in 140ms ease-out;
+}
+
+@keyframes meeting-sel-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.meeting-selection__buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.meeting-selection__btn {
+  background: rgba(4, 7, 11, 0.95);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 5px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+
+.meeting-selection__btn--primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.meeting-selection__btn:hover {
+  color: var(--accent-strong);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.35);
+}
+
+.meeting-selection__picker {
+  width: 280px;
+  background: rgba(4, 7, 11, 0.95);
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
+  max-height: 320px;
+}
+
+.meeting-selection__picker header {
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.meeting-selection__picker ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.meeting-selection__picker li button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 6px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.meeting-selection__picker li button:hover {
+  background: rgba(0, 212, 255, 0.08);
+}
+
+.meeting-selection__skill-name {
+  color: var(--text);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.meeting-selection__skill-desc {
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meeting-selection__empty {
+  color: var(--text-faint);
+  font-size: 11px;
+  padding: 6px 8px;
+  font-style: italic;
+}
+
+.meeting-selection__picker footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-strong);
+}
+
+.meeting-selection__picker footer button {
+  background: transparent;
+  border: 0;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.meeting-selection__picker footer button:hover {
+  color: var(--text-dim);
+}
+
 .meeting-overlay__dot {
   width: 8px;
   height: 8px;
