@@ -488,6 +488,27 @@ function SessionAffordances({ task }: { task: TaskSummary }) {
     }
   };
 
+  /**
+   * The "I'll take it from here" path. Aborts Jarvis's iterator (so we
+   * don't have two writers on the same session), copies the resume
+   * command to clipboard, and tells the user where to paste it.
+   * Visible only while the task is live.
+   */
+  const handOff = async () => {
+    try {
+      await window.jarvis.abortTask(task.id);
+      await navigator.clipboard.writeText(resumeCmd);
+      toast({
+        message: `Aborted in Jarvis · ${resumeCmd} copied. Paste in any terminal to continue.`,
+      });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
   return (
     <div className="detail__session-row" title={`session ${sessionId}`}>
       <code className="detail__session-id">{sessionId.slice(0, 8)}…</code>
@@ -497,6 +518,15 @@ function SessionAffordances({ task }: { task: TaskSummary }) {
       <button onClick={() => void openInDesktop()} title="Open this session in Claude Code Desktop">
         Open in Claude Code
       </button>
+      {isLive && (
+        <button
+          onClick={() => void handOff()}
+          title="Stop Jarvis cleanly and copy the resume command so you can continue in a terminal"
+          className="detail__session-handoff"
+        >
+          Hand off to terminal
+        </button>
+      )}
     </div>
   );
 }
