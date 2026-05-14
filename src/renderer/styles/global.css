@@ -1616,6 +1616,24 @@ button:disabled:hover {
   box-shadow: 0 0 6px rgba(255, 196, 80, 0.25);
 }
 
+.inbox__bulk-dismiss {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 6px 12px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.inbox__bulk-dismiss:hover {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
 .inbox__filter-hint {
   padding: 6px 14px;
   border-left: 2px solid var(--warn);

@@ -78,6 +78,35 @@ export function Inbox() {
     }
   };
 
+  /**
+   * Snooze every currently-visible item — useful after a triage pass
+   * when you want a clean slate until tomorrow. Respects the scope
+   * filter (only snoozes filtered items).
+   */
+  const bulkDismiss = async (label: string) => {
+    if (filteredItems.length === 0) return;
+    const snoozeMs = 24 * 60 * 60 * 1000;
+    if (
+      !confirm(
+        `Snooze ${filteredItems.length} item${filteredItems.length === 1 ? '' : 's'} for ${label}?`,
+      )
+    )
+      return;
+    try {
+      await Promise.all(
+        filteredItems.map((it) =>
+          window.jarvis.dismissInboxItem(it.id, snoozeMs),
+        ),
+      );
+      toast({ message: `Snoozed ${filteredItems.length} for ${label}` });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
   const filteredItems = useMemo(() => {
     if (!filterByScope || !activeProject) return items;
     return items.filter((it) => it.project === activeProject);
@@ -113,6 +142,15 @@ export function Inbox() {
               }
             >
               {filterByScope ? `✓ ${activeProject}` : `Filter: ${activeProject}`}
+            </button>
+          )}
+          {filteredItems.length > 0 && (
+            <button
+              className="inbox__bulk-dismiss"
+              onClick={() => void bulkDismiss('1 day')}
+              title="Snooze every visible item for 24 hours"
+            >
+              💤 Snooze all 24h
             </button>
           )}
           <button
