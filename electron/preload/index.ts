@@ -59,7 +59,7 @@ const api = {
     subscribe(IpcChannels.observatoryFocusTask, listener),
   onShellNavigate: (
     listener: Listener<{
-      tab?: 'observatory' | 'inbox' | 'projects' | 'routines' | 'settings';
+      tab?: 'observatory' | 'inbox' | 'briefings' | 'projects' | 'routines' | 'settings';
       moduleId?: string;
       action?: 'open-new-project';
       initial?: string;
@@ -188,6 +188,35 @@ const api = {
     subscribe(IpcChannels.inboxChanged, listener),
   onInboxRefreshing: (listener: Listener<boolean>): Unsubscribe =>
     subscribe(IpcChannels.inboxRefreshing, listener),
+
+  listBriefingKinds: (): Promise<
+    Array<{
+      id: string;
+      label: string;
+      description: string;
+      skillId: string;
+      schedule?: string;
+    }>
+  > => ipcRenderer.invoke(IpcChannels.listBriefingKinds),
+  listBriefingFiles: (
+    kindId: string,
+  ): Promise<
+    Array<{
+      kind: string;
+      filename: string;
+      path: string;
+      mtimeMs: number;
+      sizeBytes: number;
+      title: string;
+      date: string | null;
+    }>
+  > => ipcRenderer.invoke(IpcChannels.listBriefingFiles, kindId),
+  readBriefingFile: (kindId: string, filename: string): Promise<string> =>
+    ipcRenderer.invoke(IpcChannels.readBriefingFile, { kindId, filename }),
+  generateBriefing: (kindId: string): Promise<TaskSummary> =>
+    ipcRenderer.invoke(IpcChannels.generateBriefing, kindId),
+  onBriefingsChanged: (listener: Listener<void>): Unsubscribe =>
+    subscribe(IpcChannels.briefingsChanged, listener),
 
   requestMicAccess: (): Promise<{ granted: boolean; status: string }> =>
     ipcRenderer.invoke(IpcChannels.requestMicAccess),

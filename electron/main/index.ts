@@ -6,9 +6,11 @@ import { IpcChannels } from '@shared/ipc';
 import type { AppStatus, TaskEvent, TaskSummary } from '@shared/types';
 
 import { detectClaudeBinary, loadAuthMode } from './auth.js';
+import { BriefingsStore } from './briefings.js';
 import { closeDatabase, initDatabase, listRecentTasks } from './db.js';
 import { startHttpServer, type HttpServerHandle } from './http-server.js';
 import { InboxStore } from './inbox.js';
+import { BUILTIN_BRIEFING_KINDS } from './seeds/briefing-kinds.js';
 import {
   failedRoutinesInboxSource,
   prAddressCommentsInboxSource,
@@ -85,6 +87,7 @@ const preferences = new PreferencesStore(
 );
 const userContext = new UserContextStore();
 const inbox = new InboxStore();
+const briefings = new BriefingsStore(BUILTIN_BRIEFING_KINDS);
 // Built-in context providers: time + active project (set from renderer) +
 // projects list + recent task. Order matters — first registered is first
 // in the prepended block. Modules can add more via
@@ -291,6 +294,7 @@ app.whenReady().then(async () => {
   mcp.init();
   projects.init();
   preferences.init();
+  briefings.init();
   routines.init();
 
   // Reminder fire handler must be set BEFORE init() so past-due reminders
@@ -434,6 +438,7 @@ app.whenReady().then(async () => {
   inbox.on('refreshing', (flag: boolean) =>
     broadcast(IpcChannels.inboxRefreshing, flag),
   );
+  briefings.on('changed', () => broadcast(IpcChannels.briefingsChanged, null));
   // Proactive Jarvis: ping the user once when new inbox items appear since
   // the previous refresh. Grouped — one notification for N items, not N
   // notifications. Click jumps to the Inbox tab.
@@ -538,6 +543,7 @@ app.whenReady().then(async () => {
     userContext,
     preferences,
     inbox,
+    briefings,
     jarvisRoot,
     auth: {
       refresh: refreshAuth,
@@ -573,6 +579,7 @@ app.on('before-quit', () => {
   projects.close();
   preferences.close();
   inbox.stopAutoRefresh();
+  briefings.close();
   void httpServer?.close();
   closeDatabase();
 });

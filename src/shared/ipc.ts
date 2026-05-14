@@ -64,6 +64,12 @@ export const IpcChannels = {
   inboxChanged: 'inbox:changed',
   inboxRefreshing: 'inbox:refreshing',
 
+  listBriefingKinds: 'briefings:listKinds',
+  listBriefingFiles: 'briefings:listFiles',
+  readBriefingFile: 'briefings:readFile',
+  generateBriefing: 'briefings:generate',
+  briefingsChanged: 'briefings:changed',
+
   requestMicAccess: 'media:requestMic',
   micStatus: 'media:micStatus',
 
