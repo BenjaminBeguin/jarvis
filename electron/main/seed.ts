@@ -272,6 +272,18 @@ misunderstood snippet.
 2. The matched project tells you the local path (\`cd\` target) and repo
    identifier ("owner/name") for \`gh\`.
 
+## Load project memory (READ FIRST)
+
+Before planning, glob \`~/.jarvis/projects/<project-slug>/memory/*.md\`
+where \`<project-slug>\` is the project's name lowercased with spaces →
+\`-\`. These markdown files are notes left by previous agents about
+this codebase — flaky tests, conventions, gotchas, things to avoid.
+
+Use them as authoritative context. If memory says "the integration
+tests need a 50ms wait before assertions", do that. If a file
+contradicts what you're observing, surface it ("memory said X but the
+code now does Y — proceeding with Y, will update memory").
+
 ## Step-by-step
 
 1. **Plan** — write a 3-5 line summary: what the change is, why,
@@ -301,11 +313,26 @@ misunderstood snippet.
 6. **Open the PR** via \`gh pr create\` with a body that links the
    Linear ticket. Mark as draft if the change is a stub.
 
-7. **Report back** — output a short markdown block:
+7. **Save project memory.** Append to
+   \`~/.jarvis/projects/<project-slug>/memory/<topic>.md\` (one file per
+   area of the codebase you touched — e.g. \`auth.md\`, \`build.md\`).
+   Each entry should be a few lines, dated, focused on the
+   **non-obvious things** future agents will need:
+
+   - Conventions you had to follow ("this codebase uses Vitest, not Jest").
+   - Gotchas you hit ("integration tests need a 50ms wait before assertions").
+   - Architectural decisions you observed ("auth flows go through the
+     UserSession singleton — don't add new auth paths").
+   - Caveats that aren't in the code or README.
+
+   Skip the obvious. Don't write "the project uses TypeScript".
+
+8. **Report back** — output a short markdown block:
        \`\`\`
        ✅ Ticket: <linear url>
        ✅ Branch: <branch>
        ✅ PR (draft): <pr url>
+       📝 Memory: <files touched>
        \`\`\`
    If any step failed, surface the error verbatim and stop.
 
@@ -370,6 +397,15 @@ Otherwise list as:
 1. #<num> · <owner>/<repo> · <title>  — by @author · <age>
 …
 \`\`\`
+
+## 2.5 — Load project memory (if scoped)
+
+When the queue is project-scoped, glob
+\`~/.jarvis/projects/<project-slug>/memory/*.md\` and read. These are
+notes left by previous agents who worked on this codebase: known flaky
+tests, conventions, things to flag vs ignore. Use them as authoritative
+context — if memory says "we deliberately don't request changes on
+style in this repo", carry that bias.
 
 ## 3 — Per PR, in order
 
@@ -486,6 +522,14 @@ gh pr view <num> --repo <owner>/<repo> --json headRefName,headRepository,baseRef
 Resolve the local clone via \`~/.jarvis/projects.json\` if the repo
 is registered, otherwise ask where the local checkout lives.
 
+## Load project memory
+
+Glob \`~/.jarvis/projects/<project-slug>/memory/*.md\` (where
+\`<project-slug>\` is the project name lowercased with spaces → \`-\`).
+Read everything. These are notes from previous agents on this codebase:
+conventions, gotchas, things that look broken but aren't. Use them as
+authoritative context before reaching for the edits.
+
 ## Rebase
 
 1. \`cd\` to the local repo path.
@@ -580,6 +624,19 @@ gh api -X POST repos/<owner>/<repo>/issues/<num>/comments \\
 
 Tone: brief, no apology theatre. "Done — switched to early return."
 Not "Great point, thank you so much! I have refactored…"
+
+## Update project memory
+
+After everything pushes cleanly, append a few lines to
+\`~/.jarvis/projects/<project-slug>/memory/pr-feedback.md\` (create if
+missing). Log **patterns**, not every fix:
+
+- "Reviewers on this repo consistently flag X" → next time, avoid X
+  preemptively.
+- "Comments often ask for early-return refactors" → take as house
+  style.
+
+Memory is for cross-PR patterns. Don't log per-fix.
 
 ## Hard rules
 

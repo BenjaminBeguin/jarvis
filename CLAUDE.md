@@ -112,12 +112,15 @@ If a new feature breaks either primitive, push back before implementing.
 
 ```
 ~/.jarvis/
-  skills/<name>/SKILL.md   # frontmatter + body; body is the systemPrompt
-  mcp.json                 # global MCP servers; skills opt-in by name
-  mcp.json.example         # seeded on first launch
-  reminders.json           # one-shot fires; rehydrated on startup
-  notes/<date>.md          # quick-note module
-  meetings/<ts>-<slug>.md  # meeting-recorder module (auto-debriefed)
+  skills/<name>/SKILL.md          # frontmatter + body; body is the systemPrompt
+  mcp.json                        # global MCP servers; skills opt-in by name
+  mcp.json.example                # seeded on first launch
+  reminders.json                  # one-shot fires; rehydrated on startup
+  notes/<date>.md                 # quick-note module (global)
+  notes/<project>/<date>.md       # quick-note when scoped: "/note alias: …"
+  meetings/<ts>-<slug>.md         # meeting-recorder (global)
+  meetings/<project>/<ts>-…       # meeting-recorder when scoped
+  projects/<name>/memory/*.md     # per-project agent memory (growing scratchpad)
   routines.json            # array of routine defs, schema in routines.ts
   jarvis.sqlite            # tasks + task_events
 ```

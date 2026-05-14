@@ -43,6 +43,7 @@ import { invokeMcpTool } from './mcp-invoke.js';
 import { probeMcpTools } from './mcp-probe.js';
 import { ShellRunner } from './shell-runner.js';
 import { parseIntent } from './intent-router.js';
+import { ProjectMemoryStore } from './project-memory.js';
 import { ProjectStore } from './projects.js';
 import { ReminderStore } from './reminders.js';
 import { RoutineStore } from './routines.js';
@@ -86,6 +87,7 @@ const runner = new TaskRunner();
 const routines = new RoutineStore();
 const reminders = new ReminderStore();
 const skillSuggestions = new SkillSuggestionStore(join(homedir(), '.jarvis'));
+const projectMemory = new ProjectMemoryStore();
 const modules = new ModuleRegistry();
 const shellRunner = new ShellRunner(runner);
 runner.setSkillStore(skills);
@@ -526,6 +528,7 @@ function registerIpc(): void {
       _e,
       payload: {
         title: string;
+        project?: string | null;
         startedAt: number;
         endedAt: number;
         sampleRate: number;
@@ -534,6 +537,7 @@ function registerIpc(): void {
     ): Promise<{ filename: string }> => {
       const filename = await persistMeeting(join(homedir(), '.jarvis'), {
         title: payload.title,
+        project: payload.project ?? null,
         startedAt: payload.startedAt,
         endedAt: payload.endedAt,
         sampleRate: payload.sampleRate,
@@ -940,6 +944,12 @@ app.whenReady().then(async () => {
     },
     parseFreeTextIntent: (input: string) => parseIntent(input),
     createReminder: (input) => reminders.create(input),
+    resolveProject: (query: string) => projects.resolve(query),
+    memoryRead: (project: string, file?: string) =>
+      projectMemory.read(project, file),
+    memoryAppend: (project: string, file: string, content: string) => {
+      projectMemory.append(project, file, content);
+    },
     registerExternalTask: (summary) => runner.registerExternal(summary),
     recordExternalEvent: (taskId, msg) =>
       runner.recordExternalEvent(taskId, msg),

@@ -13,6 +13,8 @@ export interface MeetingState {
   active: boolean;
   startedAt: number | null;
   title: string | null;
+  /** Project name when the recording was scoped via "<alias>: <title>". */
+  project: string | null;
   /** True while we're transcribing + saving after stop. */
   finishing: boolean;
   error: string | null;
@@ -26,6 +28,7 @@ const INITIAL_STATE: MeetingState = {
   active: false,
   startedAt: null,
   title: null,
+  project: null,
   finishing: false,
   error: null,
   liveChunks: [],
@@ -88,7 +91,7 @@ class MeetingRecorder {
     return () => this.listeners.delete(listener);
   }
 
-  async start(title: string): Promise<void> {
+  async start(title: string, project: string | null = null): Promise<void> {
     if (this.state.active) return;
     // Make sure the user actually granted mic access first (silent denial
     // would surface as zero samples, very confusing).
@@ -121,6 +124,7 @@ class MeetingRecorder {
       active: true,
       startedAt: Date.now(),
       title,
+      project,
       finishing: false,
       error: null,
       liveChunks: [],
@@ -185,6 +189,7 @@ class MeetingRecorder {
     }
     const title = this.state.title ?? 'Untitled meeting';
     const startedAt = this.state.startedAt ?? Date.now();
+    const project = this.state.project;
     this.setState({ ...this.state, active: false, finishing: true });
     let pcm: Float32Array;
     try {
@@ -208,6 +213,7 @@ class MeetingRecorder {
     try {
       await window.jarvis.meetingFinish({
         title,
+        project,
         startedAt,
         endedAt: Date.now(),
         sampleRate: 16_000,

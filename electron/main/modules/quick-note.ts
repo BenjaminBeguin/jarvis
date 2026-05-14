@@ -3,6 +3,14 @@ import { dirname, join } from 'node:path';
 
 import type { Module } from './types.js';
 
+function slugifyProject(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+}
+
 function dateKey(d: Date): string {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -38,10 +46,29 @@ export const quickNoteModule: Module = {
         'write this down',
       ],
       handler: async (input, ctx) => {
-        const text = input.trim();
-        if (!text) throw new Error('Note is empty');
+        const raw = input.trim();
+        if (!raw) throw new Error('Note is empty');
+
+        // Project scoping: "<alias>: <body>" lands the note under
+        // ~/.jarvis/notes/<project>/<date>.md if <alias> resolves. Otherwise
+        // it's a global note.
+        let text = raw;
+        let projectName: string | null = null;
+        const m = /^([\w-]+)\s*:\s*(.+)$/s.exec(raw);
+        if (m) {
+          const candidate = m[1]!;
+          const project = ctx.resolveProject(candidate);
+          if (project) {
+            projectName = project.name;
+            text = m[2]!.trim();
+          }
+        }
+
         const now = new Date();
-        const filePath = join(ctx.jarvisRoot, 'notes', `${dateKey(now)}.md`);
+        const dir = projectName
+          ? join(ctx.jarvisRoot, 'notes', slugifyProject(projectName))
+          : join(ctx.jarvisRoot, 'notes');
+        const filePath = join(dir, `${dateKey(now)}.md`);
         mkdirSync(dirname(filePath), { recursive: true });
         const block = `\n## ${timeKey(now)}\n\n${text}\n`;
         appendFileSync(filePath, block, 'utf8');
@@ -71,7 +98,10 @@ export const quickNoteModule: Module = {
           return `Saved + ${intent.mode === 'scheduled' ? 'scheduled' : 'reminder'} · ${when}`;
         }
 
-        ctx.notify('Note saved', rel);
+        ctx.notify(
+          projectName ? `Note saved · ${projectName}` : 'Note saved',
+          rel,
+        );
         return `Saved · ${rel}`;
       },
     },

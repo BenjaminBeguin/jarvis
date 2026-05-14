@@ -136,6 +136,7 @@ const api = {
 
   meetingFinish: (payload: {
     title: string;
+    project?: string | null;
     startedAt: number;
     endedAt: number;
     sampleRate: number;
@@ -143,7 +144,7 @@ const api = {
   }): Promise<{ filename: string }> =>
     ipcRenderer.invoke(IpcChannels.meetingFinish, payload),
   onMeetingStart: (
-    listener: Listener<{ title: string; startedAt: number }>,
+    listener: Listener<{ title: string; project?: string | null; startedAt: number }>,
   ): Unsubscribe => subscribe(IpcChannels.meetingStart, listener),
   onMeetingStopRequest: (listener: Listener<void>): Unsubscribe =>
     subscribe(IpcChannels.meetingStopRequest, listener),

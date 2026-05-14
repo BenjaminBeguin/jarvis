@@ -125,8 +125,8 @@ export function MeetingOverlay() {
   }, []);
 
   useEffect(() => {
-    const offStart = window.jarvis.onMeetingStart(({ title }) => {
-      void meetingRecorder.start(title);
+    const offStart = window.jarvis.onMeetingStart(({ title, project }) => {
+      void meetingRecorder.start(title, project ?? null);
     });
     const offStopReq = window.jarvis.onMeetingStopRequest(() => {
       void meetingRecorder.stop();
@@ -165,7 +165,14 @@ export function MeetingOverlay() {
           <div className="meeting-overlay__header">
             <span className="meeting-overlay__dot" />
             <div className="meeting-overlay__body">
-              <div className="meeting-overlay__title">{state.title}</div>
+              <div className="meeting-overlay__title">
+                {state.project && (
+                  <span className="meeting-overlay__project">
+                    {state.project} ·{' '}
+                  </span>
+                )}
+                {state.title}
+              </div>
               <div className="meeting-overlay__time">
                 REC · {formatDuration(now - state.startedAt)}
                 {state.transcribing && <span className="meeting-overlay__pulse"> · ✦</span>}

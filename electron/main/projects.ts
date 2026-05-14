@@ -74,6 +74,28 @@ export class ProjectStore extends EventEmitter {
     return this.projects;
   }
 
+  /**
+   * Fuzzy-match a free-text query against project names + aliases +
+   * description. Returns the best match or null if nothing fits. Used by
+   * modules that want to scope an action to a project ("/note csai: foo",
+   * "review my csai prs", etc.) without reimplementing the match logic.
+   */
+  resolve(query: string): ProjectDef | null {
+    const q = query.toLowerCase().trim();
+    if (!q) return null;
+    // Exact name / alias match wins.
+    for (const p of this.projects) {
+      if (p.name.toLowerCase() === q) return p;
+      if (p.aliases.some((a) => a.toLowerCase() === q)) return p;
+    }
+    // Substring fallback on name / aliases.
+    for (const p of this.projects) {
+      if (p.name.toLowerCase().includes(q)) return p;
+      if (p.aliases.some((a) => a.toLowerCase().includes(q))) return p;
+    }
+    return null;
+  }
+
   private reload(): void {
     if (!existsSync(this.path)) {
       this.projects = [];

@@ -1,4 +1,11 @@
-import type { LaunchTaskRequest, Reminder, ReminderMode, TaskStatus, TaskSummary } from '@shared/types';
+import type {
+  LaunchTaskRequest,
+  ProjectDef,
+  Reminder,
+  ReminderMode,
+  TaskStatus,
+  TaskSummary,
+} from '@shared/types';
 
 export type ParsedFreeTextIntent =
   | { kind: 'task'; body: string }
@@ -29,6 +36,15 @@ export interface ModuleContext {
   parseFreeTextIntent(input: string): ParsedFreeTextIntent;
   /** Schedule a reminder / scheduled action. Same store the palette uses. */
   createReminder(input: { body: string; mode: ReminderMode; fireAt: number }): Reminder;
+  /** Fuzzy-match a free-text query against ~/.jarvis/projects.json (name/aliases/description). */
+  resolveProject(query: string): ProjectDef | null;
+  /**
+   * Per-project memory at ~/.jarvis/projects/<name>/memory/. Agents read
+   * this at start of a task (so they don't relearn the codebase every
+   * time) and append findings at the end.
+   */
+  memoryRead(project: string, file?: string): string;
+  memoryAppend(project: string, file: string, content: string): void;
   /** Publish an observable entry the module is watching (not running). */
   registerExternalTask(summary: TaskSummary): void;
   /** Push a streamed event for a previously-registered external entry. */

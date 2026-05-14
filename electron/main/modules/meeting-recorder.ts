@@ -50,14 +50,32 @@ export const meetingRecorderModule: Module = {
         'capture meeting',
       ],
       handler: (input, ctx) => {
+        // Optional project scoping: "<alias>: <title>" lands the recorded
+        // markdown under ~/.jarvis/meetings/<project>/. If <alias> doesn't
+        // resolve, treat the whole input as a literal title.
+        let project: string | null = null;
+        let rawTitle = input.trim();
+        const m = /^([\w-]+)\s*:\s*(.+)$/s.exec(rawTitle);
+        if (m) {
+          const candidate = m[1]!;
+          const p = ctx.resolveProject(candidate);
+          if (p) {
+            project = p.name;
+            rawTitle = m[2]!.trim();
+          }
+        }
         const title =
-          input.trim() ||
+          rawTitle ||
           `Meeting at ${new Date().toLocaleTimeString([], {
             hour: '2-digit',
             minute: '2-digit',
           })}`;
-        ctx.broadcast(CHANNEL_START, { title, startedAt: Date.now() });
-        return `Recording started · ${title}`;
+        ctx.broadcast(CHANNEL_START, {
+          title,
+          project,
+          startedAt: Date.now(),
+        });
+        return `Recording started · ${project ? `${project} · ${title}` : title}`;
       },
     },
     {
@@ -87,6 +105,8 @@ interface FinishedRecording {
   pcm: Float32Array;
   /** Sample rate of the PCM (almost always 16_000). */
   sampleRate: number;
+  /** Project name when the recording was scoped via "<alias>: <title>". */
+  project?: string | null;
 }
 
 /**
@@ -102,19 +122,27 @@ export async function persistMeeting(
   const durationSec = Math.round(
     (recording.endedAt - recording.startedAt) / 1000,
   );
-  const dir = join(jarvisRoot, 'meetings');
+  const dir = recording.project
+    ? join(jarvisRoot, 'meetings', slugify(recording.project))
+    : join(jarvisRoot, 'meetings');
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const filename = `${timestamp(new Date(recording.startedAt))}-${slugify(recording.title)}.md`;
   const filePath = join(dir, filename);
   const startedAtIso = new Date(recording.startedAt).toISOString();
+  const projectLine = recording.project ? `project: ${recording.project}\n` : '';
   const body =
     `---\n` +
     `title: ${recording.title}\n` +
+    projectLine +
     `started_at: ${startedAtIso}\n` +
     `duration_seconds: ${durationSec}\n` +
     `---\n\n` +
     `# ${recording.title}\n\n` +
     `${transcript || '_no speech detected_'}\n`;
   writeFileSync(filePath, body, 'utf8');
-  return filename;
+  // Return path relative to ~/.jarvis/meetings/ so the caller can show a
+  // useful breadcrumb.
+  return recording.project
+    ? join(slugify(recording.project), filename)
+    : filename;
 }
