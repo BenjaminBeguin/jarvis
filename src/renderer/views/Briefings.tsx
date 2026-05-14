@@ -251,16 +251,8 @@ function SchedulePanel({
   kind: DigestKind;
   routine: RoutineDef | null;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [cronDraft, setCronDraft] = useState(routine?.cron ?? kind.schedule ?? '');
   const [busy, setBusy] = useState(false);
   const [skillOpen, setSkillOpen] = useState(false);
-
-  // Keep the draft in sync if the routine changes externally (e.g.
-  // user-edited routines.json by hand).
-  useEffect(() => {
-    if (!editing) setCronDraft(routine?.cron ?? kind.schedule ?? '');
-  }, [routine, kind.schedule, editing]);
 
   const enabled = routine?.enabled === true;
   const id = routineIdForKind(kind.id);
@@ -276,51 +268,6 @@ function SchedulePanel({
         enabled: true,
       });
       toast({ message: `Scheduled · ${kind.label}` });
-    } catch (e) {
-      toast({
-        kind: 'error',
-        message: e instanceof Error ? e.message : String(e),
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const disable = async () => {
-    if (!confirm(`Stop scheduling "${kind.label}"? The routine will be deleted; generated files stay.`)) {
-      return;
-    }
-    setBusy(true);
-    try {
-      await window.jarvis.deleteRoutine(id);
-      toast({ message: `Scheduling off · ${kind.label}` });
-    } catch (e) {
-      toast({
-        kind: 'error',
-        message: e instanceof Error ? e.message : String(e),
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const saveCron = async () => {
-    const next = cronDraft.trim();
-    if (!next) {
-      toast({ kind: 'error', message: 'Cron expression is required' });
-      return;
-    }
-    setBusy(true);
-    try {
-      await window.jarvis.saveRoutine({
-        id,
-        skillId: kind.skillId,
-        cron: next,
-        input: routine?.input ?? `Generate the ${kind.label.toLowerCase()}.`,
-        enabled: routine?.enabled ?? true,
-      });
-      setEditing(false);
-      toast({ message: `Schedule updated · ${next}` });
     } catch (e) {
       toast({
         kind: 'error',
@@ -400,73 +347,27 @@ function SchedulePanel({
         <span className="briefings__schedule-label">
           {enabled ? 'Scheduled' : 'Disabled'}
         </span>
-        {editing ? (
-          <input
-            className="briefings__schedule-input"
-            value={cronDraft}
-            onChange={(e) => setCronDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void saveCron();
-              if (e.key === 'Escape') {
-                setEditing(false);
-                setCronDraft(routine.cron);
-              }
-            }}
-            spellCheck={false}
-            autoFocus
-            placeholder="0 8 * * *"
-          />
-        ) : (
-          <code className="briefings__schedule-cron" title="Cron expression">
-            {routine.cron}
-          </code>
-        )}
+        <code className="briefings__schedule-cron" title="Cron expression">
+          {routine.cron}
+        </code>
         <span className="briefings__schedule-hint">
           {routine.lastRunAt
             ? `last run ${formatRelative(routine.lastRunAt)}`
             : 'never run'}
           {' · skill '}{skillLink}
-          {' · '}
-          <button
-            className="briefings__schedule-link"
-            onClick={jumpToRoutines}
-            title={`Routine id: ${routine.id} · open Routines tab`}
-          >
-            routine: {routine.id}
-          </button>
         </span>
       </div>
       <div className="briefings__schedule-actions">
-        {editing ? (
-          <>
-            <button onClick={() => setEditing(false)} disabled={busy}>
-              Cancel
-            </button>
-            <button
-              className="briefings__schedule-primary"
-              onClick={() => void saveCron()}
-              disabled={busy}
-            >
-              Save
-            </button>
-          </>
-        ) : (
-          <>
-            <button onClick={() => void runNow()} disabled={busy} title="Fire the routine right now">
-              Run now
-            </button>
-            <button onClick={() => setEditing(true)} disabled={busy}>
-              Edit cron
-            </button>
-            <button
-              className="briefings__schedule-danger"
-              onClick={() => void disable()}
-              disabled={busy}
-            >
-              Stop
-            </button>
-          </>
-        )}
+        <button onClick={() => void runNow()} disabled={busy} title="Fire the routine right now">
+          Run now
+        </button>
+        <button
+          className="briefings__schedule-link"
+          onClick={jumpToRoutines}
+          title={`Edit cron, disable, or delete in Routines · ${routine.id}`}
+        >
+          ⚙ Manage in Routines →
+        </button>
       </div>
     </div>
     {skillOpen && (
