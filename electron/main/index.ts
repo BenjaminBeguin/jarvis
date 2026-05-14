@@ -1,4 +1,4 @@
-import { app, globalShortcut, Notification } from 'electron';
+import { app, globalShortcut, ipcMain, Notification } from 'electron';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -7,6 +7,7 @@ import type { AppStatus, TaskEvent, TaskSummary } from '@shared/types';
 
 import { detectClaudeBinary, loadAuthMode } from './auth.js';
 import { closeDatabase, initDatabase, listRecentTasks } from './db.js';
+import { startHttpServer, type HttpServerHandle } from './http-server.js';
 import { InboxStore } from './inbox.js';
 import {
   failedRoutinesInboxSource,
@@ -36,6 +37,8 @@ import { seedDefaultsIfEmpty } from './seed.js';
 import {
   getAnthropicApiKey,
   getClaudeCodeOAuthToken,
+  getOrCreateHttpApiToken,
+  rotateHttpApiToken,
 } from './secrets.js';
 import { ShellRunner } from './shell-runner.js';
 import { SkillStore } from './skill-store.js';
@@ -106,6 +109,7 @@ runner.setPreferencesStore(preferences);
 routines.setRunner(runner);
 
 let claudeBinaryPath: string | null = null;
+let httpServer: HttpServerHandle | null = null;
 
 // ─── auth + status reconciliation ────────────────────────────────────────────
 
@@ -465,6 +469,52 @@ app.whenReady().then(async () => {
   // delayed 5s so the renderer's on-mount refresh wins the race.
   inbox.startAutoRefresh(5 * 60 * 1000);
 
+  // Localhost HTTP API. Auto-generates a bearer token on first launch
+  // and binds 127.0.0.1:4747. Lets iOS Shortcuts / CLI / future phone
+  // clients drive Jarvis the same way the renderer does via IPC.
+  // If the port is taken the server logs + skips — Jarvis works fine
+  // without it; the user just won't have external access.
+  try {
+    const token = await getOrCreateHttpApiToken();
+    httpServer = await startHttpServer({
+      runner,
+      reminders,
+      inbox,
+      token,
+      version: app.getVersion(),
+    });
+  } catch (err) {
+    console.warn('HTTP API startup failed:', err);
+  }
+
+  // Settings → API status. Inline here (rather than in ipc/<domain>.ts)
+  // because the handle is module-scoped in this bootstrap. If the API
+  // grows more endpoints / surface area, lift these into ipc/http.ts.
+  ipcMain.handle(IpcChannels.httpApiStatus, async () => {
+    const token = await getOrCreateHttpApiToken();
+    return {
+      running: httpServer !== null,
+      url: httpServer?.url ?? null,
+      token,
+    };
+  });
+  ipcMain.handle(IpcChannels.rotateHttpApiToken, async () => {
+    const fresh = await rotateHttpApiToken();
+    // Restart the server so the new token takes effect immediately;
+    // existing in-flight requests fail with 401 on the next call.
+    if (httpServer) {
+      await httpServer.close();
+      httpServer = await startHttpServer({
+        runner,
+        reminders,
+        inbox,
+        token: fresh,
+        version: app.getVersion(),
+      });
+    }
+    return { token: fresh, url: httpServer?.url ?? null };
+  });
+
   setProgressEmitter((event) =>
     broadcast(IpcChannels.transcribeProgress, event),
   );
@@ -518,5 +568,6 @@ app.on('before-quit', () => {
   projects.close();
   preferences.close();
   inbox.stopAutoRefresh();
+  void httpServer?.close();
   closeDatabase();
 });

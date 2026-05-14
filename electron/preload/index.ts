@@ -8,6 +8,7 @@ import type {
   DispatchIntentResult,
   JarvisFileEntry,
   CostSummary,
+  HttpApiStatus,
   InboxItem,
   LaunchTaskRequest,
   McpInvokeResult,
@@ -58,7 +59,7 @@ const api = {
     subscribe(IpcChannels.observatoryFocusTask, listener),
   onShellNavigate: (
     listener: Listener<{
-      tab?: 'observatory' | 'inbox' | 'projects' | 'routines' | 'integrations' | 'modules';
+      tab?: 'observatory' | 'inbox' | 'projects' | 'routines' | 'settings';
       moduleId?: string;
       action?: 'open-new-project';
       initial?: string;
@@ -76,6 +77,11 @@ const api = {
     ipcRenderer.invoke(IpcChannels.openInClaudeDesktop, sessionId),
   costSummary: (): Promise<CostSummary> =>
     ipcRenderer.invoke(IpcChannels.costSummary),
+
+  httpApiStatus: (): Promise<HttpApiStatus> =>
+    ipcRenderer.invoke(IpcChannels.httpApiStatus),
+  rotateHttpApiToken: (): Promise<{ token: string; url: string | null }> =>
+    ipcRenderer.invoke(IpcChannels.rotateHttpApiToken),
 
   showAnswerHud: (taskId: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.showAnswerHud, taskId),

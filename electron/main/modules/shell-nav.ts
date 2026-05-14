@@ -11,7 +11,7 @@ import type { Module } from './types.js';
 const CHANNEL = 'shell:navigate';
 
 interface NavPayload {
-  tab?: 'observatory' | 'inbox' | 'projects' | 'routines' | 'integrations' | 'modules';
+  tab?: 'observatory' | 'inbox' | 'projects' | 'routines' | 'settings';
   moduleId?: string;
   action?: 'open-new-project';
   /** Free-text payload that accompanies an action (e.g. pre-filled name). */
@@ -25,10 +25,10 @@ export const shellNavModule: Module = {
   version: '1.0.0',
   intents: [
     {
-      id: 'integrations',
-      prefix: '/open-integrations',
-      label: 'Open Integrations',
-      description: 'MCP integrations & settings',
+      id: 'settings',
+      prefix: '/open-settings',
+      label: 'Open Settings',
+      description: 'Auth, preferences, modules, integrations, API',
       verbalTriggers: [
         'open settings',
         'open the settings',
@@ -38,10 +38,12 @@ export const shellNavModule: Module = {
         'open the mcp config',
         'open mcp',
         'show mcp',
+        'open preferences',
+        'show preferences',
       ],
       handler: (_input, ctx) => {
-        ctx.broadcast(CHANNEL, { tab: 'integrations' } as NavPayload);
-        return 'Opening integrations';
+        ctx.broadcast(CHANNEL, { tab: 'settings' } as NavPayload);
+        return 'Opening settings';
       },
     },
     {
@@ -115,11 +117,11 @@ export const shellNavModule: Module = {
       id: 'modules',
       prefix: '/open-modules',
       label: 'Open Modules',
-      description: 'Module manager',
+      description: 'Module manager (now under Settings)',
       verbalTriggers: ['open modules', 'show modules', 'show my modules'],
       handler: (_input, ctx) => {
-        ctx.broadcast(CHANNEL, { tab: 'modules' } as NavPayload);
-        return 'Opening modules';
+        ctx.broadcast(CHANNEL, { tab: 'settings' } as NavPayload);
+        return 'Opening settings · modules';
       },
     },
     {
@@ -135,7 +137,7 @@ export const shellNavModule: Module = {
       ],
       handler: (_input, ctx) => {
         ctx.broadcast(CHANNEL, {
-          tab: 'modules',
+          tab: 'settings',
           moduleId: 'quick-note',
         } as NavPayload);
         return 'Opening notes';
@@ -154,7 +156,7 @@ export const shellNavModule: Module = {
       ],
       handler: (_input, ctx) => {
         ctx.broadcast(CHANNEL, {
-          tab: 'modules',
+          tab: 'settings',
           moduleId: 'meeting-recorder',
         } as NavPayload);
         return 'Opening meetings';
@@ -168,7 +170,7 @@ export const shellNavModule: Module = {
       verbalTriggers: ['open channels', 'show channels'],
       handler: (_input, ctx) => {
         ctx.broadcast(CHANNEL, {
-          tab: 'modules',
+          tab: 'settings',
           moduleId: 'send',
         } as NavPayload);
         return 'Opening channels';

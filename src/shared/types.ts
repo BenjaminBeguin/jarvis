@@ -238,6 +238,21 @@ export interface ProjectInput {
 }
 
 /**
+ * Status of the localhost HTTP API. Renderer reads this to show the URL
+ * + token in Settings → API so the user can paste them into Shortcuts,
+ * curl invocations, or future external clients.
+ */
+export interface HttpApiStatus {
+  /** True when the server is bound and accepting requests. */
+  running: boolean;
+  /** Full URL (e.g. "http://127.0.0.1:4747") or null if not started. */
+  url: string | null;
+  /** Bearer token. Always present even when not running — generated
+   * once on first launch, persisted in Keychain. */
+  token: string;
+}
+
+/**
  * Cost rollup for the Dashboard. Sums Jarvis-launched tasks only — external
  * Claude Code mirror sessions don't count (Jarvis didn't pay for them).
  */

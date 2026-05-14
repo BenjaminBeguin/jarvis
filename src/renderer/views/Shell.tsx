@@ -3,19 +3,17 @@ import { useEffect, useState } from 'react';
 import type { AppStatus, ModuleSummary, Reminder, TaskSummary } from '../../shared/types';
 import { getModulePage } from '../modules/registry';
 import { Inbox } from './Inbox';
-import { Integrations } from './integrations/Integrations';
 import { Logo } from './Logo';
 import { MeetingOverlay } from './MeetingOverlay';
-import { PreferencesDialog } from './PreferencesDialog';
 import { NewProjectDialog } from './projects/NewProjectDialog';
 import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
+import { Settings } from './Settings';
 import { Toaster } from './Toaster';
-import { ModulesPage } from './ModulesPage';
 import { Observatory } from './Observatory';
 import { Routines } from './Routines';
 
-type Tab = 'observatory' | 'inbox' | 'projects' | 'routines' | 'integrations' | 'modules';
+type Tab = 'observatory' | 'inbox' | 'projects' | 'routines' | 'settings';
 
 interface Props {
   status: AppStatus;
@@ -49,7 +47,6 @@ export function Shell({ status }: Props) {
   const [projectList, setProjectList] = useState<{ name: string; aliases: string[] }[]>([]);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectInitial, setNewProjectInitial] = useState<string>('');
-  const [prefsOpen, setPrefsOpen] = useState(false);
 
   useEffect(() => {
     const apply = (list: { name: string; aliases: string[] }[]) =>
@@ -86,7 +83,6 @@ export function Shell({ status }: Props) {
       }),
     );
   }, [activeProject]);
-  const [switchOpen, setSwitchOpen] = useState(false);
   const [clock, setClock] = useState(() => formatClock(new Date()));
   const [runningCount, setRunningCount] = useState(0);
   const [awaitingCount, setAwaitingCount] = useState(0);
@@ -104,7 +100,7 @@ export function Shell({ status }: Props) {
   // without an IPC round-trip.
   useEffect(() => {
     const applyNav = (payload: {
-      tab?: 'observatory' | 'inbox' | 'projects' | 'routines' | 'integrations' | 'modules';
+      tab?: 'observatory' | 'inbox' | 'projects' | 'routines' | 'settings';
       moduleId?: string;
       action?: 'open-new-project';
       initial?: string;
@@ -194,16 +190,6 @@ export function Shell({ status }: Props) {
     };
   }, [openModuleId]);
 
-  const switchAuth = async (mode: 'subscription' | 'api-key') => {
-    try {
-      await window.jarvis.setAuthMode(mode);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSwitchOpen(false);
-    }
-  };
-
   const badge = status.authMode === 'subscription' ? 'subscription' : 'api key';
 
   const PageComponent = openModuleId ? getModulePage(openModuleId) : null;
@@ -253,22 +239,14 @@ export function Shell({ status }: Props) {
             Routines
           </button>
           <button
-            className={`shell__tab${tab === 'integrations' && !openModuleId ? ' shell__tab--active' : ''}`}
+            className={`shell__tab shell__tab--settings${tab === 'settings' && !openModuleId ? ' shell__tab--active' : ''}`}
             onClick={() => {
-              setTab('integrations');
+              setTab('settings');
               setOpenModuleId(null);
             }}
+            title="Preferences · Modules · Integrations · API"
           >
-            Integrations
-          </button>
-          <button
-            className={`shell__tab${tab === 'modules' && !openModuleId ? ' shell__tab--active' : ''}`}
-            onClick={() => {
-              setTab('modules');
-              setOpenModuleId(null);
-            }}
-          >
-            Modules
+            ⚙ Settings
           </button>
         </div>
         <div className="shell__right">
@@ -302,46 +280,15 @@ export function Shell({ status }: Props) {
             {clock}
           </div>
           <button
-            className="shell__prefs-btn"
-            onClick={() => setPrefsOpen(true)}
-            title="Edit your preferences — applied to every task"
+            className="shell__auth-badge"
+            onClick={() => {
+              setTab('settings');
+              setOpenModuleId(null);
+            }}
+            title="Auth mode — click for Settings"
           >
-            prefs
+            {badge}
           </button>
-          <div className="shell__auth">
-            <button
-              className="shell__auth-badge"
-              onClick={() => setSwitchOpen((v) => !v)}
-              title="Switch auth mode"
-            >
-              auth: {badge}
-            </button>
-            {switchOpen && (
-              <div className="shell__auth-menu">
-                <button
-                  disabled={!status.claudeBinaryPath || !status.hasSubscriptionToken}
-                  onClick={() => void switchAuth('subscription')}
-                >
-                  Subscription
-                  {!status.claudeBinaryPath && (
-                    <span className="shell__auth-hint">claude CLI not found</span>
-                  )}
-                  {status.claudeBinaryPath && !status.hasSubscriptionToken && (
-                    <span className="shell__auth-hint">no setup-token saved</span>
-                  )}
-                </button>
-                <button
-                  disabled={!status.hasApiKey}
-                  onClick={() => void switchAuth('api-key')}
-                >
-                  API key
-                  {!status.hasApiKey && (
-                    <span className="shell__auth-hint">no key on file</span>
-                  )}
-                </button>
-              </div>
-            )}
-          </div>
           <button
             className="shell__palette-hint"
             onClick={() => void window.jarvis.openPalette()}
@@ -366,9 +313,9 @@ export function Shell({ status }: Props) {
                   }`}
                   onClick={() => {
                     if (m.id === openModuleId) {
-                      // Already open — toggle back to the modules grid.
+                      // Already open — toggle back to the modules grid (in Settings).
                       setOpenModuleId(null);
-                      setTab('modules');
+                      setTab('settings');
                     } else {
                       setOpenModuleId(m.id);
                     }
@@ -383,7 +330,7 @@ export function Shell({ status }: Props) {
             <button
               onClick={() => {
                 setOpenModuleId(null);
-                setTab('modules');
+                setTab('settings');
               }}
               className="shell__subnav-back"
               title="Back to all modules"
@@ -405,10 +352,11 @@ export function Shell({ status }: Props) {
           <Projects />
         ) : tab === 'routines' ? (
           <Routines />
-        ) : tab === 'integrations' ? (
-          <Integrations />
         ) : (
-          <ModulesPage onOpenPage={(id) => setOpenModuleId(id)} />
+          <Settings
+            status={status}
+            onOpenModulePage={(id) => setOpenModuleId(id)}
+          />
         )}
       </div>
       <MeetingOverlay />
@@ -418,7 +366,6 @@ export function Shell({ status }: Props) {
         onCreated={(def) => setActiveProject(def.name)}
         initialName={newProjectInitial}
       />
-      <PreferencesDialog open={prefsOpen} onClose={() => setPrefsOpen(false)} />
       <Toaster />
     </div>
   );
