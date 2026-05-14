@@ -436,40 +436,72 @@ interface CustomFormProps {
   onSaved: () => void;
 }
 
+type CustomKind = 'stdio' | 'sse' | 'http';
+
 function CustomForm({ onClose, onSaved }: CustomFormProps) {
+  const [kind, setKind] = useState<CustomKind>('stdio');
   const [id, setId] = useState('');
+  // stdio fields
   const [command, setCommand] = useState('npx');
   const [argsRaw, setArgsRaw] = useState('-y my-mcp-package');
   const [envRows, setEnvRows] = useState<Array<{ key: string; value: string }>>([
     { key: '', value: '' },
   ]);
+  // remote fields
+  const [url, setUrl] = useState('');
+  const [headerRows, setHeaderRows] = useState<
+    Array<{ key: string; value: string }>
+  >([{ key: '', value: '' }]);
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
-    if (!id.trim() || !command.trim()) {
-      toast({ kind: 'error', message: 'id and command are required.' });
+    if (!id.trim()) {
+      toast({ kind: 'error', message: 'id is required.' });
       return;
     }
     setSubmitting(true);
     try {
-      const args = argsRaw
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean);
-      const env: Record<string, string> = {};
-      for (const row of envRows) {
-        if (row.key.trim() && row.value.trim()) env[row.key.trim()] = row.value;
-      }
-      const r = await window.jarvis.addMcpServer({
-        id: id.trim(),
-        type: 'stdio',
-        command: command.trim(),
-        args,
-        env,
-      });
-      if (!r.ok) {
-        toast({ kind: 'error', message: r.message ?? 'Save failed' });
-        return;
+      if (kind === 'stdio') {
+        if (!command.trim()) {
+          toast({ kind: 'error', message: 'command is required for stdio.' });
+          return;
+        }
+        const args = argsRaw.trim().split(/\s+/).filter(Boolean);
+        const env: Record<string, string> = {};
+        for (const row of envRows) {
+          if (row.key.trim() && row.value.trim()) env[row.key.trim()] = row.value;
+        }
+        const r = await window.jarvis.addMcpServer({
+          id: id.trim(),
+          type: 'stdio',
+          command: command.trim(),
+          args,
+          env,
+        });
+        if (!r.ok) {
+          toast({ kind: 'error', message: r.message ?? 'Save failed' });
+          return;
+        }
+      } else {
+        if (!url.trim()) {
+          toast({ kind: 'error', message: `URL is required for ${kind}.` });
+          return;
+        }
+        const headers: Record<string, string> = {};
+        for (const row of headerRows) {
+          if (row.key.trim() && row.value.trim())
+            headers[row.key.trim()] = row.value;
+        }
+        const r = await window.jarvis.addMcpServer({
+          id: id.trim(),
+          type: kind,
+          url: url.trim(),
+          headers,
+        });
+        if (!r.ok) {
+          toast({ kind: 'error', message: r.message ?? 'Save failed' });
+          return;
+        }
       }
       onSaved();
     } finally {
@@ -485,6 +517,29 @@ function CustomForm({ onClose, onSaved }: CustomFormProps) {
         void submit();
       }}
     >
+      <fieldset className="integration-form__kind">
+        <legend>Transport</legend>
+        <div className="integration-form__kind-options">
+          {(['stdio', 'sse', 'http'] as const).map((k) => (
+            <label
+              key={k}
+              className={`integration-form__kind-opt${
+                kind === k ? ' integration-form__kind-opt--active' : ''
+              }`}
+            >
+              <input
+                type="radio"
+                name="custom-mcp-kind"
+                value={k}
+                checked={kind === k}
+                onChange={() => setKind(k)}
+              />
+              {k === 'stdio' ? 'stdio · local process' : `${k} · remote URL`}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
       <label className="integration-form__field">
         <span className="integration-form__label">
           Server id<span className="integration-form__required"> *</span>
@@ -499,62 +554,130 @@ function CustomForm({ onClose, onSaved }: CustomFormProps) {
           kebab-case. Becomes the tool prefix (mcp__my-server__*).
         </span>
       </label>
-      <label className="integration-form__field">
-        <span className="integration-form__label">
-          Command<span className="integration-form__required"> *</span>
-        </span>
-        <input
-          type="text"
-          value={command}
-          placeholder="npx"
-          onChange={(e) => setCommand(e.target.value)}
-        />
-      </label>
-      <label className="integration-form__field">
-        <span className="integration-form__label">Args</span>
-        <input
-          type="text"
-          value={argsRaw}
-          placeholder="-y my-mcp-package"
-          onChange={(e) => setArgsRaw(e.target.value)}
-        />
-        <span className="integration-form__hint">
-          Space-separated. Use a wrapper script if you need shell features.
-        </span>
-      </label>
-      <fieldset className="integration-form__env">
-        <legend>Env vars</legend>
-        {envRows.map((row, i) => (
-          <div key={i} className="integration-form__env-row">
+
+      {kind === 'stdio' ? (
+        <>
+          <label className="integration-form__field">
+            <span className="integration-form__label">
+              Command<span className="integration-form__required"> *</span>
+            </span>
             <input
               type="text"
-              value={row.key}
-              placeholder="API_KEY"
-              onChange={(e) => {
-                const next = envRows.slice();
-                next[i] = { ...row, key: e.target.value };
-                setEnvRows(next);
-              }}
+              value={command}
+              placeholder="npx"
+              onChange={(e) => setCommand(e.target.value)}
             />
+          </label>
+          <label className="integration-form__field">
+            <span className="integration-form__label">Args</span>
             <input
-              type="password"
-              value={row.value}
-              placeholder="value"
-              onChange={(e) => {
-                const next = envRows.slice();
-                next[i] = { ...row, value: e.target.value };
-                setEnvRows(next);
-              }}
+              type="text"
+              value={argsRaw}
+              placeholder="-y my-mcp-package"
+              onChange={(e) => setArgsRaw(e.target.value)}
             />
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => setEnvRows([...envRows, { key: '', value: '' }])}
-        >
-          + Add env var
-        </button>
-      </fieldset>
+            <span className="integration-form__hint">
+              Space-separated. Use a wrapper script if you need shell features.
+            </span>
+          </label>
+          <fieldset className="integration-form__env">
+            <legend>Env vars</legend>
+            {envRows.map((row, i) => (
+              <div key={i} className="integration-form__env-row">
+                <input
+                  type="text"
+                  value={row.key}
+                  placeholder="API_KEY"
+                  onChange={(e) => {
+                    const next = envRows.slice();
+                    next[i] = { ...row, key: e.target.value };
+                    setEnvRows(next);
+                  }}
+                />
+                <input
+                  type="password"
+                  value={row.value}
+                  placeholder="value"
+                  onChange={(e) => {
+                    const next = envRows.slice();
+                    next[i] = { ...row, value: e.target.value };
+                    setEnvRows(next);
+                  }}
+                />
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setEnvRows([...envRows, { key: '', value: '' }])}
+            >
+              + Add env var
+            </button>
+          </fieldset>
+        </>
+      ) : (
+        <>
+          <label className="integration-form__field">
+            <span className="integration-form__label">
+              URL<span className="integration-form__required"> *</span>
+            </span>
+            <input
+              type="text"
+              value={url}
+              placeholder={
+                kind === 'sse'
+                  ? 'https://server.example.com/sse'
+                  : 'https://server.example.com/mcp'
+              }
+              onChange={(e) => setUrl(e.target.value)}
+            />
+            <span className="integration-form__hint">
+              {kind === 'sse'
+                ? 'Server-Sent Events endpoint. Typically /sse on the upstream service.'
+                : 'Streamable HTTP MCP endpoint (the newer remote transport).'}
+            </span>
+          </label>
+          <fieldset className="integration-form__env">
+            <legend>Headers</legend>
+            {headerRows.map((row, i) => (
+              <div key={i} className="integration-form__env-row">
+                <input
+                  type="text"
+                  value={row.key}
+                  placeholder="Authorization"
+                  onChange={(e) => {
+                    const next = headerRows.slice();
+                    next[i] = { ...row, key: e.target.value };
+                    setHeaderRows(next);
+                  }}
+                />
+                <input
+                  type="password"
+                  value={row.value}
+                  placeholder="Bearer …"
+                  onChange={(e) => {
+                    const next = headerRows.slice();
+                    next[i] = { ...row, value: e.target.value };
+                    setHeaderRows(next);
+                  }}
+                />
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() =>
+                setHeaderRows([...headerRows, { key: '', value: '' }])
+              }
+            >
+              + Add header
+            </button>
+            <p className="integration-form__hint">
+              Remote MCPs can't be probed locally (the playground only works
+              for stdio servers). The connection still flows through to Jarvis
+              tasks if the SDK can reach the URL.
+            </p>
+          </fieldset>
+        </>
+      )}
       <footer className="integration-form__actions">
         <button type="button" onClick={onClose}>
           Cancel

@@ -4540,6 +4540,64 @@ button:disabled:hover {
   padding: 4px 10px;
 }
 
+/* Transport radio group (stdio / sse / http) for the custom MCP form. */
+.integration-form__kind {
+  border: 0;
+  padding: 0;
+  margin: 0 0 4px;
+}
+
+.integration-form__kind legend {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.integration-form__kind-options {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.integration-form__kind-opt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.integration-form__kind-opt input {
+  appearance: none;
+  margin: 0;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+}
+
+.integration-form__kind-opt input:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 4px rgba(0, 212, 255, 0.45);
+}
+
+.integration-form__kind-opt--active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .integration-form__actions {
   display: flex;
   gap: 8px;
