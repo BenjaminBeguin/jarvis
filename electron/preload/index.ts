@@ -7,6 +7,7 @@ import type {
   ClaudeMcpEntry,
   DispatchIntentResult,
   JarvisFileEntry,
+  InboxItem,
   LaunchTaskRequest,
   McpInvokeResult,
   McpProbeResult,
@@ -56,7 +57,7 @@ const api = {
     subscribe(IpcChannels.observatoryFocusTask, listener),
   onShellNavigate: (
     listener: Listener<{
-      tab?: 'observatory' | 'projects' | 'routines' | 'integrations' | 'modules';
+      tab?: 'observatory' | 'inbox' | 'projects' | 'routines' | 'integrations' | 'modules';
       moduleId?: string;
       action?: 'open-new-project';
       initial?: string;
@@ -169,6 +170,15 @@ const api = {
     ipcRenderer.invoke(IpcChannels.revealPreferences),
   onPreferencesChanged: (listener: Listener<string>): Unsubscribe =>
     subscribe(IpcChannels.preferencesChanged, listener),
+
+  listInbox: (): Promise<InboxItem[]> =>
+    ipcRenderer.invoke(IpcChannels.listInbox),
+  refreshInbox: (): Promise<InboxItem[]> =>
+    ipcRenderer.invoke(IpcChannels.refreshInbox),
+  onInboxChanged: (listener: Listener<InboxItem[]>): Unsubscribe =>
+    subscribe(IpcChannels.inboxChanged, listener),
+  onInboxRefreshing: (listener: Listener<boolean>): Unsubscribe =>
+    subscribe(IpcChannels.inboxRefreshing, listener),
 
   requestMicAccess: (): Promise<{ granted: boolean; status: string }> =>
     ipcRenderer.invoke(IpcChannels.requestMicAccess),

@@ -224,6 +224,45 @@ export interface ProjectInput {
   templateId?: string;
 }
 
+/**
+ * One row in the Inbox. Built by InboxSource implementations in main and
+ * shipped to the renderer for the daily-driver triage list. Optional
+ * `action` lets the user dispatch a skill / prompt with one click.
+ */
+export interface InboxItem {
+  /** Stable id across refreshes — used for React keys and dedupe. */
+  id: string;
+  /** Source name (e.g. "pr-review", "reminders"). Groups rows in the UI. */
+  source: string;
+  /** One-line primary text. */
+  title: string;
+  /** Optional secondary line (repo · author · age · etc.). */
+  subtitle?: string;
+  /** Project alias if this item is scoped to one — used for filtering. */
+  project?: string;
+  /** External link (gh URL, Linear ticket, etc.) — opens in browser. */
+  url?: string;
+  /**
+   * For time-pressured items (reminders): when this fires. Items with
+   * fireAt sort first, soonest at the top.
+   */
+  fireAt?: number;
+  /** When the item first appeared. Newest-first when no fireAt is set. */
+  createdAt: number;
+  /**
+   * One-click action — launches a task or routes through the palette.
+   * Sources that have nothing to dispatch leave this undefined; the row
+   * still shows as informational.
+   */
+  action?: {
+    label: string;
+    /** Skill id to launch — falls back to free-text routing if absent. */
+    skillId?: string;
+    /** Prompt text to send (or route through intent parser). */
+    prompt: string;
+  };
+}
+
 /** Renderer-facing summary of a workflow template — body lives in main. */
 export interface ProjectTemplateSummary {
   id: string;

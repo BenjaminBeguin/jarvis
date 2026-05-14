@@ -55,6 +55,11 @@ export const IpcChannels = {
 
   openInClaudeDesktop: 'tasks:openInClaudeDesktop',
 
+  listInbox: 'inbox:list',
+  refreshInbox: 'inbox:refresh',
+  inboxChanged: 'inbox:changed',
+  inboxRefreshing: 'inbox:refreshing',
+
   requestMicAccess: 'media:requestMic',
   micStatus: 'media:micStatus',
 

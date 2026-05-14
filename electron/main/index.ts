@@ -7,6 +7,13 @@ import type { AppStatus, TaskEvent, TaskSummary } from '@shared/types';
 
 import { detectClaudeBinary, loadAuthMode } from './auth.js';
 import { closeDatabase, initDatabase, listRecentTasks } from './db.js';
+import { InboxStore } from './inbox.js';
+import {
+  failedRoutinesInboxSource,
+  prAddressCommentsInboxSource,
+  prReviewQueueInboxSource,
+  remindersInboxSource,
+} from './inbox-sources/index.js';
 import { registerAllIpc } from './ipc/index.js';
 import { McpConfigStore } from './mcp-config.js';
 import { ModuleRegistry } from './module-registry.js';
@@ -73,6 +80,7 @@ const preferences = new PreferencesStore(
   join(homedir(), '.jarvis', 'preferences.md'),
 );
 const userContext = new UserContextStore();
+const inbox = new InboxStore();
 // Built-in context providers: time + active project (set from renderer) +
 // projects list + recent task. Order matters — first registered is first
 // in the prepended block. Modules can add more via
@@ -81,6 +89,14 @@ userContext.register(timeProvider);
 userContext.register(activeProjectProvider(userContext));
 userContext.register(projectsProvider(projects));
 userContext.register(recentTaskProvider(runner));
+
+// Built-in inbox sources: time-pressured reminders, errored routines, and
+// the two gh-CLI driven PR queues. Modules can add more via the module
+// context (e.g. Slack DM count, Linear assignments) once registered.
+inbox.register(remindersInboxSource(reminders));
+inbox.register(failedRoutinesInboxSource());
+inbox.register(prReviewQueueInboxSource);
+inbox.register(prAddressCommentsInboxSource);
 
 runner.setSkillStore(skills);
 runner.setMcpStore(mcp);
@@ -405,6 +421,10 @@ app.whenReady().then(async () => {
   preferences.on('changed', (contents: string) =>
     broadcast(IpcChannels.preferencesChanged, contents),
   );
+  inbox.on('changed', (items) => broadcast(IpcChannels.inboxChanged, items));
+  inbox.on('refreshing', (flag: boolean) =>
+    broadcast(IpcChannels.inboxRefreshing, flag),
+  );
 
   setProgressEmitter((event) =>
     broadcast(IpcChannels.transcribeProgress, event),
@@ -423,6 +443,7 @@ app.whenReady().then(async () => {
     skillSuggestions,
     userContext,
     preferences,
+    inbox,
     jarvisRoot,
     auth: {
       refresh: refreshAuth,

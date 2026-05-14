@@ -1235,6 +1235,211 @@ button:disabled:hover {
   display: flex;
 }
 
+/* ----- Inbox: daily-driver triage list ----------------------------------- */
+
+.inbox {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 36px;
+  gap: 18px;
+  overflow-y: auto;
+}
+
+.inbox__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border-strong);
+  padding-bottom: 14px;
+}
+
+.inbox__head h2 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 18px;
+  letter-spacing: 0.32em;
+  color: var(--accent);
+  text-shadow: var(--accent-glow);
+}
+
+.inbox__hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+  letter-spacing: 0.04em;
+}
+
+.inbox__refresh {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 6px 14px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.inbox__refresh:hover:not(:disabled) {
+  background: rgba(0, 212, 255, 0.10);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.inbox__refresh:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.inbox__error {
+  color: var(--bad);
+  font-family: var(--mono);
+  font-size: 11px;
+  border-left: 2px solid var(--bad);
+  padding: 6px 10px;
+  background: rgba(255, 80, 80, 0.05);
+}
+
+.inbox__empty {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-faint);
+  padding: 40px 0;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+.inbox__group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inbox__group-head {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inbox__group-count {
+  color: var(--accent);
+  font-size: 10px;
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+
+.inbox__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inbox__row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--border-strong);
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.2);
+  font-family: var(--mono);
+  transition: border-color 0.12s;
+}
+
+.inbox__row:hover {
+  border-left-color: var(--accent);
+}
+
+.inbox__row-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.inbox__row-title {
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inbox__row-sub {
+  color: var(--text-dim);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inbox__row-meta {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.inbox__row-when {
+  display: inline-block;
+}
+
+.inbox__row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.inbox__row-link,
+.inbox__row-primary {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 5px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.inbox__row-link:hover,
+.inbox__row-primary:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.inbox__row-primary {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.inbox__row-primary:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
 /* ----- Observatory: constellation + slide-in transcript panel ----------- */
 
 .observatory {

@@ -11,7 +11,7 @@ import type { Module } from './types.js';
 const CHANNEL = 'shell:navigate';
 
 interface NavPayload {
-  tab?: 'observatory' | 'projects' | 'routines' | 'integrations' | 'modules';
+  tab?: 'observatory' | 'inbox' | 'projects' | 'routines' | 'integrations' | 'modules';
   moduleId?: string;
   action?: 'open-new-project';
   /** Free-text payload that accompanies an action (e.g. pre-filled name). */
@@ -60,6 +60,23 @@ export const shellNavModule: Module = {
       handler: (_input, ctx) => {
         ctx.broadcast(CHANNEL, { tab: 'observatory' } as NavPayload);
         return 'Opening observatory';
+      },
+    },
+    {
+      id: 'inbox',
+      prefix: '/open-inbox',
+      label: 'Open Inbox',
+      description: 'Daily triage: PRs, comments, reminders, failed routines',
+      verbalTriggers: [
+        'open inbox',
+        'show inbox',
+        'show my inbox',
+        'what is waiting for me',
+        "what's waiting for me",
+      ],
+      handler: (_input, ctx) => {
+        ctx.broadcast(CHANNEL, { tab: 'inbox' } as NavPayload);
+        return 'Opening inbox';
       },
     },
     {

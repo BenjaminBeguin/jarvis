@@ -1,4 +1,5 @@
 import { registerAuthIpc } from './auth.js';
+import { registerInboxIpc } from './inbox.js';
 import { registerIntentIpc } from './intent.js';
 import { registerMcpIpc } from './mcp.js';
 import { registerMediaIpc } from './media.js';
@@ -22,6 +23,7 @@ export type { IpcDeps } from './types.js';
  */
 export function registerAllIpc(deps: IpcDeps): void {
   registerAuthIpc(deps);
+  registerInboxIpc(deps);
   registerIntentIpc(deps);
   registerMcpIpc(deps);
   registerMediaIpc(deps);

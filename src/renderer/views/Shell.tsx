@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { AppStatus, ModuleSummary, Reminder, TaskSummary } from '../../shared/types';
 import { getModulePage } from '../modules/registry';
+import { Inbox } from './Inbox';
 import { Integrations } from './integrations/Integrations';
 import { Logo } from './Logo';
 import { MeetingOverlay } from './MeetingOverlay';
@@ -14,7 +15,7 @@ import { ModulesPage } from './ModulesPage';
 import { Observatory } from './Observatory';
 import { Routines } from './Routines';
 
-type Tab = 'observatory' | 'projects' | 'routines' | 'integrations' | 'modules';
+type Tab = 'observatory' | 'inbox' | 'projects' | 'routines' | 'integrations' | 'modules';
 
 interface Props {
   status: AppStatus;
@@ -103,7 +104,7 @@ export function Shell({ status }: Props) {
   // without an IPC round-trip.
   useEffect(() => {
     const applyNav = (payload: {
-      tab?: 'observatory' | 'projects' | 'routines' | 'integrations' | 'modules';
+      tab?: 'observatory' | 'inbox' | 'projects' | 'routines' | 'integrations' | 'modules';
       moduleId?: string;
       action?: 'open-new-project';
       initial?: string;
@@ -223,6 +224,15 @@ export function Shell({ status }: Props) {
             }}
           >
             Observatory
+          </button>
+          <button
+            className={`shell__tab${tab === 'inbox' && !openModuleId ? ' shell__tab--active' : ''}`}
+            onClick={() => {
+              setTab('inbox');
+              setOpenModuleId(null);
+            }}
+          >
+            Inbox
           </button>
           <button
             className={`shell__tab${tab === 'projects' && !openModuleId ? ' shell__tab--active' : ''}`}
@@ -389,6 +399,8 @@ export function Shell({ status }: Props) {
           <PageComponent />
         ) : tab === 'observatory' ? (
           <Observatory />
+        ) : tab === 'inbox' ? (
+          <Inbox />
         ) : tab === 'projects' ? (
           <Projects />
         ) : tab === 'routines' ? (

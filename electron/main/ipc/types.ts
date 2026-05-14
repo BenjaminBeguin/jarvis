@@ -1,5 +1,6 @@
 import type { AppStatus } from '@shared/types';
 
+import type { InboxStore } from '../inbox.js';
 import type { McpConfigStore } from '../mcp-config.js';
 import type { ModuleRegistry } from '../module-registry.js';
 import type { PreferencesStore } from '../preferences-store.js';
@@ -33,6 +34,7 @@ export interface IpcDeps {
   skillSuggestions: SkillSuggestionStore;
   userContext: UserContextStore;
   preferences: PreferencesStore;
+  inbox: InboxStore;
   jarvisRoot: string;
   auth: {
     /** Reconcile auth state from disk + keychain; returns the next status. */
