@@ -124,6 +124,19 @@ export interface RoutineDef {
   enabled: boolean;
   lastRunAt: number | null;
   nextRunAt: number | null;
+  /**
+   * Optional shell command run on every cron tick. The routine's skill
+   * fires only when this command exits 0 AND produces non-empty stdout.
+   * Turns a cron routine into a "watch" — e.g. `cron: every 5m` +
+   * `condition: gh pr list --search "review-requested:@me is:open" --limit 1`
+   * fires the action only when there's something to review.
+   *
+   * Edit ~/.jarvis/routines.json directly to set this; no UI editor yet.
+   */
+  condition?: string;
+  /** When the most recent condition check fired vs. skipped, for debugging. */
+  lastConditionAt?: number;
+  lastConditionResult?: 'fired' | 'skipped' | 'errored';
 }
 
 /**

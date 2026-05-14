@@ -1,12 +1,16 @@
+import { exec } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { promisify } from 'node:util';
 import cron, { type ScheduledTask } from 'node-cron';
 import { nanoid } from 'nanoid';
 
 import type { RoutineDef } from '@shared/types';
 import type { TaskRunner } from './task-runner.js';
+
+const execAsync = promisify(exec);
 
 interface PersistedRoutine {
   id: string;
@@ -15,6 +19,7 @@ interface PersistedRoutine {
   input?: string;
   enabled?: boolean;
   lastRunAt?: number;
+  condition?: string;
 }
 
 interface ScheduledRoutine {
@@ -69,6 +74,7 @@ export class RoutineStore extends EventEmitter {
       enabled: input.enabled ?? existing?.def.enabled ?? true,
       lastRunAt: existing?.def.lastRunAt ?? null,
       nextRunAt: null,
+      condition: input.condition ?? existing?.def.condition,
     };
     this.applyRoutine(def);
     this.persist();
@@ -102,14 +108,63 @@ export class RoutineStore extends EventEmitter {
     const existing = this.routines.get(def.id);
     if (existing) existing.task?.stop();
     const task = def.enabled
-      ? cron.schedule(def.cron, () => this.fire(def), { scheduled: true })
+      ? cron.schedule(def.cron, () => void this.tick(def.id), {
+          scheduled: true,
+        })
       : null;
     this.routines.set(def.id, { def, task });
   }
 
+  /**
+   * Cron-tick entry point. Reads the latest def from the map (so the
+   * condition + skill reflect any in-flight edits), then either fires
+   * directly or runs the condition gate first.
+   */
+  private async tick(id: string): Promise<void> {
+    const rec = this.routines.get(id);
+    if (!rec) return;
+    const def = rec.def;
+    if (!def.condition) {
+      this.fire(def);
+      return;
+    }
+    // Watch flavor: cheap shell command decides whether to fire. Empty
+    // stdout (or non-zero exit) = skip this tick. Trimmed to ignore
+    // trailing newlines.
+    let fired: 'fired' | 'skipped' | 'errored' = 'skipped';
+    try {
+      const { stdout } = await execAsync(def.condition, {
+        timeout: 30_000,
+        env: process.env,
+      });
+      if (stdout.trim().length > 0) {
+        this.fire(def);
+        fired = 'fired';
+      }
+    } catch (err) {
+      console.warn(`routine ${id}: condition errored:`, err);
+      fired = 'errored';
+    }
+    const updated: RoutineDef = {
+      ...def,
+      lastConditionAt: Date.now(),
+      lastConditionResult: fired,
+    };
+    rec.def = updated;
+    // We only persist after fire() (which calls persist itself) — for
+    // skip/error we keep state in-memory to avoid hammering disk every
+    // 5 minutes. lastConditionResult is informational, not critical.
+    this.emit('changed', this.list());
+  }
+
   private fire(def: RoutineDef): void {
     if (!this.runner) return;
-    const updated: RoutineDef = { ...def, lastRunAt: Date.now() };
+    const updated: RoutineDef = {
+      ...def,
+      lastRunAt: Date.now(),
+      lastConditionAt: def.condition ? Date.now() : def.lastConditionAt,
+      lastConditionResult: def.condition ? 'fired' : def.lastConditionResult,
+    };
     const rec = this.routines.get(def.id);
     if (rec) rec.def = updated;
     this.runner.launch({
@@ -144,6 +199,7 @@ export class RoutineStore extends EventEmitter {
           enabled: item.enabled ?? true,
           lastRunAt: item.lastRunAt ?? null,
           nextRunAt: null,
+          condition: item.condition,
         };
         this.applyRoutine(def);
       }
@@ -161,6 +217,7 @@ export class RoutineStore extends EventEmitter {
       input: r.def.input,
       enabled: r.def.enabled,
       lastRunAt: r.def.lastRunAt ?? undefined,
+      condition: r.def.condition,
     }));
     writeFileSync(this.path, JSON.stringify(list, null, 2), 'utf8');
   }
