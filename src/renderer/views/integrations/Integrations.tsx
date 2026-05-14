@@ -647,6 +647,7 @@ function ToolPlayground({
   const [useRaw, setUseRaw] = useState(!properties);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<McpInvokeResult | null>(null);
+  const [rawResult, setRawResult] = useState(false);
 
   const buildArgs = (): { args: Record<string, unknown> } | { error: string } => {
     if (useRaw) {
@@ -791,19 +792,135 @@ function ToolPlayground({
             {result.isError && ' · server flagged isError'}
           </span>
         )}
+        {result && (
+          <button
+            className="tool-playground__raw-toggle"
+            onClick={() => setRawResult((v) => !v)}
+          >
+            {rawResult ? 'pretty' : 'raw'}
+          </button>
+        )}
       </footer>
       {result && (
-        <pre
-          className={`tool-playground__result${
-            !result.ok || result.isError ? ' tool-playground__result--error' : ''
-          }`}
-        >
-          {result.ok
-            ? JSON.stringify(result.content ?? null, null, 2)
-            : `Error: ${result.message ?? 'unknown'}`}
-        </pre>
+        <ResultView
+          result={result}
+          raw={rawResult}
+        />
       )}
     </div>
+  );
+}
+
+/**
+ * MCP results come back as content blocks: `[{type:'text', text:'…'}, …]`.
+ * Many servers (Slack, GitHub, Linear) stuff their JSON response into the
+ * text field with escapes — looks like raw text but is parseable. This
+ * renderer detects + pretty-prints those, falls back to raw text for plain
+ * strings, and falls back to JSON for unknown shapes.
+ */
+function ResultView({
+  result,
+  raw,
+}: {
+  result: McpInvokeResult;
+  raw: boolean;
+}) {
+  const errored = !result.ok || result.isError;
+  if (!result.ok) {
+    return (
+      <pre className="tool-playground__result tool-playground__result--error">
+        Error: {result.message ?? 'unknown'}
+      </pre>
+    );
+  }
+  if (raw) {
+    return (
+      <pre
+        className={`tool-playground__result${
+          errored ? ' tool-playground__result--error' : ''
+        }`}
+      >
+        {JSON.stringify(result.content ?? null, null, 2)}
+      </pre>
+    );
+  }
+  const blocks = normalizeBlocks(result.content);
+  return (
+    <div
+      className={`tool-playground__result-blocks${
+        errored ? ' tool-playground__result-blocks--error' : ''
+      }`}
+    >
+      {blocks.map((b, i) => (
+        <RenderBlock key={i} block={b} />
+      ))}
+    </div>
+  );
+}
+
+interface ContentBlock {
+  type: string;
+  text?: string;
+  data?: string;
+  mimeType?: string;
+  [key: string]: unknown;
+}
+
+function normalizeBlocks(content: unknown): ContentBlock[] {
+  if (Array.isArray(content)) {
+    return content.filter(
+      (b): b is ContentBlock =>
+        !!b && typeof b === 'object' && typeof (b as ContentBlock).type === 'string',
+    );
+  }
+  // Some servers return a plain string or single object instead of an array.
+  if (typeof content === 'string') {
+    return [{ type: 'text', text: content }];
+  }
+  if (content && typeof content === 'object') {
+    const c = content as Partial<ContentBlock>;
+    if (typeof c.type === 'string') return [c as ContentBlock];
+  }
+  return [{ type: 'text', text: JSON.stringify(content ?? null, null, 2) }];
+}
+
+function RenderBlock({ block }: { block: ContentBlock }) {
+  if (block.type === 'text' && typeof block.text === 'string') {
+    // Try to parse as JSON — if it works, pretty-print. Otherwise show raw.
+    const text = block.text;
+    const trimmed = text.trim();
+    if (
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    ) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return (
+          <pre className="tool-playground__result">
+            {JSON.stringify(parsed, null, 2)}
+          </pre>
+        );
+      } catch {
+        // fall through
+      }
+    }
+    return <pre className="tool-playground__result tool-playground__result--text">{text}</pre>;
+  }
+  if (block.type === 'image' && block.data) {
+    const mime = block.mimeType ?? 'image/png';
+    return (
+      <img
+        className="tool-playground__result-image"
+        src={`data:${mime};base64,${block.data}`}
+        alt="MCP result"
+      />
+    );
+  }
+  // Unknown block type — show as JSON.
+  return (
+    <pre className="tool-playground__result">
+      {JSON.stringify(block, null, 2)}
+    </pre>
   );
 }
 
