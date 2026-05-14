@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { ClaudeMcpEntry, McpServerSummary } from '../../../shared/types';
+import type {
+  ClaudeMcpEntry,
+  McpServerSummary,
+  McpToolSummary,
+} from '../../../shared/types';
 import { toast } from '../Toaster';
 import { CATALOG, type CatalogEntry, type CatalogField } from './catalog';
 
@@ -192,6 +196,35 @@ function CatalogCard({
       : status === 'claude-ai-only'
       ? '◐ claude.ai only'
       : '○ not set up';
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [tools, setTools] = useState<McpToolSummary[] | null>(null);
+  const [probing, setProbing] = useState(false);
+  const [probeError, setProbeError] = useState<string | null>(null);
+
+  const loadTools = async () => {
+    setProbing(true);
+    setProbeError(null);
+    try {
+      const r = await window.jarvis.probeMcpTools(entry.id);
+      if (r.ok && r.tools) {
+        setTools(r.tools);
+      } else {
+        setProbeError(r.message ?? 'Probe failed');
+      }
+    } finally {
+      setProbing(false);
+    }
+  };
+
+  const toggleTools = () => {
+    if (toolsOpen) {
+      setToolsOpen(false);
+      return;
+    }
+    setToolsOpen(true);
+    if (!tools && !probing) void loadTools();
+  };
+
   return (
     <article className={`bracketed integration-card integration-card--${status}`}>
       <header className="integration-card__head">
@@ -206,37 +239,87 @@ function CatalogCard({
       {editing && entry.command !== null ? (
         <CatalogForm entry={entry} onClose={onClose} onSaved={onClose} />
       ) : (
-        <footer className="integration-card__actions">
-          {entry.claudeAiOnly && (
-            <span className="integration-card__note">
-              Claude.ai-only. See setup notes.
-            </span>
+        <>
+          <footer className="integration-card__actions">
+            {entry.claudeAiOnly && (
+              <span className="integration-card__note">
+                Claude.ai-only. See setup notes.
+              </span>
+            )}
+            {entry.command !== null && (
+              <button
+                className="integration-card__btn integration-card__btn--primary"
+                onClick={onEdit}
+              >
+                {status === 'connected' ? 'Edit' : 'Configure'}
+              </button>
+            )}
+            {status === 'connected' && entry.command !== null && (
+              <button
+                className="integration-card__btn"
+                onClick={toggleTools}
+                disabled={probing}
+              >
+                {probing
+                  ? 'Probing…'
+                  : toolsOpen
+                  ? '▾ Hide tools'
+                  : `▸ ${tools ? `${tools.length} tools` : 'Show tools'}`}
+              </button>
+            )}
+            {entry.setupUrl && (
+              <button
+                className="integration-card__btn"
+                onClick={() => void window.jarvis.openExternal(entry.setupUrl!)}
+              >
+                Open setup ↗
+              </button>
+            )}
+            {status === 'connected' && entry.command !== null && (
+              <button
+                className="integration-card__btn integration-card__btn--danger"
+                onClick={() => void onRemove()}
+              >
+                Remove
+              </button>
+            )}
+          </footer>
+          {toolsOpen && status === 'connected' && (
+            <div className="integration-card__tools">
+              {probeError && (
+                <div className="integration-card__tools-error">
+                  Probe failed: {probeError}
+                </div>
+              )}
+              {tools && tools.length === 0 && !probeError && (
+                <div className="integration-card__tools-empty">
+                  Connected but exposed no tools.
+                </div>
+              )}
+              {tools && tools.length > 0 && (
+                <ul>
+                  {tools.map((t) => (
+                    <li key={t.name}>
+                      <code>{t.name}</code>
+                      {t.description && (
+                        <span className="integration-card__tools-desc">
+                          {t.description.length > 140
+                            ? `${t.description.slice(0, 139)}…`
+                            : t.description}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="integration-card__tools-footer">
+                <button onClick={() => void loadTools()} disabled={probing}>
+                  {probing ? 'Probing…' : '↻ Refresh'}
+                </button>
+              </div>
+            </div>
           )}
-          {entry.command !== null && (
-            <button
-              className="integration-card__btn integration-card__btn--primary"
-              onClick={onEdit}
-            >
-              {status === 'connected' ? 'Edit' : 'Configure'}
-            </button>
-          )}
-          {entry.setupUrl && (
-            <button
-              className="integration-card__btn"
-              onClick={() => void window.jarvis.openExternal(entry.setupUrl!)}
-            >
-              Open setup ↗
-            </button>
-          )}
-          {status === 'connected' && entry.command !== null && (
-            <button
-              className="integration-card__btn integration-card__btn--danger"
-              onClick={() => void onRemove()}
-            >
-              Remove
-            </button>
-          )}
-        </footer>
+        </>
       )}
     </article>
   );

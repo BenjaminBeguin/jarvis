@@ -8,6 +8,7 @@ import type {
   DispatchIntentResult,
   JarvisFileEntry,
   LaunchTaskRequest,
+  McpProbeResult,
   McpServerInput,
   McpServerSummary,
   ModuleSummary,
@@ -84,6 +85,8 @@ const api = {
   readMcpFile: (): Promise<{ path: string; contents: string | null }> =>
     ipcRenderer.invoke(IpcChannels.readMcpFile),
   revealMcpFile: (): Promise<void> => ipcRenderer.invoke(IpcChannels.revealMcpFile),
+  probeMcpTools: (id: string): Promise<McpProbeResult> =>
+    ipcRenderer.invoke(IpcChannels.probeMcpTools, id),
 
   listModules: (): Promise<ModuleSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listModules),

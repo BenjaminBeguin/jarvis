@@ -123,6 +123,19 @@ export interface RoutineDef {
  * `McpServerSummary` which only reflects Jarvis-managed local stdio MCPs
  * in ~/.jarvis/mcp.json.
  */
+export interface McpToolSummary {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+}
+
+export interface McpProbeResult {
+  ok: boolean;
+  tools?: McpToolSummary[];
+  durationMs?: number;
+  message?: string;
+}
+
 export interface ClaudeMcpEntry {
   /** Short name after stripping the "claude.ai " or "plugin:foo:" prefix. */
   name: string;

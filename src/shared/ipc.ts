@@ -25,6 +25,7 @@ export const IpcChannels = {
   removeMcpServer: 'mcp:remove',
   readMcpFile: 'mcp:readFile',
   revealMcpFile: 'mcp:revealFile',
+  probeMcpTools: 'mcp:probeTools',
 
   listModules: 'modules:list',
   dispatchIntent: 'modules:dispatchIntent',

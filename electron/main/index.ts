@@ -37,6 +37,7 @@ import { sendModule } from './modules/send.js';
 import { skillSuggesterModule } from './modules/skill-suggester.js';
 import { statusModule } from './modules/status.js';
 import { listClaudeMcps } from './claude-mcp.js';
+import { probeMcpTools } from './mcp-probe.js';
 import { parseIntent } from './intent-router.js';
 import { ProjectStore } from './projects.js';
 import { ReminderStore } from './reminders.js';
@@ -336,6 +337,13 @@ function registerIpc(): void {
       ? mcp.path
       : join(homedir(), '.jarvis');
     shell.showItemInFolder(target);
+  });
+
+  ipcMain.handle(IpcChannels.probeMcpTools, async (_e, id: string) => {
+    if (typeof id !== 'string' || !id) {
+      return { ok: false, message: 'Invalid server id.' };
+    }
+    return probeMcpTools(mcp, id);
   });
 
   ipcMain.handle(IpcChannels.listModules, () => modules.list());
