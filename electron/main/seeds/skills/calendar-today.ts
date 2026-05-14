@@ -45,32 +45,46 @@ require automation permission. Be defensive:
 
 3. **Use a short timeout** (10 sec) on the osascript invocation.
 
-Example one-liner (tweak the time window as needed):
+Example AppleScript that emits one delimited line per event,
+including the event's location and description so you can extract the
+meeting URL on the shell side:
 
 \`\`\`bash
 osascript <<'APPLESCRIPT'
 set theStart to current date
 set theEnd to theStart + 12 * hours
+set TAB to (ASCII character 9)
+set out to ""
 tell application "Calendar"
-  set out to {}
   repeat with cal in calendars
     repeat with evt in (events of cal whose start date is greater than or equal to theStart and start date is less than theEnd)
-      set evtUid to uid of evt
-      set evtSum to summary of evt
-      set evtStart to start date of evt
-      set evtEnd to end date of evt
-      copy {evtUid, evtSum, evtStart, evtEnd, name of cal} to end of out
+      try
+        set evtLoc to location of evt
+      on error
+        set evtLoc to ""
+      end try
+      try
+        set evtDesc to description of evt
+      on error
+        set evtDesc to ""
+      end try
+      set out to out & (uid of evt) & TAB & (summary of evt) & TAB & ((start date of evt) as «class isot» as string) & TAB & ((end date of evt) as «class isot» as string) & TAB & (name of cal) & TAB & evtLoc & TAB & evtDesc & linefeed
     end repeat
   end repeat
-  return out
 end tell
+return out
 APPLESCRIPT
 \`\`\`
 
-You'll get raw text back — parse it carefully. AppleScript date
-formatting varies by locale. Best path: query each field separately
-and assemble in your shell pipeline, OR have AppleScript emit a
-delimiter-separated string per event.
+Each line is tab-separated: \`uid \\t summary \\t startISO \\t endISO \\t
+calendar \\t location \\t description\`. Parse line-by-line.
+
+To extract the meeting URL: regex over \`location\` first, then
+\`description\` if location is plain text. Common patterns:
+
+\`\`\`
+https?:\\/\\/[a-z0-9.-]*(?:meet\\.google|zoom\\.us|teams\\.microsoft|webex|whereby|jitsi)[^\\s<>"']*
+\`\`\`
 
 ## Output shape
 
@@ -82,18 +96,27 @@ Each event → one inbox item:
   "title": "<summary>",
   "subtitle": "<calendar name> · HH:MM–HH:MM",
   "fireAt": <event start ms epoch>,
-  "createdAt": <ms epoch now>
+  "createdAt": <ms epoch now>,
+  "url": "<meeting link if extractable>"
 }
 \`\`\`
 
 Notes:
-- \`fireAt\` makes the event sort to the top (time-pressured, soonest
-  first).
+- \`fireAt\` makes the event sort to the top AND triggers Jarvis's
+  proximity notification 5 min before — so set this accurately.
 - \`id\` MUST be stable across runs — use the Calendar UID. Re-runs
   with the same id don't trigger fresh notifications.
-- No \`action\` needed — calendar events are informational unless the
-  user has a "join meeting" URL, in which case set \`url\` to the
-  meeting link.
+- **Extract the meeting URL** from the event's \`location\` field OR
+  \`description\` / \`notes\` body. Look for:
+  - \`meet.google.com/...\` (Google Meet)
+  - \`zoom.us/j/...\` (Zoom)
+  - \`teams.microsoft.com/...\` (Teams)
+  - \`webex.com/meet/...\` (Webex)
+
+  When the user clicks the proximity notification, Jarvis opens the
+  URL directly — saves them from hunting in the calendar app. If no
+  URL is found, omit the field; the notification still works, click
+  just jumps to the Inbox.
 
 ## Hard rules
 

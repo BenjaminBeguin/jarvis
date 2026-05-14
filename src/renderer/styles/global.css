@@ -1754,6 +1754,29 @@ button:disabled:hover {
   border-left-color: var(--accent);
 }
 
+.inbox__row--soon {
+  border-left-color: var(--warn);
+  background: rgba(255, 196, 80, 0.05);
+  box-shadow: 0 0 12px rgba(255, 196, 80, 0.12);
+}
+
+.inbox__row-pulse {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+  margin-right: 8px;
+  box-shadow: 0 0 6px var(--warn);
+  animation: inbox-pulse 1.5s ease-in-out infinite;
+  vertical-align: middle;
+}
+
+@keyframes inbox-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.3); }
+}
+
 .inbox__row-main {
   min-width: 0;
   display: flex;

@@ -1,4 +1,4 @@
-import { app, globalShortcut, ipcMain, Notification } from 'electron';
+import { app, globalShortcut, ipcMain, Notification, shell } from 'electron';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -10,6 +10,7 @@ import { BriefingsStore } from './briefings.js';
 import { closeDatabase, initDatabase, listRecentTasks } from './db.js';
 import { startHttpServer, type HttpServerHandle } from './http-server.js';
 import { InboxStore } from './inbox.js';
+import { InboxProximityWatcher } from './inbox-proximity.js';
 import { BUILTIN_BRIEFING_KINDS } from './seeds/briefing-kinds.js';
 import {
   failedRoutinesInboxSource,
@@ -88,6 +89,41 @@ const preferences = new PreferencesStore(
 const userContext = new UserContextStore();
 const inbox = new InboxStore();
 const briefings = new BriefingsStore(BUILTIN_BRIEFING_KINDS);
+// "Heads up" notifications when an inbox item with fireAt is within 5
+// min. Calendar events flow naturally through this; reminders are
+// skipped (ReminderStore handles those at fireAt time).
+const inboxProximity = new InboxProximityWatcher(inbox, (item, minutesUntil) => {
+  try {
+    const minutesLabel =
+      minutesUntil <= 1 ? 'starting now' : `in ${minutesUntil} min`;
+    const notif = new Notification({
+      title: `Heads up · ${minutesLabel}`,
+      body: item.title,
+      silent: false,
+    });
+    notif.on('click', () => {
+      // If the item has a URL (Google Meet link, Zoom, etc.), open it
+      // in the default browser — that's the user's actual intent. No
+      // URL → open the Inbox so they can see the row.
+      if (item.url && /^https?:\/\//i.test(item.url)) {
+        void shell.openExternal(item.url);
+        return;
+      }
+      const win = openObservatory();
+      win.focus();
+      const send = () =>
+        win.webContents.send(IpcChannels.shellNavigate, { tab: 'inbox' });
+      if (win.webContents.isLoading()) {
+        win.webContents.once('did-finish-load', send);
+      } else {
+        send();
+      }
+    });
+    notif.show();
+  } catch {
+    // Notifications can fail pre-permission; not fatal.
+  }
+});
 // Built-in context providers: time + active project (set from renderer) +
 // projects list + recent task. Order matters — first registered is first
 // in the prepended block. Modules can add more via
@@ -527,6 +563,9 @@ app.whenReady().then(async () => {
   // Refresh the inbox every 5 minutes in the background. First tick is
   // delayed 5s so the renderer's on-mount refresh wins the race.
   inbox.startAutoRefresh(5 * 60 * 1000);
+  // Watch every minute for fireAt items in the next 5 min so the user
+  // gets a "starting soon" popup. Click → opens the meeting URL.
+  inboxProximity.start();
 
   // Localhost HTTP API. Auto-generates a bearer token on first launch
   // and binds 127.0.0.1:4747. Lets iOS Shortcuts / CLI / future phone
@@ -628,6 +667,7 @@ app.on('before-quit', () => {
   projects.close();
   preferences.close();
   inbox.stopAutoRefresh();
+  inboxProximity.stop();
   briefings.close();
   void httpServer?.close();
   closeDatabase();

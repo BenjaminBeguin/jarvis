@@ -226,6 +226,12 @@ export function Inbox() {
 function InboxRow({ item }: { item: InboxItem }) {
   const [acting, setActing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // "Starting soon" — fireAt within 10 min (matches the proximity
+  // notification, ±some buffer for the eye). Re-evaluated on every
+  // render which is fine; the Inbox view doesn't re-render every
+  // second so this might be a few seconds stale.
+  const startsSoon =
+    item.fireAt != null && item.fireAt - Date.now() < 10 * 60 * 1000 && item.fireAt - Date.now() > 0;
 
   const act = async () => {
     if (!item.action) return;
@@ -267,9 +273,12 @@ function InboxRow({ item }: { item: InboxItem }) {
   };
 
   return (
-    <li className="inbox__row">
+    <li className={`inbox__row${startsSoon ? ' inbox__row--soon' : ''}`}>
       <div className="inbox__row-main">
-        <div className="inbox__row-title">{item.title}</div>
+        <div className="inbox__row-title">
+          {startsSoon && <span className="inbox__row-pulse" aria-hidden />}
+          {item.title}
+        </div>
         {item.subtitle && <div className="inbox__row-sub">{item.subtitle}</div>}
       </div>
       <div className="inbox__row-meta">
