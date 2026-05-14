@@ -34,6 +34,7 @@ import { meetingRecorderModule, persistMeeting } from './modules/meeting-recorde
 import { prWorkflowsModule } from './modules/pr-workflows.js';
 import { quickNoteModule } from './modules/quick-note.js';
 import { sendModule } from './modules/send.js';
+import { shellNavModule } from './modules/shell-nav.js';
 import { skillSuggesterModule } from './modules/skill-suggester.js';
 import { statusModule } from './modules/status.js';
 import { listClaudeMcps } from './claude-mcp.js';
@@ -945,6 +946,7 @@ app.whenReady().then(async () => {
   await modules.register(skillSuggesterModule);
   await modules.register(sendModule);
   await modules.register(prWorkflowsModule);
+  await modules.register(shellNavModule);
 
   skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
   mcp.on('changed', (list) => broadcast(IpcChannels.listMcpServers, list));

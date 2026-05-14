@@ -50,6 +50,12 @@ const api = {
     ipcRenderer.invoke(IpcChannels.openObservatory, taskId),
   onObservatoryFocusTask: (listener: Listener<string>): Unsubscribe =>
     subscribe(IpcChannels.observatoryFocusTask, listener),
+  onShellNavigate: (
+    listener: Listener<{
+      tab?: 'observatory' | 'routines' | 'integrations' | 'modules';
+      moduleId?: string;
+    }>,
+  ): Unsubscribe => subscribe(IpcChannels.shellNavigate, listener),
   openPalette: (): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.openPalette),
   resizePalette: (height: number): Promise<void> =>

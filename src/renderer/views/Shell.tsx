@@ -52,6 +52,16 @@ export function Shell({ status }: Props) {
     return () => clearInterval(id);
   }, []);
 
+  // Verbal nav: the shell-nav module fires shell:navigate when the user
+  // says "open settings", "show observatory", etc. Switch the tab + module
+  // page state to match.
+  useEffect(() => {
+    return window.jarvis.onShellNavigate((payload) => {
+      if (payload.tab) setTab(payload.tab);
+      setOpenModuleId(payload.moduleId ?? null);
+    });
+  }, []);
+
   // Keep the global status pill in sync across tabs. Pulls counts on mount
   // then subscribes for updates.
   useEffect(() => {
