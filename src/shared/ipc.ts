@@ -63,6 +63,7 @@ export const IpcChannels = {
   refreshInbox: 'inbox:refresh',
   inboxChanged: 'inbox:changed',
   inboxRefreshing: 'inbox:refreshing',
+  dismissInboxItem: 'inbox:dismiss',
 
   listBriefingKinds: 'briefings:listKinds',
   listBriefingFiles: 'briefings:listFiles',

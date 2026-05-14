@@ -2,6 +2,8 @@ import { EventEmitter } from 'node:events';
 
 import type { InboxItem } from '@shared/types';
 
+import { InboxDismissalStore } from './inbox-dismissals.js';
+
 /**
  * Daily-driver triage view. Aggregates "things waiting on you" from
  * multiple sources — PRs to review, comments on your PRs, reminders firing
@@ -39,6 +41,7 @@ export class InboxStore extends EventEmitter {
   private refreshing = false;
   private lastRefreshedAt = 0;
   private autoTimer: NodeJS.Timeout | null = null;
+  private dismissals = new InboxDismissalStore();
 
   register(source: InboxSource): void {
     const i = this.sources.findIndex((s) => s.name === source.name);
@@ -47,7 +50,28 @@ export class InboxStore extends EventEmitter {
   }
 
   list(): InboxItem[] {
-    return this.items;
+    // Filter snoozed/dismissed items out at read time. Storage stays
+    // simple (no need to mutate `items`); time-based reappearance is
+    // automatic — once the snoozeUntil passes, the next list() call
+    // surfaces the item again.
+    return this.items.filter((it) => !this.dismissals.isDismissed(it.id));
+  }
+
+  /** Snooze an item. `snoozeMs` is duration from now; use
+   * InboxDismissalStore.forever() to never re-show. */
+  dismiss(id: string, snoozeMs: number): void {
+    this.dismissals.dismiss(id, snoozeMs);
+    this.emit('changed', this.list());
+  }
+
+  restore(id: string): void {
+    this.dismissals.restore(id);
+    this.emit('changed', this.list());
+  }
+
+  /** Forever sentinel — for the "stop showing me this" UX. */
+  static foreverMs(): number {
+    return InboxDismissalStore.forever();
   }
 
   lastRefresh(): number {
@@ -117,19 +141,27 @@ export class InboxStore extends EventEmitter {
       const sorted = all.sort(byPriority);
       // Compute new-items diff. First refresh after launch seeds the
       // baseline silently — we don't want to spam a notification with
-      // every existing PR just because Jarvis booted.
+      // every existing PR just because Jarvis booted. Dismissed items
+      // are also excluded from the "new" set so a snoozed PR doesn't
+      // re-ping when the source re-emits it.
       const firstRefresh = this.lastRefreshedAt === 0;
       const fresh = firstRefresh
         ? []
-        : sorted.filter((it) => !this.knownIds.has(it.id));
+        : sorted.filter(
+            (it) =>
+              !this.knownIds.has(it.id) && !this.dismissals.isDismissed(it.id),
+          );
       this.knownIds = new Set(sorted.map((it) => it.id));
       this.items = sorted;
       this.lastRefreshedAt = Date.now();
-      this.emit('changed', this.items);
+      this.emit('changed', this.list());
       if (fresh.length > 0) {
         this.emit('new-items', fresh);
       }
-      return this.items;
+      // Prune expired snoozes opportunistically — keeps the store from
+      // growing forever.
+      this.dismissals.pruneExpired();
+      return this.list();
     } finally {
       this.refreshing = false;
       this.emit('refreshing', false);

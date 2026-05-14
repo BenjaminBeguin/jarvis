@@ -188,6 +188,8 @@ const api = {
     subscribe(IpcChannels.inboxChanged, listener),
   onInboxRefreshing: (listener: Listener<boolean>): Unsubscribe =>
     subscribe(IpcChannels.inboxRefreshing, listener),
+  dismissInboxItem: (id: string, snoozeMs: number): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.dismissInboxItem, { id, snoozeMs }),
 
   listBriefingKinds: (): Promise<
     Array<{

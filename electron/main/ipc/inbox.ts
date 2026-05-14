@@ -13,4 +13,10 @@ import type { IpcDeps } from './types.js';
 export function registerInboxIpc({ inbox }: IpcDeps): void {
   ipcMain.handle(IpcChannels.listInbox, () => inbox.list());
   ipcMain.handle(IpcChannels.refreshInbox, () => inbox.refresh());
+  ipcMain.handle(
+    IpcChannels.dismissInboxItem,
+    (_e, payload: { id: string; snoozeMs: number }) => {
+      inbox.dismiss(payload.id, payload.snoozeMs);
+    },
+  );
 }

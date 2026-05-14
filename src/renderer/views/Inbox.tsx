@@ -100,6 +100,7 @@ export function Inbox() {
 
 function InboxRow({ item }: { item: InboxItem }) {
   const [acting, setActing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const act = async () => {
     if (!item.action) return;
@@ -124,6 +125,20 @@ function InboxRow({ item }: { item: InboxItem }) {
   const open = () => {
     if (!item.url) return;
     void window.jarvis.openExternal(item.url);
+  };
+
+  const dismissFor = async (snoozeMs: number, label: string) => {
+    try {
+      await window.jarvis.dismissInboxItem(item.id, snoozeMs);
+      toast({ message: `Snoozed · ${label}` });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setMenuOpen(false);
+    }
   };
 
   return (
@@ -160,6 +175,40 @@ function InboxRow({ item }: { item: InboxItem }) {
             {acting ? 'Launching…' : item.action.label}
           </button>
         )}
+        <div className="inbox__row-dismiss">
+          <button
+            className="inbox__row-dismiss-btn"
+            onClick={() => setMenuOpen((v) => !v)}
+            title="Snooze or dismiss this item"
+          >
+            💤
+          </button>
+          {menuOpen && (
+            <div
+              className="inbox__row-dismiss-menu"
+              onMouseLeave={() => setMenuOpen(false)}
+            >
+              <button onClick={() => void dismissFor(1 * 60 * 60 * 1000, '1h')}>
+                1 hour
+              </button>
+              <button onClick={() => void dismissFor(4 * 60 * 60 * 1000, '4h')}>
+                4 hours
+              </button>
+              <button onClick={() => void dismissFor(24 * 60 * 60 * 1000, '1 day')}>
+                Tomorrow
+              </button>
+              <button onClick={() => void dismissFor(7 * 24 * 60 * 60 * 1000, '1 week')}>
+                Next week
+              </button>
+              <button
+                className="inbox__row-dismiss-menu-forever"
+                onClick={() => void dismissFor(4_102_444_800_000, 'forever')}
+              >
+                Dismiss forever
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </li>
   );
