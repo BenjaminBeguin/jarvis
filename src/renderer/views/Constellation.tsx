@@ -188,8 +188,13 @@ export function Constellation({
   const panRef = useRef<{ startX: number; startY: number; tx: number; ty: number } | null>(null);
 
   /**
-   * Wheel = zoom anchored at the cursor so the point under the mouse stays
-   * fixed (Figma-style). Clamp to a friendly range so it can't go wild.
+   * Figma-style trackpad behavior:
+   *   - Pinch (wheel + ctrlKey, which is what macOS synthesizes for
+   *     pinch gestures on the trackpad) → zoom anchored at the cursor.
+   *   - Two-finger scroll → pan the canvas.
+   *   - Regular mouse wheel (deltaMode 1, no ctrlKey) → also zoom,
+   *     since users without trackpads expect wheel = zoom on a map view.
+   * Clamp scale to a friendly range so it can't go wild.
    */
   useEffect(() => {
     const el = svgRef.current;
@@ -197,21 +202,35 @@ export function Constellation({
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const rect = el.getBoundingClientRect();
-      // Mouse in viewBox-space (account for current transform):
-      const vx = ((e.clientX - rect.left) / rect.width) * 1000;
-      const vy = ((e.clientY - rect.top) / rect.height) * 1000;
-      setView((v) => {
-        const factor = Math.exp(-e.deltaY * 0.0015);
-        const next = Math.max(0.4, Math.min(4, v.scale * factor));
-        if (next === v.scale) return v;
-        // Keep the point under the cursor fixed.
-        const k = next / v.scale;
-        return {
-          scale: next,
-          tx: vx - (vx - v.tx) * k,
-          ty: vy - (vy - v.ty) * k,
-        };
-      });
+      const isPinch = e.ctrlKey;
+      const isMouseWheel = e.deltaMode === 1 || Math.abs(e.deltaY) > 50;
+      const shouldZoom = isPinch || isMouseWheel;
+
+      if (shouldZoom) {
+        // Larger sensitivity for pinch (deltaY is small for trackpad
+        // gestures); modest for mouse wheel.
+        const k = isPinch ? 0.02 : 0.005;
+        const factor = Math.exp(-e.deltaY * k);
+        // Mouse in viewBox-space.
+        const vx = ((e.clientX - rect.left) / rect.width) * 1000;
+        const vy = ((e.clientY - rect.top) / rect.height) * 1000;
+        setView((v) => {
+          const next = Math.max(0.3, Math.min(5, v.scale * factor));
+          if (next === v.scale) return v;
+          const r = next / v.scale;
+          return {
+            scale: next,
+            tx: vx - (vx - v.tx) * r,
+            ty: vy - (vy - v.ty) * r,
+          };
+        });
+      } else {
+        // Two-finger scroll on a trackpad → pan. Translate the wheel
+        // delta (pixels) into viewBox units.
+        const dx = (e.deltaX / rect.width) * 1000;
+        const dy = (e.deltaY / rect.height) * 1000;
+        setView((v) => ({ ...v, tx: v.tx - dx, ty: v.ty - dy }));
+      }
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);

@@ -2578,36 +2578,65 @@ button:disabled:hover {
 
 /* ----- Shell breadcrumb (module page navigation) ----------------------- */
 
-.shell__breadcrumb {
+/* Sub-nav shown above a module page — lets the user jump laterally
+   between module pages without going back to the modules grid. */
+.shell__subnav {
   display: flex;
   align-items: center;
   gap: 14px;
   padding: 8px 22px;
   background: rgba(10, 17, 24, 0.6);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-strong);
   font-family: var(--mono);
   font-size: 11px;
 }
 
-.shell__breadcrumb-back {
+.shell__subnav-back {
   background: transparent;
-  border: 0;
+  border: 1px solid var(--border-strong);
   color: var(--text-dim);
-  padding: 4px 8px;
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  border-radius: 2px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.shell__subnav-back:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.shell__subnav-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.shell__subnav-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  padding: 4px 12px;
   font-family: var(--mono);
   font-size: 11px;
-  letter-spacing: 0.08em;
-}
-
-.shell__breadcrumb-back:hover {
-  color: var(--accent);
-}
-
-.shell__breadcrumb-name {
-  color: var(--accent);
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.shell__subnav-tab:hover {
+  color: var(--text);
+}
+
+.shell__subnav-tab--active {
+  color: var(--accent);
+  border-color: var(--accent);
   text-shadow: var(--accent-glow);
+  background: rgba(0, 212, 255, 0.06);
 }
 
 /* ----- Modules page ---------------------------------------------------- */

@@ -41,6 +41,7 @@ export function Shell({ status }: Props) {
   const [tab, setTab] = useState<Tab>('observatory');
   const [openModuleId, setOpenModuleId] = useState<string | null>(null);
   const [openModule, setOpenModule] = useState<ModuleSummary | null>(null);
+  const [moduleList, setModuleList] = useState<ModuleSummary[]>([]);
   const [switchOpen, setSwitchOpen] = useState(false);
   const [clock, setClock] = useState(() => formatClock(new Date()));
   const [runningCount, setRunningCount] = useState(0);
@@ -92,6 +93,12 @@ export function Shell({ status }: Props) {
       offRemoved();
       offRem();
     };
+  }, []);
+
+  // Always keep the modules list in sync so we can render the sub-nav.
+  useEffect(() => {
+    void window.jarvis.listModules().then(setModuleList);
+    return window.jarvis.onModulesChanged(setModuleList);
   }, []);
 
   // Keep openModule in sync with the registry — handles "module disabled
@@ -249,19 +256,33 @@ export function Shell({ status }: Props) {
       </nav>
 
       {openModuleId && PageComponent && (
-        <div className="shell__breadcrumb">
+        <div className="shell__subnav">
           <button
             onClick={() => {
               setOpenModuleId(null);
               setTab('modules');
             }}
-            className="shell__breadcrumb-back"
+            className="shell__subnav-back"
+            title="Back to all modules"
           >
-            ← Modules
+            ← All modules
           </button>
-          <span className="shell__breadcrumb-name">
-            {openModule?.name ?? openModuleId}
-          </span>
+          <div className="shell__subnav-tabs">
+            {moduleList
+              .filter((m) => m.hasPage && m.enabled)
+              .map((m) => (
+                <button
+                  key={m.id}
+                  className={`shell__subnav-tab${
+                    m.id === openModuleId ? ' shell__subnav-tab--active' : ''
+                  }`}
+                  onClick={() => setOpenModuleId(m.id)}
+                  title={m.description}
+                >
+                  {m.name}
+                </button>
+              ))}
+          </div>
         </div>
       )}
 
