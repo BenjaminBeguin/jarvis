@@ -60,6 +60,44 @@ export function Dashboard({ tasks, reminders, onSelectTask, onCancelReminder }: 
   const [suggestions, setSuggestions] = useState<SkillSuggestion[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [cost, setCost] = useState<CostSummary | null>(null);
+  interface BriefingPreview {
+    kind: string;
+    label: string;
+    filename: string;
+    title: string;
+    mtimeMs: number;
+  }
+  const [recentBriefings, setRecentBriefings] = useState<BriefingPreview[]>([]);
+
+  // Most-recent briefing file per kind (one per kind, newest first
+  // across kinds). Refresh on briefings:changed.
+  useEffect(() => {
+    const refresh = async () => {
+      try {
+        const kinds = await window.jarvis.listBriefingKinds();
+        const top: BriefingPreview[] = [];
+        for (const k of kinds) {
+          const files = await window.jarvis.listBriefingFiles(k.id);
+          if (files.length > 0) {
+            const f = files[0]!;
+            top.push({
+              kind: k.id,
+              label: k.label,
+              filename: f.filename,
+              title: f.title,
+              mtimeMs: f.mtimeMs,
+            });
+          }
+        }
+        top.sort((a, b) => b.mtimeMs - a.mtimeMs);
+        setRecentBriefings(top);
+      } catch {
+        setRecentBriefings([]);
+      }
+    };
+    void refresh();
+    return window.jarvis.onBriefingsChanged(refresh);
+  }, []);
 
   // Cost is cheap to compute (single SQLite query) but only worth
   // refreshing after a task completes / errors. Re-fetch on every change
@@ -152,6 +190,32 @@ export function Dashboard({ tasks, reminders, onSelectTask, onCancelReminder }: 
       </DashCard>
 
       <CostCard cost={cost} />
+
+      <DashCard
+        title="Latest briefings"
+        accent="cyan"
+        count={recentBriefings.length}
+        empty="No briefings yet. Open the Briefings tab and click Generate now."
+      >
+        {recentBriefings.map((b) => (
+          <button
+            key={`${b.kind}-${b.filename}`}
+            className="dashboard__row"
+            onClick={() => {
+              window.dispatchEvent(
+                new CustomEvent('jarvis:navigate', {
+                  detail: { tab: 'briefings' },
+                }),
+              );
+            }}
+            title={`Open Briefings → ${b.label}`}
+          >
+            <span className="dashboard__row-dot" />
+            <span className="dashboard__row-title">{b.label} · {b.title}</span>
+            <span className="dashboard__row-meta">{formatRelative(b.mtimeMs)}</span>
+          </button>
+        ))}
+      </DashCard>
 
       <DashCard
         title="Skill ideas"
