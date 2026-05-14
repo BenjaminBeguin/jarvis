@@ -118,6 +118,37 @@ export function Shell({ status }: Props) {
     return () => clearInterval(id);
   }, []);
 
+  // Cmd+1..6 tab shortcuts. Standard pattern across editors; saves a
+  // mouse round-trip when the user wants to flip between Observatory
+  // and Inbox dozens of times a day. Skipped when focus is in a text
+  // input so the user can still type "⌘1" in markdown.
+  useEffect(() => {
+    const tabsOrder: Tab[] = [
+      'observatory',
+      'inbox',
+      'briefings',
+      'projects',
+      'routines',
+      'settings',
+    ];
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const inField =
+        document.activeElement instanceof HTMLInputElement ||
+        document.activeElement instanceof HTMLTextAreaElement ||
+        (document.activeElement as HTMLElement | null)?.isContentEditable;
+      if (inField) return;
+      const idx = parseInt(e.key, 10);
+      if (Number.isFinite(idx) && idx >= 1 && idx <= tabsOrder.length) {
+        e.preventDefault();
+        setTab(tabsOrder[idx - 1]!);
+        setOpenModuleId(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Verbal nav: the shell-nav module fires shell:navigate when the user
   // says "open settings", "show observatory", etc. Switch the tab + module
   // page state to match. We also listen for a renderer-side window event
@@ -233,6 +264,7 @@ export function Shell({ status }: Props) {
               setTab('observatory');
               setOpenModuleId(null);
             }}
+            title="⌘1"
           >
             Observatory
           </button>
@@ -242,6 +274,7 @@ export function Shell({ status }: Props) {
               setTab('inbox');
               setOpenModuleId(null);
             }}
+            title="⌘2"
           >
             Inbox
           </button>
@@ -251,6 +284,7 @@ export function Shell({ status }: Props) {
               setTab('briefings');
               setOpenModuleId(null);
             }}
+            title="⌘3"
           >
             Briefings
           </button>
@@ -260,6 +294,7 @@ export function Shell({ status }: Props) {
               setTab('projects');
               setOpenModuleId(null);
             }}
+            title="⌘4"
           >
             Projects
           </button>
@@ -269,6 +304,7 @@ export function Shell({ status }: Props) {
               setTab('routines');
               setOpenModuleId(null);
             }}
+            title="⌘5"
           >
             Routines
           </button>
@@ -278,7 +314,7 @@ export function Shell({ status }: Props) {
               setTab('settings');
               setOpenModuleId(null);
             }}
-            title="Preferences · Modules · Integrations · API"
+            title="⌘6 · Preferences · Modules · Integrations · API"
           >
             ⚙ Settings
           </button>
