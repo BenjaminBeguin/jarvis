@@ -168,6 +168,16 @@ export class TaskRunner extends EventEmitter {
     return this.records.get(taskId)?.events ?? [];
   }
 
+  /**
+   * Expose the AbortSignal for a task so external runners (e.g. the shell
+   * runner) can wire their own cleanup — kill child process, close socket,
+   * etc. — when the user hits Stop. Returns null if no such task.
+   */
+  getAbortSignal(taskId: string): AbortSignal | null {
+    const rec = this.records.get(taskId);
+    return rec?.abort.signal ?? null;
+  }
+
   abort(taskId: string): boolean {
     const rec = this.records.get(taskId);
     if (!rec) return false;

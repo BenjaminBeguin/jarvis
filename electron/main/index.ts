@@ -34,12 +34,14 @@ import { meetingRecorderModule, persistMeeting } from './modules/meeting-recorde
 import { prWorkflowsModule } from './modules/pr-workflows.js';
 import { quickNoteModule } from './modules/quick-note.js';
 import { sendModule } from './modules/send.js';
+import { shellModule } from './modules/shell.js';
 import { shellNavModule } from './modules/shell-nav.js';
 import { skillSuggesterModule } from './modules/skill-suggester.js';
 import { statusModule } from './modules/status.js';
 import { listClaudeMcps } from './claude-mcp.js';
 import { invokeMcpTool } from './mcp-invoke.js';
 import { probeMcpTools } from './mcp-probe.js';
+import { ShellRunner } from './shell-runner.js';
 import { parseIntent } from './intent-router.js';
 import { ProjectStore } from './projects.js';
 import { ReminderStore } from './reminders.js';
@@ -85,6 +87,7 @@ const routines = new RoutineStore();
 const reminders = new ReminderStore();
 const skillSuggestions = new SkillSuggestionStore(join(homedir(), '.jarvis'));
 const modules = new ModuleRegistry();
+const shellRunner = new ShellRunner(runner);
 runner.setSkillStore(skills);
 runner.setMcpStore(mcp);
 runner.setProjectStore(projects);
@@ -708,6 +711,13 @@ function registerIpc(): void {
     runner.abort(taskId),
   );
 
+  ipcMain.handle(IpcChannels.launchShell, (_e, cmd: string) => {
+    if (typeof cmd !== 'string' || !cmd.trim()) {
+      throw new Error('Empty shell command.');
+    }
+    return shellRunner.launch(cmd);
+  });
+
   ipcMain.handle(
     IpcChannels.sendTaskMessage,
     (_e, { taskId, text }: { taskId: string; text: string }) =>
@@ -915,6 +925,7 @@ app.whenReady().then(async () => {
     launchTask: (req) =>
       runner.launch({ ...req, origin: asTaskOrigin(req.origin) }),
     showHud: (taskId) => pushTaskToHud(taskId),
+    runShell: (cmd) => shellRunner.launch(cmd),
     listRecentTasks: (limit) => {
       // Mirror the listTasks IPC: if the in-memory runner is empty (fresh
       // boot, or all tasks aged out), fall back to SQLite history so the
@@ -947,6 +958,7 @@ app.whenReady().then(async () => {
   await modules.register(sendModule);
   await modules.register(prWorkflowsModule);
   await modules.register(shellNavModule);
+  await modules.register(shellModule);
 
   skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
   mcp.on('changed', (list) => broadcast(IpcChannels.listMcpServers, list));
@@ -995,6 +1007,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   runner.abortAll();
+  shellRunner.abortAll();
   globalShortcut.unregisterAll();
   void modules.unloadAll();
   routines.close();

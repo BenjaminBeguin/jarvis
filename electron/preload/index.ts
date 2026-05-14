@@ -200,6 +200,8 @@ const api = {
 
   launchTask: (req: LaunchTaskRequest): Promise<TaskSummary> =>
     ipcRenderer.invoke(IpcChannels.launchTask, req),
+  launchShell: (cmd: string): Promise<TaskSummary> =>
+    ipcRenderer.invoke(IpcChannels.launchShell, cmd),
   abortTask: (taskId: string): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.abortTask, taskId),
   sendTaskMessage: (taskId: string, text: string): Promise<boolean> =>

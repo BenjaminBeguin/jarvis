@@ -70,6 +70,7 @@ export const IpcChannels = {
   remindersChanged: 'reminders:changed',
 
   launchTask: 'task:launch',
+  launchShell: 'task:launchShell',
   abortTask: 'task:abort',
   sendTaskMessage: 'task:sendMessage',
   listTasks: 'task:list',

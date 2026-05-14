@@ -18,6 +18,11 @@ export interface ModuleContext {
   launchTask(req: LaunchTaskRequest): TaskSummary;
   /** Pop the answer HUD with a freshly-launched task so the user can watch it. */
   showHud(taskId: string): void;
+  /**
+   * Run a raw shell command, streaming output to the HUD as a task — no
+   * Claude in the loop. Same shell environment Jarvis tasks have.
+   */
+  runShell(cmd: string): TaskSummary;
   /** Recent task summaries (newest first). Used by skill-suggester to feed Claude. */
   listRecentTasks(limit?: number): TaskSummary[];
   /** Run the palette intent parser on free text. Returns a 'reminder' kind when the text has a time phrase. */
