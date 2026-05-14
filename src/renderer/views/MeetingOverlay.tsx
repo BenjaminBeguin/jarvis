@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   meetingRecorder,
@@ -24,6 +24,25 @@ function formatDuration(ms: number): string {
 export function MeetingOverlay() {
   const [state, setState] = useState<MeetingState>(meetingRecorder.getState());
   const [now, setNow] = useState(Date.now());
+  const [expanded, setExpanded] = useState(false);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+
+  // Concatenate chunks for a flowing transcript; preserve breaks every
+  // few chunks so the eye gets paragraph anchors.
+  const liveText = useMemo(
+    () => state.liveChunks.map((c) => c.text).join(' '),
+    [state.liveChunks],
+  );
+
+  // Auto-scroll to bottom as new chunks come in, unless the user has
+  // scrolled up to read older content.
+  useEffect(() => {
+    const el = transcriptRef.current;
+    if (!el || !expanded) return;
+    const nearBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (nearBottom) el.scrollTop = el.scrollHeight;
+  }, [liveText, expanded]);
 
   useEffect(() => {
     const unsub = meetingRecorder.subscribe(setState);
@@ -65,22 +84,43 @@ export function MeetingOverlay() {
   if (!state.active && !state.finishing && !state.error) return null;
 
   return (
-    <div className="meeting-overlay">
+    <div className={`meeting-overlay${expanded ? ' meeting-overlay--expanded' : ''}`}>
       {state.active && state.startedAt !== null && (
         <>
-          <span className="meeting-overlay__dot" />
-          <div className="meeting-overlay__body">
-            <div className="meeting-overlay__title">{state.title}</div>
-            <div className="meeting-overlay__time">
-              REC · {formatDuration(now - state.startedAt)}
+          <div className="meeting-overlay__header">
+            <span className="meeting-overlay__dot" />
+            <div className="meeting-overlay__body">
+              <div className="meeting-overlay__title">{state.title}</div>
+              <div className="meeting-overlay__time">
+                REC · {formatDuration(now - state.startedAt)}
+                {state.transcribing && <span className="meeting-overlay__pulse"> · ✦</span>}
+              </div>
             </div>
+            <button
+              className="meeting-overlay__toggle"
+              onClick={() => setExpanded((v) => !v)}
+              title={expanded ? 'Collapse transcript' : 'Show live transcript'}
+            >
+              {expanded ? '▾' : '▸'}
+            </button>
+            <button
+              className="meeting-overlay__stop"
+              onClick={() => void meetingRecorder.stop()}
+            >
+              Stop
+            </button>
           </div>
-          <button
-            className="meeting-overlay__stop"
-            onClick={() => void meetingRecorder.stop()}
-          >
-            Stop
-          </button>
+          {expanded && (
+            <div className="meeting-overlay__transcript" ref={transcriptRef}>
+              {liveText ? (
+                liveText
+              ) : (
+                <span className="meeting-overlay__placeholder">
+                  Listening… first chunk transcribes after ~5s of speech.
+                </span>
+              )}
+            </div>
+          )}
         </>
       )}
       {state.finishing && (

@@ -1,5 +1,14 @@
 import { AudioCapture } from './AudioCapture';
 
+export interface LiveTranscriptChunk {
+  /** Local id so the renderer can key + dedupe. */
+  id: number;
+  /** ms since meeting start when this chunk began. */
+  offsetMs: number;
+  /** Cleaned Whisper output for the chunk. May be empty if filtered. */
+  text: string;
+}
+
 export interface MeetingState {
   active: boolean;
   startedAt: number | null;
@@ -7,6 +16,10 @@ export interface MeetingState {
   /** True while we're transcribing + saving after stop. */
   finishing: boolean;
   error: string | null;
+  /** Rolling Whisper chunks transcribed during the recording. */
+  liveChunks: LiveTranscriptChunk[];
+  /** True while a chunk is currently being transcribed (small spinner). */
+  transcribing: boolean;
 }
 
 const INITIAL_STATE: MeetingState = {
@@ -15,7 +28,38 @@ const INITIAL_STATE: MeetingState = {
   title: null,
   finishing: false,
   error: null,
+  liveChunks: [],
+  transcribing: false,
 };
+
+const CHUNK_INTERVAL_MS = 5_000;
+
+/**
+ * Same hallucination filter the palette uses on dictation. Whisper-tiny
+ * outputs "Thank you." / "you" for silent or noisy chunks; we'd rather
+ * skip those than pollute the live transcript.
+ */
+function cleanChunkText(raw: string): string {
+  const stripped = raw
+    .replace(/\[\s*BLANK[_ ]AUDIO\s*\]/gi, '')
+    .replace(/\[\s*INAUDIBLE\s*\]/gi, '')
+    .replace(/\[\s*MUSIC\s*\]/gi, '')
+    .replace(/\(\s*silence\s*\)/gi, '')
+    .replace(/\(\s*music\s*\)/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const normalized = stripped.toLowerCase().replace(/[.!?,;:'"-]+$/, '').trim();
+  if (
+    normalized === '' ||
+    normalized === 'thank you' ||
+    normalized === 'thanks' ||
+    normalized === 'you' ||
+    normalized === '.'
+  ) {
+    return '';
+  }
+  return stripped;
+}
 
 type Listener = (state: MeetingState) => void;
 
@@ -29,6 +73,11 @@ class MeetingRecorder {
   private capture: AudioCapture | null = null;
   private state: MeetingState = { ...INITIAL_STATE };
   private listeners = new Set<Listener>();
+  /** Sample offset where the previous chunk ended (at source rate). */
+  private chunkCursor = 0;
+  /** Auto-increment id for live chunks. */
+  private nextChunkId = 1;
+  private chunkTimer: ReturnType<typeof setInterval> | null = null;
 
   getState(): MeetingState {
     return this.state;
@@ -66,19 +115,74 @@ class MeetingRecorder {
       return;
     }
     this.capture = capture;
+    this.chunkCursor = 0;
+    this.nextChunkId = 1;
     this.setState({
       active: true,
       startedAt: Date.now(),
       title,
       finishing: false,
       error: null,
+      liveChunks: [],
+      transcribing: false,
     });
+    // Live transcription: every CHUNK_INTERVAL_MS, slice the audio
+    // captured since the previous cursor and send to whisper. Cheap on
+    // M-series; boundary words can clip but final stop() pass uses the
+    // full PCM so the saved transcript is whole.
+    this.chunkTimer = setInterval(() => {
+      void this.tickChunk();
+    }, CHUNK_INTERVAL_MS);
+  }
+
+  private async tickChunk(): Promise<void> {
+    const capture = this.capture;
+    if (!capture || !this.state.active) return;
+    const end = capture.capturedSamples();
+    const start = this.chunkCursor;
+    const rate = capture.sampleRate() ?? 48_000;
+    if (end - start < rate * 1.0) {
+      // Less than ~1s of new audio — skip this tick, wait for more.
+      return;
+    }
+    const pcm = capture.sliceResampled(start, end);
+    this.chunkCursor = end;
+    if (!pcm || pcm.length === 0) return;
+    const offsetMs =
+      this.state.startedAt != null ? Date.now() - this.state.startedAt : 0;
+    this.setState({ ...this.state, transcribing: true });
+    try {
+      const raw = await window.jarvis.transcribe(pcm.buffer as ArrayBuffer);
+      const text = cleanChunkText(raw);
+      if (text) {
+        const chunk: LiveTranscriptChunk = {
+          id: this.nextChunkId++,
+          offsetMs,
+          text,
+        };
+        this.setState({
+          ...this.state,
+          liveChunks: [...this.state.liveChunks, chunk],
+          transcribing: false,
+        });
+      } else {
+        this.setState({ ...this.state, transcribing: false });
+      }
+    } catch {
+      // Transient transcribe failures (e.g. model busy) just skip; the
+      // next tick picks up.
+      this.setState({ ...this.state, transcribing: false });
+    }
   }
 
   async stop(): Promise<void> {
     const capture = this.capture;
     if (!this.state.active || !capture) return;
     this.capture = null;
+    if (this.chunkTimer) {
+      clearInterval(this.chunkTimer);
+      this.chunkTimer = null;
+    }
     const title = this.state.title ?? 'Untitled meeting';
     const startedAt = this.state.startedAt ?? Date.now();
     this.setState({ ...this.state, active: false, finishing: true });
@@ -124,6 +228,10 @@ class MeetingRecorder {
   abort(): void {
     this.capture?.abort();
     this.capture = null;
+    if (this.chunkTimer) {
+      clearInterval(this.chunkTimer);
+      this.chunkTimer = null;
+    }
     this.setState({ ...INITIAL_STATE });
   }
 

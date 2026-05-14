@@ -47,6 +47,64 @@ export class AudioCapture {
     this.processor.connect(this.audioContext.destination);
   }
 
+  /**
+   * Source sample rate the OS handed us, or null if not capturing.
+   * Almost always 48000 on macOS.
+   */
+  sampleRate(): number | null {
+    return this.audioContext?.sampleRate ?? null;
+  }
+
+  /**
+   * Total samples captured so far at the source sample rate. Used by
+   * callers polling for new audio without ending the recording (live
+   * meeting transcription).
+   */
+  capturedSamples(): number {
+    let total = 0;
+    for (const c of this.chunks) total += c.length;
+    return total;
+  }
+
+  /**
+   * Return the audio between two sample offsets (at source sample rate),
+   * resampled to 16kHz for Whisper. Returns null if the range is empty or
+   * out of bounds. Doesn't mutate state — safe to call mid-recording.
+   *
+   * Usage:
+   *   const start = recorder.capturedSamples();
+   *   // …wait 5s…
+   *   const end = recorder.capturedSamples();
+   *   const chunk = recorder.sliceResampled(start, end);
+   *   // chunk is 16kHz mono Float32, ready for whisper
+   */
+  sliceResampled(startSamples: number, endSamples: number): Float32Array | null {
+    if (endSamples <= startSamples) return null;
+    const sourceSampleRate = this.audioContext?.sampleRate ?? 48_000;
+    const wanted = endSamples - startSamples;
+    const out = new Float32Array(wanted);
+    let written = 0;
+    let cursor = 0;
+    for (const chunk of this.chunks) {
+      const chunkEnd = cursor + chunk.length;
+      if (chunkEnd <= startSamples) {
+        cursor = chunkEnd;
+        continue;
+      }
+      if (cursor >= endSamples) break;
+      const from = Math.max(0, startSamples - cursor);
+      const to = Math.min(chunk.length, endSamples - cursor);
+      if (to > from) {
+        out.set(chunk.subarray(from, to), written);
+        written += to - from;
+      }
+      cursor = chunkEnd;
+    }
+    if (written === 0) return null;
+    const trimmed = written === wanted ? out : out.subarray(0, written);
+    return resampleLinear(trimmed, sourceSampleRate, 16_000);
+  }
+
   async stop(): Promise<CaptureResult> {
     const sourceSampleRate = this.audioContext?.sampleRate ?? 48_000;
     try {
