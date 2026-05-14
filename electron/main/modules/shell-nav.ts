@@ -206,6 +206,14 @@ export const shellNavModule: Module = {
         'add a project',
         'add new project',
       ],
+      // Mid-sentence phrasings: "Create a hivecore project", "new
+      // hivecore project", "set up a hivecore project". First capture
+      // group becomes the initial project name. Anchored at start; the
+      // word "project" must be present to avoid false positives like
+      // "create a function".
+      verbalPatterns: [
+        /^\s*(?:please\s+)?(?:can\s+you\s+)?(?:create|new|add|set\s+up|make)\s+(?:a|an|the)?\s*([\w][\w-]*(?:\s+[\w][\w-]*){0,3}?)\s+project\b/i,
+      ],
       handler: (input, ctx) => {
         const initial = input.trim();
         ctx.broadcast(CHANNEL, {

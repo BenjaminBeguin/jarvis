@@ -160,12 +160,34 @@ export class ModuleRegistry extends EventEmitter {
         }
       }
     }
-    if (!best) return null;
-    return {
-      moduleId: best.moduleId,
-      intentId: best.intentId,
-      rest: best.rest,
-    };
+    if (best) {
+      return {
+        moduleId: best.moduleId,
+        intentId: best.intentId,
+        rest: best.rest,
+      };
+    }
+    // Fallback layer: regex patterns. Lets intents match phrasings
+    // where the payload lives mid-sentence ("create a hivecore project"
+    // → /new-project with input "hivecore"). First capture group is
+    // the input. Patterns tried AFTER literal triggers so explicit
+    // prefixes always win.
+    for (const { module, intentsById, enabled } of this.modules.values()) {
+      if (!enabled) continue;
+      for (const intent of intentsById.values()) {
+        for (const pattern of intent.verbalPatterns ?? []) {
+          const m = prompt.match(pattern);
+          if (m) {
+            return {
+              moduleId: module.id,
+              intentId: intent.id,
+              rest: (m[1] ?? '').trim(),
+            };
+          }
+        }
+      }
+    }
+    return null;
   }
 
   async dispatch(

@@ -104,6 +104,17 @@ export interface PaletteIntent {
    * stays a regular Claude task.
    */
   verbalTriggers?: string[];
+  /**
+   * Regex patterns for phrasings that don't fit a leading-prefix
+   * match — e.g. "create a hivecore project" where the project name
+   * lives in the middle. The FIRST CAPTURE GROUP becomes the input
+   * passed to the handler. Patterns should be anchored (^) to avoid
+   * loose substring matches deep in a sentence.
+   *
+   * Tried AFTER verbalTriggers so explicit prefixes still win.
+   * Case-insensitive match is up to the pattern (use the /i flag).
+   */
+  verbalPatterns?: RegExp[];
   handler: (
     input: string,
     ctx: ModuleContext,
