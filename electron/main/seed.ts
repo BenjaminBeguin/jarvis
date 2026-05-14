@@ -235,6 +235,92 @@ Your job, in this order:
   manipulative / spammy, refuse and ask them to clarify.
 `;
 
+const TICKET_TO_PR_SKILL = `---
+name: ticket-to-pr
+description: From a meeting selection or short brief, create a Linear ticket + a draft PR in the right repo
+allowed-tools:
+  - Read
+  - Edit
+  - Write
+  - Bash
+  - Glob
+  - Grep
+  - mcp__*
+---
+
+You take a short brief (often a snippet pulled from a live meeting
+transcript) and turn it into:
+  1. A Linear ticket capturing what needs to change.
+  2. A draft PR on the relevant repo with a first-pass implementation.
+
+## Inputs you'll get
+
+The user (or the meeting recorder) hands you a prompt that contains:
+- A **highlighted excerpt** — the actual problem statement.
+- Optional **full transcript so far** for surrounding context.
+- Optional explicit project / repo hint.
+
+If anything is ambiguous, **propose a plan and ask for "go"** before
+creating tickets or pushing branches. Don't burn a Linear ticket on a
+misunderstood snippet.
+
+## Resolve the project
+
+1. Read \`~/.jarvis/projects.json\`. Match the brief against project names
+   + aliases + descriptions. If exactly one project fits, that's it.
+   Multiple plausible? Ask. None? Ask.
+2. The matched project tells you the local path (\`cd\` target) and repo
+   identifier ("owner/name") for \`gh\`.
+
+## Step-by-step
+
+1. **Plan** — write a 3-5 line summary: what the change is, why,
+   acceptance criteria. Show it to the user. Wait for "go" / "yes" /
+   "proceed". This is your guard against acting on a misheard snippet.
+
+2. **Create the Linear ticket** via \`mcp__linear__save_issue\` (or
+   whatever your Linear MCP exposes). Title: short imperative. Body:
+   the plan + relevant excerpt as a quote. Assign to the current user
+   if you can resolve them; otherwise leave unassigned. Capture the
+   resulting ticket URL.
+
+3. **Open the repo** — \`cd\` to the project's local path. Pull main.
+   Create a feature branch named after the ticket (\`<team>-<num>-<slug>\`).
+
+4. **Make the change** — for small, well-scoped tickets, do the actual
+   edits with Read/Edit/Write/Glob. For anything larger, write a
+   placeholder commit (\`TODO(<ticket-id>): <one-liner>\`) and a
+   detailed body explaining what needs to happen, so the PR is a real
+   handoff instead of a fake one. Either way, run the project's lint /
+   typecheck if obvious (\`pnpm typecheck\`, \`npm run lint\`, etc.) and
+   fix what's auto-fixable.
+
+5. **Commit + push** — single tight commit with the ticket id in the
+   message. Push to the remote.
+
+6. **Open the PR** via \`gh pr create\` with a body that links the
+   Linear ticket. Mark as draft if the change is a stub.
+
+7. **Report back** — output a short markdown block:
+       \`\`\`
+       ✅ Ticket: <linear url>
+       ✅ Branch: <branch>
+       ✅ PR (draft): <pr url>
+       \`\`\`
+   If any step failed, surface the error verbatim and stop.
+
+## Hard rules
+
+- Never push to main / master directly.
+- Never force-push.
+- Don't merge the PR — humans do that.
+- If the repo has \`CLAUDE.md\` or similar agent guidance, read it first
+  and respect it.
+- If the change touches > ~5 files or a security-sensitive area
+  (auth, payment, env vars, infra config), STOP after the plan and
+  ask before editing.
+`;
+
 const COMMIT_HELPER_SKILL = `---
 name: commit-helper
 description: Drafts a short commit message for the current working tree diff
@@ -365,4 +451,5 @@ export function seedDefaultsIfEmpty(): void {
   writeSkill(skillsRoot, 'commit-helper', COMMIT_HELPER_SKILL);
   writeSkill(skillsRoot, 'skill-author', SKILL_AUTHOR_SKILL);
   writeSkill(skillsRoot, 'send', SEND_SKILL);
+  writeSkill(skillsRoot, 'ticket-to-pr', TICKET_TO_PR_SKILL);
 }
