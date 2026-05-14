@@ -114,6 +114,22 @@ export function Projects() {
     }
   };
 
+  const runAudit = async (projectName: string) => {
+    try {
+      const summary = await window.jarvis.launchTask({
+        prompt: `Audit the memory dir for project "${projectName}". Read every .md file under ~/.jarvis/projects/<slug>/memory/, propose a trim plan, and wait for my go before editing.`,
+        skillId: 'memory-trim',
+        origin: 'palette',
+      });
+      void window.jarvis.showAnswerHud(summary.id);
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
   const onDelete = async () => {
     if (!activeProject || !selectedFile) return;
     if (!confirm(`Delete memory file "${selectedFile}"? This can't be undone.`))
@@ -184,6 +200,18 @@ export function Projects() {
       </aside>
 
       <main className="projects__main">
+        {activeDef && (
+          <div className="projects__main-actions">
+            <button
+              className="projects__audit-btn"
+              title="Run the memory-trim skill — proposes which notes to drop, merge, or keep"
+              onClick={() => void runAudit(activeDef.name)}
+              disabled={memory.length === 0}
+            >
+              ✂ Audit memory
+            </button>
+          </div>
+        )}
         {activeDef ? (
           <MemoryConstellation
             project={activeDef}

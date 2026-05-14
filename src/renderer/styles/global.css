@@ -4807,6 +4807,39 @@ button:disabled:hover {
   cursor: pointer;
 }
 
+.projects__main-actions {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  z-index: 4;
+  display: flex;
+  gap: 8px;
+}
+
+.projects__audit-btn {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.projects__audit-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.projects__audit-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .projects__new-btn:hover {
   background: rgba(0, 212, 255, 0.10);
   box-shadow: var(--accent-glow-soft);

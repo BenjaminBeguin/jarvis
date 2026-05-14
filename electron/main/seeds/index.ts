@@ -12,6 +12,7 @@ import brainstorm from './skills/brainstorm.js';
 import commitHelper from './skills/commit-helper.js';
 import dailyBrief from './skills/daily-brief.js';
 import meetingDebrief from './skills/meeting-debrief.js';
+import memoryTrim from './skills/memory-trim.js';
 import prAddressComments from './skills/pr-address-comments.js';
 import prReviewQueue from './skills/pr-review-queue.js';
 import send from './skills/send.js';
@@ -29,6 +30,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'commit-helper', body: commitHelper },
   { name: 'daily-brief', body: dailyBrief },
   { name: 'meeting-debrief', body: meetingDebrief },
+  { name: 'memory-trim', body: memoryTrim },
   { name: 'pr-address-comments', body: prAddressComments },
   { name: 'pr-review-queue', body: prReviewQueue },
   { name: 'send', body: send },
