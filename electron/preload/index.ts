@@ -147,6 +147,8 @@ const api = {
     ipcRenderer.invoke(IpcChannels.listProjectTemplates),
   setActiveProject: (name: string | null): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.setActiveProject, name),
+  setProjectInboxScan: (name: string, enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.setProjectInboxScan, { name, enabled }),
   onProjectsChanged: (listener: Listener<ProjectDef[]>): Unsubscribe =>
     subscribe(IpcChannels.projectsChanged, listener),
   listProjectMemory: (project: string): Promise<ProjectMemoryFile[]> =>

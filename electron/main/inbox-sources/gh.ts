@@ -8,28 +8,191 @@ import type { ProjectStore } from '../projects.js';
 
 const execFileAsync = promisify(execFile);
 
-interface GhPr {
-  number: number;
-  title: string;
-  url: string;
-  author: { login: string };
-  // `gh search prs` returns repository.nameWithOwner (a global query
-  // works across all repos, no local clone needed). `gh pr list` would
-  // surface headRepositoryOwner + headRepository — but it requires a
-  // git remote in the cwd, which Jarvis doesn't have. Search > list.
-  repository?: { nameWithOwner: string };
-  createdAt: string;
-  updatedAt?: string;
-  commentsCount?: number;
-}
-
 async function runGh(args: string[]): Promise<string> {
   const { stdout } = await execFileAsync('gh', args, {
-    timeout: 12_000,
-    // Avoid `gh` paging into less when invoked under Electron — would hang.
+    timeout: 15_000,
     env: { ...process.env, GH_PAGER: 'cat', PAGER: 'cat' },
   });
   return stdout;
+}
+
+/**
+ * Single GraphQL fetch backing both PR inbox sources. One round-trip
+ * gives us:
+ *   - the viewer login (to check "did I reply to the last comment?")
+ *   - PRs awaiting my review (with my reviews so we can filter out
+ *     ones I've already submitted on)
+ *   - my open PRs (with review threads so we can filter out ones
+ *     where I've already replied / resolved)
+ *
+ * `repoFilter` (optional) constrains both queries to specific repos
+ * via the gh search syntax. When empty / undefined, queries fall
+ * back to the global default ("everything I have access to").
+ *
+ * The function is internal to this file; the two exported sources
+ * each call it and pick the relevant slice. A 30s in-memory cache
+ * dedupes back-to-back refreshes when both sources are registered.
+ */
+
+interface GhFetchResult {
+  viewerLogin: string;
+  needsReview: ReviewQueuePr[];
+  myOpen: MyOpenPr[];
+}
+
+interface ReviewQueuePr {
+  number: number;
+  title: string;
+  url: string;
+  createdAt: string;
+  author: { login: string } | null;
+  repository: { nameWithOwner: string };
+  /** Reviews I've submitted on this PR (filtered to current viewer
+   * client-side via viewerLogin). */
+  myReviewCount: number;
+}
+
+interface MyOpenPr {
+  number: number;
+  title: string;
+  url: string;
+  updatedAt: string;
+  createdAt: string;
+  repository: { nameWithOwner: string };
+  reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
+  /** Unresolved threads where the last comment ISN'T me — i.e. waiting on me. */
+  pendingThreads: number;
+}
+
+let cachedFetch: { at: number; repoFilterKey: string; result: GhFetchResult } | null = null;
+const CACHE_TTL_MS = 30_000;
+
+function repoSearchClause(repos: string[]): string {
+  return repos.map((r) => `repo:${r}`).join(' ');
+}
+
+async function fetchGh(repoFilter: string[]): Promise<GhFetchResult> {
+  const key = repoFilter.slice().sort().join(',');
+  if (cachedFetch && cachedFetch.repoFilterKey === key && Date.now() - cachedFetch.at < CACHE_TTL_MS) {
+    return cachedFetch.result;
+  }
+
+  const reviewQuery = ['review-requested:@me', 'is:pr', 'is:open']
+    .concat(repoFilter.length ? [repoSearchClause(repoFilter)] : [])
+    .join(' ');
+  const mineQuery = ['author:@me', 'is:pr', 'is:open']
+    .concat(repoFilter.length ? [repoSearchClause(repoFilter)] : [])
+    .join(' ');
+
+  // Two `search` blocks in one GraphQL query. Inline the search strings
+  // because Vars don't propagate through SearchType without extra ceremony.
+  // The viewer login comes back too for client-side "is this me" filtering.
+  const query = `
+    query {
+      viewer { login }
+      needsReview: search(first: 40, type: ISSUE, query: ${JSON.stringify(reviewQuery)}) {
+        nodes {
+          ... on PullRequest {
+            number title url createdAt
+            author { login }
+            repository { nameWithOwner }
+            reviews(first: 30) { nodes { author { login } } }
+          }
+        }
+      }
+      myOpen: search(first: 40, type: ISSUE, query: ${JSON.stringify(mineQuery)}) {
+        nodes {
+          ... on PullRequest {
+            number title url updatedAt createdAt
+            repository { nameWithOwner }
+            reviewDecision
+            reviewThreads(first: 50) {
+              nodes {
+                isResolved
+                comments(last: 1) { nodes { author { login } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const stdout = await runGh(['api', 'graphql', '-f', `query=${query}`]);
+  const parsed = JSON.parse(stdout) as {
+    data?: {
+      viewer: { login: string };
+      needsReview: { nodes: Array<{
+        number: number; title: string; url: string; createdAt: string;
+        author: { login: string } | null;
+        repository: { nameWithOwner: string };
+        reviews: { nodes: Array<{ author: { login: string } | null }> };
+      } | null> };
+      myOpen: { nodes: Array<{
+        number: number; title: string; url: string; updatedAt: string; createdAt: string;
+        repository: { nameWithOwner: string };
+        reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
+        reviewThreads: { nodes: Array<{
+          isResolved: boolean;
+          comments: { nodes: Array<{ author: { login: string } | null }> };
+        }> };
+      } | null> };
+    };
+    errors?: unknown;
+  };
+
+  if (!parsed.data) {
+    throw new Error('gh api graphql returned no data: ' + JSON.stringify(parsed.errors ?? parsed));
+  }
+
+  const viewerLogin = parsed.data.viewer.login;
+
+  const needsReview: ReviewQueuePr[] = [];
+  for (const n of parsed.data.needsReview.nodes) {
+    if (!n) continue;
+    const myReviewCount = n.reviews.nodes.filter(
+      (r) => r.author?.login?.toLowerCase() === viewerLogin.toLowerCase(),
+    ).length;
+    needsReview.push({
+      number: n.number,
+      title: n.title,
+      url: n.url,
+      createdAt: n.createdAt,
+      author: n.author,
+      repository: n.repository,
+      myReviewCount,
+    });
+  }
+
+  const myOpen: MyOpenPr[] = [];
+  for (const n of parsed.data.myOpen.nodes) {
+    if (!n) continue;
+    let pendingThreads = 0;
+    for (const t of n.reviewThreads.nodes) {
+      if (t.isResolved) continue;
+      const last = t.comments.nodes[t.comments.nodes.length - 1];
+      const lastAuthor = last?.author?.login;
+      if (!lastAuthor) continue;
+      // Pending if the most-recent commenter isn't me.
+      if (lastAuthor.toLowerCase() !== viewerLogin.toLowerCase()) {
+        pendingThreads++;
+      }
+    }
+    myOpen.push({
+      number: n.number,
+      title: n.title,
+      url: n.url,
+      updatedAt: n.updatedAt,
+      createdAt: n.createdAt,
+      repository: n.repository,
+      reviewDecision: n.reviewDecision,
+      pendingThreads,
+    });
+  }
+
+  const result: GhFetchResult = { viewerLogin, needsReview, myOpen };
+  cachedFetch = { at: Date.now(), repoFilterKey: key, result };
+  return result;
 }
 
 /**
@@ -44,118 +207,122 @@ function matchProjectByRepo(
   if (!projects || !repoFullName) return undefined;
   for (const p of projects.list()) {
     if (!p.repo) continue;
-    // ProjectDef.repo can be "owner/name" or "github.com/owner/name" or
-    // a full URL. Normalise to owner/name for comparison.
-    const norm = p.repo
-      .replace(/^https?:\/\/(www\.)?github\.com\//i, '')
-      .replace(/^github\.com\//i, '')
-      .replace(/\.git$/, '')
-      .replace(/\/+$/, '');
-    if (norm.toLowerCase() === repoFullName.toLowerCase()) return p.name;
+    if (normalizeRepo(p.repo).toLowerCase() === repoFullName.toLowerCase()) {
+      return p.name;
+    }
   }
   return undefined;
 }
 
+function normalizeRepo(repo: string): string {
+  return repo
+    .replace(/^https?:\/\/(www\.)?github\.com\//i, '')
+    .replace(/^github\.com\//i, '')
+    .replace(/\.git$/, '')
+    .replace(/\/+$/, '');
+}
+
 /**
- * PRs across all repos where review is requested from the current user.
- * Powers the "you have N reviews to do" headline of the inbox. Each row
- * has a 1-click action that fires the `pr-review-queue` skill scoped to
- * that PR (it'll pull the diff, draft a review, ask for confirmation).
+ * Collect the repo allowlist from tracked projects. If any project
+ * has `inboxScan` explicitly true OR if any has `inboxScan` undefined
+ * AND repo set, that repo gets scanned. Projects with `inboxScan:false`
+ * are excluded.
  *
- * Uses `gh search prs` (not `gh pr list`) — the search subcommand works
- * globally across every repo you have access to, no local clone needed.
- * Skipped gracefully if `gh` isn't installed or the user isn't logged in.
- *
- * Takes a ProjectStore so each item gets tagged with `project: <name>`
- * when the PR's repo matches a tracked project — drives scope filtering
- * in the Inbox UI.
+ * If NO project has a repo at all, returns an empty array → fall back
+ * to scanning everything (no filter).
+ */
+function scanRepos(projects: ProjectStore | undefined): string[] {
+  if (!projects) return [];
+  const out: string[] = [];
+  for (const p of projects.list()) {
+    if (!p.repo) continue;
+    if (p.inboxScan === false) continue;
+    out.push(normalizeRepo(p.repo));
+  }
+  return out;
+}
+
+/**
+ * PRs across all repos (or only configured ones) where review is
+ * requested from the current user AND I haven't submitted a review yet.
+ * `myReviewCount === 0` is the "still need to look" signal.
  */
 export function prReviewQueueInboxSource(projects?: ProjectStore): InboxSource {
   return {
     name: 'pr-review',
     label: 'PRs awaiting your review',
     async fetch(): Promise<InboxItem[]> {
-      const stdout = await runGh([
-        'search',
-        'prs',
-        '--review-requested',
-        '@me',
-        '--state',
-        'open',
-        '--limit',
-        '40',
-        '--json',
-        'number,title,url,author,repository,createdAt',
-      ]);
-      const prs = JSON.parse(stdout) as GhPr[];
+      const { needsReview } = await fetchGh(scanRepos(projects));
       const now = Date.now();
-      return prs.map((pr) => {
-        const repoLabel = pr.repository?.nameWithOwner ?? '';
-        return {
-          id: `pr-review-${pr.url}`,
-          source: 'pr-review',
-          title: `#${pr.number} · ${pr.title}`,
-          subtitle: `${repoLabel ? `${repoLabel} · ` : ''}by @${pr.author.login}`,
-          url: pr.url,
-          createdAt: pr.createdAt ? Date.parse(pr.createdAt) : now,
-          project: matchProjectByRepo(projects, repoLabel),
-          action: {
-            label: 'Review now',
-            skillId: 'pr-review-queue',
-            prompt: `Review PR ${pr.url}`,
-          },
-        };
-      });
+      return needsReview
+        .filter((pr) => pr.myReviewCount === 0)
+        .map((pr) => {
+          const repoLabel = pr.repository.nameWithOwner;
+          return {
+            id: `pr-review-${pr.url}`,
+            source: 'pr-review',
+            title: `#${pr.number} · ${pr.title}`,
+            subtitle: `${repoLabel} · by @${pr.author?.login ?? '?'}`,
+            url: pr.url,
+            createdAt: pr.createdAt ? Date.parse(pr.createdAt) : now,
+            project: matchProjectByRepo(projects, repoLabel),
+            action: {
+              label: 'Review now',
+              skillId: 'pr-review-queue',
+              prompt: `Review PR ${pr.url}`,
+            },
+          };
+        });
     },
   };
 }
 
 /**
- * The user's own open PRs that have review comments. Surfaces them for
- * the `pr-address-comments` skill, which rebases + works the comments
- * down to zero. Again `gh search prs` — works globally without a local
- * remote.
+ * My open PRs where there's at least one unresolved review thread
+ * whose last comment ISN'T me (i.e. waiting on me to respond) — OR
+ * the PR has CHANGES_REQUESTED at the review level.
+ *
+ * Filters out PRs where I've already replied to / resolved every
+ * thread, even if `gh pr list` would still show them as having
+ * comments. The big accuracy upgrade.
  */
 export function prAddressCommentsInboxSource(projects?: ProjectStore): InboxSource {
   return {
     name: 'pr-comments',
     label: 'Comments on your PRs',
     async fetch(): Promise<InboxItem[]> {
-      const stdout = await runGh([
-        'search',
-        'prs',
-        '--author',
-        '@me',
-        '--state',
-        'open',
-        '--limit',
-        '40',
-        // `gh search prs` doesn't expose reviewDecision/comments — those
-        // are list-only. We surface every open PR of mine; the user can
-        // visually skip ones they know are already addressed. Better that
-        // than an empty inbox section.
-        '--json',
-        'number,title,url,author,repository,createdAt,updatedAt',
-      ]);
-      const prs = JSON.parse(stdout) as GhPr[];
+      const { myOpen } = await fetchGh(scanRepos(projects));
       const now = Date.now();
-      return prs.map((pr) => {
-        const repoLabel = pr.repository?.nameWithOwner ?? '';
-        return {
-          id: `pr-comments-${pr.url}`,
-          source: 'pr-comments',
-          title: `#${pr.number} · ${pr.title}`,
-          subtitle: `${repoLabel ? `${repoLabel} · ` : ''}your PR · open`,
-          url: pr.url,
-          createdAt: pr.updatedAt ? Date.parse(pr.updatedAt) : now,
-          project: matchProjectByRepo(projects, repoLabel),
-          action: {
-            label: 'Address comments',
-            skillId: 'pr-address-comments',
-            prompt: `Address review comments on ${pr.url}`,
-          },
-        };
-      });
+      return myOpen
+        .filter(
+          (pr) => pr.pendingThreads > 0 || pr.reviewDecision === 'CHANGES_REQUESTED',
+        )
+        .map((pr) => {
+          const repoLabel = pr.repository.nameWithOwner;
+          const sub: string[] = [repoLabel];
+          if (pr.pendingThreads > 0) {
+            sub.push(
+              `${pr.pendingThreads} unresolved thread${pr.pendingThreads === 1 ? '' : 's'}`,
+            );
+          }
+          if (pr.reviewDecision === 'CHANGES_REQUESTED') {
+            sub.push('changes requested');
+          }
+          return {
+            id: `pr-comments-${pr.url}`,
+            source: 'pr-comments',
+            title: `#${pr.number} · ${pr.title}`,
+            subtitle: sub.join(' · '),
+            url: pr.url,
+            createdAt: pr.updatedAt ? Date.parse(pr.updatedAt) : now,
+            project: matchProjectByRepo(projects, repoLabel),
+            action: {
+              label: 'Address comments',
+              skillId: 'pr-address-comments',
+              prompt: `Address review comments on ${pr.url}`,
+            },
+          };
+        });
     },
   };
 }

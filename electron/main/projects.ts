@@ -12,6 +12,7 @@ interface PersistedProject {
   path?: string;
   repo?: string;
   description?: string;
+  inboxScan?: boolean;
 }
 
 interface PersistedFile {
@@ -102,23 +103,43 @@ export class ProjectStore extends EventEmitter {
       path: input.path?.trim() || undefined,
       repo: input.repo?.trim() || undefined,
       description: input.description?.trim() || undefined,
+      inboxScan: input.inboxScan,
     };
+    this.projects = [...this.projects, def];
+    this.writeAll();
+    this.emit('changed', this.projects);
+    return def;
+  }
+
+  /**
+   * Toggle whether a project's repo gets scanned by the PR inbox sources.
+   * Persisted as `inboxScan` on the project entry in projects.json.
+   * No-op if the project doesn't exist.
+   */
+  setInboxScan(name: string, enabled: boolean): void {
+    const i = this.projects.findIndex(
+      (p) => p.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (i < 0) return;
+    this.projects[i] = { ...this.projects[i]!, inboxScan: enabled };
+    this.writeAll();
+    this.emit('changed', this.projects);
+  }
+
+  /** Serialise the current in-memory projects to projects.json. */
+  private writeAll(): void {
     const next: PersistedFile = {
-      projects: [...this.projects, def].map((p) => ({
+      projects: this.projects.map((p) => ({
         name: p.name,
         aliases: p.aliases,
         path: p.path,
         repo: p.repo,
         description: p.description,
+        inboxScan: p.inboxScan,
       })),
     };
     mkdirSync(dirname(this.path), { recursive: true });
     writeFileSync(this.path, JSON.stringify(next, null, 2) + '\n', 'utf8');
-    // The chokidar watcher will pick this up and emit 'changed', but apply
-    // it eagerly too so the caller's next list() is correct.
-    this.projects = [...this.projects, def];
-    this.emit('changed', this.projects);
-    return def;
   }
 
   /**
@@ -159,6 +180,7 @@ export class ProjectStore extends EventEmitter {
         path: expandHome(p.path),
         repo: p.repo?.trim() || undefined,
         description: p.description?.trim() || undefined,
+        inboxScan: typeof p.inboxScan === 'boolean' ? p.inboxScan : undefined,
       }));
     } catch (err) {
       console.warn(`failed to parse projects.json:`, err);

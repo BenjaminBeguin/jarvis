@@ -52,6 +52,17 @@ export function registerProjectsIpc({
     userContext.setActiveProject(typeof name === 'string' ? name : null);
   });
 
+  // Toggle the per-project "scan this repo's PRs in the inbox" flag.
+  // Persisted to projects.json; the gh inbox sources read it on next
+  // refresh.
+  ipcMain.handle(
+    IpcChannels.setProjectInboxScan,
+    (_e, payload: { name: string; enabled: boolean }) => {
+      if (typeof payload?.name !== 'string') return;
+      projects.setInboxScan(payload.name, payload.enabled === true);
+    },
+  );
+
   ipcMain.handle(IpcChannels.listProjectMemory, (_e, project: string) =>
     projectMemory.list(project),
   );

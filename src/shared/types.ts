@@ -230,6 +230,13 @@ export interface ProjectDef {
   repo?: string;
   /** One-line description that helps the agent decide relevance. */
   description?: string;
+  /**
+   * Should the inbox PR sources scan this repo? Defaults to true when
+   * `repo` is set. Set to `false` to exclude a project from PR scanning
+   * without removing it as a project (you might still want it in the
+   * scope picker / memory). Toggled from Settings → Inbox.
+   */
+  inboxScan?: boolean;
 }
 
 /** Payload for creating a new project from the UI. */
@@ -239,6 +246,9 @@ export interface ProjectInput {
   path?: string;
   repo?: string;
   description?: string;
+  /** Default for inboxScan when this project is created. Defaults to
+   * undefined (= included by default if repo is set). */
+  inboxScan?: boolean;
   /** Optional workflow template id (see ProjectTemplateSummary). When set,
    * ProjectStore seeds the project's memory dir from the template. */
   templateId?: string;

@@ -40,6 +40,7 @@ export const IpcChannels = {
   listProjects: 'projects:list',
   createProject: 'projects:create',
   setActiveProject: 'projects:setActive',
+  setProjectInboxScan: 'projects:setInboxScan',
   projectsChanged: 'projects:changed',
   listProjectTemplates: 'projects:listTemplates',
   listProjectMemory: 'projects:listMemory',

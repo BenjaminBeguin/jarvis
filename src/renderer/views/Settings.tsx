@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { AppStatus, AuthMode, HttpApiStatus } from '../../shared/types';
+import type { AppStatus, AuthMode, HttpApiStatus, ProjectDef } from '../../shared/types';
 import { Integrations } from './integrations/Integrations';
 import { ModulesPage } from './ModulesPage';
 import { toast } from './Toaster';
 
-type Section = 'general' | 'preferences' | 'modules' | 'integrations' | 'api';
+type Section = 'general' | 'preferences' | 'inbox' | 'modules' | 'integrations' | 'api';
 
 interface Props {
   status: AppStatus;
@@ -40,6 +40,9 @@ export function Settings({ status, onOpenModulePage, initialSection }: Props) {
         <SectionTab name="preferences" active={section} onClick={setSection}>
           Preferences
         </SectionTab>
+        <SectionTab name="inbox" active={section} onClick={setSection}>
+          Inbox
+        </SectionTab>
         <SectionTab name="modules" active={section} onClick={setSection}>
           Modules
         </SectionTab>
@@ -53,6 +56,7 @@ export function Settings({ status, onOpenModulePage, initialSection }: Props) {
       <main className="settings__panel">
         {section === 'general' && <GeneralPanel status={status} />}
         {section === 'preferences' && <PreferencesPanel />}
+        {section === 'inbox' && <InboxPanel />}
         {section === 'modules' && <ModulesPage onOpenPage={onOpenModulePage} />}
         {section === 'integrations' && <Integrations />}
         {section === 'api' && <ApiPanel />}
@@ -446,6 +450,105 @@ function ApiPanel() {
         to fire it on a schedule. Built-in patterns:{' '}
         <code>slack-inbox</code>, <code>linear-inbox</code>,{' '}
         <code>calendar-today</code>. Full pattern in <code>docs/scenarios.md</code>.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Per-project checklist controlling which repos the PR inbox sources
+ * scan. Default: scan all tracked projects that have a `repo` field.
+ * Untick a row to exclude that project — persisted as
+ * `inboxScan: false` on the project entry in projects.json.
+ */
+function InboxPanel() {
+  const [projects, setProjects] = useState<ProjectDef[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    void window.jarvis.listProjects().then(setProjects);
+    return window.jarvis.onProjectsChanged(setProjects);
+  }, []);
+
+  const projectsWithRepo = projects.filter((p) => p.repo);
+  const allOff = projectsWithRepo.every((p) => p.inboxScan === false);
+
+  const toggle = async (project: ProjectDef) => {
+    setBusy(project.name);
+    try {
+      const next = project.inboxScan === false; // currently off → turn on
+      await window.jarvis.setProjectInboxScan(project.name, next);
+      toast({
+        message: `${project.name}: PR scanning ${next ? 'enabled' : 'disabled'}`,
+      });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="settings__section">
+      <h3>PR inbox scope</h3>
+      <p className="settings__hint">
+        The PR inbox sources (Reviews waiting on you, Comments on your PRs)
+        scan repos for activity. By default they scan every tracked
+        project that has a <code>repo</code> field. Untick a row to skip
+        that one — keeps the noise down when you're not actively in a
+        codebase.
+      </p>
+
+      {projectsWithRepo.length === 0 && (
+        <div className="settings__hint settings__hint--dim">
+          No tracked projects have a <code>repo</code> set yet. Add one
+          via the Projects tab + New, or edit <code>~/.jarvis/projects.json</code>{' '}
+          directly. With no repos configured, the PR sources scan
+          everything <code>gh</code> can see.
+        </div>
+      )}
+
+      {projectsWithRepo.length > 0 && (
+        <>
+          <ul className="settings__scan-list">
+            {projectsWithRepo.map((p) => {
+              const enabled = p.inboxScan !== false;
+              return (
+                <li key={p.name} className="settings__scan-row">
+                  <label className="settings__scan-label">
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      disabled={busy === p.name}
+                      onChange={() => void toggle(p)}
+                    />
+                    <span className="settings__scan-name">{p.name}</span>
+                    <code className="settings__scan-repo">{p.repo}</code>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+          {allOff && (
+            <div className="settings__hint settings__hint--dim">
+              All projects are disabled. PR sources will return nothing
+              until you re-enable at least one above.
+            </div>
+          )}
+        </>
+      )}
+
+      <h4 className="settings__subhead">How the accuracy works</h4>
+      <p className="settings__hint">
+        Refreshes are smart: <strong>Comments on your PRs</strong> only
+        surfaces PRs with at least one unresolved thread where the last
+        comment isn't you (or PRs in <code>CHANGES_REQUESTED</code>{' '}
+        state). <strong>Reviews waiting on you</strong> only surfaces
+        PRs where you haven't submitted a review yet. Items you've
+        already replied to drop out automatically on the next refresh.
       </p>
     </div>
   );
