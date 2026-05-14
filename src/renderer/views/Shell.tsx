@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-import type { AppStatus, ModuleSummary, Reminder, TaskSummary } from '../../shared/types';
+import type { AppStatus, ModuleSummary, ProjectDef, Reminder, TaskSummary } from '../../shared/types';
 import { getModulePage } from '../modules/registry';
 import { Inbox } from './Inbox';
 import { Logo } from './Logo';
@@ -9,6 +9,7 @@ import { NewProjectDialog } from './projects/NewProjectDialog';
 import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
 import { Settings } from './Settings';
+import { toast } from './Toaster';
 import { Toaster } from './Toaster';
 import { Observatory } from './Observatory';
 import { Routines } from './Routines';
@@ -44,13 +45,16 @@ export function Shell({ status }: Props) {
       return null;
     }
   });
-  const [projectList, setProjectList] = useState<{ name: string; aliases: string[] }[]>([]);
+  const [projectList, setProjectList] = useState<ProjectDef[]>([]);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectInitial, setNewProjectInitial] = useState<string>('');
+  // Skip the toast on the initial render — the activeProject useEffect
+  // fires once on mount with the value loaded from localStorage and we
+  // don't want a "Scope set to …" toast every time the window opens.
+  const scopeToastSeededRef = useRef(false);
 
   useEffect(() => {
-    const apply = (list: { name: string; aliases: string[] }[]) =>
-      setProjectList(list.map((p) => ({ name: p.name, aliases: p.aliases })));
+    const apply = (list: ProjectDef[]) => setProjectList(list);
     void window.jarvis.listProjects().then(apply);
     return window.jarvis.onProjectsChanged(apply);
   }, []);
@@ -82,7 +86,27 @@ export function Shell({ status }: Props) {
         detail: { project: activeProject },
       }),
     );
-  }, [activeProject]);
+    // Visible feedback. Without this, picking a scope feels like a
+    // no-op because most of the cascade (cwd of next task, project
+    // memory load) is invisible until you actually launch something.
+    if (scopeToastSeededRef.current) {
+      if (activeProject) {
+        const def = projectList.find((p) => p.name === activeProject);
+        if (def?.path) {
+          toast({ message: `Scope: ${activeProject} · cwd ${def.path}` });
+        } else {
+          toast({
+            kind: 'info',
+            message: `Scope: ${activeProject} · no path set in projects.json — tasks will still run in ~`,
+          });
+        }
+      } else {
+        toast({ message: 'Scope cleared' });
+      }
+    } else {
+      scopeToastSeededRef.current = true;
+    }
+  }, [activeProject, projectList]);
   const [clock, setClock] = useState(() => formatClock(new Date()));
   const [runningCount, setRunningCount] = useState(0);
   const [awaitingCount, setAwaitingCount] = useState(0);

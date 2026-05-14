@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 interface ScopePickerProps {
-  projects: { name: string; aliases: string[] }[];
+  projects: { name: string; aliases: string[]; path?: string }[];
   active: string | null;
   onChange: (next: string | null) => void;
   onCreate: () => void;
@@ -64,12 +64,16 @@ export function ScopePicker({ projects, active, onChange, onCreate }: ScopePicke
                 onChange(p.name);
                 setOpen(false);
               }}
-              title={p.aliases.length ? `aliases: ${p.aliases.join(', ')}` : undefined}
+              title={
+                p.path
+                  ? `${p.path}${p.aliases.length ? ` · aliases: ${p.aliases.join(', ')}` : ''}`
+                  : 'No path set in projects.json — tasks will run in ~'
+              }
             >
               {p.name}
-              {p.aliases.length > 0 && (
-                <span className="shell__scope-item-hint">{p.aliases[0]}</span>
-              )}
+              <span className="shell__scope-item-hint">
+                {p.path ? p.aliases[0] ?? 'set' : 'no path'}
+              </span>
             </button>
           ))}
           <button
