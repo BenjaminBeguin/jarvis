@@ -1,0 +1,296 @@
+#!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports */
+'use strict';
+
+/**
+ * `jarvis` CLI — drive the Jarvis HTTP API from a terminal.
+ *
+ * Discovery: the URL is fixed (http://127.0.0.1:4747); the bearer token
+ * is read from the macOS Keychain via `security`. So this script works
+ * out of the box on any machine where the Jarvis app has run at least
+ * once (the token is seeded on first launch).
+ *
+ * Install: symlink anywhere on your PATH, e.g.
+ *
+ *   ln -s "$PWD/cli/jarvis" /usr/local/bin/jarvis
+ *
+ * Then:
+ *
+ *   jarvis status
+ *   jarvis run "remind me in 2h to drink water"
+ *   jarvis tasks
+ *   jarvis inbox
+ *   jarvis attach <task-id>
+ *
+ * No npm install. Single-file, Node built-ins only.
+ */
+
+const http = require('node:http');
+const { execFileSync } = require('node:child_process');
+
+const URL_BASE = 'http://127.0.0.1:4747';
+const KEYCHAIN_SERVICE = 'app.jarvis';
+const KEYCHAIN_ACCOUNT = 'jarvis-http-api-token';
+
+// ─── token discovery ────────────────────────────────────────────────────────
+
+function readToken() {
+  try {
+    const out = execFileSync(
+      'security',
+      ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', KEYCHAIN_ACCOUNT, '-w'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    return out.trim();
+  } catch {
+    die(
+      "Couldn't read the Jarvis API token from Keychain.\n" +
+      'Has the Jarvis app run on this machine at least once?',
+    );
+  }
+}
+
+// ─── http ────────────────────────────────────────────────────────────────────
+
+function request(method, path, body) {
+  const token = readToken();
+  return new Promise((resolve, reject) => {
+    const url = new URL(URL_BASE + path);
+    const payload = body == null ? null : Buffer.from(JSON.stringify(body));
+    const req = http.request(
+      {
+        hostname: url.hostname,
+        port: url.port,
+        path: url.pathname + url.search,
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(payload != null ? { 'Content-Type': 'application/json', 'Content-Length': payload.length } : {}),
+        },
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          const raw = Buffer.concat(chunks).toString('utf8');
+          let parsed = null;
+          if (raw) {
+            try {
+              parsed = JSON.parse(raw);
+            } catch {
+              parsed = raw;
+            }
+          }
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(parsed);
+          } else {
+            reject(new Error(
+              `${method} ${path} → ${res.statusCode}: ${
+                parsed && parsed.error ? parsed.error : raw || 'no body'
+              }`,
+            ));
+          }
+        });
+      },
+    );
+    req.on('error', (err) => {
+      if (err.code === 'ECONNREFUSED') {
+        reject(new Error(
+          `Can't reach Jarvis at ${URL_BASE}. Is the app running?`,
+        ));
+      } else {
+        reject(err);
+      }
+    });
+    if (payload != null) req.write(payload);
+    req.end();
+  });
+}
+
+// ─── commands ───────────────────────────────────────────────────────────────
+
+const COMMANDS = {
+  async status() {
+    const res = await request('GET', '/v1/status');
+    console.log(`✓ ${res.name} v${res.version}`);
+  },
+
+  async run(args) {
+    const flags = parseFlags(args);
+    const prompt = flags._.join(' ').trim();
+    if (!prompt) die('Usage: jarvis run "<prompt>" [--skill <skill-id>]');
+    const body = { prompt };
+    if (flags.skill) body.skillId = flags.skill;
+    const task = await request('POST', '/v1/tasks', body);
+    console.log(`launched ${task.id} — ${task.title}`);
+    if (flags.attach) {
+      await COMMANDS.attach([task.id]);
+    }
+  },
+
+  async intent(args) {
+    const prompt = args.join(' ').trim();
+    if (!prompt) die('Usage: jarvis intent "<prompt>"');
+    const res = await request('POST', '/v1/intent', { prompt });
+    if (res.kind === 'reminder') {
+      console.log(
+        `reminder set · ${new Date(res.reminder.fireAt).toLocaleString()} · ${res.reminder.body}`,
+      );
+    } else {
+      console.log(`launched ${res.task.id} — ${res.task.title}`);
+    }
+  },
+
+  async tasks() {
+    const list = await request('GET', '/v1/tasks');
+    if (!list.length) {
+      console.log('(no recent tasks)');
+      return;
+    }
+    for (const t of list.slice(0, 20)) {
+      console.log(
+        `${t.id}  ${(t.status || '').padEnd(10)} ${pad(t.origin, 8)}  ${t.title}`,
+      );
+    }
+  },
+
+  async inbox() {
+    const items = await request('GET', '/v1/inbox');
+    if (!items.length) {
+      console.log("you're caught up");
+      return;
+    }
+    const groups = {};
+    for (const it of items) {
+      (groups[it.source] = groups[it.source] || []).push(it);
+    }
+    for (const [src, rows] of Object.entries(groups)) {
+      console.log(`\n${src.toUpperCase()} (${rows.length})`);
+      for (const r of rows) {
+        console.log(`  · ${r.title}`);
+        if (r.subtitle) console.log(`    ${r.subtitle}`);
+      }
+    }
+  },
+
+  async attach(args) {
+    const taskId = args[0];
+    if (!taskId) die('Usage: jarvis attach <task-id>');
+    let lastSeen = -1;
+    while (true) {
+      let res;
+      try {
+        res = await request('GET', `/v1/tasks/${taskId}`);
+      } catch (err) {
+        die(err.message);
+      }
+      for (const evt of res.events) {
+        if (evt.seq <= lastSeen) continue;
+        lastSeen = evt.seq;
+        const line = formatEvent(evt);
+        if (line) console.log(line);
+      }
+      const status = res.summary.status;
+      if (status === 'completed' || status === 'errored' || status === 'aborted') {
+        console.log(`\n— ${status}${res.summary.costUsd > 0 ? ` · $${res.summary.costUsd.toFixed(4)}` : ''}`);
+        return;
+      }
+      await sleep(1000);
+    }
+  },
+
+  async help() {
+    console.log(`jarvis — terminal client for the Jarvis HTTP API
+
+  jarvis status                   health check
+  jarvis run "<prompt>"           launch a task (--skill X, --attach)
+  jarvis intent "<prompt>"        route through the palette intent parser
+                                  (handles "remind me in 2h …", etc.)
+  jarvis tasks                    list recent tasks
+  jarvis inbox                    show inbox items grouped by source
+  jarvis attach <task-id>         tail a running task's event stream
+  jarvis help                     this message
+
+Token is read from Keychain (account: ${KEYCHAIN_ACCOUNT}).
+Server: ${URL_BASE}`);
+  },
+};
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+function parseFlags(args) {
+  const out = { _: [] };
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a.startsWith('--')) {
+      const key = a.slice(2);
+      const next = args[i + 1];
+      if (next == null || next.startsWith('--')) {
+        out[key] = true;
+      } else {
+        out[key] = next;
+        i++;
+      }
+    } else {
+      out._.push(a);
+    }
+  }
+  return out;
+}
+
+function pad(s, n) {
+  s = String(s || '');
+  return s.length >= n ? s : s + ' '.repeat(n - s.length);
+}
+
+function formatEvent(evt) {
+  const m = evt.msg;
+  if (!m) return null;
+  if (m.type === 'assistant' && m.message && m.message.content) {
+    const parts = m.message.content
+      .filter((p) => p.type === 'text')
+      .map((p) => p.text)
+      .join('');
+    return parts || null;
+  }
+  if (m.type === 'user' && m.message && m.message.content) {
+    const parts = m.message.content
+      .filter((p) => p.type === 'text')
+      .map((p) => `> ${p.text}`)
+      .join('\n');
+    return parts || null;
+  }
+  if (m.type === 'system' && m.subtype === 'init') {
+    return `[session ${m.session_id || '?'}]`;
+  }
+  if (m.type === 'result') {
+    return null;
+  }
+  return null;
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function die(msg) {
+  console.error(msg);
+  process.exit(1);
+}
+
+// ─── main ───────────────────────────────────────────────────────────────────
+
+(async () => {
+  const [, , cmd, ...rest] = process.argv;
+  const fn = COMMANDS[cmd];
+  if (!fn) {
+    if (cmd) console.error(`Unknown command: ${cmd}\n`);
+    COMMANDS.help();
+    process.exit(cmd ? 1 : 0);
+  }
+  try {
+    await fn(rest);
+  } catch (err) {
+    die(err && err.message ? err.message : String(err));
+  }
+})();

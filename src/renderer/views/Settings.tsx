@@ -361,6 +361,15 @@ function ApiPanel() {
       <h4 className="settings__subhead">Try it</h4>
       <pre className="settings__code">{curlExample}</pre>
 
+      <h4 className="settings__subhead">CLI</h4>
+      <p className="settings__hint">
+        The repo ships a tiny <code>jarvis</code> CLI at <code>cli/jarvis</code>{' '}
+        that reads the token from Keychain — no env vars needed. Symlink it
+        onto your PATH and run <code>jarvis status</code>, <code>jarvis run
+        "&lt;prompt&gt;"</code>, <code>jarvis inbox</code>, etc. See{' '}
+        <code>docs/cli.md</code> for the full reference.
+      </p>
+
       <h4 className="settings__subhead">Available endpoints</h4>
       <ul className="settings__endpoints">
         <li>

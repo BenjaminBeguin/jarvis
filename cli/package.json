@@ -1,0 +1,6 @@
+{
+  "name": "jarvis-cli",
+  "private": true,
+  "type": "commonjs",
+  "description": "Tiny commonjs override for the jarvis CLI script — the parent package.json declares \"type\": \"module\" for Electron's main process, but the CLI is plain Node and uses require()."
+}
