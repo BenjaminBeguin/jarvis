@@ -18,6 +18,19 @@ export const sendModule: Module = {
       label: 'Send to someone',
       description: 'Pick a channel + recipient; preview before firing',
       placeholder: 'who · channel · what (e.g. "Luca slack: I\'ll be 5 min late")',
+      verbalTriggers: [
+        'send a message',
+        'send message',
+        'send a slack',
+        'send slack',
+        'send an email',
+        'send email',
+        'email',
+        'dm',
+        'message',
+        'tell',
+        'ping',
+      ],
       handler: (input, ctx) => {
         const body = input.trim();
         if (!body) {

@@ -299,17 +299,21 @@ export function CommandPalette() {
         void window.jarvis.showAnswerHud(summary.id);
         return;
       }
-      // Free-text: let main classify ("remind me in 2h …" → reminder, else
-      // task). Reminder confirmations show as a brief native notification;
-      // tasks pop the HUD as before.
+      // Free-text classifier in main:
+      //   - verbal intent match ('record the meeting' → meeting module)
+      //   - reminder/scheduled ('remind me in 2h …')
+      //   - fall through to a Claude task
       const result = await window.jarvis.routePrompt(prompt, {
         origin: override.origin ?? 'palette',
       });
       setText('');
       if (result.kind === 'task') {
         void window.jarvis.showAnswerHud(result.task.id);
+      } else if (result.kind === 'intent' && !result.ok) {
+        setError(result.message ?? 'Intent failed');
       }
-      // For reminders: main fires its own notification; nothing more to do.
+      // Reminders + successful intents: main fires its own notification /
+      // module side-effects (HUD pop, recording overlay, …). Nothing here.
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }

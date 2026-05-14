@@ -28,6 +28,15 @@ export const quickNoteModule: Module = {
       label: 'Quick note',
       description: 'Append to today\'s journal',
       placeholder: 'What\'s on your mind?',
+      verbalTriggers: [
+        'note',
+        'take a note',
+        'make a note',
+        'jot down',
+        'jot this down',
+        'remember this',
+        'write this down',
+      ],
       handler: async (input, ctx) => {
         const text = input.trim();
         if (!text) throw new Error('Note is empty');

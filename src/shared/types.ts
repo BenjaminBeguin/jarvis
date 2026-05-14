@@ -97,11 +97,13 @@ export interface Reminder {
 }
 
 /**
- * Result of routing a free-text palette prompt. Either we recognized it as a
- * reminder ("remind me X in 2h") and persisted one, or we treated it as a
- * regular task launch and returned the resulting summary.
+ * Result of routing a free-text palette prompt. The router tries (in order):
+ *  1. Verbal intent match — "record the meeting" → meeting module.
+ *  2. Reminder/scheduled parse — "remind me in 2h …".
+ *  3. Fall through to a regular Claude task.
  */
 export type RoutePromptResult =
+  | { kind: 'intent'; moduleId: string; intentId: string; ok: boolean; message?: string }
   | { kind: 'reminder'; reminder: Reminder }
   | { kind: 'task'; task: TaskSummary };
 

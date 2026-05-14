@@ -23,6 +23,12 @@ export const skillSuggesterModule: Module = {
       label: 'Analyze prompts for skill ideas',
       description:
         'Send recent prompts to Claude to find reusable patterns worth saving as skills',
+      verbalTriggers: [
+        'suggest skills',
+        'suggest new skills',
+        'find skill ideas',
+        'analyze my prompts',
+      ],
       handler: (_input, ctx) => {
         // Visible "I ran" beacon — if the user sees this fire but nothing
         // else, we know the handler started but failed downstream.

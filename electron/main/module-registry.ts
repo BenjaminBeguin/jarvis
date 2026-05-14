@@ -124,6 +124,50 @@ export class ModuleRegistry extends EventEmitter {
     return out;
   }
 
+  /**
+   * Find the intent whose verbal trigger best matches the leading words
+   * of `prompt`. Returns null if nothing matches. "Best" = longest trigger
+   * length (so "record the meeting" beats "record" if both are registered).
+   * Match is case-insensitive and requires the trigger to start the prompt
+   * (followed by end-of-string or whitespace) — prevents loose substring
+   * matches on long sentences.
+   */
+  matchVerbal(
+    prompt: string,
+  ): { moduleId: string; intentId: string; rest: string } | null {
+    const lower = prompt.toLowerCase().trim();
+    if (!lower) return null;
+    let best:
+      | { moduleId: string; intentId: string; rest: string; len: number }
+      | null = null;
+    for (const { module, intentsById, enabled } of this.modules.values()) {
+      if (!enabled) continue;
+      for (const intent of intentsById.values()) {
+        for (const triggerRaw of intent.verbalTriggers ?? []) {
+          const trigger = triggerRaw.toLowerCase().trim();
+          if (!trigger) continue;
+          if (lower === trigger || lower.startsWith(trigger + ' ')) {
+            if (!best || trigger.length > best.len) {
+              const rest = prompt.slice(trigger.length).trim();
+              best = {
+                moduleId: module.id,
+                intentId: intent.id,
+                rest: stripLeadingConnectors(rest),
+                len: trigger.length,
+              };
+            }
+          }
+        }
+      }
+    }
+    if (!best) return null;
+    return {
+      moduleId: best.moduleId,
+      intentId: best.intentId,
+      rest: best.rest,
+    };
+  }
+
   async dispatch(
     moduleId: string,
     intentId: string,
@@ -148,6 +192,18 @@ export class ModuleRegistry extends EventEmitter {
       return { ok: false, message };
     }
   }
+}
+
+/**
+ * After stripping a trigger like 'record the meeting' from
+ * 'record the meeting about Q3', the remainder is 'about Q3'.
+ * Strip a small set of leading connectors so the handler sees just
+ * the actual content ('Q3').
+ */
+function stripLeadingConnectors(s: string): string {
+  return s
+    .replace(/^(on|about|for|to|that|called|named|titled|with)\s+/i, '')
+    .trim();
 }
 
 function toIntentSummary(

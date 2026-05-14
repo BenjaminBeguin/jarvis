@@ -19,6 +19,13 @@ export const statusModule: Module = {
       prefix: '/status',
       label: 'Status digest',
       description: 'Pending reminders, recent notes/meetings, PRs',
+      verbalTriggers: [
+        'status',
+        'what is happening',
+        "what's happening",
+        "what's up",
+        'where am I',
+      ],
       handler: (_input, ctx) => {
         const t = ctx.launchTask({
           prompt: 'Produce my status digest using the status skill.',
@@ -34,6 +41,11 @@ export const statusModule: Module = {
       prefix: '/next',
       label: 'What should I work on next?',
       description: 'Prioritized next-move recommendation',
+      verbalTriggers: [
+        'what should I work on next',
+        'what should I do next',
+        'what next',
+      ],
       handler: (_input, ctx) => {
         const t = ctx.launchTask({
           prompt:

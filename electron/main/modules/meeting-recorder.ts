@@ -38,6 +38,17 @@ export const meetingRecorderModule: Module = {
       label: 'Record meeting',
       description: 'Start capturing audio — stop button appears top-right',
       placeholder: 'Meeting title (optional)',
+      verbalTriggers: [
+        'record the meeting',
+        'record this meeting',
+        'record meeting',
+        'start the meeting',
+        'start meeting',
+        'start recording',
+        'begin recording',
+        'capture this meeting',
+        'capture meeting',
+      ],
       handler: (input, ctx) => {
         const title =
           input.trim() ||
@@ -54,6 +65,13 @@ export const meetingRecorderModule: Module = {
       prefix: '/meeting-stop',
       label: 'Stop meeting recording',
       description: 'Stop the current recording and transcribe',
+      verbalTriggers: [
+        'stop the meeting',
+        'stop meeting',
+        'stop recording',
+        'end recording',
+        'end the meeting',
+      ],
       handler: (_input, ctx) => {
         ctx.broadcast(CHANNEL_STOP_REQUEST);
         return 'Stop requested';

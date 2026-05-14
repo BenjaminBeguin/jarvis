@@ -499,6 +499,25 @@ function registerIpc(): void {
       payload: { prompt: string; origin?: 'palette' | 'voice' },
     ) => {
       const prompt = typeof payload?.prompt === 'string' ? payload.prompt : '';
+      // 1. Verbal intent match: "record the meeting" → meeting/start, etc.
+      //    Routed BEFORE parseIntent so module-owned phrases win over the
+      //    reminder parser (a phrase like 'remind me to record the meeting'
+      //    still parses as a reminder because the leading word is 'remind').
+      const verbal = modules.matchVerbal(prompt);
+      if (verbal) {
+        const result = await modules.dispatch(
+          verbal.moduleId,
+          verbal.intentId,
+          verbal.rest,
+        );
+        return {
+          kind: 'intent' as const,
+          moduleId: verbal.moduleId,
+          intentId: verbal.intentId,
+          ok: result.ok,
+          message: result.message,
+        };
+      }
       const intent = parseIntent(prompt);
       if (intent.kind === 'reminder') {
         const reminder = reminders.create({

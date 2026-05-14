@@ -64,6 +64,15 @@ export interface PaletteIntent {
   label: string;
   description?: string;
   placeholder?: string;
+  /**
+   * Multi-word phrases that, when typed as free text in the palette,
+   * route to this intent automatically (without the slash prefix).
+   * The MATCH IS LEADING — the prompt must START with the trigger to
+   * route, so a trigger like 'record the meeting' won't fire on 'I
+   * should record the meeting later'. Long-form natural language
+   * stays a regular Claude task.
+   */
+  verbalTriggers?: string[];
   handler: (
     input: string,
     ctx: ModuleContext,
