@@ -182,6 +182,14 @@ function pushTaskToHud(taskId: string): void {
 /** Track previous awaitingInput per task so we only ping on false→true. */
 const awaitingFlipped = new Map<string, boolean>();
 
+/**
+ * Cost guardrail: warn the user when a task crosses a spending threshold.
+ * Single-fire per task to avoid notification spam. Hard-coded for now;
+ * later this could read from preferences.md or per-skill frontmatter.
+ */
+const COST_GUARDRAIL_USD = 0.5;
+const costWarned = new Set<string>();
+
 function wireRunnerEvents(): void {
   runner.on('event', (payload: { taskId: string; event: TaskEvent }) => {
     broadcast(IpcChannels.taskEvent, payload);
@@ -202,6 +210,47 @@ function wireRunnerEvents(): void {
     setRunningTasksCount(running);
     setAwaitingRepliesCount(awaiting);
     broadcast(IpcChannels.taskStatus, summary);
+
+    // Cost guardrail: fire ONCE when a task crosses the threshold.
+    // Useful for unattended routines that could otherwise run away —
+    // gives the user a chance to abort before the cost grows further.
+    // Clears on completion / error so a future run of the same skill
+    // starts fresh.
+    if (
+      summary.origin !== 'external' &&
+      summary.costUsd > COST_GUARDRAIL_USD &&
+      !costWarned.has(summary.id)
+    ) {
+      costWarned.add(summary.id);
+      try {
+        const notif = new Notification({
+          title: `Jarvis · task at $${summary.costUsd.toFixed(2)}`,
+          body: `${summary.title.length > 60 ? summary.title.slice(0, 60) + '…' : summary.title}\nClick to open · abort if surprising.`,
+          silent: false,
+        });
+        notif.on('click', () => {
+          const win = openObservatory();
+          win.focus();
+          const send = () =>
+            win.webContents.send(IpcChannels.observatoryFocusTask, summary.id);
+          if (win.webContents.isLoading()) {
+            win.webContents.once('did-finish-load', send);
+          } else {
+            send();
+          }
+        });
+        notif.show();
+      } catch {
+        // Notifications can fail pre-permission; the task continues.
+      }
+    }
+    if (
+      summary.status === 'completed' ||
+      summary.status === 'errored' ||
+      summary.status === 'aborted'
+    ) {
+      costWarned.delete(summary.id);
+    }
 
     if (summary.origin !== 'external') {
       const was = awaitingFlipped.get(summary.id) ?? false;
