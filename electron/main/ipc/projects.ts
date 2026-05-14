@@ -3,8 +3,9 @@ import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, normalize, relative, resolve } from 'node:path';
 
 import { IpcChannels } from '@shared/ipc';
-import type { ProjectInput } from '@shared/types';
+import type { ProjectInput, ProjectTemplateSummary } from '@shared/types';
 
+import { BUILTIN_TEMPLATES, findTemplate } from '../seeds/templates/index.js';
 import type { IpcDeps } from './types.js';
 
 export function registerProjectsIpc({
@@ -15,9 +16,35 @@ export function registerProjectsIpc({
 }: IpcDeps): void {
   ipcMain.handle(IpcChannels.listProjects, () => projects.list());
 
-  ipcMain.handle(IpcChannels.createProject, (_e, input: ProjectInput) =>
-    projects.create(input),
+  // List built-in workflow templates as renderer-facing summaries (no
+  // template body — the memory seeds stay in main). Used by the New
+  // Project dialog to populate its template picker.
+  ipcMain.handle(IpcChannels.listProjectTemplates, (): ProjectTemplateSummary[] =>
+    BUILTIN_TEMPLATES.map((t) => ({
+      id: t.id,
+      label: t.label,
+      description: t.description,
+      recommendedSkills: t.recommendedSkills,
+      recommendedMcps: t.recommendedMcps,
+      memorySeedCount: t.memorySeeds.length,
+    })),
   );
+
+  ipcMain.handle(IpcChannels.createProject, (_e, input: ProjectInput) => {
+    // 1. Create the project entry first — fails loudly on duplicate name
+    //    before we touch the filesystem.
+    const def = projects.create(input);
+    // 2. If a template was selected, seed its memory files. We never
+    //    overwrite an existing file (a user re-creating after manual
+    //    experimentation should keep their notes).
+    const template = findTemplate(input.templateId ?? null);
+    for (const seed of template.memorySeeds) {
+      const existing = projectMemory.read(def.name, seed.file);
+      if (existing) continue;
+      projectMemory.write(def.name, seed.file, seed.content);
+    }
+    return def;
+  });
 
   // Cache the renderer's scope-picker selection in main, so the
   // UserContextStore can inject it into every task's system prompt.

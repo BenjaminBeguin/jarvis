@@ -4655,6 +4655,64 @@ button:disabled:hover {
   color: var(--text-faint);
 }
 
+/* Workflow template picker — radio-as-cards. Compact 2-column grid; active
+   card highlights with the accent border + soft glow. */
+.template-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.template-picker__card {
+  text-align: left;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--text);
+  font-family: var(--mono);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.template-picker__card:hover {
+  border-color: var(--accent);
+}
+
+.template-picker__card--active {
+  border-color: var(--accent);
+  background: rgba(0, 212, 255, 0.06);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.template-picker__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  text-shadow: var(--accent-glow);
+}
+
+.template-picker__card--active .template-picker__label {
+  text-shadow: var(--accent-glow);
+}
+
+.template-picker__desc {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.template-picker__meta {
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+
 .project-dialog__error {
   color: var(--bad);
   font-family: var(--mono);

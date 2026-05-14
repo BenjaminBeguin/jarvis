@@ -219,6 +219,22 @@ export interface ProjectInput {
   path?: string;
   repo?: string;
   description?: string;
+  /** Optional workflow template id (see ProjectTemplateSummary). When set,
+   * ProjectStore seeds the project's memory dir from the template. */
+  templateId?: string;
+}
+
+/** Renderer-facing summary of a workflow template — body lives in main. */
+export interface ProjectTemplateSummary {
+  id: string;
+  label: string;
+  description: string;
+  /** Skill names the template suggests as good fits. Just hints. */
+  recommendedSkills?: string[];
+  /** MCP server names the template suggests. Just hints. */
+  recommendedMcps?: string[];
+  /** Count of memory files this template seeds, for the dialog hint. */
+  memorySeedCount: number;
 }
 
 export interface PaletteIntentSummary {

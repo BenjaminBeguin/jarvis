@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { ProjectDef } from '../../../shared/types';
+import type { ProjectDef, ProjectTemplateSummary } from '../../../shared/types';
 import { toast } from '../Toaster';
 
 interface Props {
@@ -23,11 +23,14 @@ export function NewProjectDialog({ open, onClose, onCreated, initialName }: Prop
   const [repo, setRepo] = useState('');
   const [path, setPath] = useState('');
   const [description, setDescription] = useState('');
+  const [templateId, setTemplateId] = useState<string>('none');
+  const [templates, setTemplates] = useState<ProjectTemplateSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
-  // Reset + autofocus on each open.
+  // Reset + autofocus on each open. Templates list rarely changes between
+  // opens — fetch once per open to keep it simple.
   useEffect(() => {
     if (!open) return;
     setName(initialName ?? '');
@@ -35,8 +38,10 @@ export function NewProjectDialog({ open, onClose, onCreated, initialName }: Prop
     setRepo('');
     setPath('');
     setDescription('');
+    setTemplateId('none');
     setError(null);
     setBusy(false);
+    void window.jarvis.listProjectTemplates().then(setTemplates);
     const t = setTimeout(() => nameRef.current?.focus(), 30);
     return () => clearTimeout(t);
   }, [open, initialName]);
@@ -62,6 +67,7 @@ export function NewProjectDialog({ open, onClose, onCreated, initialName }: Prop
     }
     setBusy(true);
     try {
+      const selectedTemplate = templates.find((t) => t.id === templateId);
       const def = await window.jarvis.createProject({
         name: trimmed,
         aliases: aliases
@@ -71,8 +77,13 @@ export function NewProjectDialog({ open, onClose, onCreated, initialName }: Prop
         repo: repo.trim() || undefined,
         path: path.trim() || undefined,
         description: description.trim() || undefined,
+        templateId: templateId !== 'none' ? templateId : undefined,
       });
-      toast({ message: `Project "${def.name}" created` });
+      const seedCount = selectedTemplate?.memorySeedCount ?? 0;
+      const seedSuffix = seedCount > 0
+        ? ` · seeded ${seedCount} memory file${seedCount === 1 ? '' : 's'}`
+        : '';
+      toast({ message: `Project "${def.name}" created${seedSuffix}` });
       onCreated?.(def);
       onClose();
     } catch (e) {
@@ -170,6 +181,14 @@ export function NewProjectDialog({ open, onClose, onCreated, initialName }: Prop
             />
           </label>
 
+          {templates.length > 0 && (
+            <TemplatePicker
+              templates={templates}
+              value={templateId}
+              onChange={setTemplateId}
+            />
+          )}
+
           {error && <div className="project-dialog__error">{error}</div>}
         </div>
 
@@ -186,6 +205,53 @@ export function NewProjectDialog({ open, onClose, onCreated, initialName }: Prop
           </button>
         </footer>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Visual picker for the workflow template — radio cards with the template's
+ * label + description and a small "seeds N memory file(s)" hint. Default is
+ * the first option, which we ensure is the "none" template via
+ * BUILTIN_TEMPLATES ordering in main.
+ */
+function TemplatePicker({
+  templates,
+  value,
+  onChange,
+}: {
+  templates: ProjectTemplateSummary[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <div className="project-dialog__field">
+      <span>Workflow template</span>
+      <div className="template-picker">
+        {templates.map((t) => {
+          const active = t.id === value;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className={`template-picker__card${active ? ' template-picker__card--active' : ''}`}
+              onClick={() => onChange(t.id)}
+            >
+              <div className="template-picker__label">{t.label}</div>
+              <div className="template-picker__desc">{t.description}</div>
+              <div className="template-picker__meta">
+                {t.memorySeedCount > 0
+                  ? `seeds ${t.memorySeedCount} memory file${t.memorySeedCount === 1 ? '' : 's'}`
+                  : 'no seeds'}
+                {t.recommendedSkills && t.recommendedSkills.length > 0 && (
+                  <> · {t.recommendedSkills.slice(0, 2).join(', ')}{t.recommendedSkills.length > 2 ? '…' : ''}</>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <small>Memory seeds are placeholder markdown — agents fill them in over time.</small>
     </div>
   );
 }

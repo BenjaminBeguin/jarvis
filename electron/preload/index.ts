@@ -16,6 +16,7 @@ import type {
   ProjectDef,
   ProjectInput,
   ProjectMemoryFile,
+  ProjectTemplateSummary,
   Reminder,
   RoutePromptResult,
   RoutineDef,
@@ -132,6 +133,8 @@ const api = {
     ipcRenderer.invoke(IpcChannels.listProjects),
   createProject: (input: ProjectInput): Promise<ProjectDef> =>
     ipcRenderer.invoke(IpcChannels.createProject, input),
+  listProjectTemplates: (): Promise<ProjectTemplateSummary[]> =>
+    ipcRenderer.invoke(IpcChannels.listProjectTemplates),
   setActiveProject: (name: string | null): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.setActiveProject, name),
   onProjectsChanged: (listener: Listener<ProjectDef[]>): Unsubscribe =>

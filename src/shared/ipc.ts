@@ -41,6 +41,7 @@ export const IpcChannels = {
   createProject: 'projects:create',
   setActiveProject: 'projects:setActive',
   projectsChanged: 'projects:changed',
+  listProjectTemplates: 'projects:listTemplates',
   listProjectMemory: 'projects:listMemory',
   readProjectMemory: 'projects:readMemory',
   writeProjectMemory: 'projects:writeMemory',
