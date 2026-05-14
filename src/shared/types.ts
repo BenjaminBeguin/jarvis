@@ -32,6 +32,13 @@ export interface TaskSummary {
    * Claude Code session record on disk.
    */
   sdkSessionId?: string | null;
+  /**
+   * Working directory the spawned Claude session runs in. Derived from
+   * the active project's path (when scoped) or ~ as a fallback. Shown in
+   * TaskDetail so the user can see which repo the agent's file operations
+   * are actually targeting.
+   */
+  cwd?: string;
 }
 
 export interface TaskEvent {

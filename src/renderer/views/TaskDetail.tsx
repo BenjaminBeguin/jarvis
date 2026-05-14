@@ -24,6 +24,15 @@ function formatTime(ts: number): string {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
+/** Collapse the user's home directory to `~` for compact display. */
+function formatCwd(cwd: string): string {
+  // The renderer doesn't know HOMEDIR; sniff it from the path. Most macOS
+  // homes live under /Users/, so trim the first two segments and prefix `~`.
+  const match = cwd.match(/^\/Users\/[^/]+(\/.*)?$/);
+  if (match) return `~${match[1] ?? ''}`;
+  return cwd;
+}
+
 interface RenderedEvent {
   key: string;
   kind: 'text' | 'user' | 'tool_use' | 'tool_result' | 'result' | 'error' | 'system';
@@ -210,6 +219,11 @@ export function TaskDetail({ task, onSelectTask }: Props) {
             {task.status} · {task.origin} · started {formatRelative(task.startedAt)}
             {task.costUsd > 0 && ` · $${task.costUsd.toFixed(4)}`}
           </div>
+          {task.cwd && task.origin !== 'external' && (
+            <div className="meta detail__cwd" title="Working directory">
+              📁 {formatCwd(task.cwd)}
+            </div>
+          )}
           {task.sdkSessionId && task.origin !== 'external' && (
             <SessionAffordances task={task} />
           )}
@@ -478,7 +492,7 @@ function SessionAffordances({ task }: { task: TaskSummary }) {
     if (res.ok) {
       toast({
         message:
-          'Opened Claude Code — if Desktop didn\'t jump to the session, find it in Recents.',
+          'Opened Claude Code Desktop — your session is in the Recents tab.',
       });
     } else {
       toast({

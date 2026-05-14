@@ -3114,6 +3114,12 @@ button:disabled:hover {
   text-transform: uppercase;
 }
 
+.detail__cwd {
+  text-transform: none !important;
+  letter-spacing: 0.02em !important;
+  color: var(--text-dim) !important;
+}
+
 /* Claude Code jump affordances — only present on subscription-mode tasks
    that have an sdkSessionId. Compact row, monospace, sits under the meta. */
 .detail__session-row {

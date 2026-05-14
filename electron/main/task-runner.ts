@@ -113,6 +113,21 @@ export class TaskRunner extends EventEmitter {
   }
 
   /**
+   * Working directory for the spawned Claude session. Mirrors `claude
+   * --cwd <path>` — Claude Code keys its session storage by absolute
+   * project path, so getting this right means the session lands in the
+   * correct ~/.claude/projects/<hash>/ bucket too.
+   */
+  private resolveCwd(): string {
+    const activeName = this.userContext?.getActiveProject();
+    if (activeName) {
+      const def = this.projects?.resolve(activeName);
+      if (def?.path) return def.path;
+    }
+    return homedir();
+  }
+
+  /**
    * Build the system prompt for a task. Order:
    *   1. Skill body (or default Jarvis prompt) — the task's framing.
    *   2. The user's preferences — their hard rules + how-I-work overlay.
@@ -345,6 +360,7 @@ export class TaskRunner extends EventEmitter {
       endedAt: null,
       costUsd: 0,
       inputPreview: req.prompt.slice(0, 240),
+      cwd: this.resolveCwd(),
     };
     const inputs = new AsyncMessageQueue();
     inputs.push(userMessage(req.prompt, id));
@@ -386,11 +402,16 @@ export class TaskRunner extends EventEmitter {
         // toolbox the user has in their day-to-day claude CLI / Claude
         // Desktop sessions.
         settingSources: ['user', 'project', 'local'],
-        // Run from the user's home directory by default. Electron's cwd is
-        // the .app bundle path, which is the wrong place for the agent to
-        // operate from (read/write/git/etc. would target Jarvis itself).
-        // Skills can override this in the future via a `cwd` frontmatter.
-        cwd: homedir(),
+        // Working directory resolution:
+        //   1. explicit override on the launch request (caller knew best)
+        //   2. active project's path (so 'agent on csai PR' runs from
+        //      ~/Code/csai, file ops land in the right repo)
+        //   3. ~ as fallback (Electron's cwd is the .app bundle —
+        //      unusable for read/write/git/etc.)
+        // Skills can carry a cwd in frontmatter for cases where the
+        // skill itself dictates the dir (rare). When that ships, slot
+        // it into this chain before the project path.
+        cwd: this.resolveCwd(),
       };
       if (
         this.auth.mode === 'subscription' &&

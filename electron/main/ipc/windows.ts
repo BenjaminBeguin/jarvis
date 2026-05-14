@@ -1,3 +1,6 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
 import { ipcMain, shell } from 'electron';
 
 import { IpcChannels } from '@shared/ipc';
@@ -10,6 +13,8 @@ import {
   resizePalette,
 } from '../windows.js';
 import type { IpcDeps } from './types.js';
+
+const execFileAsync = promisify(execFile);
 
 export function registerWindowIpc(_deps: IpcDeps): void {
   ipcMain.handle(IpcChannels.openObservatory, (_e, taskId?: string) => {
@@ -59,30 +64,36 @@ export function registerWindowIpc(_deps: IpcDeps): void {
     await shell.openExternal(url);
   });
 
-  // Jump from a Jarvis task into the Claude Code Desktop app on the same
-  // session. Subscription-mode tasks ARE Claude Code sessions on disk, so
-  // Desktop already knows about them — this is just a one-click launcher.
-  // If Desktop hasn't registered the `claude-code://` URL scheme, openExternal
-  // silently does nothing on macOS; we follow up with a plain `open -a Claude`
-  // best-effort so the app at least comes to the foreground.
+  // Jump from a Jarvis task into Claude Code Desktop. Subscription-mode
+  // sessions are real Claude Code sessions on disk (~/.claude/projects/...)
+  // so Desktop already lists them in Recents — this just brings the app
+  // forward. Claude Code Desktop doesn't register a `claude-code://` URL
+  // scheme, so we use `open -a Claude` (and a few variant names) instead.
+  // The `sessionId` arg is kept in case Desktop ever ships a deep-link
+  // scheme; right now it's informational.
   ipcMain.handle(
     IpcChannels.openInClaudeDesktop,
     async (
       _e,
-      sessionId: string,
+      _sessionId: string,
     ): Promise<{ ok: boolean; message?: string }> => {
-      if (typeof sessionId !== 'string' || !sessionId) {
-        return { ok: false, message: 'No session id.' };
+      // Common bundle names Claude Code Desktop might ship as. We try in
+      // order; the first one that exists on this machine wins. `open -a`
+      // exits non-zero if the app isn't found, so we catch + try the next.
+      const candidates = ['Claude', 'Claude Code', 'ClaudeCode'];
+      for (const name of candidates) {
+        try {
+          await execFileAsync('open', ['-a', name]);
+          return { ok: true, message: name };
+        } catch {
+          // try the next candidate
+        }
       }
-      try {
-        await shell.openExternal(`claude-code://session/${sessionId}`);
-        return { ok: true };
-      } catch (err) {
-        return {
-          ok: false,
-          message: err instanceof Error ? err.message : String(err),
-        };
-      }
+      return {
+        ok: false,
+        message:
+          "Couldn't find Claude Code Desktop on this machine. Install it from claude.ai/download, or use the Copy resume command button to continue in a terminal.",
+      };
     },
   );
 }

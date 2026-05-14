@@ -579,6 +579,42 @@ take the wheel now" alternative.
 
 ## Stretch / less obvious
 
+### Worktree mode for tasks (Claude-like launch options)
+
+**Problem.** Today every Jarvis task runs from the active project's
+path (or `~` if none). Useful, but two real cases aren't covered:
+
+1. **Worktree isolation** — the agent works on a branch without
+   touching your main checkout. Same as `git worktree add` →
+   `cd worktree` → run agent.
+2. **Per-task cwd override** — sometimes you want to point a single
+   task at a different repo without changing scope. Right now you
+   can't; `cwd` is implicit.
+
+**Proposal.** Extend `LaunchTaskRequest` with:
+
+- `cwd?: string` — explicit override of the resolved cwd
+- `worktree?: { branch?: string; base?: string }` — when set, Jarvis
+  creates `git worktree add /tmp/jarvis-<task-id> -b <branch>` (or
+  uses an existing branch) and uses that path as cwd. On task end,
+  the worktree is left in place; the user prunes via `git worktree
+  prune` or a future "Clean up worktrees" button.
+
+Skill frontmatter could also carry `cwd:` / `worktree:` for skills
+that always want isolation (e.g. a `experiment` skill).
+
+**UI:** a small "Working directory" dropdown in the palette when a
+task is being launched. Defaults to scope-derived. Shows worktree
+option if the cwd is a git repo.
+
+**Effort:** ~1-2 days. The worktree management is the bulk.
+
+**Why it matters:** completes the "Claude-like launch options"
+parity. Right now if you want a worktree, you create it manually
+and run `claude` in there — you can't drive that from Jarvis.
+
+---
+
 ### Memory search in the palette
 
 Type `?<query>` or use a `/recall` intent → semantic-ish search
