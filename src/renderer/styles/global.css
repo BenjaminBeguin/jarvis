@@ -1963,6 +1963,125 @@ button:disabled:hover {
   border-left-color: var(--warn) !important;
 }
 
+/* ----- MeetingPrompt: "your meeting is starting" actionable toast ------- */
+
+.meeting-prompt {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  width: 320px;
+  background: rgba(7, 11, 15, 0.96);
+  border: 1px solid var(--warn);
+  border-radius: 2px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.55), 0 0 18px rgba(255, 196, 80, 0.25);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 90;
+  font-family: var(--mono);
+  animation: meeting-prompt-in 0.25s ease-out;
+}
+
+@keyframes meeting-prompt-in {
+  from { transform: translateY(-10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.meeting-prompt__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meeting-prompt__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+  box-shadow: 0 0 6px var(--warn);
+  animation: inbox-pulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.meeting-prompt__label {
+  flex: 1;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--warn);
+  text-shadow: 0 0 8px rgba(255, 196, 80, 0.4);
+}
+
+.meeting-prompt__close {
+  background: transparent;
+  border: 0;
+  color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.meeting-prompt__close:hover {
+  color: var(--text);
+}
+
+.meeting-prompt__title {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.meeting-prompt__sub {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.meeting-prompt__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.meeting-prompt__primary,
+.meeting-prompt__join,
+.meeting-prompt__skip {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 6px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  flex: 1;
+}
+
+.meeting-prompt__primary {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.meeting-prompt__primary:hover {
+  background: rgba(255, 196, 80, 0.08);
+  box-shadow: 0 0 8px rgba(255, 196, 80, 0.35);
+}
+
+.meeting-prompt__join:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.meeting-prompt__skip:hover {
+  color: var(--text);
+}
+
 /* ----- Briefings: generated-doc collection (daily recap, retros, focus) -- */
 
 .briefings {

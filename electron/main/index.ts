@@ -92,37 +92,62 @@ const briefings = new BriefingsStore(BUILTIN_BRIEFING_KINDS);
 // "Heads up" notifications when an inbox item with fireAt is within 5
 // min. Calendar events flow naturally through this; reminders are
 // skipped (ReminderStore handles those at fireAt time).
-const inboxProximity = new InboxProximityWatcher(inbox, (item, minutesUntil) => {
-  try {
-    const minutesLabel =
-      minutesUntil <= 1 ? 'starting now' : `in ${minutesUntil} min`;
-    const notif = new Notification({
-      title: `Heads up · ${minutesLabel}`,
-      body: item.title,
-      silent: false,
-    });
-    notif.on('click', () => {
-      // If the item has a URL (Google Meet link, Zoom, etc.), open it
-      // in the default browser — that's the user's actual intent. No
-      // URL → open the Inbox so they can see the row.
-      if (item.url && /^https?:\/\//i.test(item.url)) {
-        void shell.openExternal(item.url);
-        return;
-      }
+const inboxProximity = new InboxProximityWatcher(
+  inbox,
+  (item, minutesUntil) => {
+    try {
+      const minutesLabel =
+        minutesUntil <= 1 ? 'starting now' : `in ${minutesUntil} min`;
+      const notif = new Notification({
+        title: `Heads up · ${minutesLabel}`,
+        body: item.title,
+        silent: false,
+      });
+      notif.on('click', () => {
+        if (item.url && /^https?:\/\//i.test(item.url)) {
+          void shell.openExternal(item.url);
+          return;
+        }
+        const win = openObservatory();
+        win.focus();
+        const send = () =>
+          win.webContents.send(IpcChannels.shellNavigate, { tab: 'inbox' });
+        if (win.webContents.isLoading()) {
+          win.webContents.once('did-finish-load', send);
+        } else {
+          send();
+        }
+      });
+      notif.show();
+    } catch {
+      // Notifications can fail pre-permission; not fatal.
+    }
+  },
+  // Imminent meeting prompt — bring the window forward and broadcast
+  // a meeting-imminent event. The renderer mounts a toast with [Record]
+  // / [Skip] buttons; the user picks. No native notification here —
+  // an in-app actionable toast is the only place we can offer buttons.
+  (item, minutesUntil) => {
+    try {
       const win = openObservatory();
       win.focus();
       const send = () =>
-        win.webContents.send(IpcChannels.shellNavigate, { tab: 'inbox' });
+        win.webContents.send(IpcChannels.meetingImminent, { item, minutesUntil });
       if (win.webContents.isLoading()) {
         win.webContents.once('did-finish-load', send);
       } else {
         send();
       }
-    });
-    notif.show();
-  } catch {
-    // Notifications can fail pre-permission; not fatal.
-  }
+    } catch (err) {
+      console.warn('Meeting prompt broadcast failed:', err);
+    }
+  },
+);
+
+// Wire the renderer's "Skip" button so we don't re-prompt for the same
+// item every minute when the user dismissed it.
+ipcMain.handle(IpcChannels.suppressMeetingPrompt, (_e, id: string) => {
+  if (typeof id === 'string') inboxProximity.suppressMeetingPrompt(id);
 });
 // Built-in context providers: time + active project (set from renderer) +
 // projects list + recent task. Order matters — first registered is first

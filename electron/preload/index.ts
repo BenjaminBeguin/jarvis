@@ -190,6 +190,11 @@ const api = {
     subscribe(IpcChannels.inboxRefreshing, listener),
   dismissInboxItem: (id: string, snoozeMs: number): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.dismissInboxItem, { id, snoozeMs }),
+  onMeetingImminent: (
+    listener: Listener<{ item: InboxItem; minutesUntil: number }>,
+  ): Unsubscribe => subscribe(IpcChannels.meetingImminent, listener),
+  suppressMeetingPrompt: (id: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.suppressMeetingPrompt, id),
 
   listBriefingKinds: (): Promise<
     Array<{

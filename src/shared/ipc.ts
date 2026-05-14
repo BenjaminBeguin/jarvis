@@ -64,6 +64,8 @@ export const IpcChannels = {
   inboxChanged: 'inbox:changed',
   inboxRefreshing: 'inbox:refreshing',
   dismissInboxItem: 'inbox:dismiss',
+  meetingImminent: 'inbox:meetingImminent',
+  suppressMeetingPrompt: 'inbox:suppressMeetingPrompt',
 
   listBriefingKinds: 'briefings:listKinds',
   listBriefingFiles: 'briefings:listFiles',

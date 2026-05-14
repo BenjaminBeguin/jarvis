@@ -6,6 +6,7 @@ import { Briefings } from './Briefings';
 import { Inbox } from './Inbox';
 import { Logo } from './Logo';
 import { MeetingOverlay } from './MeetingOverlay';
+import { MeetingPrompt } from './MeetingPrompt';
 import { NewProjectDialog } from './projects/NewProjectDialog';
 import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
@@ -432,6 +433,7 @@ export function Shell({ status }: Props) {
         )}
       </div>
       <MeetingOverlay />
+      <MeetingPrompt />
       <NewProjectDialog
         open={newProjectOpen}
         onClose={() => setNewProjectOpen(false)}
