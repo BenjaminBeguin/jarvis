@@ -27,13 +27,21 @@ export function ScopePicker({ projects, active, onChange, onCreate }: ScopePicke
   }, [open]);
 
   const label = active ?? 'All projects';
+  const activeDef = active ? projects.find((p) => p.name === active) : null;
+  // Tooltip on the header button — show the path so the user knows where
+  // tasks will land without having to open the dropdown.
+  const buttonTitle = active
+    ? activeDef?.path
+      ? `Scope: ${active} · tasks run in ${activeDef.path}`
+      : `Scope: ${active} · no path set (tasks run in ~)`
+    : 'Click to pick a project scope';
 
   return (
     <div className="shell__scope" ref={wrapRef}>
       <button
         className={`shell__scope-btn${active ? ' shell__scope-btn--active' : ''}`}
         onClick={() => setOpen((v) => !v)}
-        title="Active project scope"
+        title={buttonTitle}
       >
         <span className="shell__scope-dot" />
         <span className="shell__scope-label">{label}</span>

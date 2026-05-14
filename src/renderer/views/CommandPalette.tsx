@@ -36,6 +36,9 @@ const PLACEHOLDER_HINTS = [
   '/status · what is happening right now',
   '/next · best move for the next 30 minutes',
   '/note quick thought to look at later',
+  'create a hivecore project',
+  'show me today',
+  'show inbox',
 ];
 
 function loadHistory(): string[] {

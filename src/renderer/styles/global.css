@@ -1210,9 +1210,11 @@ button:disabled:hover {
   font-family: var(--mono);
   font-size: 12px;
   text-align: left;
-  padding: 8px 10px;
+  padding: 9px 12px;
   cursor: pointer;
   letter-spacing: 0.06em;
+  border-radius: 0;
+  transition: background 0.12s, color 0.12s;
 }
 
 .settings__nav-item:hover {
@@ -1223,8 +1225,14 @@ button:disabled:hover {
 .settings__nav-item--active {
   color: var(--accent);
   border-left-color: var(--accent);
-  background: rgba(0, 212, 255, 0.06);
+  background: rgba(0, 212, 255, 0.08);
   text-shadow: var(--accent-glow);
+  font-weight: 500;
+}
+
+.settings__nav-item--active::before {
+  content: '▸ ';
+  margin-right: 4px;
 }
 
 .settings__panel {
@@ -1816,6 +1824,15 @@ button:disabled:hover {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.inbox__row-main--clickable {
+  cursor: pointer;
+}
+
+.inbox__row-main--clickable:hover .inbox__row-title {
+  color: var(--accent);
+  text-shadow: var(--accent-glow);
 }
 
 .inbox__row-title {
@@ -5843,12 +5860,15 @@ button:disabled:hover {
 .shell__scope-item--new {
   border-top: 1px solid var(--border-strong);
   margin-top: 4px;
+  padding-top: 10px;
   color: var(--accent);
+  font-weight: 500;
 }
 
 .shell__scope-item--new:hover {
   background: rgba(0, 212, 255, 0.08);
   border-left-color: var(--accent);
+  text-shadow: var(--accent-glow);
 }
 
 .project-dialog-backdrop {

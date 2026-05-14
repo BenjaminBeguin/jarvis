@@ -272,9 +272,22 @@ function InboxRow({ item }: { item: InboxItem }) {
     }
   };
 
+  // Clicking the title area opens the item's URL (if any) — matches
+  // "click row to open" UX of most list views. The action buttons on
+  // the right stay primary; this is just the intuitive shortcut.
+  const titleClick = () => {
+    if (item.url) {
+      void window.jarvis.openExternal(item.url);
+    }
+  };
+
   return (
     <li className={`inbox__row${startsSoon ? ' inbox__row--soon' : ''}`}>
-      <div className="inbox__row-main">
+      <div
+        className={`inbox__row-main${item.url ? ' inbox__row-main--clickable' : ''}`}
+        onClick={item.url ? titleClick : undefined}
+        title={item.url ? `Click to open ${item.url}` : undefined}
+      >
         <div className="inbox__row-title">
           {startsSoon && <span className="inbox__row-pulse" aria-hidden />}
           {item.title}
