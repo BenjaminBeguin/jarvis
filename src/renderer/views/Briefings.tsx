@@ -225,17 +225,12 @@ export function Briefings() {
                 ))}
               </aside>
 
-              <article className="briefings__content">
-                {content ? (
-                  <MarkdownText>{content}</MarkdownText>
-                ) : activeFile ? (
-                  <div className="briefings__empty">Loading…</div>
-                ) : (
-                  <div className="briefings__empty">
-                    Pick a file on the left.
-                  </div>
-                )}
-              </article>
+              <BriefingContentPane
+                kindId={activeKind}
+                filename={activeFile}
+                content={content}
+                onContentChange={setContent}
+              />
             </div>
           </>
         )}
@@ -259,6 +254,7 @@ function SchedulePanel({
   const [editing, setEditing] = useState(false);
   const [cronDraft, setCronDraft] = useState(routine?.cron ?? kind.schedule ?? '');
   const [busy, setBusy] = useState(false);
+  const [skillOpen, setSkillOpen] = useState(false);
 
   // Keep the draft in sync if the routine changes externally (e.g.
   // user-edited routines.json by hand).
@@ -356,30 +352,46 @@ function SchedulePanel({
     );
   };
 
+  const skillLink = (
+    <button
+      className="briefings__schedule-link"
+      onClick={() => setSkillOpen(true)}
+      title={`Open SKILL.md for ${kind.skillId}`}
+    >
+      {kind.skillId}
+    </button>
+  );
+
   if (!routine) {
     return (
-      <div className="briefings__schedule">
-        <div className="briefings__schedule-status">
-          <span className="briefings__schedule-dot briefings__schedule-dot--off" />
-          <span className="briefings__schedule-label">Not scheduled</span>
-          <span className="briefings__schedule-hint">
-            suggested: <code>{kind.schedule ?? '0 8 * * *'}</code> · uses skill{' '}
-            <code>{kind.skillId}</code>
-          </span>
+      <>
+        <div className="briefings__schedule">
+          <div className="briefings__schedule-status">
+            <span className="briefings__schedule-dot briefings__schedule-dot--off" />
+            <span className="briefings__schedule-label">Not scheduled</span>
+            <span className="briefings__schedule-hint">
+              suggested: <code>{kind.schedule ?? '0 8 * * *'}</code> · uses skill{' '}
+              {skillLink}
+            </span>
+          </div>
+          <button
+            className="briefings__schedule-primary"
+            onClick={() => void enable()}
+            disabled={busy}
+            title="Add a routine that fires this skill on the suggested cron"
+          >
+            Enable schedule
+          </button>
         </div>
-        <button
-          className="briefings__schedule-primary"
-          onClick={() => void enable()}
-          disabled={busy}
-          title="Add a routine that fires this skill on the suggested cron"
-        >
-          Enable schedule
-        </button>
-      </div>
+        {skillOpen && (
+          <SkillViewer skillId={kind.skillId} onClose={() => setSkillOpen(false)} />
+        )}
+      </>
     );
   }
 
   return (
+    <>
     <div className="briefings__schedule">
       <div className="briefings__schedule-status">
         <span
@@ -413,6 +425,7 @@ function SchedulePanel({
           {routine.lastRunAt
             ? `last run ${formatRelative(routine.lastRunAt)}`
             : 'never run'}
+          {' · skill '}{skillLink}
           {' · '}
           <button
             className="briefings__schedule-link"
@@ -456,6 +469,10 @@ function SchedulePanel({
         )}
       </div>
     </div>
+    {skillOpen && (
+      <SkillViewer skillId={kind.skillId} onClose={() => setSkillOpen(false)} />
+    )}
+    </>
   );
 }
 
@@ -468,4 +485,167 @@ function formatRelative(ms: number): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.round(h / 24);
   return `${d}d ago`;
+}
+
+/**
+ * Reading + editing pane for a single briefing markdown file.
+ * Toggles between rendered MarkdownText and a raw textarea editor.
+ * Save persists via writeBriefingFile; chokidar broadcast triggers
+ * the rest of the UI to refresh.
+ */
+function BriefingContentPane({
+  kindId,
+  filename,
+  content,
+  onContentChange,
+}: {
+  kindId: string;
+  filename: string | null;
+  content: string;
+  onContentChange: (next: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(content);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDraft(content);
+  }, [content]);
+
+  // Switching to a different file cancels any in-progress edit so
+  // the user doesn't accidentally save Mon's text over Tue's.
+  useEffect(() => {
+    setEditing(false);
+  }, [filename]);
+
+  const save = async () => {
+    if (!filename) return;
+    setSaving(true);
+    try {
+      await window.jarvis.writeBriefingFile(kindId, filename, draft);
+      onContentChange(draft);
+      setEditing(false);
+      toast({ message: 'Briefing saved' });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!filename) {
+    return (
+      <article className="briefings__content">
+        <div className="briefings__empty">Pick a file on the left.</div>
+      </article>
+    );
+  }
+
+  return (
+    <article className="briefings__content">
+      <div className="briefings__content-actions">
+        {!editing ? (
+          <button
+            className="briefings__content-edit"
+            onClick={() => setEditing(true)}
+            title="Edit the markdown"
+          >
+            ✎ Edit
+          </button>
+        ) : (
+          <>
+            <button
+              className="briefings__content-edit"
+              onClick={() => {
+                setDraft(content);
+                setEditing(false);
+              }}
+              disabled={saving}
+            >
+              Cancel
+            </button>
+            <button
+              className="briefings__content-save"
+              onClick={() => void save()}
+              disabled={saving || draft === content}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </>
+        )}
+      </div>
+      {editing ? (
+        <textarea
+          className="briefings__content-editor"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          spellCheck={false}
+          autoFocus
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+              e.preventDefault();
+              void save();
+            }
+          }}
+        />
+      ) : content ? (
+        <MarkdownText>{content}</MarkdownText>
+      ) : (
+        <div className="briefings__empty">Loading…</div>
+      )}
+    </article>
+  );
+}
+
+/**
+ * Small modal that shows a skill's SKILL.md body, read-only. Used
+ * when the user clicks a skill name in the schedule strip — they want
+ * to see what prompt actually runs.
+ */
+function SkillViewer({
+  skillId,
+  onClose,
+}: {
+  skillId: string;
+  onClose: () => void;
+}) {
+  const [body, setBody] = useState<string>('');
+  useEffect(() => {
+    void window.jarvis.readSkillBody(skillId).then(setBody);
+  }, [skillId]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div
+      className="project-dialog-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="project-dialog skill-viewer">
+        <header className="project-dialog__head">
+          <div>
+            <h2>Skill: {skillId}</h2>
+            <div className="preferences-dialog__path">
+              ~/.jarvis/skills/{skillId}/SKILL.md
+            </div>
+          </div>
+          <button className="project-dialog__close" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </header>
+        <div className="project-dialog__body">
+          <pre className="skill-viewer__body">{body || 'Loading…'}</pre>
+        </div>
+      </div>
+    </div>
+  );
 }

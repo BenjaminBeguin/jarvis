@@ -26,6 +26,19 @@ export function registerBriefingsIpc({ briefings, runner }: IpcDeps): void {
       briefings.readFile(payload.kindId, payload.filename),
   );
 
+  ipcMain.handle(
+    IpcChannels.writeBriefingFile,
+    (
+      _e,
+      payload: { kindId: string; filename: string; content: string },
+    ) => {
+      if (typeof payload?.content !== 'string') {
+        throw new Error('content must be a string');
+      }
+      briefings.writeFile(payload.kindId, payload.filename, payload.content);
+    },
+  );
+
   // Generate on demand: launch the kind's skill via the runner. The
   // skill is responsible for writing the new file. We return the task
   // summary so the renderer can pop the Answer HUD and watch it.

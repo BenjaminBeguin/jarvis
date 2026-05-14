@@ -143,6 +143,13 @@ const api = {
     ipcRenderer.invoke(IpcChannels.listProjects),
   createProject: (input: ProjectInput): Promise<ProjectDef> =>
     ipcRenderer.invoke(IpcChannels.createProject, input),
+  updateProject: (
+    currentName: string,
+    patch: ProjectInput,
+  ): Promise<ProjectDef> =>
+    ipcRenderer.invoke(IpcChannels.updateProject, { currentName, patch }),
+  deleteProject: (name: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.deleteProject, name),
   listProjectTemplates: (): Promise<ProjectTemplateSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listProjectTemplates),
   setActiveProject: (name: string | null): Promise<void> =>
@@ -222,6 +229,18 @@ const api = {
   > => ipcRenderer.invoke(IpcChannels.listBriefingFiles, kindId),
   readBriefingFile: (kindId: string, filename: string): Promise<string> =>
     ipcRenderer.invoke(IpcChannels.readBriefingFile, { kindId, filename }),
+  writeBriefingFile: (
+    kindId: string,
+    filename: string,
+    content: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.writeBriefingFile, {
+      kindId,
+      filename,
+      content,
+    }),
+  readSkillBody: (skillId: string): Promise<string> =>
+    ipcRenderer.invoke(IpcChannels.readSkillBody, skillId),
   generateBriefing: (kindId: string): Promise<TaskSummary> =>
     ipcRenderer.invoke(IpcChannels.generateBriefing, kindId),
   onBriefingsChanged: (listener: Listener<void>): Unsubscribe =>

@@ -31,6 +31,7 @@ export function Projects() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [newOpen, setNewOpen] = useState(false);
+  const [editProject, setEditProject] = useState<ProjectDef | null>(null);
 
   useEffect(() => {
     const apply = (list: ProjectDef[]) => {
@@ -174,7 +175,7 @@ export function Projects() {
           {projects.map((p) => {
             const count = memoryCounts[p.name] ?? 0;
             return (
-              <li key={p.name}>
+              <li key={p.name} className="projects__list-item">
                 <button
                   className={`project-card${
                     p.name === activeProject ? ' project-card--active' : ''
@@ -192,6 +193,17 @@ export function Projects() {
                       <span>· {p.aliases.length} alias{p.aliases.length === 1 ? '' : 'es'}</span>
                     )}
                   </div>
+                </button>
+                <button
+                  className="projects__edit-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditProject(p);
+                  }}
+                  title="Edit name / aliases / repo / path / description"
+                  aria-label={`Edit ${p.name}`}
+                >
+                  ✎
                 </button>
               </li>
             );
@@ -301,6 +313,21 @@ export function Projects() {
         open={newOpen}
         onClose={() => setNewOpen(false)}
         onCreated={(def) => setActiveProject(def.name)}
+      />
+      <NewProjectDialog
+        open={editProject !== null}
+        editing={editProject}
+        onClose={() => setEditProject(null)}
+        onCreated={(def) => {
+          // Renaming a project changes the activeProject key — keep
+          // the new name selected.
+          if (editProject && def.name !== editProject.name) {
+            setActiveProject(def.name);
+          }
+        }}
+        onDelete={(name) => {
+          if (activeProject === name) setActiveProject(null);
+        }}
       />
     </section>
   );

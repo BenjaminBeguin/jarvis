@@ -39,6 +39,8 @@ export const IpcChannels = {
 
   listProjects: 'projects:list',
   createProject: 'projects:create',
+  updateProject: 'projects:update',
+  deleteProject: 'projects:delete',
   setActiveProject: 'projects:setActive',
   setProjectInboxScan: 'projects:setInboxScan',
   projectsChanged: 'projects:changed',
@@ -71,8 +73,10 @@ export const IpcChannels = {
   listBriefingKinds: 'briefings:listKinds',
   listBriefingFiles: 'briefings:listFiles',
   readBriefingFile: 'briefings:readFile',
+  writeBriefingFile: 'briefings:writeFile',
   generateBriefing: 'briefings:generate',
   briefingsChanged: 'briefings:changed',
+  readSkillBody: 'skills:readBody',
 
   requestMicAccess: 'media:requestMic',
   micStatus: 'media:micStatus',

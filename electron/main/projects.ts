@@ -112,6 +112,62 @@ export class ProjectStore extends EventEmitter {
   }
 
   /**
+   * Update an existing project in-place. Keyed by the CURRENT name
+   * (which may be in `input.name` if renaming, or omitted to keep the
+   * existing name). All other fields fall back to the existing values
+   * when undefined in `input` — so the caller can pass a partial patch.
+   * Returns the updated def; throws if the project doesn't exist.
+   */
+  update(currentName: string, input: ProjectInput): ProjectDef {
+    const i = this.projects.findIndex(
+      (p) => p.name.toLowerCase() === currentName.toLowerCase(),
+    );
+    if (i < 0) throw new Error(`Project "${currentName}" not found`);
+    const existing = this.projects[i]!;
+    const nextName = input.name?.trim() || existing.name;
+    // Block name collisions with a different existing project.
+    if (
+      nextName.toLowerCase() !== existing.name.toLowerCase() &&
+      this.projects.some(
+        (p, idx) => idx !== i && p.name.toLowerCase() === nextName.toLowerCase(),
+      )
+    ) {
+      throw new Error(`Project "${nextName}" already exists`);
+    }
+    const def: ProjectDef = {
+      name: nextName,
+      aliases:
+        input.aliases !== undefined
+          ? input.aliases.map((a) => a.trim()).filter(Boolean)
+          : existing.aliases,
+      path: input.path !== undefined ? input.path.trim() || undefined : existing.path,
+      repo: input.repo !== undefined ? input.repo.trim() || undefined : existing.repo,
+      description:
+        input.description !== undefined
+          ? input.description.trim() || undefined
+          : existing.description,
+      inboxScan: input.inboxScan !== undefined ? input.inboxScan : existing.inboxScan,
+    };
+    this.projects[i] = def;
+    this.writeAll();
+    this.emit('changed', this.projects);
+    return def;
+  }
+
+  /** Delete a project by name. Throws if it doesn't exist. The project's
+   * on-disk memory directory is left in place — the user can clean it
+   * up manually if they want a fresh start. */
+  remove(name: string): void {
+    const i = this.projects.findIndex(
+      (p) => p.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (i < 0) throw new Error(`Project "${name}" not found`);
+    this.projects.splice(i, 1);
+    this.writeAll();
+    this.emit('changed', this.projects);
+  }
+
+  /**
    * Toggle whether a project's repo gets scanned by the PR inbox sources.
    * Persisted as `inboxScan` on the project entry in projects.json.
    * No-op if the project doesn't exist.

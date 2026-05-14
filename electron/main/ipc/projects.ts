@@ -30,6 +30,21 @@ export function registerProjectsIpc({
     })),
   );
 
+  ipcMain.handle(
+    IpcChannels.updateProject,
+    (
+      _e,
+      payload: { currentName: string; patch: ProjectInput },
+    ) => projects.update(payload.currentName, payload.patch),
+  );
+
+  ipcMain.handle(IpcChannels.deleteProject, (_e, name: string) => {
+    if (typeof name !== 'string' || !name) {
+      throw new Error('project name required');
+    }
+    projects.remove(name);
+  });
+
   ipcMain.handle(IpcChannels.createProject, (_e, input: ProjectInput) => {
     // 1. Create the project entry first — fails loudly on duplicate name
     //    before we touch the filesystem.

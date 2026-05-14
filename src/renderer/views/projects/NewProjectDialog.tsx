@@ -9,6 +9,12 @@ interface Props {
   onCreated?: (def: ProjectDef) => void;
   /** Optional initial name — handy when /new-project carried a prompt body. */
   initialName?: string;
+  /** When set, the dialog is in EDIT mode: pre-fills with this def's
+   * fields, hides the template picker, and saves via updateProject
+   * instead of createProject. */
+  editing?: ProjectDef | null;
+  /** Optional delete handler — only shown in edit mode. */
+  onDelete?: (name: string) => void;
 }
 
 /**
@@ -17,7 +23,15 @@ interface Props {
  * intent. Kept intentionally narrow — name + aliases + (optional) repo,
  * path, description. Memory is created implicitly on first append.
  */
-export function NewProjectDialog({ open, onClose, onCreated, initialName }: Props) {
+export function NewProjectDialog({
+  open,
+  onClose,
+  onCreated,
+  initialName,
+  editing,
+  onDelete,
+}: Props) {
+  const isEdit = !!editing;
   const [name, setName] = useState(initialName ?? '');
   const [aliases, setAliases] = useState('');
   const [repo, setRepo] = useState('');
@@ -29,22 +43,32 @@ export function NewProjectDialog({ open, onClose, onCreated, initialName }: Prop
   const [error, setError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
-  // Reset + autofocus on each open. Templates list rarely changes between
-  // opens — fetch once per open to keep it simple.
+  // Reset + autofocus on each open. In edit mode, pre-fill from the
+  // existing project; in create mode, start blank (or with initialName).
   useEffect(() => {
     if (!open) return;
-    setName(initialName ?? '');
-    setAliases('');
-    setRepo('');
-    setPath('');
-    setDescription('');
+    if (editing) {
+      setName(editing.name);
+      setAliases(editing.aliases.join(', '));
+      setRepo(editing.repo ?? '');
+      setPath(editing.path ?? '');
+      setDescription(editing.description ?? '');
+    } else {
+      setName(initialName ?? '');
+      setAliases('');
+      setRepo('');
+      setPath('');
+      setDescription('');
+    }
     setTemplateId('none');
     setError(null);
     setBusy(false);
-    void window.jarvis.listProjectTemplates().then(setTemplates);
+    if (!isEdit) {
+      void window.jarvis.listProjectTemplates().then(setTemplates);
+    }
     const t = setTimeout(() => nameRef.current?.focus(), 30);
     return () => clearTimeout(t);
-  }, [open, initialName]);
+  }, [open, initialName, editing, isEdit]);
 
   // Escape to close.
   useEffect(() => {
@@ -67,24 +91,53 @@ export function NewProjectDialog({ open, onClose, onCreated, initialName }: Prop
     }
     setBusy(true);
     try {
-      const selectedTemplate = templates.find((t) => t.id === templateId);
-      const def = await window.jarvis.createProject({
+      const aliasList = aliases
+        .split(/[,\n]/)
+        .map((a) => a.trim())
+        .filter(Boolean);
+      const fields = {
         name: trimmed,
-        aliases: aliases
-          .split(/[,\n]/)
-          .map((a) => a.trim())
-          .filter(Boolean),
+        aliases: aliasList,
         repo: repo.trim() || undefined,
         path: path.trim() || undefined,
         description: description.trim() || undefined,
-        templateId: templateId !== 'none' ? templateId : undefined,
-      });
-      const seedCount = selectedTemplate?.memorySeedCount ?? 0;
-      const seedSuffix = seedCount > 0
-        ? ` · seeded ${seedCount} memory file${seedCount === 1 ? '' : 's'}`
-        : '';
-      toast({ message: `Project "${def.name}" created${seedSuffix}` });
-      onCreated?.(def);
+      };
+      if (isEdit && editing) {
+        const def = await window.jarvis.updateProject(editing.name, fields);
+        toast({ message: `Project "${def.name}" updated` });
+        onCreated?.(def);
+        onClose();
+      } else {
+        const selectedTemplate = templates.find((t) => t.id === templateId);
+        const def = await window.jarvis.createProject({
+          ...fields,
+          templateId: templateId !== 'none' ? templateId : undefined,
+        });
+        const seedCount = selectedTemplate?.memorySeedCount ?? 0;
+        const seedSuffix = seedCount > 0
+          ? ` · seeded ${seedCount} memory file${seedCount === 1 ? '' : 's'}`
+          : '';
+        toast({ message: `Project "${def.name}" created${seedSuffix}` });
+        onCreated?.(def);
+        onClose();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!editing || !onDelete) return;
+    if (!confirm(`Delete project "${editing.name}"? This removes it from projects.json. The project's memory directory stays on disk.`)) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await window.jarvis.deleteProject(editing.name);
+      onDelete(editing.name);
+      toast({ message: `Project "${editing.name}" deleted` });
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -106,7 +159,9 @@ export function NewProjectDialog({ open, onClose, onCreated, initialName }: Prop
         aria-labelledby="project-dialog-title"
       >
         <header className="project-dialog__head">
-          <h2 id="project-dialog-title">New project</h2>
+          <h2 id="project-dialog-title">
+            {isEdit ? `Edit project · ${editing!.name}` : 'New project'}
+          </h2>
           <button
             className="project-dialog__close"
             onClick={onClose}
@@ -181,7 +236,7 @@ export function NewProjectDialog({ open, onClose, onCreated, initialName }: Prop
             />
           </label>
 
-          {templates.length > 0 && (
+          {!isEdit && templates.length > 0 && (
             <TemplatePicker
               templates={templates}
               value={templateId}
@@ -193,6 +248,17 @@ export function NewProjectDialog({ open, onClose, onCreated, initialName }: Prop
         </div>
 
         <footer className="project-dialog__foot">
+          {isEdit && onDelete && (
+            <button
+              className="project-dialog__danger"
+              onClick={() => void handleDelete()}
+              disabled={busy}
+              title="Delete this project from projects.json"
+            >
+              Delete
+            </button>
+          )}
+          <div style={{ flex: 1 }} />
           <button onClick={onClose} disabled={busy}>
             Cancel
           </button>
@@ -201,7 +267,13 @@ export function NewProjectDialog({ open, onClose, onCreated, initialName }: Prop
             onClick={() => void submit()}
             disabled={busy || !name.trim()}
           >
-            {busy ? 'Creating…' : 'Create project'}
+            {busy
+              ? isEdit
+                ? 'Saving…'
+                : 'Creating…'
+              : isEdit
+                ? 'Save'
+                : 'Create project'}
           </button>
         </footer>
       </div>

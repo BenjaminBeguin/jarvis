@@ -5,6 +5,7 @@ import {
   readFileSync,
   readdirSync,
   statSync,
+  writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -152,7 +153,6 @@ export class BriefingsStore extends EventEmitter {
 
   /** Read one file. Empty string if missing. */
   readFile(kindId: string, filename: string): string {
-    // Defense in depth: filename must not escape the kind's directory.
     if (filename.includes('/') || filename.includes('..')) {
       throw new Error(`invalid filename: ${filename}`);
     }
@@ -163,6 +163,23 @@ export class BriefingsStore extends EventEmitter {
     } catch {
       return '';
     }
+  }
+
+  /** Overwrite a briefing file with new contents. The user edited it
+   * in-app and clicked Save. Path-traversal guarded same as readFile. */
+  writeFile(kindId: string, filename: string, content: string): void {
+    if (filename.includes('/') || filename.includes('..')) {
+      throw new Error(`invalid filename: ${filename}`);
+    }
+    if (!/\.md$/.test(filename)) {
+      throw new Error('filename must end with .md');
+    }
+    const dir = join(ROOT, kindId);
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, filename);
+    // Briefings are small (1-10 KB), sync write is fine. chokidar
+    // picks up the change and broadcasts 'changed'.
+    writeFileSync(path, content, 'utf8');
   }
 
   /** Absolute path to a kind's directory — for skills to Write into. */
