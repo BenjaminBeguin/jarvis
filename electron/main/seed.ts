@@ -323,7 +323,7 @@ misunderstood snippet.
 
 const PR_REVIEW_QUEUE_SKILL = `---
 name: pr-review-queue
-description: Walk through PRs awaiting my review and post structured feedback on each
+description: Review PRs awaiting your review — inline comments, real approvals, project-scoped if asked
 allowed-tools:
   - Read
   - Bash
@@ -332,75 +332,121 @@ allowed-tools:
   - mcp__*
 ---
 
-You help the user clear their PR review queue. Lean on \`gh\` for everything;
-don't open browser tabs in your reply.
+You help the user clear their PR review queue. Lean on \`gh\` for everything.
+**Terse. Real reviewer behavior. Inline comments on the lines that matter.**
 
-## Find the queue
+## 1 — Resolve project scope (if any)
 
+Read \`~/.jarvis/projects.json\`. If the user's prompt references a
+project ("review my csai PRs", "focus on cs-ai", "the example project"):
+
+1. Lowercase the prompt + match against each project's \`name\`,
+   \`aliases[]\`, and \`description\`. Pick the best match.
+2. Extract the project's \`repo\` field ("owner/name").
+3. Filter the queue to that repo: \`--repo <owner>/<name>\` on every \`gh\` call.
+
+If no project mentioned, scan the full queue. If the prompt mentions a
+project alias you can't resolve, **stop and ask** — don't review
+random PRs against the wrong instructions.
+
+## 2 — Find the queue
+
+Project-scoped:
 \`\`\`
-gh pr list --search "review-requested:@me is:open" --state open --json number,title,headRepository,headRepositoryOwner,url,author,createdAt
+gh pr list --repo <owner>/<name> --search "review-requested:@me is:open" --state open \\
+  --json number,title,url,author,createdAt
 \`\`\`
 
-If empty, say so in one line and stop. Otherwise enumerate:
+Unscoped (all repos you can see):
+\`\`\`
+gh pr list --search "review-requested:@me is:open" --state open \\
+  --json number,title,headRepository,headRepositoryOwner,url,author,createdAt
+\`\`\`
 
+If empty: "Nothing in your queue." Stop.
+
+Otherwise list as:
 \`\`\`
 1. #<num> · <owner>/<repo> · <title>  — by @author · <age>
 …
 \`\`\`
 
-## For each PR (one at a time)
+## 3 — Per PR, in order
 
-The user may give you feedback hints in the prompt — examples:
-"focus on tests", "be strict about types", "ignore style nits, only flag
-real bugs". Carry those across every PR in the batch.
+The user may also pass feedback hints ("be strict on types", "ignore
+style nits"). Carry across every PR.
 
-1. **Pull the context.** \`gh pr view <num> --repo <owner>/<repo>\` for
-   description + checks. \`gh pr diff <num> --repo <owner>/<repo>\` for
-   the change. If the diff is huge (>1000 lines), say so and offer to
-   focus on a subset.
-2. **Read smartly.** You don't need to copy the diff into your message.
-   Note: which files changed, the shape of the change, anything you can
-   tell from the PR description vs the actual diff.
-3. **Draft a review.** Structure as:
-       \`\`\`
-       ## Summary
-       <one paragraph: what does this change, is it a sound approach?>
+1. **Pull context, fast.** \`gh pr view <num> --repo <owner>/<repo>\`
+   for description + checks. \`gh pr diff <num> --repo <owner>/<repo>\`
+   for the diff. Huge diff (>1000 lines)? Say so and ask which files
+   to focus on.
 
-       ## Strengths
-       - bullet
-       - bullet
+2. **Find the real issues.** Not nits. Things that would actually break
+   prod, mislead a reader, or cost the team time. If you can't find a
+   real issue, that's an **approve**, not "I should manufacture one
+   to look thorough".
 
-       ## Issues
-       - <file>:<line> — <one-sentence concern + suggestion>
-       - …
+3. **Draft the review.** Two parts:
 
-       ## Verdict
-       APPROVE / REQUEST_CHANGES / COMMENT
-       \`\`\`
-   Be specific. If you'd APPROVE, say so confidently. If you'd
-   REQUEST_CHANGES, the issues list must be substantive — not style
-   nits. If you'd COMMENT, you're flagging questions, not blocking.
+   **Inline comments** (zero or more) — one per genuine issue, anchored
+   to the line where it lives. **Keep each comment one or two sentences.**
+   No preamble, no apology. Example: "Cache key omits user.id — calls
+   from a second user will hit a stale entry." That's the whole comment.
 
-4. **Show the draft and wait for explicit "post" / "skip" / "edit"**.
-   Never post a review without confirmation — this lands in the
-   author's notifications and is permanent.
+   **Summary** — 1-2 sentences AT MOST for the overall review body. If
+   approving, the body is "lgtm" or a single line of context, not a
+   wall of bullets. If requesting changes, the body is one sentence
+   pointing at the blocking inline comment(s).
 
-5. **On "post":** use \`gh pr review <num> --repo <owner>/<repo>\` with
-   the appropriate flag (\`--approve\` / \`--request-changes\` /
-   \`--comment\`) and \`--body\` containing the review body.
+4. **Pick a verdict yourself.** Don't ask the user.
 
-6. **Move to the next PR.** Re-confirm at the top of each so the user
-   can pause if they need to context-switch.
+   - **APPROVE** when there are zero blockers and no real issues.
+     Approve confidently. \`lgtm\` is enough.
+   - **REQUEST_CHANGES** when at least one inline comment is a
+     blocker (correctness, security, perf cliff). Real reviewers
+     don't request changes for naming.
+   - **COMMENT** when you have questions or non-blocking observations
+     but the PR isn't broken.
+
+5. **Show the draft + verdict, ask "post" / "skip" / "edit"**. One
+   confirmation per PR — this is the gate. Never post without it. If
+   the user types "post" on an APPROVE → real approve happens.
+
+6. **Post via the GitHub API** so inline comments land on the right
+   lines. The \`gh pr review\` CLI alone only posts the body; for
+   inline comments you need \`gh api\`:
+
+   \`\`\`bash
+   gh api -X POST repos/<owner>/<repo>/pulls/<num>/reviews \\
+     -f event=<APPROVE|REQUEST_CHANGES|COMMENT> \\
+     -f body="<summary>" \\
+     -f "comments[][path]=src/foo.ts" \\
+     -F "comments[][line]=42" \\
+     -f "comments[][side]=RIGHT" \\
+     -f "comments[][body]=Cache key omits user.id — second user hits a stale entry." \\
+     # repeat the comments[][...] block for each inline comment
+   \`\`\`
+
+   For a clean approve with no inline comments:
+   \`\`\`bash
+   gh pr review <num> --repo <owner>/<repo> --approve --body "lgtm"
+   \`\`\`
+
+   Verify success — gh returns the review URL on stdout.
+
+7. **Next PR.** Re-confirm at each one. The user can pause anytime.
 
 ## Hard rules
 
-- Never approve a PR you'd flag as REQUEST_CHANGES just to clear the
-  queue. If you're not sure, COMMENT and ask the author.
-- Never post inline line comments without explicit user OK on the
-  individual line — those are hard to retract.
-- Don't merge anything. Don't dismiss other reviewers' reviews.
-- If a PR has CI failures, flag them in Summary but don't block on
-  them — that's the author's problem, not the reviewer's.
+- **Approve really means approve.** Don't request-changes just to feel
+  thorough. The user is asking for honest signal.
+- **Never approve if you'd flag it as request-changes elsewhere.**
+- **Don't merge anything.** Reviewer, not maintainer.
+- **Don't dismiss other reviewers' reviews.**
+- **CI failures are the author's problem.** Mention in Summary if
+  obvious, but don't block on them.
+- If the project the user mentioned doesn't match any in
+  \`projects.json\`, stop + ask. Don't guess.
 `;
 
 const PR_ADDRESS_COMMENTS_SKILL = `---
