@@ -20,9 +20,11 @@ type Transcriber = (audio: Float32Array, options?: unknown) => Promise<{ text: s
 // (~75MB), but accepts `language` / `task` arguments — which lets us sidestep
 // the transformers.js bug where English-only models throw if either is set,
 // even transitively via the loaded model's generation_config defaults.
+// Language is left UNSET so Whisper auto-detects per audio chunk. Task is
+// always 'transcribe' (never 'translate') so output stays in the spoken
+// language rather than being force-translated to English.
 const MODEL_NAME = 'Xenova/whisper-tiny';
 const TARGET_SAMPLE_RATE = 16_000;
-const LANGUAGE = 'english';
 const TASK = 'transcribe';
 
 let transcriber: Transcriber | null = null;
@@ -72,14 +74,21 @@ async function load(): Promise<Transcriber> {
         }
       },
     })) as unknown as Transcriber;
-    // Pre-set language/task on the multilingual model so every transcribe
-    // call has them ready. Avoids the "no language specified" warning too.
+    // Pre-set task='transcribe' on the model so the pipeline doesn't try
+    // to translate. Language is intentionally left UNSET — the multilingual
+    // model auto-detects per chunk, which is what we want for meetings
+    // that mix languages (English / French / etc.). If a chunk has no
+    // language signal (silence, noise), Whisper falls back gracefully and
+    // our cleanChunkText filter drops the typical hallucinations.
     const inner = p as unknown as {
       model?: { generation_config?: Record<string, unknown> };
     };
     if (inner.model?.generation_config) {
-      inner.model.generation_config['language'] = LANGUAGE;
       inner.model.generation_config['task'] = TASK;
+      // Explicitly clear any stale language default the model card may
+      // have shipped with, so detection actually runs.
+      delete inner.model.generation_config['language'];
+      delete inner.model.generation_config['forced_decoder_ids'];
     }
     emitProgress({ status: 'ready' });
     transcriber = p;
@@ -96,10 +105,12 @@ export async function transcribePcm(pcm: Float32Array): Promise<string> {
   const w = await load();
   // Whisper expects 16kHz mono PCM as a Float32Array. The renderer is
   // already resampling, but the pipeline doesn't enforce — caller's responsibility.
+  // No `language` here — Whisper auto-detects per call. `task: transcribe`
+  // is still passed explicitly because some transformers.js versions need
+  // it on the call options even when set in generation_config.
   const result = await w(pcm, {
     sampling_rate: TARGET_SAMPLE_RATE,
     chunk_length_s: 30,
-    language: LANGUAGE,
     task: TASK,
   } as unknown as Parameters<Transcriber>[1]);
   emitProgress({ status: 'done' });
