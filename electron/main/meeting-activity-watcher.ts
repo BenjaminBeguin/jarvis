@@ -4,34 +4,39 @@ import type { Readable } from 'node:stream';
 import type { InboxItem } from '@shared/types';
 
 /**
- * Ad-hoc meeting detector.
+ * Ad-hoc meeting detector — fires whenever the microphone (or camera)
+ * goes from idle → in-use after the watcher starts. Same signal that
+ * drives the orange/green indicator in the menu bar; works for any
+ * app: Google Meet, Zoom, Discord, FaceTime, Photo Booth, etc.
  *
- * Streams macOS unified-log events for Core Audio / CMIO subsystems and
- * fires a callback the first time the system's microphone (or camera)
- * goes from idle → in-use after the watcher starts. This is the same
- * signal that drives the orange/green indicator in the menu bar — works
- * for any app: Google Meet, Zoom, Discord, FaceTime, Photo Booth, etc.
+ * How it works:
+ *   - When audio is flowing through Core Audio, `coreaudiod` logs RMS
+ *     measurement events (`RTAID … node=-Input` for mic, `node=-Output`
+ *     for speakers). They fire ~10×/s while audio is live and stop
+ *     when it's idle — that gives us a clean heartbeat.
+ *   - We watch the heartbeat: an Input event after >IDLE_GAP_MS of
+ *     silence = "mic just went hot". We treat that as the meeting-start
+ *     signal and fire the prompt.
+ *   - Camera follows the same pattern via the CMIO subsystem.
  *
- * Why this approach: per-tab mic state isn't exposed by Chrome to
- * outside processes (would need a browser extension), but
- * `log stream --style ndjson --predicate '...'` gives us a real
- * event stream from macOS itself. No polling, no AppleScript, no
- * permissions beyond what the user has already granted Jarvis.
+ * Why this approach over alternatives:
+ *   - Per-tab mic state isn't exposed by Chrome to other processes —
+ *     would need a browser extension.
+ *   - `log stream` runs without sudo for user-scope events and needs
+ *     no special permissions beyond what Jarvis already has.
+ *   - The RTAID heartbeat is stable across macOS versions (the message
+ *     text has been the same for years on coreaudiod).
  *
  * Tradeoffs:
- *   - macOS-only. On other platforms the watcher is a no-op.
- *   - We can't know WHICH app turned the mic on — only that something
- *     did. The toast says "mic active — record this?"; the user makes
- *     the call. False positives (Voice Memos, dictation, GarageBand)
- *     are cheap because the toast auto-dismisses in 90s.
- *   - `log stream` predicates vary slightly by macOS version. The
- *     filter is intentionally broad; JS does the final match. Set
- *     JARVIS_DEBUG_MEETING_LOG=1 to dump matching events to console.
+ *   - macOS-only. No-op elsewhere.
+ *   - We can't know WHICH app turned the mic on. The toast says "mic
+ *     active — record this?" and the user makes the call. False
+ *     positives (Voice Memos, dictation, GarageBand) are cheap because
+ *     the toast auto-dismisses in 90s.
  *
- * TODO (later): for rock-solid detection, ship a small Swift helper
+ * TODO (later): swap the `log stream` parse for a tiny Swift helper
  * that listens to `kAudioDevicePropertyDeviceIsRunningSomewhere` +
- * the CMIO equivalent and writes events to stdout. Same API on this
- * end — just swap how `child` gets spawned.
+ * the CMIO equivalent directly. Same API on this end.
  */
 
 export interface MeetingActivityCallback {
@@ -39,30 +44,37 @@ export interface MeetingActivityCallback {
 }
 
 /**
- * Cooldown after a prompt. Without this, a user who clicks Skip but
- * stays on the same call would get re-prompted as soon as the next
- * mic toggle (mute / unmute) hits the log. 10 min is enough to span
- * a standup, short enough to re-prompt on a back-to-back meeting.
+ * Cooldown after a prompt. Without this, brief mic toggles (mute /
+ * unmute) inside a call would re-fire the prompt.
  */
 const PROMPT_COOLDOWN_MS = 10 * 60 * 1000;
 
 /**
- * Min interval between two state-change events to count as "really
- * went active". Filters out the brief mic blip macOS does to test
- * permission at app launch.
+ * Heartbeat gap: an Input event after this long a silence counts as a
+ * fresh "mic just went hot" transition. RTAID events fire ~10×/s while
+ * audio is live, so anything ≥3s of silence is a clean break.
  */
-const STABILIZE_MS = 1500;
+const IDLE_GAP_MS = 3000;
+
+/**
+ * After start(), ignore detections for this long. macOS doesn't replay
+ * past logs into a new stream, but the watcher might come up while
+ * audio is already mid-stream (e.g. you launch Jarvis during a call).
+ * Better to be slightly slow than to nag on every restart.
+ */
+const STARTUP_GRACE_MS = 4000;
 
 export class MeetingActivityWatcher {
   private child: ChildProcessByStdio<null, Readable, Readable> | null = null;
   private buffer = '';
-  private micActive = false;
-  private cameraActive = false;
-  private pendingMicSince = 0;
-  private pendingCameraSince = 0;
+  private startedAt = 0;
+  private lastInputAt = 0;
+  private lastCameraAt = 0;
   private lastPromptAt = 0;
   private suppressed = new Set<string>();
-  private debug = false;
+  private debug: boolean;
+  private eventsSeen = 0;
+  private inputEventsSeen = 0;
 
   constructor(private prompt: MeetingActivityCallback) {
     this.debug = process.env.JARVIS_DEBUG_MEETING_LOG === '1';
@@ -71,41 +83,40 @@ export class MeetingActivityWatcher {
   start(): void {
     if (process.platform !== 'darwin') return;
     if (this.child) return;
-    // Broad predicate — we match again in JS for clarity / debuggability.
-    // `eventMessage` text varies by macOS version; we include several
-    // known phrasings.
-    const predicate = [
-      '(subsystem == "com.apple.coreaudio"',
-      '  OR subsystem == "com.apple.audio.AVAEEngine"',
-      '  OR subsystem CONTAINS "cmio"',
-      '  OR subsystem CONTAINS "AVFoundation")',
-      'AND (eventMessage CONTAINS "Running"',
-      '  OR eventMessage CONTAINS "RunningSomewhere"',
-      '  OR eventMessage CONTAINS "Recording"',
-      '  OR eventMessage CONTAINS "started"',
-      '  OR eventMessage CONTAINS "stopped"',
-      '  OR eventMessage CONTAINS "isAvailable")',
-    ].join(' ');
+    // Process-filter is the most stable predicate across macOS versions.
+    // coreaudiod owns input/output state; cmio is the camera framework
+    // (and stays around even on Sonoma+).
+    const predicate =
+      '(process == "coreaudiod" OR subsystem CONTAINS "cmio")';
+    console.log('[meeting-activity] watcher started (mic/cam)');
     let child: ChildProcessByStdio<null, Readable, Readable>;
     try {
       child = spawn(
         '/usr/bin/log',
-        ['stream', '--style', 'ndjson', '--predicate', predicate],
+        ['stream', '--style', 'ndjson', '--info', '--predicate', predicate],
         { stdio: ['ignore', 'pipe', 'pipe'] },
       );
     } catch (err) {
-      console.warn('MeetingActivityWatcher: spawn failed', err);
+      console.warn('[meeting-activity] spawn failed:', err);
       return;
     }
     this.child = child;
+    this.startedAt = Date.now();
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => this.onChunk(chunk));
-    child.on('error', (err) => {
-      console.warn('MeetingActivityWatcher: stream error', err);
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk: string) => {
+      const trimmed = chunk.trim();
+      if (trimmed) console.warn('[meeting-activity] log stderr:', trimmed);
     });
-    child.on('exit', (code) => {
-      if (code != null && code !== 0) {
-        console.warn(`MeetingActivityWatcher: log stream exited (${code})`);
+    child.on('error', (err) => {
+      console.warn('[meeting-activity] stream error', err);
+    });
+    child.on('exit', (code, signal) => {
+      if ((code != null && code !== 0) || signal) {
+        console.warn(
+          `[meeting-activity] log stream exited code=${code} signal=${signal}`,
+        );
       }
       this.child = null;
     });
@@ -122,7 +133,7 @@ export class MeetingActivityWatcher {
     this.buffer = '';
   }
 
-  /** Renderer Skip → suppress until the next session cooldown elapses. */
+  /** Renderer Skip → suppress until the cooldown elapses. */
   suppress(id: string): void {
     this.suppressed.add(id);
   }
@@ -132,70 +143,66 @@ export class MeetingActivityWatcher {
     const lines = this.buffer.split('\n');
     this.buffer = lines.pop() ?? '';
     for (const raw of lines) {
-      const line = raw.trim();
-      if (!line || line.startsWith('[')) continue; // ndjson preamble / closing
+      let line = raw.trim();
+      if (!line) continue;
+      // `log stream --style ndjson` is usually one JSON object per line.
+      // Some macOS versions wrap output in an array — strip array
+      // delimiters / trailing commas to be safe.
+      if (line === '[' || line === ']') continue;
+      if (line.endsWith(',')) line = line.slice(0, -1);
+      let evt: { eventMessage?: string; subsystem?: string; process?: string };
       try {
-        const evt = JSON.parse(line) as {
-          eventMessage?: string;
-          subsystem?: string;
-        };
-        this.handleEvent(evt);
+        evt = JSON.parse(line) as typeof evt;
       } catch {
-        // log stream emits a single non-JSON line at start; ignore.
+        // First line of output is usually plain text ("Filtering …").
+        continue;
       }
+      this.eventsSeen++;
+      this.handleEvent(evt);
     }
   }
 
   private handleEvent(evt: {
     eventMessage?: string;
     subsystem?: string;
+    process?: string;
   }): void {
     const msg = evt.eventMessage ?? '';
-    const sub = evt.subsystem ?? '';
     if (!msg) return;
-    if (this.debug) {
-      console.log(`[meeting-activity] ${sub}: ${msg.slice(0, 160)}`);
-    }
-    const lower = msg.toLowerCase();
-    const isCamera = sub.includes('cmio') || lower.includes('camera');
-    const isAudio =
-      sub === 'com.apple.coreaudio' || sub === 'com.apple.audio.avaeengine';
-    // "device went hot" tokens vary; these three cover most variants.
-    const wentActive =
-      /runningsomewhere.*=.*1|recording is in progress|started running|deviceisrunning.*=.*1|isavailable.*=.*1/i.test(
-        msg,
-      );
-    const wentIdle =
-      /runningsomewhere.*=.*0|recording stopped|stopped running|deviceisrunning.*=.*0|isavailable.*=.*0/i.test(
-        msg,
-      );
+    const proc = evt.process ?? '';
+    const sub = evt.subsystem ?? '';
     const now = Date.now();
-    if (isAudio && wentActive) {
-      if (now - this.pendingMicSince < STABILIZE_MS) return;
-      this.pendingMicSince = now;
-      if (!this.micActive) {
-        this.micActive = true;
-        this.maybePrompt('mic');
+
+    // ----- mic: coreaudiod RTAID heartbeat with node=-Input -----------
+    if (proc === 'coreaudiod' && msg.includes('node=-Input')) {
+      this.inputEventsSeen++;
+      const wasIdle = now - this.lastInputAt > IDLE_GAP_MS;
+      this.lastInputAt = now;
+      if (this.debug && this.inputEventsSeen <= 3) {
+        console.log(
+          `[meeting-activity] input event #${this.inputEventsSeen}, wasIdle=${wasIdle}`,
+        );
       }
-    } else if (isAudio && wentIdle) {
-      this.micActive = false;
-    } else if (isCamera && wentActive) {
-      if (now - this.pendingCameraSince < STABILIZE_MS) return;
-      this.pendingCameraSince = now;
-      if (!this.cameraActive) {
-        this.cameraActive = true;
-        this.maybePrompt('camera');
-      }
-    } else if (isCamera && wentIdle) {
-      this.cameraActive = false;
+      if (wasIdle) this.tryFire('mic');
+      return;
+    }
+
+    // ----- camera: cmio events from a specific process other than
+    //       Jarvis. The CMIO framework emits a stream of events while a
+    //       capture session is active (and quiets when idle). Same
+    //       heartbeat trick as audio.
+    if (sub.includes('cmio') && /(stream|capture|video|frame)/i.test(msg)) {
+      const wasIdle = now - this.lastCameraAt > IDLE_GAP_MS;
+      this.lastCameraAt = now;
+      if (wasIdle) this.tryFire('camera');
+      return;
     }
   }
 
-  private maybePrompt(kind: 'mic' | 'camera'): void {
+  private tryFire(kind: 'mic' | 'camera'): void {
     const now = Date.now();
+    if (now - this.startedAt < STARTUP_GRACE_MS) return;
     if (now - this.lastPromptAt < PROMPT_COOLDOWN_MS) return;
-    // Synthetic id: one per "session" of activity, salted by kind so a
-    // back-to-back mic-then-camera doesn't double-prompt the same call.
     const id = `ad-hoc-${kind}-${Math.floor(now / PROMPT_COOLDOWN_MS)}`;
     if (this.suppressed.has(id)) return;
     this.lastPromptAt = now;
@@ -209,10 +216,13 @@ export class MeetingActivityWatcher {
       subtitle: 'Detected by macOS Core Audio. Tap Record to capture audio.',
       createdAt: now,
     };
+    console.log(
+      `[meeting-activity] firing prompt (kind=${kind}, totalEvents=${this.eventsSeen}, inputEvents=${this.inputEventsSeen})`,
+    );
     try {
       this.prompt(item);
     } catch (err) {
-      console.warn('MeetingActivityWatcher: prompt callback threw', err);
+      console.warn('[meeting-activity] prompt callback threw', err);
     }
   }
 }
