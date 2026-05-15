@@ -23,6 +23,25 @@ export interface CatalogField {
   hint?: string;
 }
 
+/**
+ * One numbered step in a guided setup walkthrough. Richer than
+ * `setupNotes` (plain paragraph). The form renders these as a numbered
+ * list; commands get a copy button + monospace styling, urls become
+ * "Open" buttons, and shell snippets stay readable.
+ */
+export interface SetupStep {
+  /** One-line summary of the step ("Enable the Calendar API"). */
+  title: string;
+  /** Optional body paragraph rendered under the title. Plain text. */
+  body?: string;
+  /** Optional shell command. Rendered as a code block with a copy button. */
+  command?: string;
+  /** Optional external URL. Renders an "Open" button next to the title. */
+  url?: string;
+  /** Optional caption shown next to the URL ("Cloud Console"). */
+  urlLabel?: string;
+}
+
 export interface CatalogEntry {
   id: string;
   /** Display name (Slack, Linear, Gmail · personal …). */
@@ -47,6 +66,13 @@ export interface CatalogEntry {
   setupUrl?: string;
   /** 1-2 sentences of upstream-setup context shown next to the form. */
   setupNotes?: string;
+  /**
+   * Optional structured walkthrough. When present, the form renders this
+   * as a numbered list with copy-pasteable commands + "Open" buttons for
+   * URLs. Prefer this over `setupNotes` for anything more than a one-
+   * liner — the goal is "user reads top to bottom and is done."
+   */
+  setupSteps?: SetupStep[];
   /**
    * If true, this entry is provided by claude.ai's hosted connectors and
    * doesn't propagate to Agent SDK subprocess sessions. Surfaced with a
@@ -92,26 +118,53 @@ export const CATALOG: CatalogEntry[] = [
     command: 'sh',
     args: [
       '-c',
-      'cd ~/.gmail-mcp-personal && exec npx -y @gongrzhe/server-gmail-autoauth-mcp',
+      'cd ~/.jarvis/secrets/google-personal && exec npx -y @gongrzhe/server-gmail-autoauth-mcp',
     ],
     fields: [],
     setupUrl: 'https://console.cloud.google.com',
-    setupNotes:
-      "Run upstream setup once: mkdir ~/.gmail-mcp-personal, drop your gcp-oauth.keys.json there, then `cd ~/.gmail-mcp-personal && npx -y @gongrzhe/server-gmail-autoauth-mcp auth`. Click Save below to register the entry — your refresh token is already in the folder.",
+    setupSteps: GOOGLE_SETUP_STEPS('personal', 'gmail'),
   },
   {
     id: 'gmail-work',
     name: 'Gmail · work',
-    description: 'Same flow as personal, with a different folder',
+    description: 'Same flow as personal, scoped to a different Google account',
     aliases: ['gmail-work'],
     command: 'sh',
     args: [
       '-c',
-      'cd ~/.gmail-mcp-work && exec npx -y @gongrzhe/server-gmail-autoauth-mcp',
+      'cd ~/.jarvis/secrets/google-work && exec npx -y @gongrzhe/server-gmail-autoauth-mcp',
     ],
     fields: [],
-    setupNotes:
-      "Run the auth flow inside ~/.gmail-mcp-work, logging in with your work Gmail. Note: Google Workspace admins often block unverified OAuth apps; ask your IT to approve your client first.",
+    setupUrl: 'https://console.cloud.google.com',
+    setupSteps: GOOGLE_SETUP_STEPS('work', 'gmail'),
+  },
+  {
+    id: 'calendar-personal',
+    name: 'Calendar · personal',
+    description: 'Read + create events on your personal Google Calendar',
+    aliases: ['calendar-personal', 'google-calendar-personal'],
+    command: 'sh',
+    args: [
+      '-c',
+      'cd ~/.jarvis/secrets/google-personal && exec npx -y @cocal/google-calendar-mcp',
+    ],
+    fields: [],
+    setupUrl: 'https://console.cloud.google.com',
+    setupSteps: GOOGLE_SETUP_STEPS('personal', 'calendar'),
+  },
+  {
+    id: 'calendar-work',
+    name: 'Calendar · work',
+    description: 'Read + create events on your work Google Calendar',
+    aliases: ['calendar-work', 'google-calendar-work'],
+    command: 'sh',
+    args: [
+      '-c',
+      'cd ~/.jarvis/secrets/google-work && exec npx -y @cocal/google-calendar-mcp',
+    ],
+    fields: [],
+    setupUrl: 'https://console.cloud.google.com',
+    setupSteps: GOOGLE_SETUP_STEPS('work', 'calendar'),
   },
   {
     id: 'linear',
@@ -210,3 +263,66 @@ export const CATALOG: CatalogEntry[] = [
       "Requires a community iMessage MCP (search 'modelcontextprotocol imessage' on GitHub) and Full Disk Access granted to the MCP process. Add manually via 'Custom MCP' once you have a server installed.",
   },
 ];
+
+/**
+ * Step-by-step walkthrough for any Google service on any account. Shared
+ * between Gmail + Calendar entries because the Cloud Console dance is
+ * identical — the only thing that varies is the API to enable and the
+ * scopes to add. The skill body covers both Gmail + Calendar use cases
+ * with one set of credentials.
+ */
+function GOOGLE_SETUP_STEPS(
+  identity: 'personal' | 'work',
+  service: 'gmail' | 'calendar',
+): SetupStep[] {
+  const dir = `~/.jarvis/secrets/google-${identity}`;
+  const apiToEnable =
+    service === 'gmail' ? 'Gmail API' : 'Google Calendar API';
+  const scopes =
+    service === 'gmail'
+      ? ['https://mail.google.com/']
+      : [
+          'https://www.googleapis.com/auth/calendar.events',
+          'https://www.googleapis.com/auth/calendar.readonly',
+        ];
+  const mcpPkg =
+    service === 'gmail'
+      ? '@gongrzhe/server-gmail-autoauth-mcp'
+      : '@cocal/google-calendar-mcp';
+  const identityNote =
+    identity === 'work'
+      ? 'Your work Google Workspace admin may need to approve unverified OAuth apps. If the consent screen rejects you, ping IT.'
+      : 'Personal Google account — you have full control, no IT approval needed.';
+
+  return [
+    {
+      title: `Create or open the Google Cloud project for this ${identity} account`,
+      body: `One OAuth app per account covers both Gmail + Calendar (and future Google services). If you already set up Gmail · ${identity}, you can reuse the same app — just enable a new API and add scopes below. ${identityNote}`,
+      url: 'https://console.cloud.google.com',
+      urlLabel: 'Cloud Console',
+    },
+    {
+      title: `Enable the ${apiToEnable}`,
+      body: 'APIs & Services → Library → search by name → Enable. Each API is per-project, not per-app.',
+    },
+    {
+      title: 'Add the scopes to your OAuth consent screen',
+      body: `APIs & Services → OAuth consent screen → Edit App → Scopes → Add or Remove Scopes. Paste each URL below into the filter, check it, save.`,
+      command: scopes.join('\n'),
+    },
+    {
+      title: `Place the OAuth credentials file at ${dir}/gcp-oauth.keys.json`,
+      body: 'Download the OAuth client JSON from Credentials → your OAuth 2.0 Client → ⤓ Download JSON. Move it into the directory below (Jarvis keeps all Google secrets here — one folder per identity).',
+      command: `mkdir -p ${dir} && mv ~/Downloads/client_secret_*.json ${dir}/gcp-oauth.keys.json`,
+    },
+    {
+      title: 'Authenticate the MCP',
+      body: `Runs the OAuth flow in your browser and writes the refresh token to ${dir}/credentials.json. You only do this once per (service, account).`,
+      command: `cd ${dir} && npx -y ${mcpPkg} auth`,
+    },
+    {
+      title: 'Register the MCP in Jarvis',
+      body: 'Click Save below. Jarvis adds an entry to ~/.jarvis/mcp.json that points at the directory you just authenticated. The MCP starts on next task launch — verify with `claude mcp list` or by typing a query that uses the tool.',
+    },
+  ];
+}

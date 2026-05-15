@@ -9046,6 +9046,127 @@ button:disabled:hover {
   color: var(--text-dim);
 }
 
+/* ----- Setup walkthrough (guided steps inside integration form) -------- */
+
+.setup-walkthrough {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: rgba(0, 212, 255, 0.025);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  padding: 14px 16px;
+}
+
+.setup-walkthrough__step {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setup-walkthrough__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.setup-walkthrough__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.setup-walkthrough__title-text {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+}
+
+.setup-walkthrough__open {
+  background: rgba(4, 7, 11, 0.5);
+  border: 1px solid var(--border-strong);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.setup-walkthrough__open:hover {
+  border-color: var(--accent);
+  background: rgba(0, 212, 255, 0.06);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.setup-walkthrough__body {
+  margin: 0;
+  padding-left: 30px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.setup-walkthrough__cmd {
+  position: relative;
+  margin: 4px 0 0 30px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+}
+
+.setup-walkthrough__cmd pre {
+  margin: 0;
+  padding: 8px 80px 8px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: auto;
+}
+
+.setup-walkthrough__copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(4, 7, 11, 0.85);
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.setup-walkthrough__copy:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .integration-form__field {
   display: flex;
   flex-direction: column;

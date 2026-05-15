@@ -7,7 +7,12 @@ import type {
   McpToolSummary,
 } from '../../../shared/types';
 import { toast } from '../Toaster';
-import { CATALOG, type CatalogEntry, type CatalogField } from './catalog';
+import {
+  CATALOG,
+  type CatalogEntry,
+  type CatalogField,
+  type SetupStep,
+} from './catalog';
 
 type Status = 'connected' | 'claude-ai-only' | 'missing';
 
@@ -376,7 +381,10 @@ function CatalogForm({ entry, onClose, onSaved }: CatalogFormProps) {
       {entry.setupNotes && (
         <p className="integration-form__notes">{entry.setupNotes}</p>
       )}
-      {entry.fields.length === 0 && (
+      {entry.setupSteps && entry.setupSteps.length > 0 && (
+        <SetupWalkthrough steps={entry.setupSteps} />
+      )}
+      {entry.fields.length === 0 && !entry.setupSteps && (
         <p className="integration-form__notes">
           No tokens needed in Jarvis — the upstream setup handles auth.
         </p>
@@ -402,6 +410,71 @@ function CatalogForm({ entry, onClose, onSaved }: CatalogFormProps) {
         </button>
       </footer>
     </form>
+  );
+}
+
+/**
+ * Numbered step-by-step walkthrough. Each step has a title (always
+ * shown), optional body paragraph, optional URL with an "Open" button,
+ * optional shell command with a copy button + monospace code block.
+ * Designed to read top-to-bottom without skipping — the user lands on
+ * the form, follows steps in order, clicks Save at the end.
+ */
+function SetupWalkthrough({ steps }: { steps: SetupStep[] }) {
+  return (
+    <ol className="setup-walkthrough">
+      {steps.map((step, i) => (
+        <li key={i} className="setup-walkthrough__step">
+          <div className="setup-walkthrough__title">
+            <span className="setup-walkthrough__num">{i + 1}</span>
+            <span className="setup-walkthrough__title-text">{step.title}</span>
+            {step.url && (
+              <button
+                type="button"
+                className="setup-walkthrough__open"
+                onClick={() => void window.jarvis.openExternal(step.url!)}
+                title={step.url}
+              >
+                ↗ {step.urlLabel ?? 'Open'}
+              </button>
+            )}
+          </div>
+          {step.body && (
+            <p className="setup-walkthrough__body">{step.body}</p>
+          )}
+          {step.command && <CopyableCommand command={step.command} />}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function CopyableCommand({ command }: { command: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+  return (
+    <div className="setup-walkthrough__cmd">
+      <pre>{command}</pre>
+      <button
+        type="button"
+        className="setup-walkthrough__copy"
+        onClick={() => void copy()}
+        title="Copy to clipboard"
+      >
+        {copied ? '✓ copied' : 'Copy'}
+      </button>
+    </div>
   );
 }
 
