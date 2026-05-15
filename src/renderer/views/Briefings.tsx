@@ -252,7 +252,6 @@ function SchedulePanel({
   routine: RoutineDef | null;
 }) {
   const [busy, setBusy] = useState(false);
-  const [skillOpen, setSkillOpen] = useState(false);
 
   const enabled = routine?.enabled === true;
   const id = routineIdForKind(kind.id);
@@ -299,11 +298,19 @@ function SchedulePanel({
     );
   };
 
+  const jumpToSkill = () => {
+    window.dispatchEvent(
+      new CustomEvent('jarvis:navigate', {
+        detail: { tab: 'skills', skillId: kind.skillId },
+      }),
+    );
+  };
+
   const skillLink = (
     <button
       className="briefings__schedule-link"
-      onClick={() => setSkillOpen(true)}
-      title={`Open SKILL.md for ${kind.skillId}`}
+      onClick={jumpToSkill}
+      title={`Open ${kind.skillId} in the Skills tab`}
     >
       {kind.skillId}
     </button>
@@ -330,9 +337,6 @@ function SchedulePanel({
             Enable schedule
           </button>
         </div>
-        {skillOpen && (
-          <SkillViewer skillId={kind.skillId} onClose={() => setSkillOpen(false)} />
-        )}
       </>
     );
   }
@@ -370,9 +374,6 @@ function SchedulePanel({
         </button>
       </div>
     </div>
-    {skillOpen && (
-      <SkillViewer skillId={kind.skillId} onClose={() => setSkillOpen(false)} />
-    )}
     </>
   );
 }
@@ -501,52 +502,3 @@ function BriefingContentPane({
   );
 }
 
-/**
- * Small modal that shows a skill's SKILL.md body, read-only. Used
- * when the user clicks a skill name in the schedule strip — they want
- * to see what prompt actually runs.
- */
-function SkillViewer({
-  skillId,
-  onClose,
-}: {
-  skillId: string;
-  onClose: () => void;
-}) {
-  const [body, setBody] = useState<string>('');
-  useEffect(() => {
-    void window.jarvis.readSkillBody(skillId).then(setBody);
-  }, [skillId]);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  return (
-    <div
-      className="project-dialog-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="project-dialog skill-viewer">
-        <header className="project-dialog__head">
-          <div>
-            <h2>Skill: {skillId}</h2>
-            <div className="preferences-dialog__path">
-              ~/.jarvis/skills/{skillId}/SKILL.md
-            </div>
-          </div>
-          <button className="project-dialog__close" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </header>
-        <div className="project-dialog__body">
-          <pre className="skill-viewer__body">{body || 'Loading…'}</pre>
-        </div>
-      </div>
-    </div>
-  );
-}

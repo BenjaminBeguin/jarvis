@@ -19,6 +19,10 @@ export const IpcChannels = {
 
   listSkills: 'skills:list',
   refreshSkills: 'skills:refresh',
+  writeSkillBody: 'skills:writeBody',
+  createSkill: 'skills:create',
+  deleteSkill: 'skills:delete',
+  revealSkill: 'skills:reveal',
 
   listMcpServers: 'mcp:list',
   listClaudeMcps: 'mcp:listClaude',

@@ -98,6 +98,23 @@ const api = {
     ipcRenderer.invoke(IpcChannels.refreshSkills),
   onSkillsChanged: (listener: Listener<SkillSummary[]>): Unsubscribe =>
     subscribe(IpcChannels.listSkills, listener),
+  writeSkillBody: (
+    skillId: string,
+    raw: string,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.writeSkillBody, skillId, raw),
+  createSkill: (input: {
+    name: string;
+    description?: string;
+    body?: string;
+  }): Promise<{ ok: boolean; id?: string; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.createSkill, input),
+  deleteSkill: (
+    skillId: string,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.deleteSkill, skillId),
+  revealSkill: (skillId: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.revealSkill, skillId),
 
   listMcpServers: (): Promise<McpServerSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listMcpServers),

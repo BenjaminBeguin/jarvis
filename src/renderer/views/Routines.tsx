@@ -326,7 +326,23 @@ function RoutineCard({ routine, skill, onEdit, onRemove, onRunNow, onToggle }: C
     <article className={`bracketed routine-card${routine.enabled ? '' : ' routine-card--off'}`}>
       <div className="routine-card__head">
         <div className="routine-card__name">
-          {skill?.name ?? <span style={{ color: 'var(--bad)' }}>missing: {routine.skillId}</span>}
+          {skill ? (
+            <button
+              className="routine-card__name-link"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent('jarvis:navigate', {
+                    detail: { tab: 'skills', skillId: routine.skillId },
+                  }),
+                )
+              }
+              title={`Open ${routine.skillId} in the Skills tab`}
+            >
+              {skill.name}
+            </button>
+          ) : (
+            <span style={{ color: 'var(--bad)' }}>missing: {routine.skillId}</span>
+          )}
         </div>
         <label className="toggle" title={routine.enabled ? 'Disable' : 'Enable'}>
           <input type="checkbox" checked={routine.enabled} onChange={onToggle} />

@@ -11,12 +11,20 @@ import { NewProjectDialog } from './projects/NewProjectDialog';
 import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
 import { Settings } from './Settings';
+import { Skills } from './Skills';
 import { toast } from './Toaster';
 import { Toaster } from './Toaster';
 import { Observatory } from './Observatory';
 import { Routines } from './Routines';
 
-type Tab = 'observatory' | 'inbox' | 'briefings' | 'projects' | 'routines' | 'settings';
+type Tab =
+  | 'observatory'
+  | 'inbox'
+  | 'briefings'
+  | 'projects'
+  | 'routines'
+  | 'skills'
+  | 'settings';
 
 interface Props {
   status: AppStatus;
@@ -32,6 +40,9 @@ function formatClock(d: Date): string {
 export function Shell({ status }: Props) {
   const [tab, setTab] = useState<Tab>('observatory');
   const [openModuleId, setOpenModuleId] = useState<string | null>(null);
+  /** When set, the Skills view opens with this skill selected and scrolls
+   * the list to it. Set by deep-link nav from Briefings / Routines. */
+  const [focusedSkillId, setFocusedSkillId] = useState<string | null>(null);
   const [openModule, setOpenModule] = useState<ModuleSummary | null>(null);
   const [moduleList, setModuleList] = useState<ModuleSummary[]>([]);
   /**
@@ -130,6 +141,7 @@ export function Shell({ status }: Props) {
       'briefings',
       'projects',
       'routines',
+      'skills',
       'settings',
     ];
     const onKey = (e: KeyboardEvent) => {
@@ -157,10 +169,11 @@ export function Shell({ status }: Props) {
   // without an IPC round-trip.
   useEffect(() => {
     const applyNav = (payload: {
-      tab?: 'observatory' | 'inbox' | 'briefings' | 'projects' | 'routines' | 'settings';
+      tab?: Tab;
       moduleId?: string;
       action?: 'open-new-project';
       initial?: string;
+      skillId?: string;
     }) => {
       if (payload.tab) setTab(payload.tab);
       if (payload.tab) setOpenModuleId(payload.moduleId ?? null);
@@ -168,6 +181,9 @@ export function Shell({ status }: Props) {
       if (payload.action === 'open-new-project') {
         setNewProjectInitial(payload.initial ?? '');
         setNewProjectOpen(true);
+      }
+      if (payload.tab === 'skills' && payload.skillId) {
+        setFocusedSkillId(payload.skillId);
       }
     };
     const offIpc = window.jarvis.onShellNavigate(applyNav);
@@ -310,12 +326,23 @@ export function Shell({ status }: Props) {
             Routines
           </button>
           <button
+            className={`shell__tab${tab === 'skills' && !openModuleId ? ' shell__tab--active' : ''}`}
+            onClick={() => {
+              setTab('skills');
+              setOpenModuleId(null);
+              setFocusedSkillId(null);
+            }}
+            title="⌘6 · Skill prompts (SKILL.md)"
+          >
+            Skills
+          </button>
+          <button
             className={`shell__tab shell__tab--settings${tab === 'settings' && !openModuleId ? ' shell__tab--active' : ''}`}
             onClick={() => {
               setTab('settings');
               setOpenModuleId(null);
             }}
-            title="⌘6 · Preferences · Modules · Integrations · API"
+            title="⌘7 · Preferences · Modules · Integrations · API"
           >
             ⚙ Settings
           </button>
@@ -425,6 +452,11 @@ export function Shell({ status }: Props) {
           <Projects />
         ) : tab === 'routines' ? (
           <Routines />
+        ) : tab === 'skills' ? (
+          <Skills
+            focusedSkillId={focusedSkillId}
+            onConsumeFocus={() => setFocusedSkillId(null)}
+          />
         ) : (
           <Settings
             status={status}
