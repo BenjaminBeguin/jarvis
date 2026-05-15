@@ -35,7 +35,10 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
   const [activeProject, setActiveProject] = useState<string | null>(() =>
     readActiveProject(),
   );
-  const [filterByScope, setFilterByScope] = useState(false);
+  // Default ON when a project scope is active. Toggle off to see everything.
+  const [filterByScope, setFilterByScope] = useState<boolean>(() =>
+    readActiveProject() !== null,
+  );
   const bindings = useTaskBinding('inbox');
 
   // Drop bindings for items that are no longer in the inbox.
@@ -80,10 +83,11 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
     };
   }, []);
 
-  // Reset the filter toggle when scope clears — the toggle only makes
-  // sense when there's something to filter by.
+  // Re-engage the filter when scope is set; clear when removed.
+  // Tracks scope changes so flipping projects in the picker carries
+  // through to the Inbox automatically.
   useEffect(() => {
-    if (!activeProject) setFilterByScope(false);
+    setFilterByScope(activeProject !== null);
   }, [activeProject]);
 
   const doRefresh = async () => {
@@ -126,7 +130,13 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
 
   const filteredItems = useMemo(() => {
     if (!filterByScope || !activeProject) return items;
-    return items.filter((it) => it.project === activeProject);
+    // Show items matching the active project AND items with no project
+    // tag (calendar events, generic reminders, etc.) — those are
+    // ambient and useful regardless of scope. Items belonging to OTHER
+    // projects (e.g. a different repo's PRs) are hidden.
+    return items.filter(
+      (it) => !it.project || it.project === activeProject,
+    );
   }, [items, filterByScope, activeProject]);
 
   const grouped = useMemo(() => groupBySource(filteredItems), [filteredItems]);
@@ -140,11 +150,20 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
           <div className="inbox__hint">
             {items.length === 0 && !refreshing
               ? 'Nothing waiting on you.'
-              : `${filteredItems.length} of ${items.length} item${items.length === 1 ? '' : 's'}${
-                  lastRefreshedAt
+              : (() => {
+                  const scopedNote =
+                    filterByScope && activeProject
+                      ? ` · scoped to ${activeProject}`
+                      : '';
+                  const countNote =
+                    filterByScope && hiddenCount > 0
+                      ? `${filteredItems.length} of ${items.length} item${items.length === 1 ? '' : 's'}`
+                      : `${items.length} item${items.length === 1 ? '' : 's'}`;
+                  const refreshedNote = lastRefreshedAt
                     ? ` · refreshed ${formatRelative(lastRefreshedAt)}`
-                    : ''
-                }`}
+                    : '';
+                  return `${countNote}${scopedNote}${refreshedNote}`;
+                })()}
           </div>
         </div>
         <div className="inbox__head-actions">
@@ -154,11 +173,13 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
               onClick={() => setFilterByScope((v) => !v)}
               title={
                 filterByScope
-                  ? `Showing only "${activeProject}" items. Click to show all.`
-                  : `Filter to "${activeProject}" items only.`
+                  ? `Showing ${activeProject} items + ambient (no-project) items. Click to show ALL projects.`
+                  : `Currently showing ALL projects. Click to filter to ${activeProject} + ambient items.`
               }
             >
-              {filterByScope ? `✓ ${activeProject}` : `Filter: ${activeProject}`}
+              {filterByScope
+                ? `✓ Scoped to ${activeProject}`
+                : `Show all · currently ${activeProject}`}
             </button>
           )}
           {filteredItems.length > 0 && (
