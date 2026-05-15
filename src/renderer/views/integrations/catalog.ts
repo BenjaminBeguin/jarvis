@@ -115,10 +115,14 @@ export const CATALOG: CatalogEntry[] = [
     name: 'Gmail · personal',
     description: 'Send + read email from your personal Gmail account',
     aliases: ['gmail-personal', 'Gmail'],
+    // @gongrzhe/server-gmail-autoauth-mcp respects GMAIL_OAUTH_PATH +
+    // GMAIL_CREDENTIALS_PATH — explicit env vars beat the cd-cwd hack
+    // (the package's defaults point at ~/.gmail-mcp/, which we'd
+    // otherwise leak to instead of our consolidated secrets dir).
     command: 'sh',
     args: [
       '-c',
-      'cd ~/.jarvis/secrets/google-personal && exec npx -y @gongrzhe/server-gmail-autoauth-mcp',
+      'GMAIL_OAUTH_PATH="$HOME/.jarvis/secrets/google-personal/gcp-oauth.keys.json" GMAIL_CREDENTIALS_PATH="$HOME/.jarvis/secrets/google-personal/credentials.json" exec npx -y @gongrzhe/server-gmail-autoauth-mcp',
     ],
     fields: [],
     setupUrl: 'https://console.cloud.google.com',
@@ -132,7 +136,7 @@ export const CATALOG: CatalogEntry[] = [
     command: 'sh',
     args: [
       '-c',
-      'cd ~/.jarvis/secrets/google-work && exec npx -y @gongrzhe/server-gmail-autoauth-mcp',
+      'GMAIL_OAUTH_PATH="$HOME/.jarvis/secrets/google-work/gcp-oauth.keys.json" GMAIL_CREDENTIALS_PATH="$HOME/.jarvis/secrets/google-work/credentials.json" exec npx -y @gongrzhe/server-gmail-autoauth-mcp',
     ],
     fields: [],
     setupUrl: 'https://console.cloud.google.com',
@@ -143,10 +147,14 @@ export const CATALOG: CatalogEntry[] = [
     name: 'Calendar · personal',
     description: 'Read + create events on your personal Google Calendar',
     aliases: ['calendar-personal', 'google-calendar-personal'],
+    // @cocal/google-calendar-mcp uses GOOGLE_OAUTH_CREDENTIALS for the
+    // OAuth keys path and stores the refresh token in the same dir by
+    // default. Pointing at our consolidated secrets dir gives us the
+    // same per-identity isolation Gmail gets.
     command: 'sh',
     args: [
       '-c',
-      'cd ~/.jarvis/secrets/google-personal && exec npx -y @cocal/google-calendar-mcp',
+      'GOOGLE_OAUTH_CREDENTIALS="$HOME/.jarvis/secrets/google-personal/gcp-oauth.keys.json" exec npx -y @cocal/google-calendar-mcp',
     ],
     fields: [],
     setupUrl: 'https://console.cloud.google.com',
@@ -160,7 +168,7 @@ export const CATALOG: CatalogEntry[] = [
     command: 'sh',
     args: [
       '-c',
-      'cd ~/.jarvis/secrets/google-work && exec npx -y @cocal/google-calendar-mcp',
+      'GOOGLE_OAUTH_CREDENTIALS="$HOME/.jarvis/secrets/google-work/gcp-oauth.keys.json" exec npx -y @cocal/google-calendar-mcp',
     ],
     fields: [],
     setupUrl: 'https://console.cloud.google.com',
@@ -317,8 +325,11 @@ function GOOGLE_SETUP_STEPS(
     },
     {
       title: 'Authenticate the MCP',
-      body: `Runs the OAuth flow in your browser and writes the refresh token to ${dir}/credentials.json. You only do this once per (service, account).`,
-      command: `cd ${dir} && npx -y ${mcpPkg} auth`,
+      body: `Runs the OAuth flow in your browser and writes the refresh token next to your OAuth keys. You only do this once per (service, account). The env var tells the package where to read + write.`,
+      command:
+        service === 'gmail'
+          ? `GMAIL_OAUTH_PATH=${dir}/gcp-oauth.keys.json GMAIL_CREDENTIALS_PATH=${dir}/credentials.json npx -y ${mcpPkg} auth`
+          : `GOOGLE_OAUTH_CREDENTIALS=${dir}/gcp-oauth.keys.json npx -y ${mcpPkg} auth`,
     },
     {
       title: 'Register the MCP in Jarvis',
