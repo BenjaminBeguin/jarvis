@@ -353,6 +353,27 @@ function wireRunnerEvents(): void {
       const was = awaitingFlipped.get(summary.id) ?? false;
       const now = !!summary.awaitingInput;
       if (!was && now) {
+        // User-initiated tasks (palette / voice) auto-pop the
+        // Observatory the moment the agent asks something — same flow
+        // as a normal chat conversation. Routine/api-origin tasks just
+        // get a clickable notification; we don't yank focus when the
+        // user didn't start the conversation.
+        const popImmediately =
+          summary.origin === 'palette' || summary.origin === 'voice';
+        const focusTaskInObservatory = () => {
+          const win = openObservatory();
+          win.focus();
+          const send = () =>
+            win.webContents.send(IpcChannels.observatoryFocusTask, summary.id);
+          if (win.webContents.isLoading()) {
+            win.webContents.once('did-finish-load', send);
+          } else {
+            send();
+          }
+        };
+        if (popImmediately) {
+          focusTaskInObservatory();
+        }
         try {
           const preview =
             summary.title.length > 80
@@ -363,20 +384,11 @@ function wireRunnerEvents(): void {
             body: preview,
             silent: false,
           });
-          notif.on('click', () => {
-            const win = openObservatory();
-            win.focus();
-            const send = () =>
-              win.webContents.send(IpcChannels.observatoryFocusTask, summary.id);
-            if (win.webContents.isLoading()) {
-              win.webContents.once('did-finish-load', send);
-            } else {
-              send();
-            }
-          });
+          notif.on('click', focusTaskInObservatory);
           notif.show();
         } catch {
-          // Notifications can fail pre-permission; not fatal.
+          // Notifications can fail pre-permission; not fatal — the
+          // auto-pop above already surfaced the conversation.
         }
       }
       awaitingFlipped.set(summary.id, now);
