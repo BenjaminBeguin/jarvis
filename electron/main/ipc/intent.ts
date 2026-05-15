@@ -1,6 +1,7 @@
 import { Notification, ipcMain } from 'electron';
 
 import { IpcChannels } from '@shared/ipc';
+import type { SessionConfig } from '@shared/types';
 
 import { parseIntent } from '../intent-router.js';
 import { asTaskOrigin } from '../task-runner.js';
@@ -27,7 +28,11 @@ export function registerIntentIpc({
     IpcChannels.routePrompt,
     async (
       _e,
-      payload: { prompt: string; origin?: 'palette' | 'voice' },
+      payload: {
+        prompt: string;
+        origin?: 'palette' | 'voice';
+        sessionConfig?: SessionConfig;
+      },
     ) => {
       const prompt = typeof payload?.prompt === 'string' ? payload.prompt : '';
       // 1. Verbal intent match: "record the meeting" → meeting/start, etc.
@@ -90,6 +95,7 @@ export function registerIntentIpc({
       const task = runner.launch({
         prompt: intent.body,
         origin: asTaskOrigin(payload?.origin),
+        ...(payload?.sessionConfig ?? {}),
       });
       return { kind: 'task' as const, task };
     },

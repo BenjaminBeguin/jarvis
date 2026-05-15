@@ -6,6 +6,7 @@ import { query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claud
 import type {
   AuthMode,
   LaunchTaskRequest,
+  SessionConfig,
   TaskEvent,
   TaskOrigin,
   TaskStatus,
@@ -57,6 +58,9 @@ interface TaskRecord {
    * mirror entry that appears for the same conversation.
    */
   sdkSessionId?: string;
+  /** Per-launch SDK option overrides (mode / model / cwd / etc.).
+   * Kept on the record so resume turns inherit them. */
+  config?: SessionConfig;
 }
 
 function userMessage(text: string, sessionId: string): SDKUserMessage {
@@ -117,8 +121,14 @@ export class TaskRunner extends EventEmitter {
    * --cwd <path>` — Claude Code keys its session storage by absolute
    * project path, so getting this right means the session lands in the
    * correct ~/.claude/projects/<hash>/ bucket too.
+   *
+   * Resolution order:
+   *   1. explicit per-launch override (palette folder picker)
+   *   2. active project's path
+   *   3. ~ as fallback (Electron's cwd is the .app bundle — unusable)
    */
-  private resolveCwd(): string {
+  private resolveCwd(override?: string | null): string {
+    if (override && override.trim()) return override;
     const activeName = this.userContext?.getActiveProject();
     if (activeName) {
       const def = this.projects?.resolve(activeName);
@@ -350,6 +360,17 @@ export class TaskRunner extends EventEmitter {
     const skill = req.skillId ? this.skills?.get(req.skillId) ?? null : null;
     const skillId = skill?.id ?? null;
     const titlePrefix = req.resumeSessionId ? '↪ ' : '';
+    // Strip the per-launch overrides off so they don't bleed into other
+    // launch-request fields. Each may be undefined; the runner falls back
+    // to its built-in defaults (bypassPermissions, active-project cwd,
+    // skill model).
+    const config: SessionConfig = {
+      permissionMode: req.permissionMode,
+      model: req.model,
+      fallbackModel: req.fallbackModel,
+      cwd: req.cwd,
+      additionalDirectories: req.additionalDirectories,
+    };
     const summary: TaskSummary = {
       id,
       skillId,
@@ -360,7 +381,7 @@ export class TaskRunner extends EventEmitter {
       endedAt: null,
       costUsd: 0,
       inputPreview: req.prompt.slice(0, 240),
-      cwd: this.resolveCwd(),
+      cwd: this.resolveCwd(config.cwd),
     };
     const inputs = new AsyncMessageQueue();
     inputs.push(userMessage(req.prompt, id));
@@ -370,6 +391,7 @@ export class TaskRunner extends EventEmitter {
       events: [],
       nextSeq: 0,
       inputs,
+      config,
     };
     this.records.set(id, record);
     insertTask(summary);
@@ -390,10 +412,14 @@ export class TaskRunner extends EventEmitter {
     let cost = 0;
     let finalStatus: TaskStatus = 'completed';
     try {
+      const cfg = record.config ?? {};
       const systemPrompt = await this.composeSystemPrompt(skill);
       const options: Parameters<typeof query>[0]['options'] = {
         abortController: record.abort,
-        permissionMode: 'bypassPermissions',
+        // Default to bypassPermissions for back-compat with the rest of
+        // Jarvis (routines, briefings, reminders all expect non-blocking
+        // runs). Per-launch override from the palette wins.
+        permissionMode: cfg.permissionMode ?? 'bypassPermissions',
         systemPrompt,
         env: this.buildEnv(),
         // SDK defaults to "isolation mode" — no MCP servers, no plugins, no
@@ -402,17 +428,11 @@ export class TaskRunner extends EventEmitter {
         // toolbox the user has in their day-to-day claude CLI / Claude
         // Desktop sessions.
         settingSources: ['user', 'project', 'local'],
-        // Working directory resolution:
-        //   1. explicit override on the launch request (caller knew best)
-        //   2. active project's path (so 'agent on csai PR' runs from
-        //      ~/Code/csai, file ops land in the right repo)
-        //   3. ~ as fallback (Electron's cwd is the .app bundle —
-        //      unusable for read/write/git/etc.)
-        // Skills can carry a cwd in frontmatter for cases where the
-        // skill itself dictates the dir (rare). When that ships, slot
-        // it into this chain before the project path.
-        cwd: this.resolveCwd(),
+        cwd: this.resolveCwd(cfg.cwd),
       };
+      if (cfg.additionalDirectories?.length) {
+        options.additionalDirectories = cfg.additionalDirectories;
+      }
       if (
         this.auth.mode === 'subscription' &&
         this.auth.claudeBinaryPath
@@ -427,7 +447,10 @@ export class TaskRunner extends EventEmitter {
         if (forkSession) o['forkSession'] = true;
       }
       if (skill?.allowedTools.length) options.allowedTools = skill.allowedTools;
-      if (skill?.model) options.model = skill.model;
+      // Model precedence: per-launch override → skill frontmatter → SDK default.
+      if (cfg.model) options.model = cfg.model;
+      else if (skill?.model) options.model = skill.model;
+      if (cfg.fallbackModel) options.fallbackModel = cfg.fallbackModel;
       if (skill?.mcpServers.length && this.mcp) {
         const resolved = this.mcp.resolve(skill.mcpServers);
         if (Object.keys(resolved).length > 0) {

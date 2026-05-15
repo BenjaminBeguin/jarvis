@@ -23,6 +23,7 @@ import type {
   Reminder,
   RoutePromptResult,
   RoutineDef,
+  SessionConfig,
   SkillSuggestion,
   SkillSummary,
   TaskEvent,
@@ -165,6 +166,10 @@ const api = {
     ipcRenderer.invoke(IpcChannels.listJarvisDir, rel),
   readJarvisFile: (rel: string): Promise<string> =>
     ipcRenderer.invoke(IpcChannels.readJarvisFile, rel),
+  pickDirectory: (
+    options?: { multi?: boolean; defaultPath?: string },
+  ): Promise<string[]> =>
+    ipcRenderer.invoke(IpcChannels.pickDirectory, options),
 
   listProjects: (): Promise<ProjectDef[]> =>
     ipcRenderer.invoke(IpcChannels.listProjects),
@@ -313,9 +318,16 @@ const api = {
 
   routePrompt: (
     prompt: string,
-    options?: { origin?: 'palette' | 'voice' },
+    options?: {
+      origin?: 'palette' | 'voice';
+      sessionConfig?: SessionConfig;
+    },
   ): Promise<RoutePromptResult> =>
-    ipcRenderer.invoke(IpcChannels.routePrompt, { prompt, origin: options?.origin }),
+    ipcRenderer.invoke(IpcChannels.routePrompt, {
+      prompt,
+      origin: options?.origin,
+      sessionConfig: options?.sessionConfig,
+    }),
   previewIntent: (
     prompt: string,
   ): Promise<

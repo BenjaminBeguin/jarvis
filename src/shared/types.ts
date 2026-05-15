@@ -47,7 +47,36 @@ export interface TaskEvent {
   msg: unknown;
 }
 
-export interface LaunchTaskRequest {
+/**
+ * Per-launch overrides Jarvis surfaces in the palette. Mirror the
+ * matching field names on the Agent SDK's Options so we can pass them
+ * through without translation. Every field is optional — omitted means
+ * "use the runner's default" (e.g. bypassPermissions for mode, active
+ * project's path for cwd, skill frontmatter for model).
+ */
+export type PermissionMode =
+  | 'default'
+  | 'acceptEdits'
+  | 'bypassPermissions'
+  | 'plan';
+
+export interface SessionConfig {
+  /** Permission flow for tool use. 'plan' = read-only / planning;
+   * 'acceptEdits' = auto-accept file edits; 'bypassPermissions' = no
+   * prompts at all (current Jarvis default); 'default' = ask. */
+  permissionMode?: PermissionMode;
+  /** Claude model id. e.g. 'claude-sonnet-4-5-20250929'. */
+  model?: string;
+  /** Auto-fallback model if the primary is overloaded / unavailable. */
+  fallbackModel?: string;
+  /** Working directory override. Defaults to the active project's path,
+   * then ~. */
+  cwd?: string;
+  /** Extra directories the agent can read/write beyond cwd. */
+  additionalDirectories?: string[];
+}
+
+export interface LaunchTaskRequest extends SessionConfig {
   skillId?: string | null;
   prompt: string;
   origin?: TaskOrigin;

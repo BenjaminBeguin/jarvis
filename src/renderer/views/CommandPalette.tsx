@@ -3,13 +3,58 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ModuleSummary,
   PaletteIntentSummary,
+  PermissionMode,
   ProjectDef,
+  SessionConfig,
   SkillSummary,
   TranscribeProgress,
 } from '../../shared/types';
 import { AudioCapture } from '../voice/AudioCapture';
 
 const ACTIVE_PROJECT_KEY = 'jarvis.activeProject';
+const SESSION_CONFIG_KEY = 'jarvis.palette.sessionConfig';
+
+/** Static curated list of currently-shipping Claude models. The SDK exposes
+ * supportedModels() only on a live Query, so we'd need a throwaway query to
+ * populate this dynamically — not worth the cost. Update this list when a
+ * new model ships; an empty model field falls back to the SDK / Claude
+ * Code default. */
+const MODEL_OPTIONS: Array<{ value: string; label: string; hint: string }> = [
+  { value: '', label: 'default', hint: "use Claude Code's default" },
+  { value: 'claude-opus-4-7', label: 'opus 4.7', hint: 'deepest reasoning' },
+  { value: 'claude-sonnet-4-6', label: 'sonnet 4.6', hint: 'balanced' },
+  { value: 'claude-haiku-4-5', label: 'haiku 4.5', hint: 'fast / cheap' },
+];
+
+const PERMISSION_MODE_OPTIONS: Array<{
+  value: PermissionMode;
+  label: string;
+  hint: string;
+}> = [
+  { value: 'bypassPermissions', label: 'yolo', hint: 'no prompts (Jarvis default)' },
+  { value: 'acceptEdits', label: 'auto-edit', hint: 'auto-accept file edits' },
+  { value: 'default', label: 'ask', hint: 'ask before tool use' },
+  { value: 'plan', label: 'plan', hint: 'plan only, no edits' },
+];
+
+function loadSessionConfig(): SessionConfig {
+  try {
+    const raw = window.localStorage.getItem(SESSION_CONFIG_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as SessionConfig;
+    return parsed || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveSessionConfig(cfg: SessionConfig): void {
+  try {
+    window.localStorage.setItem(SESSION_CONFIG_KEY, JSON.stringify(cfg));
+  } catch {
+    // ignore
+  }
+}
 
 function readActiveProject(): string | null {
   try {
@@ -137,6 +182,22 @@ export function CommandPalette() {
   const draftRef = useRef<string>('');
   const [hintIdx, setHintIdx] = useState(0);
   const captureRef = useRef<AudioCapture | null>(null);
+  /** Per-launch SDK option overrides — model / mode / extra dirs.
+   * Persisted to localStorage so the user doesn't reset them every open. */
+  const [sessionConfig, setSessionConfig] = useState<SessionConfig>(() =>
+    loadSessionConfig(),
+  );
+  const updateSessionConfig = (patch: Partial<SessionConfig>) => {
+    setSessionConfig((prev) => {
+      const next = { ...prev, ...patch };
+      // Strip undefined keys so the persisted blob stays small.
+      for (const k of Object.keys(next) as Array<keyof SessionConfig>) {
+        if (next[k] === undefined || next[k] === '') delete next[k];
+      }
+      saveSessionConfig(next);
+      return next;
+    });
+  };
   const inputRef = useRef<HTMLInputElement>(null);
   const paletteRef = useRef<HTMLDivElement>(null);
 
@@ -365,6 +426,7 @@ export function CommandPalette() {
           prompt: prompt || 'Begin.',
           skillId: skillForCall.id,
           origin: override.origin ?? 'palette',
+          ...sessionConfig,
         });
         setText('');
         setActiveSkill(null);
@@ -377,6 +439,7 @@ export function CommandPalette() {
       //   - fall through to a Claude task
       const result = await window.jarvis.routePrompt(prompt, {
         origin: override.origin ?? 'palette',
+        sessionConfig,
       });
       setText('');
       if (result.kind === 'task') {
@@ -667,6 +730,7 @@ export function CommandPalette() {
           )}
         </span>
       </div>
+      <SessionConfigBar config={sessionConfig} onChange={updateSessionConfig} />
       {downloadProgress?.status === 'downloading' && (
         <div className="palette__progress">
           downloading whisper model
@@ -738,6 +802,146 @@ export function CommandPalette() {
             No matches. Drop a SKILL.md or write a module.
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Three small chips below the palette input that override the SDK options
+ * for the next launch: permission mode, model, and additional directories.
+ * State is persisted to localStorage so the user doesn't reset them on
+ * each open. Empty / unset = "use the runner's default" — mode falls back
+ * to bypassPermissions, model to the skill frontmatter or SDK default.
+ */
+function SessionConfigBar({
+  config,
+  onChange,
+}: {
+  config: SessionConfig;
+  onChange: (patch: Partial<SessionConfig>) => void;
+}) {
+  const [modeOpen, setModeOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
+
+  const currentMode = config.permissionMode ?? 'bypassPermissions';
+  const currentModeOpt =
+    PERMISSION_MODE_OPTIONS.find((o) => o.value === currentMode) ??
+    PERMISSION_MODE_OPTIONS[0]!;
+  const currentModel = config.model ?? '';
+  const currentModelOpt =
+    MODEL_OPTIONS.find((o) => o.value === currentModel) ?? MODEL_OPTIONS[0]!;
+  const dirCount = config.additionalDirectories?.length ?? 0;
+
+  const addDir = async () => {
+    const picked = await window.jarvis.pickDirectory({ multi: true });
+    if (!picked.length) return;
+    const merged = Array.from(
+      new Set([...(config.additionalDirectories ?? []), ...picked]),
+    );
+    onChange({ additionalDirectories: merged });
+  };
+
+  const clearDirs = () => onChange({ additionalDirectories: undefined });
+
+  return (
+    <div className="session-config">
+      <div className="session-config__chip-group">
+        <button
+          className={`session-config__chip${
+            currentMode !== 'bypassPermissions' ? ' session-config__chip--set' : ''
+          }`}
+          onClick={() => {
+            setModeOpen((v) => !v);
+            setModelOpen(false);
+          }}
+          title={`Permission mode · ${currentModeOpt.hint}`}
+        >
+          <span className="session-config__chip-label">mode</span>
+          <span className="session-config__chip-value">{currentModeOpt.label}</span>
+        </button>
+        {modeOpen && (
+          <div className="session-config__menu">
+            {PERMISSION_MODE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                className={`session-config__menu-row${
+                  opt.value === currentMode ? ' session-config__menu-row--active' : ''
+                }`}
+                onClick={() => {
+                  onChange({ permissionMode: opt.value });
+                  setModeOpen(false);
+                }}
+              >
+                <div className="session-config__menu-label">{opt.label}</div>
+                <div className="session-config__menu-hint">{opt.hint}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="session-config__chip-group">
+        <button
+          className={`session-config__chip${
+            currentModel ? ' session-config__chip--set' : ''
+          }`}
+          onClick={() => {
+            setModelOpen((v) => !v);
+            setModeOpen(false);
+          }}
+          title={`Model · ${currentModelOpt.hint}`}
+        >
+          <span className="session-config__chip-label">model</span>
+          <span className="session-config__chip-value">{currentModelOpt.label}</span>
+        </button>
+        {modelOpen && (
+          <div className="session-config__menu">
+            {MODEL_OPTIONS.map((opt) => (
+              <button
+                key={opt.value || 'default'}
+                className={`session-config__menu-row${
+                  opt.value === currentModel ? ' session-config__menu-row--active' : ''
+                }`}
+                onClick={() => {
+                  onChange({ model: opt.value || undefined });
+                  setModelOpen(false);
+                }}
+              >
+                <div className="session-config__menu-label">{opt.label}</div>
+                <div className="session-config__menu-hint">{opt.hint}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <button
+        className={`session-config__chip${
+          dirCount > 0 ? ' session-config__chip--set' : ''
+        }`}
+        onClick={() => void addDir()}
+        title={
+          dirCount > 0
+            ? `${dirCount} extra dir${dirCount === 1 ? '' : 's'}: ${(
+                config.additionalDirectories ?? []
+              ).join(', ')}\nClick to add more`
+            : 'Add directories the agent can read/write beyond cwd'
+        }
+      >
+        <span className="session-config__chip-label">+dirs</span>
+        <span className="session-config__chip-value">
+          {dirCount > 0 ? dirCount : '—'}
+        </span>
+      </button>
+      {dirCount > 0 && (
+        <button
+          className="session-config__clear"
+          onClick={clearDirs}
+          title="Clear extra directories"
+        >
+          ×
+        </button>
       )}
     </div>
   );

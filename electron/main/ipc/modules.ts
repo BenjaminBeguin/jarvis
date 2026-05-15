@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, normalize, relative, resolve } from 'node:path';
 
@@ -75,4 +75,29 @@ export function registerModulesIpc({ modules, jarvisRoot }: IpcDeps): void {
     const target = resolveSafe(rel);
     return readFileSync(target, 'utf8');
   });
+
+  // Native folder picker — used by the palette session-config chip to pick
+  // extra directories the agent can read/write beyond cwd.
+  ipcMain.handle(
+    IpcChannels.pickDirectory,
+    async (
+      e,
+      options?: { multi?: boolean; defaultPath?: string },
+    ): Promise<string[]> => {
+      const sender = BrowserWindow.fromWebContents(e.sender);
+      const props: Array<'openDirectory' | 'multiSelections'> = ['openDirectory'];
+      if (options?.multi) props.push('multiSelections');
+      const result = sender
+        ? await dialog.showOpenDialog(sender, {
+            properties: props,
+            defaultPath: options?.defaultPath,
+          })
+        : await dialog.showOpenDialog({
+            properties: props,
+            defaultPath: options?.defaultPath,
+          });
+      if (result.canceled) return [];
+      return result.filePaths;
+    },
+  );
 }

@@ -63,6 +63,7 @@ export const IpcChannels = {
 
   openInClaudeDesktop: 'tasks:openInClaudeDesktop',
   costSummary: 'tasks:costSummary',
+  pickDirectory: 'fs:pickDirectory',
 
   httpApiStatus: 'http:status',
   rotateHttpApiToken: 'http:rotateToken',
