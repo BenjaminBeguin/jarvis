@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import type {
+  CalendarHorizon,
   DashboardConfig,
   DashboardItem,
   DashboardSection,
@@ -194,6 +195,11 @@ function SectionView({
   const removeItemAt = (idx: number) =>
     onItemsChange(section.items.filter((_, i) => i !== idx));
 
+  /** Replace a single item — used when a widget's per-item settings
+   *  change (e.g. calendar horizon). Position in the list stays. */
+  const updateItemAt = (idx: number, next: DashboardItem) =>
+    onItemsChange(section.items.map((it, i) => (i === idx ? next : it)));
+
   const width = section.width ?? 'full';
 
   return (
@@ -274,6 +280,7 @@ function SectionView({
             item={item}
             editing={editing}
             onRemove={() => removeItemAt(idx)}
+            onChange={(next) => updateItemAt(idx, next)}
           />
         ))}
       </div>
@@ -296,10 +303,12 @@ function ItemView({
   item,
   editing,
   onRemove,
+  onChange,
 }: {
   item: DashboardItem;
   editing: boolean;
   onRemove: () => void;
+  onChange: (next: DashboardItem) => void;
 }) {
   return (
     <div className="dash-item">
@@ -313,9 +322,52 @@ function ItemView({
           ×
         </button>
       )}
+      {editing && item.kind === 'calendar' && (
+        <CalendarHorizonPicker
+          horizon={item.horizon ?? 'week'}
+          onChange={(h) => onChange({ ...item, horizon: h })}
+        />
+      )}
       {item.kind === 'inbox' && <Inbox compact />}
       {item.kind === 'routine' && <RoutineItem routineId={item.routineId} />}
-      {item.kind === 'calendar' && <CalendarTimeline />}
+      {item.kind === 'calendar' && (
+        <CalendarTimeline horizon={item.horizon ?? 'week'} />
+      )}
+    </div>
+  );
+}
+
+const CAL_HORIZONS: Array<{ value: CalendarHorizon; label: string; hint: string }> = [
+  { value: 'today', label: 'Today', hint: 'Until midnight tonight' },
+  { value: 'tomorrow', label: 'Tomorrow', hint: 'Through tomorrow night' },
+  { value: 'week', label: 'Week', hint: 'Next 7 days' },
+  { value: 'month', label: 'Month', hint: 'Next 30 days' },
+];
+
+function CalendarHorizonPicker({
+  horizon,
+  onChange,
+}: {
+  horizon: CalendarHorizon;
+  onChange: (next: CalendarHorizon) => void;
+}) {
+  return (
+    <div className="dash-item__settings">
+      <span className="dash-item__settings-label">Horizon</span>
+      <div className="dash-item__settings-chips">
+        {CAL_HORIZONS.map((opt) => (
+          <button
+            key={opt.value}
+            className={`dash-item__settings-chip${
+              opt.value === horizon ? ' dash-item__settings-chip--active' : ''
+            }`}
+            onClick={() => onChange(opt.value)}
+            title={opt.hint}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -585,7 +637,7 @@ function BriefingPreview({ kindId }: { kindId: string }) {
  * Each item carries a `kind` so the detail panel can render
  * type-appropriate actions. Click anywhere on a row to open detail.
  */
-function CalendarTimeline() {
+function CalendarTimeline({ horizon = 'week' }: { horizon?: CalendarHorizon }) {
   const [inboxItems, setInboxItems] = useState<InboxItem[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [routines, setRoutines] = useState<RoutineDef[]>([]);
@@ -610,10 +662,20 @@ function CalendarTimeline() {
     };
   }, []);
 
-  const items = useMemo(
-    () => buildScheduledItems(inboxItems, reminders, routines, now, 7),
-    [inboxItems, reminders, routines, now],
-  );
+  // Horizon → numeric days for buildScheduledItems' routine forecast,
+  // and a fireAt cutoff for filtering display items.
+  const horizonDays = HORIZON_DAYS[horizon];
+  const cutoff = useMemo(() => horizonCutoff(horizon, now), [horizon, now]);
+  const items = useMemo(() => {
+    const built = buildScheduledItems(
+      inboxItems,
+      reminders,
+      routines,
+      now,
+      horizonDays,
+    );
+    return built.filter((it) => it.fireAt <= cutoff);
+  }, [inboxItems, reminders, routines, now, horizonDays, cutoff]);
 
   const groups = useMemo(() => groupByDay(items, now), [items, now]);
 
@@ -622,6 +684,7 @@ function CalendarTimeline() {
       <div className="dash-cal">
         <header className="dash-cal__head">
           <span className="dash-cal__hint">events · reminders · routines</span>
+          <span className="dash-cal__horizon">● {HORIZON_LABEL[horizon]}</span>
         </header>
         <div className="dash-cal__empty">
           Nothing scheduled. Calendar events show up here once a calendar
@@ -632,11 +695,15 @@ function CalendarTimeline() {
     );
   }
 
+  const horizonLabel = HORIZON_LABEL[horizon];
   return (
     <div className="dash-cal">
       <header className="dash-cal__head">
         <span className="dash-cal__hint">
           events · reminders · routines · click any row for detail
+        </span>
+        <span className="dash-cal__horizon" title="Edit layout to change">
+          ● {horizonLabel}
         </span>
       </header>
       <div className="dash-cal__groups">
@@ -705,6 +772,42 @@ function KindBadge({ kind }: { kind: ScheduledItem['kind'] }) {
       {label}
     </span>
   );
+}
+
+/** Days passed to buildScheduledItems (controls how far forward
+ *  routine cadence is forecast). */
+const HORIZON_DAYS: Record<CalendarHorizon, number> = {
+  today: 1,
+  tomorrow: 2,
+  week: 7,
+  month: 30,
+};
+
+/** Human label shown in the calendar widget header. */
+const HORIZON_LABEL: Record<CalendarHorizon, string> = {
+  today: 'today',
+  tomorrow: 'today + tomorrow',
+  week: 'next 7 days',
+  month: 'next 30 days',
+};
+
+/** Absolute fireAt cutoff for each horizon — anything past this point
+ *  is dropped from the timeline display. "today" cuts at end-of-today
+ *  in local time so a meeting tomorrow morning doesn't slip in. */
+function horizonCutoff(horizon: CalendarHorizon, now: number): number {
+  const d = new Date(now);
+  d.setHours(23, 59, 59, 999);
+  const endOfToday = d.getTime();
+  switch (horizon) {
+    case 'today':
+      return endOfToday;
+    case 'tomorrow':
+      return endOfToday + 24 * 60 * 60 * 1000;
+    case 'week':
+      return endOfToday + 6 * 24 * 60 * 60 * 1000;
+    case 'month':
+      return endOfToday + 29 * 24 * 60 * 60 * 1000;
+  }
 }
 
 function groupByDay(

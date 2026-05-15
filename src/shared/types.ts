@@ -279,6 +279,10 @@ export type RoutePromptResult =
  * Item kinds are intentionally a discriminated union so future kinds
  * (pinned tasks, notes, external links) just add a variant.
  */
+/** Time-horizon options for the dashboard Calendar widget. The Calendar
+ *  tab module ignores this — it has its own Month/Week/Day modes. */
+export type CalendarHorizon = 'today' | 'tomorrow' | 'week' | 'month';
+
 export type DashboardItem =
   | { kind: 'inbox' }
   | { kind: 'routine'; routineId: string }
@@ -287,6 +291,8 @@ export type DashboardItem =
        * actions, and routine cadence. Read-only aggregator over the
        * inbox + reminders + routines stores. */
       kind: 'calendar';
+      /** How far ahead the widget looks. Default 'week'. */
+      horizon?: CalendarHorizon;
     };
 
 export interface DashboardSection {

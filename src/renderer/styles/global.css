@@ -4639,6 +4639,69 @@ button:disabled:hover {
   box-shadow: 0 0 8px rgba(255, 85, 119, 0.4);
 }
 
+/* Per-widget settings strip — only rendered in edit mode. Sits at the
+   top of a .dash-item, doesn't push out the actual widget content.
+   Subtle so it doesn't compete visually. */
+.dash-item__settings {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  background: rgba(0, 212, 255, 0.04);
+  border: 1px dashed rgba(0, 212, 255, 0.28);
+  border-radius: 2px;
+  font-family: var(--mono);
+}
+
+.dash-item__settings-label {
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.dash-item__settings-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.dash-item__settings-chip {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.dash-item__settings-chip:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.dash-item__settings-chip--active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(0, 212, 255, 0.08);
+}
+
+/* Read-only horizon indicator on the calendar widget header. Sits on
+   the right with a small accent dot. */
+.dash-cal__horizon {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
 /* Routine item — header + body wrapping a renderer that varies by output kind. */
 
 .dash-routine {
