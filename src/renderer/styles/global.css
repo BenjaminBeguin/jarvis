@@ -3491,12 +3491,44 @@ button:disabled:hover {
   margin-bottom: 10px;
 }
 
+.dash-routine__title-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.dash-routine__caret {
+  color: var(--text-faint);
+  font-size: 11px;
+  width: 12px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.dash-routine__title-btn:hover .dash-routine__caret {
+  color: var(--accent);
+}
+
 .dash-routine__title {
   font-family: var(--mono);
   font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text);
+}
+
+.dash-routine__title-btn:hover .dash-routine__title {
+  color: var(--accent);
+}
+
+.dash-routine--collapsed .dash-routine__head {
+  margin-bottom: 0;
 }
 
 .dash-routine__meta {

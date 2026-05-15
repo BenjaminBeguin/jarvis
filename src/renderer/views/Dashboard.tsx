@@ -286,15 +286,57 @@ function ItemView({
   );
 }
 
+const COLLAPSED_ROUTINES_KEY = 'jarvis.dashboard.collapsedRoutines';
+
+function loadCollapsed(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(COLLAPSED_ROUTINES_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveCollapsed(set: Set<string>): void {
+  try {
+    window.localStorage.setItem(
+      COLLAPSED_ROUTINES_KEY,
+      JSON.stringify([...set]),
+    );
+  } catch {
+    // non-fatal — collapse state is cosmetic
+  }
+}
+
 /**
  * Renders a routine's latest output. Picks the renderer by inferring
  * the routine's output kind from its skill id (briefing-prefix /
  * inbox-suffix / etc.) — same heuristic Routines.tsx uses for purpose
  * chips, kept here as a local copy to avoid the cross-file dep.
+ *
+ * The body can be collapsed via the ▾/▸ toggle in the header; choice
+ * persists per routine in localStorage so a "hidden by default" stay
+ * hidden across reopens.
  */
 function RoutineItem({ routineId }: { routineId: string }) {
   const [routine, setRoutine] = useState<RoutineDef | null>(null);
   const [skill, setSkill] = useState<SkillSummary | null>(null);
+  const [collapsed, setCollapsed] = useState<boolean>(() =>
+    loadCollapsed().has(routineId),
+  );
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      const set = loadCollapsed();
+      if (next) set.add(routineId);
+      else set.delete(routineId);
+      saveCollapsed(set);
+      return next;
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -332,11 +374,19 @@ function RoutineItem({ routineId }: { routineId: string }) {
   const kind = inferOutputKind(routine);
 
   return (
-    <article className="dash-routine">
+    <article className={`dash-routine${collapsed ? ' dash-routine--collapsed' : ''}`}>
       <header className="dash-routine__head">
-        <div className="dash-routine__title">
-          {skill?.name ?? routine.skillId}
-        </div>
+        <button
+          className="dash-routine__title-btn"
+          onClick={toggleCollapsed}
+          title={collapsed ? 'Show output' : 'Hide output'}
+          aria-expanded={!collapsed}
+        >
+          <span className="dash-routine__caret">{collapsed ? '▸' : '▾'}</span>
+          <span className="dash-routine__title">
+            {skill?.name ?? routine.skillId}
+          </span>
+        </button>
         <div className="dash-routine__meta">
           {routine.lastRunAt
             ? `last run · ${formatRelative(routine.lastRunAt)}`
@@ -372,44 +422,46 @@ function RoutineItem({ routineId }: { routineId: string }) {
           </button>
         </div>
       </header>
-      <div className="dash-routine__body">
-        {kind === 'briefing' && (
-          <BriefingPreview kindId={inferBriefingKindId(routine)} />
-        )}
-        {kind === 'inbox-source' && (
-          <div className="dash-routine__hint">
-            Inbox source · view rows in the{' '}
-            <button
-              className="dash-routine__link"
-              onClick={() =>
-                window.dispatchEvent(
-                  new CustomEvent('jarvis:navigate', { detail: { tab: 'inbox' } }),
-                )
-              }
-            >
-              Inbox tab
-            </button>
-            .
-          </div>
-        )}
-        {kind === 'freeform' && (
-          routine.lastTaskId ? (
-            // Show ONLY the assistant's answer — the user explicitly does
-            // not want to see the full pipeline (tool calls, intermediate
-            // events) on the dashboard. Compact slices long answers so
-            // dashboards stay scannable; the link opens the full one.
-            <TaskAnswerPreview
-              taskId={routine.lastTaskId}
-              compact
-              openLabel="see full pipeline in Observatory →"
-            />
-          ) : (
+      {!collapsed && (
+        <div className="dash-routine__body">
+          {kind === 'briefing' && (
+            <BriefingPreview kindId={inferBriefingKindId(routine)} />
+          )}
+          {kind === 'inbox-source' && (
             <div className="dash-routine__hint">
-              No output yet. Click "run now" above to generate the first one.
+              Inbox source · view rows in the{' '}
+              <button
+                className="dash-routine__link"
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent('jarvis:navigate', { detail: { tab: 'inbox' } }),
+                  )
+                }
+              >
+                Inbox tab
+              </button>
+              .
             </div>
-          )
-        )}
-      </div>
+          )}
+          {kind === 'freeform' && (
+            routine.lastTaskId ? (
+              // Show ONLY the assistant's answer — the user explicitly does
+              // not want to see the full pipeline (tool calls, intermediate
+              // events) on the dashboard. Compact slices long answers so
+              // dashboards stay scannable; the link opens the full one.
+              <TaskAnswerPreview
+                taskId={routine.lastTaskId}
+                compact
+                openLabel="see full pipeline in Observatory →"
+              />
+            ) : (
+              <div className="dash-routine__hint">
+                No output yet. Click "run now" above to generate the first one.
+              </div>
+            )
+          )}
+        </div>
+      )}
     </article>
   );
 }
