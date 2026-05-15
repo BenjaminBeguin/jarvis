@@ -374,7 +374,7 @@ export function Shell({ status }: Props) {
             }}
           />
           <button
-            className={`shell__icon-btn${
+            className={`shell__icon-btn shell__icon-btn--activity${
               tab === 'activity' && !openModuleId ? ' shell__icon-btn--active' : ''
             }`}
             onClick={() => {
@@ -384,7 +384,24 @@ export function Shell({ status }: Props) {
             title="Activity · /send history (and later, every other thing you did)"
             aria-label="Activity"
           >
-            ≡
+            <svg viewBox="0 0 16 16" aria-hidden width="14" height="14">
+              <circle
+                cx="8"
+                cy="8"
+                r="6.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+              />
+              <path
+                d="M8 4 L8 8 L11 9.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
           <AuthBadgeMenu
             label={badge}
