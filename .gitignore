@@ -8,3 +8,7 @@ dist/
 .env.local
 .vscode/
 .idea/
+
+# electron-vite's transient compiled config cache. Sometimes lingers
+# when the dev server crashes before cleaning it up.
+electron.vite.config.*.mjs

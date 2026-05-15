@@ -2187,6 +2187,23 @@ button:disabled:hover {
   gap: 4px;
 }
 
+.activity__groups {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.activity__group-label {
+  margin: 0 0 6px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
 .activity__row {
   display: flex;
   align-items: center;

@@ -89,18 +89,53 @@ export function Activity() {
           recording meetings, toggling integrations) this feed fills up.
         </div>
       ) : (
-        <ul className="activity__list">
-          {rows.map((row) =>
-            row.kind === 'send' ? (
-              <SendRow key={`send-${row.task.id}`} task={row.task} />
-            ) : (
-              <EventRow key={`event-${row.event.id}`} event={row.event} />
-            ),
-          )}
-        </ul>
+        <div className="activity__groups">
+          {groupByDay(rows).map((group) => (
+            <section key={group.label} className="activity__group">
+              <h3 className="activity__group-label">{group.label}</h3>
+              <ul className="activity__list">
+                {group.rows.map((row) =>
+                  row.kind === 'send' ? (
+                    <SendRow key={`send-${row.task.id}`} task={row.task} />
+                  ) : (
+                    <EventRow key={`event-${row.event.id}`} event={row.event} />
+                  ),
+                )}
+              </ul>
+            </section>
+          ))}
+        </div>
       )}
     </section>
   );
+}
+
+/**
+ * Bucket rows into Today / Yesterday / This week / Earlier. Same
+ * spirit as the Dashboard's CalendarTimeline grouping; rendered here
+ * as `<h3>` separators between groups.
+ */
+function groupByDay(rows: Row[]): Array<{ label: string; rows: Row[] }> {
+  if (rows.length === 0) return [];
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const today = startOfToday.getTime();
+  const yesterday = today - 24 * 60 * 60 * 1000;
+  const weekStart = today - 7 * 24 * 60 * 60 * 1000;
+  const buckets: Record<string, Row[]> = {};
+  for (const row of rows) {
+    let key: string;
+    if (row.ts >= today) key = 'Today';
+    else if (row.ts >= yesterday) key = 'Yesterday';
+    else if (row.ts >= weekStart) key = 'This week';
+    else key = 'Earlier';
+    if (!buckets[key]) buckets[key] = [];
+    buckets[key]!.push(row);
+  }
+  const order = ['Today', 'Yesterday', 'This week', 'Earlier'];
+  return order
+    .filter((k) => buckets[k])
+    .map((label) => ({ label, rows: buckets[label]! }));
 }
 
 function openObservatoryTask(id: string): void {
