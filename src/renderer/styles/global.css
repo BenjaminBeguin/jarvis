@@ -2140,6 +2140,92 @@ button:disabled:hover {
   color: var(--text-faint);
 }
 
+/* Per-source preference row (e.g. calendar window hours). Sits below
+   the source list when its parent source is enabled. */
+.inbox-pref-row {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  border-radius: 2px;
+  font-family: var(--mono);
+}
+
+.inbox-pref-row__label {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.inbox-pref-row__hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+.inbox-pref-row__input {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.inbox-pref-row__input input[type='number'] {
+  width: 72px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: 2px;
+}
+
+.inbox-pref-row__input input[type='number']:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.inbox-pref-row__unit {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.inbox-pref-row__chips {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.inbox-pref-row__chip {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.inbox-pref-row__chip:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.inbox-pref-row__chip--active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(0, 212, 255, 0.08);
+}
+
 .inbox-source__kind {
   font-size: 9px;
   letter-spacing: 0.18em;

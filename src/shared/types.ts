@@ -78,10 +78,15 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
  */
 export interface InboxPrefs {
   disabledSources: string[];
+  /** How many hours into the future the Inbox shows calendar events.
+   *  Items past this window are dropped from the Inbox only (the
+   *  Calendar tab + Dashboard Calendar timeline keep showing them). */
+  calendarWindowHours: number;
 }
 
 export const DEFAULT_INBOX_PREFS: InboxPrefs = {
   disabledSources: ['calendar'],
+  calendarWindowHours: 24,
 };
 
 /**

@@ -719,6 +719,57 @@ function InboxPanel() {
         onToggle={toggleSource}
       />
 
+      {!inboxPrefs.disabledSources.includes('calendar') && (
+        <div className="inbox-pref-row">
+          <div className="inbox-pref-row__label">Calendar window</div>
+          <div className="inbox-pref-row__hint">
+            How many hours into the future the Inbox shows meetings.
+            Events past this window stay visible in the Calendar tab
+            and the Dashboard timeline — they're just hidden from the
+            triage feed.
+          </div>
+          <div className="inbox-pref-row__input">
+            <input
+              type="number"
+              min={1}
+              max={744}
+              step={1}
+              value={inboxPrefs.calendarWindowHours}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                if (!Number.isFinite(n) || n <= 0) return;
+                void window.jarvis.writeInboxPrefs({
+                  ...inboxPrefs,
+                  calendarWindowHours: Math.min(n, 744),
+                });
+              }}
+            />
+            <span className="inbox-pref-row__unit">hours</span>
+            <div className="inbox-pref-row__chips">
+              {[12, 24, 48, 168].map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  className={`inbox-pref-row__chip${
+                    inboxPrefs.calendarWindowHours === h
+                      ? ' inbox-pref-row__chip--active'
+                      : ''
+                  }`}
+                  onClick={() =>
+                    void window.jarvis.writeInboxPrefs({
+                      ...inboxPrefs,
+                      calendarWindowHours: h,
+                    })
+                  }
+                >
+                  {h === 168 ? '1 week' : `${h}h`}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <h3 style={{ marginTop: 28 }}>PR inbox scope</h3>
       <p className="settings__hint">
         The PR inbox sources (Reviews waiting on you, Comments on your PRs)

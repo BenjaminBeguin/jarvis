@@ -150,14 +150,14 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
     const disabledSet = new Set(inboxPrefs.disabledSources);
     let next = items.filter((it) => !disabledSet.has(it.source));
 
-    // 2. For sources still enabled: calendar items outside the next 24h
-    //    are dropped from the Inbox so it stays a "what's happening
-    //    today" view. The Calendar tab and Dashboard Calendar timeline
-    //    read the same JSON file through other paths and still see the
-    //    full 7-day window.
+    // 2. For sources still enabled: calendar items outside the
+    //    configured window are dropped from the Inbox. Default 24h —
+    //    user can tune in Settings → Inbox. The Calendar tab and
+    //    Dashboard Calendar timeline read the same JSON file through
+    //    other paths and still see the full 7-day window.
     if (!disabledSet.has('calendar')) {
-      const CAL_WINDOW_MS = 24 * 60 * 60 * 1000;
-      const cutoff = Date.now() + CAL_WINDOW_MS;
+      const windowMs = inboxPrefs.calendarWindowHours * 60 * 60 * 1000;
+      const cutoff = Date.now() + windowMs;
       next = next.filter((it) => {
         if (it.source !== 'calendar') return true;
         if (it.fireAt == null) return true;
@@ -188,8 +188,10 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
                     filterByScope && activeProject
                       ? ` · scoped to ${activeProject}`
                       : '';
+                  // "N of M items" anytime any filter is hiding rows
+                  // (disabled source, calendar window, project scope).
                   const countNote =
-                    filterByScope && hiddenCount > 0
+                    hiddenCount > 0
                       ? `${filteredItems.length} of ${items.length} item${items.length === 1 ? '' : 's'}`
                       : `${items.length} item${items.length === 1 ? '' : 's'}`;
                   const refreshedNote = lastRefreshedAt

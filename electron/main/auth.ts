@@ -122,10 +122,16 @@ export function saveNotificationPrefs(prefs: NotificationPrefs): void {
 export function loadInboxPrefs(): InboxPrefs {
   const cfg = readConfig();
   const stored = cfg.inboxPrefs ?? {};
+  const rawHours = stored.calendarWindowHours;
+  const calendarWindowHours =
+    typeof rawHours === 'number' && Number.isFinite(rawHours) && rawHours > 0
+      ? Math.min(rawHours, 24 * 31) // cap at one month so a typo can't break things
+      : DEFAULT_INBOX_PREFS.calendarWindowHours;
   return {
     disabledSources: Array.isArray(stored.disabledSources)
       ? stored.disabledSources.filter((x): x is string => typeof x === 'string')
       : DEFAULT_INBOX_PREFS.disabledSources,
+    calendarWindowHours,
   };
 }
 
