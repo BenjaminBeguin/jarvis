@@ -26,8 +26,9 @@ function timeKey(d: Date): string {
 
 export const quickNoteModule: Module = {
   id: 'quick-note',
-  name: 'Quick note',
-  description: "Append a timestamped note to today's journal markdown file",
+  name: 'Notes & Reminders',
+  description:
+    "Capture-for-later: free-form notes (markdown journal) + time-pressured reminders. /note appends to today's journal; /reminders opens the reminders tab on the same page.",
   version: '1.0.0',
   intents: [
     {

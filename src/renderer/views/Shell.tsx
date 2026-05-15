@@ -251,6 +251,24 @@ export function Shell({ status }: Props) {
     return window.jarvis.onModulesChanged(setModuleList);
   }, []);
 
+  // Surface every fired reminder as an in-app toast so the user sees
+  // SOMETHING even when macOS notifications are silenced (Focus mode,
+  // permission denied, app in foreground bug). The native notification
+  // still fires from main; this is the redundant signal.
+  //
+  // Subscribes to activity events: kind='reminder.fired' rows are the
+  // signal. Everything else is ignored — Activity-tab rendering already
+  // covers the broader feed.
+  useEffect(() => {
+    return window.jarvis.onActivityChanged((event) => {
+      if (event.kind !== 'reminder.fired') return;
+      toast({
+        kind: 'info',
+        message: event.label.replace(/^Reminder fired · /, '⏰ '),
+      });
+    });
+  }, []);
+
   // Keep openModule in sync with the registry — handles "module disabled
   // while its page is open" by closing the page automatically.
   useEffect(() => {

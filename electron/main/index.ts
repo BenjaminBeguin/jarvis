@@ -568,27 +568,39 @@ app.whenReady().then(async () => {
       reminder.body.length > 80 ? `${reminder.body.slice(0, 80)}…` : reminder.body;
 
     if (reminder.mode === 'reminder') {
-      // Pure nudge — no Claude. Native notification + activity log.
-      try {
-        const notif = new Notification({
-          title: 'Reminder',
-          body: preview,
-          silent: false,
-        });
-        notif.on('click', () => {
-          const win = openObservatory();
-          win.focus();
-          if (win.webContents.isLoading()) {
-            win.webContents.once('did-finish-load', () =>
-              win.webContents.send(IpcChannels.shellNavigate, { tab: 'inbox' }),
-            );
-          } else {
-            win.webContents.send(IpcChannels.shellNavigate, { tab: 'inbox' });
-          }
-        });
-        notif.show();
-      } catch {
-        // Notifications can fail pre-permission; not fatal.
+      // Pure nudge — no Claude. Three signals so the user can't miss it:
+      //   1. macOS notification (might be silenced by Focus mode or
+      //      blocked by Notification perms).
+      //   2. Activity log row — visible on the Activity tab.
+      //   3. In-app toast via the activityChanged broadcast — renderers
+      //      pop this regardless of OS state. See Shell.tsx.
+      console.log(
+        `[reminder] firing nudge id=${reminder.id} body="${preview}"`,
+      );
+      if (!Notification.isSupported()) {
+        console.warn('[reminder] Notification.isSupported() = false');
+      } else {
+        try {
+          const notif = new Notification({
+            title: 'Reminder',
+            body: preview,
+            silent: false,
+          });
+          notif.on('click', () => {
+            const win = openObservatory();
+            win.focus();
+            if (win.webContents.isLoading()) {
+              win.webContents.once('did-finish-load', () =>
+                win.webContents.send(IpcChannels.shellNavigate, { tab: 'inbox' }),
+              );
+            } else {
+              win.webContents.send(IpcChannels.shellNavigate, { tab: 'inbox' });
+            }
+          });
+          notif.show();
+        } catch (err) {
+          console.warn('[reminder] notification failed:', err);
+        }
       }
       activity.record({
         kind: 'reminder.fired',
