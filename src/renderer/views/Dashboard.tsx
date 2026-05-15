@@ -610,22 +610,38 @@ function CalendarTimeline() {
         raw: it,
       });
     }
-    // Routines' next-fire — only show enabled ones within 7 days so the
-    // timeline stays anchored to the near future.
+    // Routines' next-fire (7-day horizon) + recent fires (12h
+    // lookback) so the timeline answers both "what's coming up" and
+    // "what just ran." Last-fire rows are clickable to open the
+    // transcript via the detail panel.
     const horizon = now + 7 * 24 * 60 * 60 * 1000;
+    const lookback = now - 12 * 60 * 60 * 1000;
     for (const r of routines) {
-      if (!r.enabled) continue;
-      const next = nextCronFire(r.cron, now);
-      if (next == null || next > horizon) continue;
-      out.push({
-        id: `routine-${r.id}`,
-        kind: 'routine-next',
-        title: r.id.replace(/^briefing-/, ''),
-        subtitle: r.input || undefined,
-        fireAt: next,
-        source: r.skillId,
-        raw: r,
-      });
+      if (r.enabled) {
+        const next = nextCronFire(r.cron, now);
+        if (next != null && next <= horizon) {
+          out.push({
+            id: `routine-next-${r.id}`,
+            kind: 'routine-next',
+            title: r.id.replace(/^briefing-/, ''),
+            subtitle: r.input || undefined,
+            fireAt: next,
+            source: r.skillId,
+            raw: r,
+          });
+        }
+      }
+      if (r.lastRunAt && r.lastRunAt >= lookback) {
+        out.push({
+          id: `routine-last-${r.id}`,
+          kind: 'routine-last',
+          title: r.id.replace(/^briefing-/, ''),
+          subtitle: r.input || undefined,
+          fireAt: r.lastRunAt,
+          source: r.skillId,
+          raw: r,
+        });
+      }
     }
     return out.sort((a, b) => a.fireAt - b.fireAt);
   }, [inboxItems, reminders, routines, now]);
@@ -685,7 +701,13 @@ function CalendarTimeline() {
 
 interface ScheduledItem {
   id: string;
-  kind: 'event' | 'reminder' | 'scheduled-action' | 'inbox-task' | 'routine-next';
+  kind:
+    | 'event'
+    | 'reminder'
+    | 'scheduled-action'
+    | 'inbox-task'
+    | 'routine-next'
+    | 'routine-last';
   title: string;
   subtitle?: string;
   fireAt: number;
@@ -741,6 +763,7 @@ const KIND_LABEL: Record<ScheduledItem['kind'], string> = {
   'scheduled-action': 'AUTOPILOT',
   'inbox-task': 'INBOX',
   'routine-next': 'ROUTINE',
+  'routine-last': 'JUST RAN',
 };
 
 /**
@@ -854,6 +877,36 @@ function ItemActions({
     const routine = item.raw as RoutineDef;
     buttons.push({
       label: 'Run now',
+      onClick: async () => {
+        await window.jarvis.runRoutineNow(routine.id);
+        toast({ message: `Fired · ${routine.id}` });
+        onAfter();
+      },
+    });
+    buttons.push({
+      label: 'Open in Routines',
+      onClick: () => {
+        window.dispatchEvent(
+          new CustomEvent('jarvis:navigate', { detail: { tab: 'routines' } }),
+        );
+        onAfter();
+      },
+    });
+  }
+
+  if (item.kind === 'routine-last') {
+    const routine = item.raw as RoutineDef;
+    if (routine.lastTaskId) {
+      buttons.push({
+        label: '↗ View output',
+        onClick: () => {
+          void window.jarvis.openObservatory(routine.lastTaskId!);
+          onAfter();
+        },
+      });
+    }
+    buttons.push({
+      label: 'Run again',
       onClick: async () => {
         await window.jarvis.runRoutineNow(routine.id);
         toast({ message: `Fired · ${routine.id}` });

@@ -3814,6 +3814,11 @@ button:disabled:hover {
   border-color: rgba(95, 255, 166, 0.35);
 }
 
+.dash-cal__kind--routine-last {
+  color: var(--text-faint);
+  border-color: var(--border);
+}
+
 .dash-cal__kind--inbox-task {
   color: var(--text-dim);
 }
