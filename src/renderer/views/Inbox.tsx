@@ -129,12 +129,25 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
   };
 
   const filteredItems = useMemo(() => {
-    if (!filterByScope || !activeProject) return items;
+    // Calendar events outside the next 24h are dropped from the Inbox
+    // so it stays a "what's happening today" view. The Calendar tab
+    // and Dashboard Calendar timeline read the same source file but
+    // through different paths (raw listInbox in main), so they still
+    // see the full 7-day window. Solo events are already filtered at
+    // the skill level so they're absent everywhere.
+    const CALENDAR_INBOX_WINDOW_MS = 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() + CALENDAR_INBOX_WINDOW_MS;
+    const inWindow = items.filter((it) => {
+      if (it.source !== 'calendar') return true;
+      if (it.fireAt == null) return true;
+      return it.fireAt <= cutoff;
+    });
+    if (!filterByScope || !activeProject) return inWindow;
     // Show items matching the active project AND items with no project
     // tag (calendar events, generic reminders, etc.) — those are
     // ambient and useful regardless of scope. Items belonging to OTHER
     // projects (e.g. a different repo's PRs) are hidden.
-    return items.filter(
+    return inWindow.filter(
       (it) => !it.project || it.project === activeProject,
     );
   }, [items, filterByScope, activeProject]);
