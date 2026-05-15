@@ -14,7 +14,11 @@ import type {
   DashboardSection,
 } from '@shared/types';
 
-const VALID_ITEM_KINDS = new Set<DashboardItem['kind']>(['inbox', 'routine']);
+const VALID_ITEM_KINDS = new Set<DashboardItem['kind']>([
+  'inbox',
+  'routine',
+  'calendar',
+]);
 
 function isDashboardItem(v: unknown): v is DashboardItem {
   if (!v || typeof v !== 'object') return false;

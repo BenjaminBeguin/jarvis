@@ -162,7 +162,13 @@ export type RoutePromptResult =
  */
 export type DashboardItem =
   | { kind: 'inbox' }
-  | { kind: 'routine'; routineId: string };
+  | { kind: 'routine'; routineId: string }
+  | {
+      /** Unified time-sorted view: calendar events, reminders, scheduled
+       * actions, and routine cadence. Read-only aggregator over the
+       * inbox + reminders + routines stores. */
+      kind: 'calendar';
+    };
 
 export interface DashboardSection {
   id: string;

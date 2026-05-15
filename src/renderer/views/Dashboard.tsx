@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { nextCronFire } from '../../shared/cron';
 import type {
   DashboardConfig,
   DashboardItem,
   DashboardSection,
+  InboxItem,
   Reminder,
   RoutineDef,
   SkillSummary,
@@ -282,6 +284,7 @@ function ItemView({
       )}
       {item.kind === 'inbox' && <Inbox />}
       {item.kind === 'routine' && <RoutineItem routineId={item.routineId} />}
+      {item.kind === 'calendar' && <CalendarTimeline />}
     </div>
   );
 }
@@ -537,6 +540,416 @@ function BriefingPreview({ kindId }: { kindId: string }) {
 }
 
 /**
+ * Unified time-sorted view: calendar events, reminders, scheduled
+ * actions, and next-fire of every routine. The dashboard's "what's
+ * coming up" pane — answers "what's on the calendar AND on the agent
+ * docket together."
+ *
+ * Sources (all read directly via existing IPC, no new plumbing):
+ *   - listInbox()      → inbox items with fireAt (calendar source items,
+ *                        meeting reminders, etc.)
+ *   - listReminders()  → pending reminders + scheduled actions
+ *   - listRoutines()   → next-fire computed from cron expression
+ *
+ * Each item carries a `kind` so the detail panel can render
+ * type-appropriate actions. Click anywhere on a row to open detail.
+ */
+function CalendarTimeline() {
+  const [inboxItems, setInboxItems] = useState<InboxItem[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [routines, setRoutines] = useState<RoutineDef[]>([]);
+  const [now, setNow] = useState(Date.now());
+  const [selected, setSelected] = useState<ScheduledItem | null>(null);
+
+  useEffect(() => {
+    void window.jarvis.listInbox().then(setInboxItems);
+    void window.jarvis.listReminders().then(setReminders);
+    void window.jarvis.listRoutines().then(setRoutines);
+    const offInbox = window.jarvis.onInboxChanged(setInboxItems);
+    const offRem = window.jarvis.onRemindersChanged(setReminders);
+    const offRoute = window.jarvis.onRoutinesChanged(setRoutines);
+    // Tick the "now" anchor every minute so "in 5m / starts now"
+    // labels stay accurate without remounting children.
+    const tick = setInterval(() => setNow(Date.now()), 60_000);
+    return () => {
+      offInbox();
+      offRem();
+      offRoute();
+      clearInterval(tick);
+    };
+  }, []);
+
+  const items = useMemo<ScheduledItem[]>(() => {
+    const out: ScheduledItem[] = [];
+    // Reminders + scheduled actions
+    for (const r of reminders) {
+      if (r.status !== 'pending') continue;
+      out.push({
+        id: `rem-${r.id}`,
+        kind: r.mode === 'scheduled' ? 'scheduled-action' : 'reminder',
+        title: r.body,
+        fireAt: r.fireAt,
+        source: r.mode,
+        raw: r,
+      });
+    }
+    // Inbox items with a fireAt (calendar events, time-pressured items)
+    for (const it of inboxItems) {
+      if (it.fireAt == null) continue;
+      // Reminders already surfaced above — inbox mirrors them as
+      // source='reminders', skip to avoid duplicates.
+      if (it.source === 'reminders') continue;
+      out.push({
+        id: `inbox-${it.id}`,
+        kind: it.source === 'calendar' ? 'event' : 'inbox-task',
+        title: it.title,
+        subtitle: it.subtitle,
+        fireAt: it.fireAt,
+        url: it.url,
+        source: it.source,
+        raw: it,
+      });
+    }
+    // Routines' next-fire — only show enabled ones within 7 days so the
+    // timeline stays anchored to the near future.
+    const horizon = now + 7 * 24 * 60 * 60 * 1000;
+    for (const r of routines) {
+      if (!r.enabled) continue;
+      const next = nextCronFire(r.cron, now);
+      if (next == null || next > horizon) continue;
+      out.push({
+        id: `routine-${r.id}`,
+        kind: 'routine-next',
+        title: r.id.replace(/^briefing-/, ''),
+        subtitle: r.input || undefined,
+        fireAt: next,
+        source: r.skillId,
+        raw: r,
+      });
+    }
+    return out.sort((a, b) => a.fireAt - b.fireAt);
+  }, [inboxItems, reminders, routines, now]);
+
+  const groups = useMemo(() => groupByDay(items, now), [items, now]);
+
+  if (items.length === 0) {
+    return (
+      <div className="dash-cal">
+        <header className="dash-cal__head">
+          <h3>Calendar</h3>
+          <span className="dash-cal__hint">events · reminders · routines</span>
+        </header>
+        <div className="dash-cal__empty">
+          Nothing scheduled. Calendar events show up here once a calendar
+          source routine has run; reminders + routine fires appear
+          automatically.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dash-cal">
+      <header className="dash-cal__head">
+        <h3>Calendar</h3>
+        <span className="dash-cal__hint">
+          events · reminders · routines · click any row for detail
+        </span>
+      </header>
+      <div className="dash-cal__groups">
+        {groups.map((g) => (
+          <section key={g.label} className="dash-cal__group">
+            <div className="dash-cal__group-label">{g.label}</div>
+            <ul className="dash-cal__list">
+              {g.items.map((item) => (
+                <ScheduledItemRow
+                  key={item.id}
+                  item={item}
+                  now={now}
+                  onClick={() => setSelected(item)}
+                />
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+      {selected && (
+        <ScheduledItemDetail
+          item={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+interface ScheduledItem {
+  id: string;
+  kind: 'event' | 'reminder' | 'scheduled-action' | 'inbox-task' | 'routine-next';
+  title: string;
+  subtitle?: string;
+  fireAt: number;
+  url?: string;
+  source?: string;
+  raw: InboxItem | Reminder | RoutineDef;
+}
+
+function ScheduledItemRow({
+  item,
+  now,
+  onClick,
+}: {
+  item: ScheduledItem;
+  now: number;
+  onClick: () => void;
+}) {
+  const diff = item.fireAt - now;
+  const soon = diff < 10 * 60 * 1000 && diff > 0;
+  const past = diff < 0;
+  return (
+    <li>
+      <button
+        className={`dash-cal__row${soon ? ' dash-cal__row--soon' : ''}${past ? ' dash-cal__row--past' : ''}`}
+        onClick={onClick}
+      >
+        <span className="dash-cal__time">{formatClockTime(item.fireAt)}</span>
+        <KindBadge kind={item.kind} />
+        <span className="dash-cal__title">
+          {item.title}
+          {item.subtitle && (
+            <span className="dash-cal__sub"> · {item.subtitle}</span>
+          )}
+        </span>
+        <span className="dash-cal__rel">{formatRel(diff)}</span>
+      </button>
+    </li>
+  );
+}
+
+function KindBadge({ kind }: { kind: ScheduledItem['kind'] }) {
+  const label = KIND_LABEL[kind];
+  return (
+    <span className={`dash-cal__kind dash-cal__kind--${kind}`} title={label}>
+      {label}
+    </span>
+  );
+}
+
+const KIND_LABEL: Record<ScheduledItem['kind'], string> = {
+  event: 'EVENT',
+  reminder: 'REMINDER',
+  'scheduled-action': 'AUTOPILOT',
+  'inbox-task': 'INBOX',
+  'routine-next': 'ROUTINE',
+};
+
+/**
+ * Detail panel — shows the full item + kind-appropriate actions:
+ *   - event: Open meeting URL, Open in source
+ *   - reminder: Fire now, Cancel
+ *   - scheduled-action: Fire now, Cancel
+ *   - inbox-task: Open URL, Snooze
+ *   - routine-next: Run now, Edit, Open output
+ */
+function ScheduledItemDetail({
+  item,
+  onClose,
+}: {
+  item: ScheduledItem;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const meta: Array<{ label: string; value: string }> = [
+    { label: 'When', value: new Date(item.fireAt).toLocaleString() },
+    { label: 'Type', value: KIND_LABEL[item.kind] },
+  ];
+  if (item.source) meta.push({ label: 'Source', value: item.source });
+  if (item.url) meta.push({ label: 'URL', value: item.url });
+
+  return (
+    <div
+      className="project-dialog-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="project-dialog" role="dialog">
+        <header className="project-dialog__head">
+          <div>
+            <h2>{item.title}</h2>
+            <div className="preferences-dialog__path">{KIND_LABEL[item.kind]}</div>
+          </div>
+          <button
+            className="project-dialog__close"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </header>
+        <div className="project-dialog__body">
+          <dl className="dash-cal-detail__meta">
+            {meta.map((m) => (
+              <div key={m.label} className="dash-cal-detail__meta-row">
+                <dt>{m.label}</dt>
+                <dd>{m.value}</dd>
+              </div>
+            ))}
+          </dl>
+          {item.subtitle && (
+            <p className="dash-cal-detail__body">{item.subtitle}</p>
+          )}
+          <ItemActions item={item} onAfter={onClose} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ItemActions({
+  item,
+  onAfter,
+}: {
+  item: ScheduledItem;
+  onAfter: () => void;
+}) {
+  const buttons: Array<{ label: string; onClick: () => void; danger?: boolean }> = [];
+
+  if (item.url) {
+    buttons.push({
+      label: '↗ Open URL',
+      onClick: () => void window.jarvis.openExternal(item.url!),
+    });
+  }
+
+  if (item.kind === 'reminder' || item.kind === 'scheduled-action') {
+    const reminder = item.raw as Reminder;
+    buttons.push({
+      label: 'Fire now',
+      onClick: async () => {
+        await window.jarvis.fireReminderNow(reminder.id);
+        toast({ message: 'Fired' });
+        onAfter();
+      },
+    });
+    buttons.push({
+      label: 'Cancel',
+      danger: true,
+      onClick: async () => {
+        await window.jarvis.cancelReminder(reminder.id);
+        toast({ kind: 'info', message: 'Reminder cancelled' });
+        onAfter();
+      },
+    });
+  }
+
+  if (item.kind === 'routine-next') {
+    const routine = item.raw as RoutineDef;
+    buttons.push({
+      label: 'Run now',
+      onClick: async () => {
+        await window.jarvis.runRoutineNow(routine.id);
+        toast({ message: `Fired · ${routine.id}` });
+        onAfter();
+      },
+    });
+    buttons.push({
+      label: 'Open in Routines',
+      onClick: () => {
+        window.dispatchEvent(
+          new CustomEvent('jarvis:navigate', { detail: { tab: 'routines' } }),
+        );
+        onAfter();
+      },
+    });
+  }
+
+  if (item.kind === 'inbox-task' || item.kind === 'event') {
+    buttons.push({
+      label: 'Open Inbox',
+      onClick: () => {
+        window.dispatchEvent(
+          new CustomEvent('jarvis:navigate', { detail: { tab: 'inbox' } }),
+        );
+        onAfter();
+      },
+    });
+  }
+
+  if (buttons.length === 0) return null;
+  return (
+    <div className="dash-cal-detail__actions">
+      {buttons.map((b) => (
+        <button
+          key={b.label}
+          onClick={b.onClick}
+          className={b.danger ? 'project-dialog__danger' : ''}
+        >
+          {b.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function groupByDay(
+  items: ScheduledItem[],
+  now: number,
+): Array<{ label: string; items: ScheduledItem[] }> {
+  const today = startOfDay(now);
+  const tomorrow = today + 24 * 60 * 60 * 1000;
+  const weekEnd = today + 7 * 24 * 60 * 60 * 1000;
+  const groups: Record<string, ScheduledItem[]> = {};
+  for (const it of items) {
+    let key: string;
+    if (it.fireAt < today) key = 'Past';
+    else if (it.fireAt < tomorrow) key = 'Today';
+    else if (it.fireAt < tomorrow + 24 * 60 * 60 * 1000) key = 'Tomorrow';
+    else if (it.fireAt < weekEnd) key = 'This week';
+    else key = 'Later';
+    if (!groups[key]) groups[key] = [];
+    groups[key]!.push(it);
+  }
+  const order = ['Past', 'Today', 'Tomorrow', 'This week', 'Later'];
+  return order
+    .filter((k) => groups[k])
+    .map((k) => ({ label: k, items: groups[k]! }));
+}
+
+function startOfDay(ms: number): number {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function formatClockTime(ms: number): string {
+  return new Date(ms).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatRel(diffMs: number): string {
+  const abs = Math.abs(diffMs);
+  const m = Math.round(abs / 60_000);
+  const h = Math.round(m / 60);
+  const d = Math.round(h / 24);
+  let s: string;
+  if (m < 1) s = 'now';
+  else if (m < 60) s = `${m}m`;
+  else if (h < 24) s = `${h}h`;
+  else s = `${d}d`;
+  return diffMs < 0 ? `${s} ago` : `in ${s}`;
+}
+
+/**
  * Add-item picker: lists current routines + the special 'inbox' option.
  * Hides items already in the section so the user can't add duplicates.
  */
@@ -563,6 +976,7 @@ function ItemPicker({
   );
 
   const hasInbox = existing.some((it) => it.kind === 'inbox');
+  const hasCalendar = existing.some((it) => it.kind === 'calendar');
   const pinnedRoutineIds = new Set(
     existing
       .filter((it): it is Extract<DashboardItem, { kind: 'routine' }> => it.kind === 'routine')
@@ -579,6 +993,17 @@ function ItemPicker({
         >
           <div className="dash-picker__name">Inbox</div>
           <div className="dash-picker__hint">All current inbox items</div>
+        </button>
+      )}
+      {!hasCalendar && (
+        <button
+          className="dash-picker__row"
+          onClick={() => onPick({ kind: 'calendar' })}
+        >
+          <div className="dash-picker__name">Calendar</div>
+          <div className="dash-picker__hint">
+            Events · reminders · routine fires, time-sorted
+          </div>
         </button>
       )}
       {pickableRoutines.length === 0 ? (
