@@ -3722,31 +3722,43 @@ button:disabled:hover {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding: 48px 24px 24px;
+  /* Tighter top: the lone Edit-layout button used to claim a full row
+     of vertical space. Floating it into the top-right reclaims that
+     space without losing the affordance. */
+  padding: 18px 24px 24px;
+  position: relative;
 }
 
+/* Floating action cluster (top-right of the dashboard pane). Doesn't
+   take a row of its own; tucks above the section grid so the eye lands
+   on content first. z-index keeps it above the section borders. */
 .dash__header {
+  position: absolute;
+  top: 18px;
+  right: 24px;
+  z-index: 2;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  margin-bottom: 12px;
 }
 
 .dash__actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .dash__edit,
 .dash__add-section {
-  background: rgba(4, 7, 11, 0.6);
+  /* Slightly translucent so the floating chip reads as overlay rather
+     than competing with the section title underneath. */
+  background: rgba(4, 7, 11, 0.78);
+  backdrop-filter: blur(4px);
   border: 1px solid var(--border-strong);
-  color: var(--text-dim);
+  color: var(--text-faint);
   font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.12em;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  padding: 5px 12px;
+  padding: 4px 10px;
   border-radius: 2px;
   cursor: pointer;
   transition: color 120ms ease, border-color 120ms ease;
