@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { SkillSummary } from '../../shared/types';
+import { MarkdownDoc } from './MarkdownText';
 import { toast } from './Toaster';
 
 interface Props {
@@ -294,8 +295,10 @@ function SkillDetail({
               }
             }}
           />
+        ) : body ? (
+          <MarkdownDoc showFrontmatter>{body}</MarkdownDoc>
         ) : (
-          <pre className="skill-viewer__body">{body || 'Loading…'}</pre>
+          <div className="briefings__empty">Loading…</div>
         )}
       </article>
     </>

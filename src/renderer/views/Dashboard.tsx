@@ -7,6 +7,7 @@ import type {
   SkillSuggestion,
   TaskSummary,
 } from '../../shared/types';
+import { MarkdownDoc } from './MarkdownText';
 import { formatRelative } from './TaskList';
 import { toast } from './Toaster';
 import { useNow } from './useNow';
@@ -265,7 +266,9 @@ export function Dashboard({ tasks, reminders, onSelectTask, onCancelReminder }: 
               </div>
               <div className="dashboard__suggestion-desc">{s.description}</div>
               {expanded && (
-                <pre className="dashboard__suggestion-body">{s.body}</pre>
+                <div className="dashboard__suggestion-body">
+                  <MarkdownDoc showFrontmatter>{s.body}</MarkdownDoc>
+                </div>
               )}
             </div>
           );

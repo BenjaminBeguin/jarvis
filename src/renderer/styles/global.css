@@ -2828,6 +2828,52 @@ button:disabled:hover {
   font-size: 10px;
 }
 
+/* ----- MarkdownDoc: frontmatter strip + body wrapper -------------------- */
+/* Used by any view that renders a SKILL.md-style doc (frontmatter + body).
+   Body styling cascades from the parent's content container — e.g.
+   .briefings__content for Skills tab and Briefings reader. */
+
+.md-doc {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.md-doc__frontmatter {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+}
+
+.md-doc__frontmatter summary {
+  cursor: pointer;
+  padding: 6px 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  user-select: none;
+}
+
+.md-doc__frontmatter summary:hover {
+  color: var(--accent);
+}
+
+.md-doc__frontmatter pre {
+  margin: 0;
+  padding: 0 12px 10px;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
+.md-doc__body {
+  min-width: 0;
+}
+
 /* ----- Observatory: constellation + slide-in transcript panel ----------- */
 
 .observatory {
@@ -3192,12 +3238,45 @@ button:disabled:hover {
   background: rgba(0, 0, 0, 0.4);
   border: 1px solid var(--border-strong);
   border-radius: 2px;
-  padding: 8px;
+  padding: 8px 10px;
   max-height: 240px;
   overflow: auto;
   margin: 4px 0 0;
-  white-space: pre-wrap;
   color: var(--text);
+  line-height: 1.55;
+}
+
+.dashboard__suggestion-body h1,
+.dashboard__suggestion-body h2,
+.dashboard__suggestion-body h3 {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 8px 0 4px;
+}
+.dashboard__suggestion-body p {
+  margin: 4px 0;
+}
+.dashboard__suggestion-body ul,
+.dashboard__suggestion-body ol {
+  padding-left: 18px;
+  margin: 4px 0;
+}
+.dashboard__suggestion-body code {
+  background: rgba(0, 212, 255, 0.06);
+  padding: 0 4px;
+  border-radius: 2px;
+  color: var(--accent);
+}
+.dashboard__suggestion-body pre {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  border-radius: 2px;
+  overflow-x: auto;
+  font-size: 10px;
 }
 
 /* List view inside the observatory */
