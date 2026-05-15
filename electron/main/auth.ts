@@ -3,11 +3,16 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { homedir } from 'node:os';
 
-import type { AuthMode } from '@shared/types';
+import {
+  DEFAULT_NOTIFICATION_PREFS,
+  type AuthMode,
+  type NotificationPrefs,
+} from '@shared/types';
 
 interface PersistedConfig {
   authMode?: AuthMode;
   disabledModules?: string[];
+  notificationPrefs?: Partial<NotificationPrefs>;
 }
 
 const CONFIG_PATH = join(homedir(), '.jarvis', 'config.json');
@@ -89,4 +94,24 @@ export function loadDisabledModules(): string[] {
 
 export function saveDisabledModules(ids: string[]): void {
   writeConfig({ ...readConfig(), disabledModules: ids });
+}
+
+export function loadNotificationPrefs(): NotificationPrefs {
+  const cfg = readConfig();
+  const stored = cfg.notificationPrefs ?? {};
+  // Validate stored values — drop typos / outdated enums so a corrupted
+  // config falls back to the default rather than yielding undefined.
+  const onAsk: NotificationPrefs['onAsk'] =
+    stored.onAsk === 'silent' || stored.onAsk === 'toast' || stored.onAsk === 'open'
+      ? stored.onAsk
+      : DEFAULT_NOTIFICATION_PREFS.onAsk;
+  const onLaunch: NotificationPrefs['onLaunch'] =
+    stored.onLaunch === 'silent' || stored.onLaunch === 'toast'
+      ? stored.onLaunch
+      : DEFAULT_NOTIFICATION_PREFS.onLaunch;
+  return { onAsk, onLaunch };
+}
+
+export function saveNotificationPrefs(prefs: NotificationPrefs): void {
+  writeConfig({ ...readConfig(), notificationPrefs: prefs });
 }

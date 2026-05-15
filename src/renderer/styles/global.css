@@ -1683,6 +1683,84 @@ button:disabled:hover {
   letter-spacing: 0.12em;
 }
 
+/* Notifications panel — two radio-card rows (one per pref). */
+.notif-choice {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.notif-choice:first-of-type {
+  margin-top: 4px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.notif-choice__head {
+  margin-bottom: 10px;
+}
+
+.notif-choice__label {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.notif-choice__hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.notif-choice__opts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.notif-choice__opt {
+  text-align: left;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--text);
+  font-family: var(--mono);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.notif-choice__opt:hover {
+  border-color: var(--accent);
+}
+
+.notif-choice__opt--active {
+  border-color: var(--accent);
+  background: rgba(0, 212, 255, 0.08);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.notif-choice__opt-label {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.notif-choice__opt-blurb {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
 .settings__kv {
   display: grid;
   grid-template-columns: 90px 1fr;

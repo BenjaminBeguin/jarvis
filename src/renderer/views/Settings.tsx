@@ -1,11 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { AppStatus, AuthMode, HttpApiStatus, ProjectDef } from '../../shared/types';
+import type {
+  AppStatus,
+  AuthMode,
+  HttpApiStatus,
+  NotificationPrefs,
+  ProjectDef,
+} from '../../shared/types';
 import { Integrations } from './integrations/Integrations';
 import { ModulesPage } from './ModulesPage';
 import { toast } from './Toaster';
 
-type Section = 'general' | 'preferences' | 'inbox' | 'modules' | 'integrations' | 'api';
+type Section =
+  | 'general'
+  | 'preferences'
+  | 'notifications'
+  | 'inbox'
+  | 'modules'
+  | 'integrations'
+  | 'api';
 
 interface Props {
   status: AppStatus;
@@ -40,6 +53,9 @@ export function Settings({ status, onOpenModulePage, initialSection }: Props) {
         <SectionTab name="preferences" active={section} onClick={setSection}>
           Preferences
         </SectionTab>
+        <SectionTab name="notifications" active={section} onClick={setSection}>
+          Notifications
+        </SectionTab>
         <SectionTab name="inbox" active={section} onClick={setSection}>
           Inbox
         </SectionTab>
@@ -56,6 +72,7 @@ export function Settings({ status, onOpenModulePage, initialSection }: Props) {
       <main className="settings__panel">
         {section === 'general' && <GeneralPanel status={status} />}
         {section === 'preferences' && <PreferencesPanel />}
+        {section === 'notifications' && <NotificationsPanel />}
         {section === 'inbox' && <InboxPanel />}
         {section === 'modules' && <ModulesPage onOpenPage={onOpenModulePage} />}
         {section === 'integrations' && <Integrations />}
@@ -296,6 +313,151 @@ function PreferencesPanel() {
         </button>
       </div>
       {error && <div className="project-dialog__error">{error}</div>}
+    </div>
+  );
+}
+
+/**
+ * Two knobs:
+ *   - onAsk: what happens when the agent transitions to awaiting input
+ *     on a user-initiated task (palette / voice). 'open' = auto-pop the
+ *     Observatory (used to be the only behavior; some users find it
+ *     too aggressive). 'toast' = system notification only. 'silent' =
+ *     nothing — the task's status flips on the constellation, but no
+ *     interruption.
+ *   - onLaunch: when a /command actually starts. 'toast' surfaces it so
+ *     /review-prs doesn't disappear into the background; 'silent' if
+ *     you find the HUD overlay enough.
+ */
+function NotificationsPanel() {
+  const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.jarvis.readNotificationPrefs().then((p) => {
+      if (!cancelled) setPrefs(p);
+    });
+    const off = window.jarvis.onNotificationPrefsChanged(setPrefs);
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
+
+  if (!prefs) {
+    return <div className="settings__section">Loading…</div>;
+  }
+
+  const update = async (patch: Partial<NotificationPrefs>) => {
+    const next = { ...prefs, ...patch };
+    setPrefs(next); // optimistic
+    try {
+      await window.jarvis.writeNotificationPrefs(next);
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
+  return (
+    <div className="settings__section">
+      <h3>Notifications</h3>
+      <p className="settings__hint">
+        How loud Jarvis is when an agent needs you or when a command
+        starts. Affects palette / voice tasks only — routine fires
+        always go through the quieter "toast" path.
+      </p>
+
+      <NotifChoice
+        label="When the agent asks me something"
+        hint="Mid-task, the agent might need a confirmation, a missing recipient, etc."
+        value={prefs.onAsk}
+        onChange={(v) => void update({ onAsk: v })}
+        options={[
+          {
+            value: 'silent',
+            label: 'Silent',
+            blurb: 'Status flips on the constellation. No popup, no sound.',
+          },
+          {
+            value: 'toast',
+            label: 'Toast',
+            blurb:
+              'macOS notification — click to jump into the conversation.',
+          },
+          {
+            value: 'open',
+            label: 'Open conversation',
+            blurb:
+              'Auto-foreground the Observatory and select the task. Most invasive.',
+          },
+        ]}
+      />
+
+      <NotifChoice
+        label="When a command launches a task"
+        hint="So /review-prs and friends don't quietly start in the background."
+        value={prefs.onLaunch}
+        onChange={(v) => void update({ onLaunch: v })}
+        options={[
+          {
+            value: 'silent',
+            label: 'Silent',
+            blurb: 'The HUD overlay still streams; no separate signal.',
+          },
+          {
+            value: 'toast',
+            label: 'Toast',
+            blurb:
+              'Silent macOS notification — gives you a glanceable "started" pill.',
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
+interface NotifChoiceOption<T extends string> {
+  value: T;
+  label: string;
+  blurb: string;
+}
+
+function NotifChoice<T extends string>({
+  label,
+  hint,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  hint: string;
+  value: T;
+  onChange: (next: T) => void;
+  options: NotifChoiceOption<T>[];
+}) {
+  return (
+    <div className="notif-choice">
+      <div className="notif-choice__head">
+        <div className="notif-choice__label">{label}</div>
+        <div className="notif-choice__hint">{hint}</div>
+      </div>
+      <div className="notif-choice__opts">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            className={`notif-choice__opt${
+              opt.value === value ? ' notif-choice__opt--active' : ''
+            }`}
+            onClick={() => onChange(opt.value)}
+          >
+            <div className="notif-choice__opt-label">{opt.label}</div>
+            <div className="notif-choice__opt-blurb">{opt.blurb}</div>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

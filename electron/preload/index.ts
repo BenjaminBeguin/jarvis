@@ -16,6 +16,7 @@ import type {
   McpServerInput,
   McpServerSummary,
   ModuleSummary,
+  NotificationPrefs,
   ProjectDef,
   ProjectInput,
   ProjectMemoryFile,
@@ -255,6 +256,14 @@ const api = {
     ipcRenderer.invoke(IpcChannels.revealPreferences),
   onPreferencesChanged: (listener: Listener<string>): Unsubscribe =>
     subscribe(IpcChannels.preferencesChanged, listener),
+
+  readNotificationPrefs: (): Promise<NotificationPrefs> =>
+    ipcRenderer.invoke(IpcChannels.readNotificationPrefs),
+  writeNotificationPrefs: (prefs: NotificationPrefs): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.writeNotificationPrefs, prefs),
+  onNotificationPrefsChanged: (
+    listener: Listener<NotificationPrefs>,
+  ): Unsubscribe => subscribe(IpcChannels.notificationPrefsChanged, listener),
 
   listInbox: (): Promise<InboxItem[]> =>
     ipcRenderer.invoke(IpcChannels.listInbox),

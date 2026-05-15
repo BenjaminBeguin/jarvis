@@ -2,6 +2,34 @@ export type TaskStatus = 'queued' | 'running' | 'completed' | 'aborted' | 'error
 
 export type TaskOrigin = 'palette' | 'voice' | 'routine' | 'api' | 'external';
 
+/**
+ * How Jarvis grabs your attention when a user-initiated task asks for
+ * input. Set per-user in Settings → Notifications.
+ *   - 'silent' = do nothing
+ *   - 'toast'  = macOS notification + Jarvis in-app toast
+ *   - 'open'   = also auto-foreground the Observatory + select the task
+ */
+export type AskAttention = 'silent' | 'toast' | 'open';
+
+/**
+ * How Jarvis signals that a palette/voice command actually started a
+ * task. Useful for /review-prs etc. where the HUD overlay is easy to
+ * miss. Defaults to 'toast' so you see something landed.
+ */
+export type LaunchAttention = 'silent' | 'toast';
+
+export interface NotificationPrefs {
+  /** What happens when the agent transitions to awaiting input. */
+  onAsk: AskAttention;
+  /** What happens when a palette/voice command launches a task. */
+  onLaunch: LaunchAttention;
+}
+
+export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  onAsk: 'toast',
+  onLaunch: 'toast',
+};
+
 export interface TaskSummary {
   id: string;
   skillId: string | null;

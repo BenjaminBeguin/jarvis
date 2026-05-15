@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { IpcChannels } from '@shared/ipc';
 import type { AppStatus, TaskEvent, TaskSummary } from '@shared/types';
 
-import { detectClaudeBinary, loadAuthMode } from './auth.js';
+import { detectClaudeBinary, loadAuthMode, loadNotificationPrefs } from './auth.js';
 import { BriefingsStore } from './briefings.js';
 import { closeDatabase, initDatabase, listRecentTasks } from './db.js';
 import { startHttpServer, type HttpServerHandle } from './http-server.js';
@@ -279,6 +279,10 @@ function pushTaskToHud(taskId: string): void {
 /** Track previous awaitingInput per task so we only ping on false→true. */
 const awaitingFlipped = new Map<string, boolean>();
 
+/** Tasks we've already announced as "started" — keeps the launch toast
+ * single-fire across the many status events a task emits. */
+const launchAnnounced = new Set<string>();
+
 /**
  * Cost guardrail: warn the user when a task crosses a spending threshold.
  * Single-fire per task to avoid notification spam. Hard-coded for now;
@@ -353,13 +357,10 @@ function wireRunnerEvents(): void {
       const was = awaitingFlipped.get(summary.id) ?? false;
       const now = !!summary.awaitingInput;
       if (!was && now) {
-        // User-initiated tasks (palette / voice) auto-pop the
-        // Observatory the moment the agent asks something — same flow
-        // as a normal chat conversation. Routine/api-origin tasks just
-        // get a clickable notification; we don't yank focus when the
+        // User picks how loud Jarvis is when the agent asks something
+        // (Settings → Notifications). Routine / api tasks always go
+        // through 'toast' regardless — we don't yank focus when the
         // user didn't start the conversation.
-        const popImmediately =
-          summary.origin === 'palette' || summary.origin === 'voice';
         const focusTaskInObservatory = () => {
           const win = openObservatory();
           win.focus();
@@ -371,30 +372,79 @@ function wireRunnerEvents(): void {
             send();
           }
         };
-        if (popImmediately) {
+        const isUserInitiated =
+          summary.origin === 'palette' || summary.origin === 'voice';
+        const askLevel = isUserInitiated
+          ? loadNotificationPrefs().onAsk
+          : 'toast';
+        if (askLevel === 'open') {
           focusTaskInObservatory();
         }
-        try {
-          const preview =
-            summary.title.length > 80
-              ? `${summary.title.slice(0, 80)}…`
-              : summary.title;
-          const notif = new Notification({
-            title: 'Jarvis · ready for your reply',
-            body: preview,
-            silent: false,
-          });
-          notif.on('click', focusTaskInObservatory);
-          notif.show();
-        } catch {
-          // Notifications can fail pre-permission; not fatal — the
-          // auto-pop above already surfaced the conversation.
+        if (askLevel !== 'silent') {
+          try {
+            const preview =
+              summary.title.length > 80
+                ? `${summary.title.slice(0, 80)}…`
+                : summary.title;
+            const notif = new Notification({
+              title: 'Jarvis · ready for your reply',
+              body: preview,
+              silent: false,
+            });
+            notif.on('click', focusTaskInObservatory);
+            notif.show();
+          } catch {
+            // Notifications can fail pre-permission; not fatal.
+          }
         }
       }
       awaitingFlipped.set(summary.id, now);
       if (summary.status === 'completed' || summary.status === 'errored') {
         awaitingFlipped.delete(summary.id);
       }
+    }
+
+    // Launched-task signal: fire once when a user-initiated task
+    // transitions queued → running, so commands like /review-prs don't
+    // disappear into the background. Respects the onLaunch pref so
+    // users who don't want a chirp can silence it.
+    if (
+      (summary.origin === 'palette' || summary.origin === 'voice') &&
+      summary.status === 'running' &&
+      !launchAnnounced.has(summary.id)
+    ) {
+      launchAnnounced.add(summary.id);
+      const launchLevel = loadNotificationPrefs().onLaunch;
+      if (launchLevel === 'toast') {
+        try {
+          const preview =
+            summary.title.length > 80
+              ? `${summary.title.slice(0, 80)}…`
+              : summary.title;
+          const notif = new Notification({
+            title: 'Jarvis · task started',
+            body: preview,
+            silent: true,
+          });
+          notif.on('click', () => {
+            const win = openObservatory();
+            win.focus();
+            const send = () =>
+              win.webContents.send(IpcChannels.observatoryFocusTask, summary.id);
+            if (win.webContents.isLoading()) {
+              win.webContents.once('did-finish-load', send);
+            } else {
+              send();
+            }
+          });
+          notif.show();
+        } catch {
+          // Notifications can fail pre-permission; not fatal.
+        }
+      }
+    }
+    if (summary.status === 'completed' || summary.status === 'errored' || summary.status === 'aborted') {
+      launchAnnounced.delete(summary.id);
     }
 
     if (
