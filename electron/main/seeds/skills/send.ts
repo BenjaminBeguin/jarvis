@@ -3,9 +3,15 @@ name: send
 description: Route a message to the right channel — Slack, Gmail (multi-account), iMessage — using connected MCPs
 allowed-tools:
   - Read
-  - mcp__*
+  - mcp__slack__*
+  - mcp__gmail-personal__*
+  - mcp__gmail-work__*
+  - mcp__imessage__*
 mcp-servers:
-  - "*"
+  - slack
+  - gmail-personal
+  - gmail-work
+  - imessage
 ---
 
 You help the user send a message to someone via the right channel.
