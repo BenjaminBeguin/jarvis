@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { RoutineDef, SkillSummary } from '../../shared/types';
+import type {
+  DashboardConfig,
+  DashboardItem,
+  RoutineDef,
+  SkillSummary,
+} from '../../shared/types';
 import { toast } from './Toaster';
 
 interface DraftRoutine {
@@ -59,11 +64,6 @@ const EMPTY_DRAFT: DraftRoutine = {
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-/**
- * Best-effort English rendering for common cron shapes. Falls back to the raw
- * expression when the pattern isn't one we explicitly recognize — better to
- * be honest than to invent a wrong description.
- */
 function humanCron(expr: string): string {
   const parts = expr.trim().split(/\s+/);
   if (parts.length !== 5) return expr;
@@ -75,8 +75,6 @@ function humanCron(expr: string): string {
   if (m === '0' && h.startsWith('*/') && dom === '*' && mon === '*' && dow === '*') {
     return `every ${h.slice(2)}h on the hour`;
   }
-
-  // Comma-separated hours like "9-17" or "9,12,17"
   const hourRangeOnHour =
     m === '0' &&
     /^[\d,-]+$/.test(h) &&
@@ -84,7 +82,6 @@ function humanCron(expr: string): string {
     mon === '*';
   if (hourRangeOnHour && dow === '*') return `every hour from ${h}`;
   if (hourRangeOnHour && dow === '1-5') return `every hour ${h} on weekdays`;
-
   if (/^\d+$/.test(m) && /^\d+$/.test(h) && dom === '*' && mon === '*') {
     const time = `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
     if (dow === '*') return `${time} daily`;
@@ -95,7 +92,6 @@ function humanCron(expr: string): string {
       if (d >= 0 && d <= 6) return `${time} on ${DAY_NAMES[d]}`;
     }
   }
-
   return expr;
 }
 
@@ -104,15 +100,19 @@ function formatTimestamp(ts: number | null): string {
   return new Date(ts).toLocaleString();
 }
 
-interface Props {
-  // Allows the parent shell to pass status if we ever need it.
-}
-
-export function Routines(_: Props = {}) {
+/**
+ * Rail-then-main layout (same shape as Briefings + Skills): all routines
+ * listed on the left grouped by purpose, selected routine renders detail
+ * on the right with schedule, action buttons, output link, and an
+ * "Add to dashboard" picker for one-click pinning.
+ */
+export function Routines() {
   const [routines, setRoutines] = useState<RoutineDef[]>([]);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [draft, setDraft] = useState<DraftRoutine | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [presetsOpen, setPresetsOpen] = useState(false);
 
   useEffect(() => {
     void window.jarvis.listRoutines().then(setRoutines);
@@ -125,18 +125,35 @@ export function Routines(_: Props = {}) {
     };
   }, []);
 
+  // Auto-pick a routine when the list loads if nothing's selected.
+  useEffect(() => {
+    if (!activeId && routines.length > 0) {
+      setActiveId(routines[0]!.id);
+    }
+    if (activeId && !routines.some((r) => r.id === activeId)) {
+      setActiveId(routines[0]?.id ?? null);
+    }
+  }, [routines, activeId]);
+
   const skillsById = useMemo(
     () => new Map(skills.map((s) => [s.id, s])),
     [skills],
   );
 
+  const active = useMemo(
+    () => routines.find((r) => r.id === activeId) ?? null,
+    [routines, activeId],
+  );
+
   const startBlank = () => {
     setError(null);
+    setPresetsOpen(false);
     setDraft({ ...EMPTY_DRAFT, skillId: skills[0]?.id ?? '' });
   };
 
   const startFromPreset = (preset: Preset) => {
     setError(null);
+    setPresetsOpen(false);
     setDraft({
       ...EMPTY_DRAFT,
       skillId: skills[0]?.id ?? '',
@@ -163,7 +180,8 @@ export function Routines(_: Props = {}) {
       return;
     }
     try {
-      await window.jarvis.saveRoutine(draft);
+      const saved = await window.jarvis.saveRoutine(draft);
+      setActiveId(saved.id);
       setDraft(null);
       setError(null);
       toast({ message: 'Routine saved' });
@@ -172,14 +190,22 @@ export function Routines(_: Props = {}) {
     }
   };
 
-  const remove = (id: string) => {
-    void window.jarvis.deleteRoutine(id);
+  const remove = (r: RoutineDef) => {
+    if (
+      !confirm(
+        `Delete routine "${skillsById.get(r.skillId)?.name ?? r.id}"? The skill stays; only the schedule is removed.`,
+      )
+    )
+      return;
+    void window.jarvis.deleteRoutine(r.id);
     toast({ kind: 'info', message: 'Routine deleted' });
   };
-  const runNow = (id: string) => {
-    void window.jarvis.runRoutineNow(id);
+
+  const runNow = (r: RoutineDef) => {
+    void window.jarvis.runRoutineNow(r.id);
     toast({ message: 'Routine running…' });
   };
+
   const toggle = async (r: RoutineDef) => {
     try {
       await window.jarvis.saveRoutine({ ...r, enabled: !r.enabled });
@@ -189,31 +215,38 @@ export function Routines(_: Props = {}) {
   };
 
   return (
-    <section className="routines">
-      <header className="routines__header">
-        <div>
-          <h2>ROUTINES</h2>
-          <p>Skills on a schedule · cron in local time</p>
-        </div>
-        <button onClick={startBlank} disabled={skills.length === 0}>
-          + NEW ROUTINE
-        </button>
-      </header>
+    <section className="briefings">
+      <aside className="briefings__rail">
+        <h2 className="briefings__rail-head">ROUTINES</h2>
+        <p className="briefings__rail-hint">
+          Skills on a schedule · cron in local time. Click a routine to
+          see details + actions on the right.
+        </p>
 
-      {skills.length === 0 && (
-        <div className="routines__notice">
-          No skills loaded. Drop a SKILL.md in <code>~/.jarvis/skills/</code> first.
+        <div className="routines__rail-actions">
+          <button
+            className="briefings__generate"
+            onClick={startBlank}
+            disabled={skills.length === 0}
+          >
+            + New routine
+          </button>
+          <button
+            className="routines__preset-toggle"
+            onClick={() => setPresetsOpen((v) => !v)}
+            disabled={skills.length === 0}
+            title="Recommended presets"
+          >
+            {presetsOpen ? '▾ Presets' : '▸ Presets'}
+          </button>
         </div>
-      )}
 
-      {skills.length > 0 && (
-        <>
-          <SectionLabel>Recommended</SectionLabel>
-          <div className="routines__preset-row">
+        {presetsOpen && (
+          <div className="routines__preset-list">
             {PRESETS.map((p) => (
               <button
                 key={p.id}
-                className="bracketed routines__preset"
+                className="routines__preset-row"
                 onClick={() => startFromPreset(p)}
               >
                 <div className="routines__preset-name">{p.name}</div>
@@ -222,73 +255,78 @@ export function Routines(_: Props = {}) {
               </button>
             ))}
           </div>
-        </>
-      )}
+        )}
 
-      {routines.length === 0 && skills.length > 0 && !draft && (
-        <>
-          <SectionLabel>Active</SectionLabel>
-          <div className="routines__notice routines__notice--empty">
-            No active routines. Three ways to add one:
-            <ul>
-              <li>
-                Pick a <strong>recommended preset</strong> above for a quick
-                free-text recurring task.
-              </li>
-              <li>
-                Open the{' '}
-                <button
-                  className="routines__inline-link"
-                  onClick={() =>
-                    window.dispatchEvent(
-                      new CustomEvent('jarvis:navigate', {
-                        detail: { tab: 'briefings' },
-                      }),
-                    )
-                  }
-                >
-                  Briefings tab
-                </button>{' '}
-                and click <strong>Enable schedule</strong> on a kind (daily
-                recap, weekly retro, today's focus) — that creates a routine
-                here automatically.
-              </li>
-              <li>
-                Want an inbox source on a schedule (Slack / Linear /
-                calendar)? See <code>docs/scenarios.md</code> — same pattern,
-                you author a skill and add a routine.
-              </li>
-              <li>
-                Or hit <strong>+ New routine</strong> for total control.
-              </li>
-            </ul>
+        {skills.length === 0 && (
+          <div className="briefings__empty" style={{ marginTop: 12 }}>
+            No skills loaded. Drop a SKILL.md in{' '}
+            <code>~/.jarvis/skills/</code> first.
           </div>
-        </>
-      )}
+        )}
 
-      {groupRoutinesByPurpose(routines).map(({ purpose, label, items }) => (
-        <div key={purpose} className="routines__group">
-          <SectionLabel>
-            {label} · {items.length}
-          </SectionLabel>
-          <div className="routines__grid">
+        {routines.length === 0 && skills.length > 0 && (
+          <div className="briefings__empty" style={{ marginTop: 12 }}>
+            No routines yet. Open <strong>Presets</strong> above or click{' '}
+            <strong>+ New routine</strong>.
+          </div>
+        )}
+
+        {groupRoutinesByPurpose(routines).map(({ purpose, label, items }) => (
+          <Fragment key={purpose}>
+            <div className="routines__rail-section">
+              {label} · {items.length}
+            </div>
             {items.map((r) => {
               const skill = skillsById.get(r.skillId);
+              const isActive = r.id === activeId;
               return (
-                <RoutineCard
+                <button
                   key={r.id}
-                  routine={r}
-                  skill={skill}
-                  onEdit={() => edit(r)}
-                  onRemove={() => remove(r.id)}
-                  onRunNow={() => runNow(r.id)}
-                  onToggle={() => void toggle(r)}
-                />
+                  className={`briefings__kind${isActive ? ' briefings__kind--active' : ''}${r.enabled ? '' : ' routines__rail-card--off'}`}
+                  onClick={() => setActiveId(r.id)}
+                >
+                  <div className="briefings__kind-label">
+                    {r.enabled && (
+                      <span
+                        className="briefings__kind-on-dot"
+                        title="Enabled"
+                      />
+                    )}
+                    {skill?.name ?? r.skillId}
+                  </div>
+                  <div className="briefings__kind-desc">
+                    {r.input || <em>no input</em>}
+                  </div>
+                  <div className="briefings__kind-schedule">
+                    {humanCron(r.cron)}
+                    {!r.enabled && ' · disabled'}
+                  </div>
+                </button>
               );
             })}
+          </Fragment>
+        ))}
+      </aside>
+
+      <main className="briefings__main">
+        {!active && (
+          <div className="briefings__placeholder">
+            {routines.length === 0
+              ? 'No routines yet. Create one on the left.'
+              : 'Pick a routine on the left.'}
           </div>
-        </div>
-      ))}
+        )}
+        {active && (
+          <RoutineDetail
+            routine={active}
+            skill={skillsById.get(active.skillId)}
+            onEdit={() => edit(active)}
+            onRemove={() => remove(active)}
+            onRunNow={() => runNow(active)}
+            onToggle={() => void toggle(active)}
+          />
+        )}
+      </main>
 
       {draft && (
         <RoutineEditor
@@ -307,28 +345,39 @@ export function Routines(_: Props = {}) {
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <div className="routines__section-label">{children}</div>;
-}
-
-interface CardProps {
+function RoutineDetail({
+  routine,
+  skill,
+  onEdit,
+  onRemove,
+  onRunNow,
+  onToggle,
+}: {
   routine: RoutineDef;
   skill: SkillSummary | undefined;
   onEdit: () => void;
   onRemove: () => void;
   onRunNow: () => void;
   onToggle: () => void;
-}
-
-function RoutineCard({ routine, skill, onEdit, onRemove, onRunNow, onToggle }: CardProps) {
+}) {
   const purpose = derivePurpose(routine);
+
   return (
-    <article className={`bracketed routine-card${routine.enabled ? '' : ' routine-card--off'}`}>
-      <div className="routine-card__head">
-        <div className="routine-card__name">
-          {skill ? (
+    <>
+      <header className="briefings__main-head">
+        <div>
+          <h3 className="briefings__main-title">
+            {skill?.name ?? (
+              <span style={{ color: 'var(--bad)' }}>
+                missing: {routine.skillId}
+              </span>
+            )}
+          </h3>
+          <div className="briefings__main-hint">
+            <code>{routine.id}</code>
+            {' · skill '}
             <button
-              className="routine-card__name-link"
+              className="briefings__schedule-link"
               onClick={() =>
                 window.dispatchEvent(
                   new CustomEvent('jarvis:navigate', {
@@ -336,89 +385,261 @@ function RoutineCard({ routine, skill, onEdit, onRemove, onRunNow, onToggle }: C
                   }),
                 )
               }
-              title={`Open ${routine.skillId} in the Skills tab`}
             >
-              {skill.name}
+              {routine.skillId}
             </button>
-          ) : (
-            <span style={{ color: 'var(--bad)' }}>missing: {routine.skillId}</span>
-          )}
+          </div>
         </div>
-        <label className="toggle" title={routine.enabled ? 'Disable' : 'Enable'}>
-          <input type="checkbox" checked={routine.enabled} onChange={onToggle} />
+        <label
+          className="toggle"
+          title={routine.enabled ? 'Disable' : 'Enable'}
+        >
+          <input
+            type="checkbox"
+            checked={routine.enabled}
+            onChange={onToggle}
+          />
           {routine.enabled ? 'on' : 'off'}
         </label>
+      </header>
+
+      <div className="briefings__schedule">
+        <div className="briefings__schedule-status">
+          <span
+            className={`briefings__schedule-dot${routine.enabled ? ' briefings__schedule-dot--on' : ' briefings__schedule-dot--off'}`}
+          />
+          <span className="briefings__schedule-label">
+            {humanCron(routine.cron)}
+          </span>
+          <code
+            className="briefings__schedule-cron"
+            title="Raw cron expression"
+          >
+            {routine.cron}
+          </code>
+          <span className="briefings__schedule-hint">
+            {routine.lastRunAt
+              ? `last run ${formatTimestamp(routine.lastRunAt)}`
+              : 'never run'}
+            {routine.lastTaskId && (
+              <>
+                {' · '}
+                <button
+                  className="briefings__schedule-link"
+                  onClick={() =>
+                    void window.jarvis.openObservatory(routine.lastTaskId!)
+                  }
+                  title="Open the last run's transcript"
+                >
+                  view output →
+                </button>
+              </>
+            )}
+          </span>
+        </div>
+        <div className="briefings__schedule-actions">
+          <button onClick={onRunNow}>Run now</button>
+          <button onClick={onEdit}>Edit</button>
+          <AddToDashboardButton routineId={routine.id} />
+          <button
+            className="briefings__schedule-danger"
+            onClick={onRemove}
+          >
+            Delete
+          </button>
+        </div>
       </div>
 
-      {purpose && (
-        <button
-          className={`routine-card__purpose routine-card__purpose--${purpose.kind}`}
-          onClick={() => {
-            window.dispatchEvent(
-              new CustomEvent('jarvis:navigate', {
-                detail: purpose.tab ? { tab: purpose.tab } : null,
-              }),
-            );
-          }}
-          title={`Jump to ${purpose.label} in the ${purpose.tab ?? 'app'} tab`}
-        >
-          <span className="routine-card__purpose-dot" />
-          {purpose.label}
-        </button>
-      )}
+      <div className="routine-detail">
+        {purpose && (
+          <button
+            className={`routine-card__purpose routine-card__purpose--${purpose.kind}`}
+            onClick={() => {
+              window.dispatchEvent(
+                new CustomEvent('jarvis:navigate', {
+                  detail: purpose.tab ? { tab: purpose.tab } : null,
+                }),
+              );
+            }}
+            title={`Jump to ${purpose.label} in the ${purpose.tab ?? 'app'} tab`}
+          >
+            <span className="routine-card__purpose-dot" />
+            {purpose.label}
+          </button>
+        )}
 
-      <div className="routine-card__cron">{humanCron(routine.cron)}</div>
-      <div className="routine-card__cron-raw">{routine.cron}</div>
+        {routine.condition && (
+          <div className="routine-detail__condition">
+            <div className="routine-detail__field-label">Watch condition</div>
+            <code>{routine.condition}</code>
+            <div className="routine-detail__hint">
+              Fires only when this shell command exits 0 AND produces non-empty stdout.
+            </div>
+          </div>
+        )}
 
-      {routine.condition && (
-        <div className="routine-card__condition" title="Watch condition — fires only when this shell command produces non-empty stdout">
-          watch · <code>{routine.condition}</code>
-        </div>
-      )}
+        {routine.input && (
+          <div className="routine-detail__input">
+            <div className="routine-detail__field-label">Input prompt</div>
+            <blockquote>{routine.input}</blockquote>
+          </div>
+        )}
 
-      {routine.input && (
-        <div className="routine-card__input">“{routine.input}”</div>
-      )}
-
-      <ToolChips skill={skill} />
-
-      <div className="routine-card__last">
-        last run · {formatTimestamp(routine.lastRunAt)}
-        {routine.lastTaskId && (
-          <>
-            {' · '}
-            <button
-              className="routine-card__view-run"
-              onClick={() => {
-                void window.jarvis.openObservatory(routine.lastTaskId!);
-              }}
-              title={`Open the transcript of the last run (task ${routine.lastTaskId})`}
-            >
-              view output →
-            </button>
-          </>
+        {skill && (
+          <div className="routine-detail__tools">
+            <div className="routine-detail__field-label">Tool access</div>
+            <ToolChips skill={skill} />
+          </div>
         )}
       </div>
-
-      <div className="routine-card__actions">
-        <button onClick={onRunNow}>Run now</button>
-        <button onClick={onEdit}>Edit</button>
-        <button
-          onClick={onRemove}
-          style={{ borderColor: 'rgba(255,85,119,0.35)', color: 'var(--bad)' }}
-        >
-          Delete
-        </button>
-      </div>
-    </article>
+    </>
   );
 }
 
 /**
- * Tag a routine with what it actually drives, so the user understands
- * the wiring at a glance. Matches by id prefix / skillId pattern —
- * stable across renames because the matching keys are stable.
+ * "Add to dashboard" affordance — opens a small popover listing the
+ * user's dashboard sections. Disables sections this routine is already
+ * in; lets the user create a brand-new section with this routine
+ * pre-pinned for one-click setup.
  */
+function AddToDashboardButton({ routineId }: { routineId: string }) {
+  const [config, setConfig] = useState<DashboardConfig | null>(null);
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    void window.jarvis.readDashboard().then(setConfig);
+    return window.jarvis.onDashboardChanged(setConfig);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+        setCreating(false);
+      }
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  if (!config) return null;
+
+  const isPinnedIn = (sectionId: string) =>
+    config.sections
+      .find((s) => s.id === sectionId)
+      ?.items.some(
+        (it) => it.kind === 'routine' && it.routineId === routineId,
+      ) ?? false;
+
+  const addToExisting = async (sectionId: string) => {
+    if (isPinnedIn(sectionId)) return;
+    const item: DashboardItem = { kind: 'routine', routineId };
+    const next: DashboardConfig = {
+      sections: config.sections.map((s) =>
+        s.id === sectionId ? { ...s, items: [...s.items, item] } : s,
+      ),
+    };
+    await window.jarvis.writeDashboard(next);
+    toast({
+      message: `Pinned to "${config.sections.find((s) => s.id === sectionId)!.title}"`,
+    });
+    setOpen(false);
+  };
+
+  const createSectionWith = async () => {
+    const title = newName.trim() || 'Untitled';
+    const id =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID().slice(0, 8)
+        : Math.random().toString(36).slice(2, 10);
+    const next: DashboardConfig = {
+      sections: [
+        ...config.sections,
+        {
+          id,
+          title,
+          items: [{ kind: 'routine', routineId }],
+        },
+      ],
+    };
+    await window.jarvis.writeDashboard(next);
+    toast({ message: `Created "${title}" with this routine` });
+    setOpen(false);
+    setCreating(false);
+    setNewName('');
+  };
+
+  return (
+    <div className="add-to-dash" ref={wrapperRef}>
+      <button
+        className="briefings__schedule-link"
+        onClick={() => setOpen((v) => !v)}
+        title="Pin this routine to a Dashboard section"
+      >
+        + Add to dashboard
+      </button>
+      {open && (
+        <div className="add-to-dash__menu">
+          {config.sections.length === 0 && !creating && (
+            <div className="add-to-dash__empty">
+              No sections yet. Create the first one below.
+            </div>
+          )}
+          {config.sections.map((s) => {
+            const already = isPinnedIn(s.id);
+            return (
+              <button
+                key={s.id}
+                className={`add-to-dash__row${already ? ' add-to-dash__row--done' : ''}`}
+                onClick={() => void addToExisting(s.id)}
+                disabled={already}
+                title={already ? 'Already pinned here' : 'Add to this section'}
+              >
+                <span>{s.title}</span>
+                {already && <span className="add-to-dash__done">✓ pinned</span>}
+              </button>
+            );
+          })}
+          {!creating && (
+            <button
+              className="add-to-dash__row add-to-dash__row--new"
+              onClick={() => setCreating(true)}
+            >
+              + New section…
+            </button>
+          )}
+          {creating && (
+            <div className="add-to-dash__new">
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Section title"
+                spellCheck={false}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void createSectionWith();
+                  if (e.key === 'Escape') {
+                    setCreating(false);
+                    setNewName('');
+                  }
+                }}
+              />
+              <button onClick={() => void createSectionWith()}>Create</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface RoutinePurpose {
   kind: 'briefing' | 'inbox' | 'freeform';
   label: string;
@@ -444,11 +665,6 @@ function derivePurpose(r: RoutineDef): RoutinePurpose | null {
   return { kind: 'freeform', label: 'Freeform' };
 }
 
-/**
- * Bucket routines into groups for display. Stable section order:
- * briefings first (they feed the daily-driver Briefings tab), then
- * inbox sources, then freeform. Empty buckets get filtered out.
- */
 function groupRoutinesByPurpose(
   routines: RoutineDef[],
 ): { purpose: 'briefing' | 'inbox' | 'freeform'; label: string; items: RoutineDef[] }[] {
@@ -462,9 +678,9 @@ function groupRoutinesByPurpose(
     else freeform.push(r);
   }
   return [
-    { purpose: 'briefing' as const, label: 'Briefings · feeds the Briefings tab', items: briefings },
-    { purpose: 'inbox' as const, label: 'Inbox sources · feeds the Inbox tab', items: inbox },
-    { purpose: 'freeform' as const, label: 'Freeform · standalone tasks', items: freeform },
+    { purpose: 'briefing' as const, label: 'Briefings', items: briefings },
+    { purpose: 'inbox' as const, label: 'Inbox sources', items: inbox },
+    { purpose: 'freeform' as const, label: 'Freeform', items: freeform },
   ].filter((g) => g.items.length > 0);
 }
 
