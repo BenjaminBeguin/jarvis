@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { JarvisFileEntry } from '../../shared/types';
 import { MarkdownText } from '../views/MarkdownText';
+import { TaskBindingBadge } from '../views/TaskBindingBadge';
 import { formatRelative } from '../views/TaskList';
+import { useTaskBinding } from '../views/useTaskBinding';
 
 interface MeetingFile {
   name: string;
@@ -38,6 +40,7 @@ export function MeetingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pushing, setPushing] = useState<string | null>(null);
+  const bindings = useTaskBinding('meetings');
 
   const refresh = async () => {
     setLoading(true);
@@ -88,6 +91,7 @@ export function MeetingsPage() {
         prompt: `${PUSH_PROMPT_PREFIX}${file.body}`,
         origin: 'palette',
       });
+      bindings.bind(file.name, summary.id);
       void window.jarvis.showAnswerHud(summary.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -139,12 +143,32 @@ export function MeetingsPage() {
                 >
                   {isOpen ? 'Collapse' : 'View'}
                 </button>
-                <button
-                  onClick={() => void pushToClaude(f)}
-                  disabled={pushing === f.name}
-                >
-                  {pushing === f.name ? 'Pushing…' : '↪ Push to Claude'}
-                </button>
+                {(() => {
+                  const binding = bindings.get(f.name);
+                  if (binding) {
+                    return (
+                      <TaskBindingBadge
+                        binding={binding}
+                        onOpen={() =>
+                          void window.jarvis.showAnswerHud(binding.taskId)
+                        }
+                        onRunAgain={() => {
+                          bindings.clear(f.name);
+                          void pushToClaude(f);
+                        }}
+                        onForget={() => bindings.clear(f.name)}
+                      />
+                    );
+                  }
+                  return (
+                    <button
+                      onClick={() => void pushToClaude(f)}
+                      disabled={pushing === f.name}
+                    >
+                      {pushing === f.name ? 'Pushing…' : '↪ Push to Claude'}
+                    </button>
+                  );
+                })()}
               </div>
               {isOpen && (
                 <div className="meeting-card__body">

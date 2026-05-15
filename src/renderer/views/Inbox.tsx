@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { InboxItem, TaskStatus } from '../../shared/types';
+import type { InboxItem } from '../../shared/types';
+import { TaskBindingBadge } from './TaskBindingBadge';
 import { toast } from './Toaster';
+import { useTaskBinding, type TaskBindingState } from './useTaskBinding';
 
 /**
  * Daily-driver triage view. Lists PRs to review, comments on your PRs,
@@ -11,50 +13,12 @@ import { toast } from './Toaster';
  * fresh in the background.
  */
 const ACTIVE_PROJECT_KEY = 'jarvis.activeProject';
-const ACTIONED_KEY = 'jarvis.inbox.actioned';
 
 function readActiveProject(): string | null {
   try {
     return window.localStorage.getItem(ACTIVE_PROJECT_KEY) || null;
   } catch {
     return null;
-  }
-}
-
-/**
- * One entry per inbox item the user has clicked an action on. Lets us
- * disable the action button + show a status link to the running task
- * instead of letting the user fire the same skill again.
- *
- * Persisted to localStorage so a page reload doesn't lose the binding.
- * Orphan entries (whose item is no longer in the inbox) get cleaned
- * on every inbox refresh.
- */
-interface ActionState {
-  taskId: string;
-  actionedAt: number;
-  status: TaskStatus;
-  awaitingInput?: boolean;
-}
-
-type ActionedMap = Record<string, ActionState>;
-
-function loadActioned(): ActionedMap {
-  try {
-    const raw = window.localStorage.getItem(ACTIONED_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return typeof parsed === 'object' && parsed !== null ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveActioned(map: ActionedMap): void {
-  try {
-    window.localStorage.setItem(ACTIONED_KEY, JSON.stringify(map));
-  } catch {
-    // localStorage full / disabled — non-fatal, state is only cosmetic
   }
 }
 
@@ -67,56 +31,15 @@ export function Inbox() {
     readActiveProject(),
   );
   const [filterByScope, setFilterByScope] = useState(false);
-  const [actioned, setActioned] = useState<ActionedMap>(() => loadActioned());
+  const bindings = useTaskBinding('inbox');
 
-  // Persist any change to the action map.
-  useEffect(() => {
-    saveActioned(actioned);
-  }, [actioned]);
-
-  // Subscribe to task status updates from main — when one of our
-  // actioned items' bound task changes state, update the entry so
-  // the row badge reflects "running" → "completed" / "errored".
-  useEffect(() => {
-    return window.jarvis.onTaskStatus((summary) => {
-      setActioned((prev) => {
-        let next: ActionedMap | null = null;
-        for (const [itemId, a] of Object.entries(prev)) {
-          if (a.taskId !== summary.id) continue;
-          if (
-            a.status === summary.status &&
-            (a.awaitingInput ?? false) === (summary.awaitingInput ?? false)
-          ) {
-            return prev;
-          }
-          if (!next) next = { ...prev };
-          next[itemId] = {
-            ...a,
-            status: summary.status,
-            awaitingInput: summary.awaitingInput,
-          };
-        }
-        return next ?? prev;
-      });
-    });
-  }, []);
-
-  // Drop action bindings for items that are no longer in the inbox.
+  // Drop bindings for items that are no longer in the inbox.
   // The accuracy filter (PR replied to / resolved) makes items vanish
   // on refresh; their bindings would otherwise pile up forever.
   useEffect(() => {
     if (items.length === 0) return;
-    const liveIds = new Set(items.map((it) => it.id));
-    setActioned((prev) => {
-      let next: ActionedMap | null = null;
-      for (const id of Object.keys(prev)) {
-        if (!liveIds.has(id)) {
-          if (!next) next = { ...prev };
-          delete next[id];
-        }
-      }
-      return next ?? prev;
-    });
+    bindings.retainKeys(new Set(items.map((it) => it.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
 
   useEffect(() => {
@@ -306,25 +229,9 @@ export function Inbox() {
               <InboxRow
                 key={item.id}
                 item={item}
-                action={actioned[item.id]}
-                onActioned={(taskId) =>
-                  setActioned((prev) => ({
-                    ...prev,
-                    [item.id]: {
-                      taskId,
-                      actionedAt: Date.now(),
-                      status: 'running',
-                    },
-                  }))
-                }
-                onClearAction={() =>
-                  setActioned((prev) => {
-                    if (!(item.id in prev)) return prev;
-                    const next = { ...prev };
-                    delete next[item.id];
-                    return next;
-                  })
-                }
+                binding={bindings.get(item.id)}
+                onBind={(taskId) => bindings.bind(item.id, taskId)}
+                onForget={() => bindings.clear(item.id)}
               />
             ))}
           </ul>
@@ -336,14 +243,14 @@ export function Inbox() {
 
 function InboxRow({
   item,
-  action,
-  onActioned,
-  onClearAction,
+  binding,
+  onBind,
+  onForget,
 }: {
   item: InboxItem;
-  action: ActionState | undefined;
-  onActioned: (taskId: string) => void;
-  onClearAction: () => void;
+  binding: TaskBindingState | undefined;
+  onBind: (taskId: string) => void;
+  onForget: () => void;
 }) {
   const [acting, setActing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -363,7 +270,7 @@ function InboxRow({
         skillId: item.action.skillId,
         origin: 'palette',
       });
-      onActioned(summary.id);
+      onBind(summary.id);
       void window.jarvis.showAnswerHud(summary.id);
     } catch (e) {
       toast({
@@ -375,9 +282,9 @@ function InboxRow({
     }
   };
 
-  const openActionedTask = () => {
-    if (!action) return;
-    void window.jarvis.showAnswerHud(action.taskId);
+  const openBoundTask = () => {
+    if (!binding) return;
+    void window.jarvis.showAnswerHud(binding.taskId);
   };
 
   const open = () => {
@@ -439,7 +346,7 @@ function InboxRow({
             Open
           </button>
         )}
-        {item.action && !action && (
+        {item.action && !binding && (
           <button
             className="inbox__row-primary"
             onClick={() => void act()}
@@ -449,11 +356,15 @@ function InboxRow({
             {acting ? 'Launching…' : item.action.label}
           </button>
         )}
-        {action && (
-          <ActionedBadge
-            action={action}
-            onOpen={openActionedTask}
-            onClear={onClearAction}
+        {binding && (
+          <TaskBindingBadge
+            binding={binding}
+            onOpen={openBoundTask}
+            onRunAgain={() => {
+              onForget();
+              void act();
+            }}
+            onForget={onForget}
           />
         )}
         <div className="inbox__row-dismiss">
@@ -492,58 +403,6 @@ function InboxRow({
         </div>
       </div>
     </li>
-  );
-}
-
-/**
- * Replaces the action button once the user has clicked it. Shows the
- * current status of the spawned task + a link to open the Answer HUD
- * so the user can see what the agent is doing. Re-fire is intentionally
- * not exposed here — the same skill on the same item would just
- * duplicate work. Clear (✕) drops the binding for retry.
- */
-function ActionedBadge({
-  action,
-  onOpen,
-  onClear,
-}: {
-  action: ActionState;
-  onOpen: () => void;
-  onClear: () => void;
-}) {
-  const running = action.status === 'running' || action.status === 'queued';
-  const awaiting = action.awaitingInput === true;
-  const label = awaiting
-    ? '⏸ Awaiting reply'
-    : running
-      ? '⟳ Running…'
-      : action.status === 'completed'
-        ? '✓ Done'
-        : action.status === 'errored'
-          ? '⚠ Failed'
-          : action.status === 'aborted'
-            ? '— Aborted'
-            : action.status;
-
-  return (
-    <div
-      className={`inbox__row-actioned inbox__row-actioned--${running ? 'running' : action.status}${awaiting ? ' inbox__row-actioned--awaiting' : ''}`}
-    >
-      <button
-        className="inbox__row-actioned-main"
-        onClick={onOpen}
-        title={`Task ${action.taskId} · click to open`}
-      >
-        {label} · Open
-      </button>
-      <button
-        className="inbox__row-actioned-clear"
-        onClick={onClear}
-        title="Clear this binding so you can re-fire the action"
-      >
-        ✕
-      </button>
-    </div>
   );
 }
 

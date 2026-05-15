@@ -2099,17 +2099,19 @@ button:disabled:hover {
   cursor: progress;
 }
 
-/* "Action already fired" badge that replaces the action button. Composed
-   of a wide pill (status + Open) and a small ✕ to clear the binding. */
-.inbox__row-actioned {
+/* "Action already fired" badge that replaces the launch button across
+   Inbox / Notes / Meetings. Composed of a status pill (click to open the
+   bound task) + a ⋯ menu (Run again / Forget). */
+.task-binding {
+  position: relative;
   display: inline-flex;
   align-items: stretch;
   border: 1px solid var(--border-strong);
   border-radius: 2px;
-  overflow: hidden;
+  overflow: visible;
 }
 
-.inbox__row-actioned-main {
+.task-binding__main {
   background: transparent;
   border: 0;
   color: var(--text-dim);
@@ -2121,65 +2123,107 @@ button:disabled:hover {
   cursor: pointer;
 }
 
-.inbox__row-actioned-main:hover {
+.task-binding__main:hover {
   color: var(--text);
   background: rgba(0, 212, 255, 0.04);
 }
 
-.inbox__row-actioned-clear {
+.task-binding__menu-toggle {
   background: transparent;
   border: 0;
   border-left: 1px solid var(--border-strong);
   color: var(--text-faint);
   font-family: var(--mono);
-  font-size: 11px;
-  padding: 0 7px;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  padding: 0 8px;
   cursor: pointer;
 }
 
-.inbox__row-actioned-clear:hover {
-  color: var(--bad);
-  background: rgba(255, 80, 80, 0.06);
+.task-binding__menu-toggle:hover {
+  color: var(--accent);
+  background: rgba(0, 212, 255, 0.05);
 }
 
-.inbox__row-actioned--running .inbox__row-actioned-main {
+.task-binding--running .task-binding__main {
   color: var(--accent);
 }
 
-.inbox__row-actioned--running {
+.task-binding--running {
   border-color: var(--accent);
   box-shadow: var(--accent-glow-soft);
 }
 
-.inbox__row-actioned--completed .inbox__row-actioned-main {
+.task-binding--completed .task-binding__main {
   color: var(--good);
 }
 
-.inbox__row-actioned--completed {
+.task-binding--completed {
   border-color: var(--good);
 }
 
-.inbox__row-actioned--errored .inbox__row-actioned-main {
+.task-binding--errored .task-binding__main {
   color: var(--bad);
 }
 
-.inbox__row-actioned--errored {
+.task-binding--errored {
   border-color: var(--bad);
 }
 
-.inbox__row-actioned--awaiting .inbox__row-actioned-main {
+.task-binding--awaiting .task-binding__main {
   color: var(--warn);
-  animation: inbox-actioned-pulse 1.6s ease-in-out infinite;
+  animation: task-binding-pulse 1.6s ease-in-out infinite;
 }
 
-.inbox__row-actioned--awaiting {
+.task-binding--awaiting {
   border-color: var(--warn);
   box-shadow: 0 0 8px rgba(255, 196, 80, 0.25);
 }
 
-@keyframes inbox-actioned-pulse {
+@keyframes task-binding-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
+}
+
+.task-binding__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 12;
+  min-width: 200px;
+  background: rgba(4, 7, 11, 0.96);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 212, 255, 0.04),
+    0 8px 28px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+}
+
+.task-binding__menu button {
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-align: left;
+  padding: 7px 10px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.task-binding__menu button:hover {
+  background: rgba(0, 212, 255, 0.06);
+  color: var(--text);
+}
+
+.task-binding__menu-forget:hover {
+  color: var(--bad) !important;
+  background: rgba(255, 85, 119, 0.06) !important;
 }
 
 .inbox__row-dismiss {

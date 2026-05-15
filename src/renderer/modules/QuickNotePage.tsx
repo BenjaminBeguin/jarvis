@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 
 import type { JarvisFileEntry } from '../../shared/types';
+import { TaskBindingBadge } from '../views/TaskBindingBadge';
 import { toast } from '../views/Toaster';
+import { useTaskBinding } from '../views/useTaskBinding';
 
 interface NoteEntry {
   time: string;
@@ -52,6 +54,7 @@ export function QuickNotePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pushing, setPushing] = useState<string | null>(null);
+  const bindings = useTaskBinding('notes');
 
   const refresh = async () => {
     setLoading(true);
@@ -91,6 +94,7 @@ export function QuickNotePage() {
         prompt: `${PUSH_PROMPT_PREFIX}${body}`,
         origin: 'palette',
       });
+      bindings.bind(key, summary.id);
       void window.jarvis.showAnswerHud(summary.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -151,13 +155,33 @@ export function QuickNotePage() {
                   <div key={key} className="note-card__entry">
                     <div className="note-card__entry-head">
                       <span className="note-card__entry-time">{entry.time}</span>
-                      <button
-                        className="note-card__push"
-                        disabled={pushing === key}
-                        onClick={() => void pushEntry(key, entry.body)}
-                      >
-                        {pushing === key ? 'Pushing…' : '↪ Push to Claude'}
-                      </button>
+                      {(() => {
+                        const binding = bindings.get(key);
+                        if (binding) {
+                          return (
+                            <TaskBindingBadge
+                              binding={binding}
+                              onOpen={() =>
+                                void window.jarvis.showAnswerHud(binding.taskId)
+                              }
+                              onRunAgain={() => {
+                                bindings.clear(key);
+                                void pushEntry(key, entry.body);
+                              }}
+                              onForget={() => bindings.clear(key)}
+                            />
+                          );
+                        }
+                        return (
+                          <button
+                            className="note-card__push"
+                            disabled={pushing === key}
+                            onClick={() => void pushEntry(key, entry.body)}
+                          >
+                            {pushing === key ? 'Pushing…' : '↪ Push to Claude'}
+                          </button>
+                        );
+                      })()}
                       <button
                         className="note-card__delete"
                         title="Delete this note"
