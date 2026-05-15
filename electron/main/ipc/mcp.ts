@@ -76,6 +76,28 @@ export function registerMcpIpc({ mcp, auth }: IpcDeps): void {
     },
   );
 
+  ipcMain.handle(
+    IpcChannels.setMcpDisabled,
+    (
+      _e,
+      payload: { id: string; untilMs?: number | null },
+    ): { ok: boolean; message?: string } => {
+      if (!payload || typeof payload.id !== 'string' || !payload.id) {
+        return { ok: false, message: 'Invalid server id.' };
+      }
+      // untilMs: number → disabled until that timestamp
+      // untilMs: null   → disabled indefinitely
+      // untilMs absent  → re-enable
+      const ok = mcp.setDisabled(
+        payload.id,
+        'untilMs' in payload ? payload.untilMs ?? null : undefined,
+      );
+      return ok
+        ? { ok: true }
+        : { ok: false, message: 'Server not found in mcp.json.' };
+    },
+  );
+
   ipcMain.handle(IpcChannels.readMcpFile, () => ({
     path: mcp.path,
     contents: mcp.rawFileContents(),

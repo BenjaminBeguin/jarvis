@@ -6,26 +6,47 @@ import chokidar, { type FSWatcher } from 'chokidar';
 
 import type { McpServerSummary } from '@shared/types';
 
-type StdioConfig = {
+/**
+ * Disable state lives on the config entry itself — single source of truth
+ * in mcp.json, no separate sidecar file. `disabledUntil` is a ms epoch;
+ * when present and in the past, resolve() auto-clears the flag and the
+ * server comes back online. `disabled:true` with no until = disabled
+ * indefinitely.
+ */
+interface DisableMixin {
+  disabled?: boolean;
+  disabledUntil?: number;
+}
+
+type StdioConfig = DisableMixin & {
   type: 'stdio';
   command: string;
   args?: string[];
   env?: Record<string, string>;
 };
 
-type SseConfig = {
+type SseConfig = DisableMixin & {
   type: 'sse';
   url: string;
   headers?: Record<string, string>;
 };
 
-type HttpConfig = {
+type HttpConfig = DisableMixin & {
   type: 'http';
   url: string;
   headers?: Record<string, string>;
 };
 
 export type McpServerConfig = StdioConfig | SseConfig | HttpConfig;
+
+/** Is this server currently disabled? Treats expired disabledUntil as
+ * "not disabled" — caller is responsible for persisting the cleared
+ * state if they want to (resolve() does this lazily). */
+function isCurrentlyDisabled(cfg: McpServerConfig, now: number): boolean {
+  if (!cfg.disabled) return false;
+  if (cfg.disabledUntil != null && cfg.disabledUntil <= now) return false;
+  return true;
+}
 
 type RawConfig = {
   mcpServers?: Record<string, McpServerConfig>;
@@ -69,14 +90,40 @@ export class McpConfigStore extends EventEmitter {
   }
 
   list(): McpServerSummary[] {
+    const now = Date.now();
     return [...this.servers.entries()]
       .map(([id, cfg]) => ({
         id,
         type: cfg.type,
         command: cfg.type === 'stdio' ? cfg.command : undefined,
         url: cfg.type !== 'stdio' ? cfg.url : undefined,
+        disabled: isCurrentlyDisabled(cfg, now),
+        disabledUntil: cfg.disabledUntil ?? null,
       }))
       .sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  /**
+   * Toggle the disabled state on an entry.
+   *   - untilMs === null     → disabled indefinitely
+   *   - untilMs === undefined → re-enable (clears the flag)
+   *   - untilMs = epoch ms   → disabled until that timestamp
+   *
+   * No-op if the id doesn't exist. Persists on success.
+   */
+  setDisabled(id: string, untilMs: number | null | undefined): boolean {
+    const cfg = this.servers.get(id);
+    if (!cfg) return false;
+    if (untilMs === undefined) {
+      cfg.disabled = false;
+      delete cfg.disabledUntil;
+    } else {
+      cfg.disabled = true;
+      if (untilMs === null) delete cfg.disabledUntil;
+      else cfg.disabledUntil = untilMs;
+    }
+    this.writeAll();
+    return true;
   }
 
   /**
@@ -124,20 +171,32 @@ export class McpConfigStore extends EventEmitter {
 
   resolve(ids: string[]): Record<string, McpServerConfig> {
     const out: Record<string, McpServerConfig> = {};
+    const now = Date.now();
+    let clearedExpired = false;
+    const tryAdd = (id: string, cfg: McpServerConfig) => {
+      // Auto-expire disabledUntil that's in the past so the entry comes
+      // back online without manual intervention.
+      if (cfg.disabled && cfg.disabledUntil != null && cfg.disabledUntil <= now) {
+        cfg.disabled = false;
+        delete cfg.disabledUntil;
+        clearedExpired = true;
+      }
+      if (isCurrentlyDisabled(cfg, now)) return; // skip — paused by user
+      out[id] = cfg;
+    };
     // '*' opts the skill into every server in ~/.jarvis/mcp.json so the
     // user can add new ones without editing every skill that wants them.
     // Useful for omnibus skills like `send` where the channel list is
     // expected to grow.
     if (ids.includes('*')) {
-      for (const [id, cfg] of this.servers.entries()) {
-        out[id] = cfg;
-      }
+      for (const [id, cfg] of this.servers.entries()) tryAdd(id, cfg);
     }
     for (const id of ids) {
       if (id === '*') continue;
       const cfg = this.servers.get(id);
-      if (cfg) out[id] = cfg;
+      if (cfg) tryAdd(id, cfg);
     }
+    if (clearedExpired) this.writeAll();
     return out;
   }
 

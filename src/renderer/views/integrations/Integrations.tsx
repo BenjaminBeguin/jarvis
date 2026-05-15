@@ -199,6 +199,21 @@ export function Integrations() {
             else toast({ kind: 'error', message: r.message ?? 'Remove failed' });
             await refreshFile();
           }}
+          onSetDisabled={async (id, untilMs) => {
+            const r = await window.jarvis.setMcpDisabled(id, untilMs);
+            if (!r.ok) {
+              toast({ kind: 'error', message: r.message ?? 'Disable failed' });
+              return;
+            }
+            if (untilMs === undefined) toast({ message: `${id} re-enabled` });
+            else if (untilMs === null) toast({ kind: 'info', message: `${id} disabled` });
+            else
+              toast({
+                kind: 'info',
+                message: `${id} disabled · auto-enables ${new Date(untilMs).toLocaleString()}`,
+              });
+            await refreshFile();
+          }}
         />
       </section>
     </section>
@@ -1150,29 +1165,42 @@ interface InstalledListProps {
   localServers: McpServerSummary[];
   claudeMcps: ClaudeMcpEntry[];
   onRemoveLocal: (id: string) => Promise<void>;
+  onSetDisabled: (id: string, untilMs?: number | null) => Promise<void>;
+}
+
+interface Row {
+  name: string;
+  sourceLabel: string;
+  status: string;
+  removable: boolean;
+  /** Disable toggle only works for Jarvis-local entries (where mcp.json
+   * owns the config). claude.json-registered ones would need a migrate
+   * step first — out of scope for v1. */
+  disablable: boolean;
+  disabled: boolean;
+  disabledUntil?: number | null;
+  id: string;
 }
 
 function InstalledList({
   localServers,
   claudeMcps,
   onRemoveLocal,
+  onSetDisabled,
 }: InstalledListProps) {
   // Merge: a Jarvis-local server takes precedence over a same-named
   // claude entry; otherwise show both.
-  const rows: Array<{
-    name: string;
-    sourceLabel: string;
-    status: string;
-    removable: boolean;
-    id: string;
-  }> = [];
+  const rows: Row[] = [];
   const localIds = new Set(localServers.map((s) => s.id));
   for (const s of localServers) {
     rows.push({
       name: s.id,
       sourceLabel: 'jarvis · ~/.jarvis/mcp.json',
-      status: 'connected',
+      status: s.disabled ? 'disabled' : 'connected',
       removable: true,
+      disablable: true,
+      disabled: !!s.disabled,
+      disabledUntil: s.disabledUntil,
       id: s.id,
     });
   }
@@ -1189,6 +1217,8 @@ function InstalledList({
             : 'connected'
           : m.status,
       removable: false,
+      disablable: false,
+      disabled: false,
       id: m.name,
     });
   }
@@ -1203,12 +1233,82 @@ function InstalledList({
             <span className={`installed-list__dot installed-list__dot--${r.status}`} />
             <span className="installed-list__name">{r.name}</span>
             <span className="installed-list__source">{r.sourceLabel}</span>
+            {r.disabled && (
+              <span className="installed-list__badge">
+                {formatDisabledLabel(r.disabledUntil)}
+              </span>
+            )}
           </div>
-          {r.removable && (
-            <button onClick={() => void onRemoveLocal(r.id)}>Remove</button>
-          )}
+          <div className="installed-list__actions">
+            {r.disablable &&
+              (r.disabled ? (
+                <button
+                  className="installed-list__enable"
+                  onClick={() => void onSetDisabled(r.id, undefined)}
+                  title="Re-enable this MCP"
+                >
+                  ▶ Enable
+                </button>
+              ) : (
+                <DisableMenu onPick={(untilMs) => void onSetDisabled(r.id, untilMs)} />
+              ))}
+            {r.removable && (
+              <button onClick={() => void onRemoveLocal(r.id)}>Remove</button>
+            )}
+          </div>
         </li>
       ))}
     </ul>
   );
+}
+
+const DISABLE_OPTIONS: Array<{ label: string; ms: number | null }> = [
+  { label: 'for 1 hour', ms: 60 * 60 * 1000 },
+  { label: 'until tomorrow', ms: 24 * 60 * 60 * 1000 },
+  { label: 'for 1 week', ms: 7 * 24 * 60 * 60 * 1000 },
+  { label: 'forever (until I re-enable)', ms: null },
+];
+
+function DisableMenu({
+  onPick,
+}: {
+  onPick: (untilMs: number | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="installed-list__menu-wrap">
+      <button onClick={() => setOpen((v) => !v)} title="Disable this MCP">
+        ⏸ Disable
+      </button>
+      {open && (
+        <div
+          className="installed-list__menu"
+          onMouseLeave={() => setOpen(false)}
+        >
+          {DISABLE_OPTIONS.map((opt) => (
+            <button
+              key={opt.label}
+              className="installed-list__menu-row"
+              onClick={() => {
+                setOpen(false);
+                onPick(opt.ms == null ? null : Date.now() + opt.ms);
+              }}
+            >
+              Disable {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatDisabledLabel(untilMs?: number | null): string {
+  if (untilMs == null) return 'disabled';
+  const diff = untilMs - Date.now();
+  if (diff <= 0) return 'disabled';
+  const h = Math.round(diff / (60 * 60 * 1000));
+  if (h < 24) return `disabled · ${h}h`;
+  const d = Math.round(h / 24);
+  return `disabled · ${d}d`;
 }

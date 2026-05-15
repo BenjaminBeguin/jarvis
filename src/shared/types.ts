@@ -274,6 +274,12 @@ export interface McpServerSummary {
   type: 'stdio' | 'sse' | 'http';
   command?: string;
   url?: string;
+  /** When true, resolve() skips this entry — the SDK never sees it,
+   * the subprocess never spawns. Click to re-enable. */
+  disabled?: boolean;
+  /** ms epoch when the disable auto-expires; null/undefined = disabled
+   * indefinitely (only manual re-enable). */
+  disabledUntil?: number | null;
 }
 
 export interface ProjectMemoryFile {

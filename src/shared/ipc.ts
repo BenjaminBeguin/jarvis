@@ -29,6 +29,7 @@ export const IpcChannels = {
   listClaudeMcps: 'mcp:listClaude',
   addMcpServer: 'mcp:add',
   removeMcpServer: 'mcp:remove',
+  setMcpDisabled: 'mcp:setDisabled',
   readMcpFile: 'mcp:readFile',
   revealMcpFile: 'mcp:revealFile',
   probeMcpTools: 'mcp:probeTools',

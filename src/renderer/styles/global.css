@@ -10168,6 +10168,72 @@ button:disabled:hover {
   padding: 4px 10px;
 }
 
+.installed-list__dot--disabled {
+  background: var(--text-faint);
+  box-shadow: none;
+}
+
+.installed-list__badge {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--warn);
+  background: rgba(255, 180, 84, 0.08);
+  border: 1px solid rgba(255, 180, 84, 0.35);
+  padding: 2px 7px;
+  border-radius: 2px;
+}
+
+.installed-list__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.installed-list__menu-wrap {
+  position: relative;
+}
+
+.installed-list__enable {
+  color: var(--good) !important;
+  border-color: rgba(95, 255, 166, 0.4) !important;
+}
+
+.installed-list__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 12;
+  min-width: 220px;
+  background: rgba(4, 7, 11, 0.96);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 212, 255, 0.04),
+    0 8px 28px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+}
+
+.installed-list__menu-row {
+  background: transparent !important;
+  border: 0 !important;
+  color: var(--text-dim) !important;
+  text-align: left !important;
+  padding: 7px 10px !important;
+  border-radius: 2px;
+  letter-spacing: 0.04em !important;
+  text-transform: none !important;
+}
+
+.installed-list__menu-row:hover {
+  background: rgba(0, 212, 255, 0.06) !important;
+  color: var(--text) !important;
+}
+
 /* ----- Setup ------------------------------------------------------------ */
 
 .setup {

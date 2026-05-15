@@ -137,6 +137,22 @@ const api = {
     ipcRenderer.invoke(IpcChannels.addMcpServer, input),
   removeMcpServer: (id: string): Promise<{ ok: boolean; message?: string }> =>
     ipcRenderer.invoke(IpcChannels.removeMcpServer, id),
+  /**
+   * Toggle the disable flag on an MCP. Pass `untilMs` as:
+   *   - `undefined` (or omit the arg) → re-enable
+   *   - `null` → disabled indefinitely
+   *   - epoch ms → disabled until that timestamp
+   */
+  setMcpDisabled: (
+    id: string,
+    untilMs?: number | null,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.setMcpDisabled, {
+      id,
+      // Only include the field when explicitly set; absence means
+      // "re-enable" on the main side.
+      ...(untilMs === undefined ? {} : { untilMs }),
+    }),
   readMcpFile: (): Promise<{ path: string; contents: string | null }> =>
     ipcRenderer.invoke(IpcChannels.readMcpFile),
   revealMcpFile: (): Promise<void> => ipcRenderer.invoke(IpcChannels.revealMcpFile),
