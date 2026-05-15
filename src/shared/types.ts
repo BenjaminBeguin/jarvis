@@ -209,6 +209,11 @@ export interface RoutineDef {
    * Capped at RECENT_TASK_IDS_MAX in main. Drives the per-routine run
    * history pane in the UI. */
   recentTaskIds?: string[];
+  /** Whether this routine's upcoming fires + recent fires show up in
+   * the Calendar timeline (Dashboard section + Calendar module). Default
+   * is true (visible); set false to hide routines that fire too often
+   * to be useful in a calendar view (e.g. every-10-minute pollers). */
+  showInCalendar?: boolean;
 }
 
 /**

@@ -8,7 +8,6 @@ import type {
   Reminder,
   RoutineDef,
   SkillSummary,
-  TaskSummary,
 } from '../../shared/types';
 import { Inbox } from './Inbox';
 import { MarkdownDoc } from './MarkdownText';
@@ -26,27 +25,26 @@ import {
 import { TaskAnswerPreview } from './TaskAnswerPreview';
 import { toast } from './Toaster';
 
-interface Props {
-  tasks: TaskSummary[];
-  reminders: Reminder[];
-  onSelectTask: (id: string) => void;
-  onCancelReminder: (id: string) => void;
-}
-
 /**
- * User-defined dashboard. The user creates sections (Inbox, My briefings,
- * …) and pins items into them. Layout config lives at
- * ~/.jarvis/dashboard.json; this view is a pure renderer with an
- * "Edit layout" toggle that exposes section + item CRUD.
+ * User-defined dashboard — top-level tab, the "what I curated" home.
+ * The Observatory tab is the parallel surface for live agent activity
+ * (running tasks, constellation, history list). Keep the two distinct:
+ * Dashboard is yours, Observatory is the agents'.
+ *
+ * The user creates sections (Inbox, My briefings, …) and pins items
+ * into them. Layout config lives at ~/.jarvis/dashboard.json; this
+ * view is a pure renderer with an "Edit layout" toggle that exposes
+ * section + item CRUD.
  *
  * Each item kind has its own renderer:
- *   - 'inbox'   → the full Inbox component inline
- *   - 'routine' → the routine's latest output, by kind:
- *                   - briefings/*  → markdown reader for the latest .md
- *                   - inbox/*      → "N rows · view inbox" link
- *                   - freeform     → "view last transcript" link
+ *   - 'inbox'    → the full Inbox component inline
+ *   - 'routine'  → the routine's latest output, by kind:
+ *                    - briefings/*  → markdown reader for the latest .md
+ *                    - inbox/*      → "N rows · view inbox" link
+ *                    - freeform     → "view last transcript" link
+ *   - 'calendar' → time-sorted timeline of events + reminders + routines
  */
-export function Dashboard(_props: Props) {
+export function Dashboard() {
   const [config, setConfig] = useState<DashboardConfig>({ sections: [] });
   const [editing, setEditing] = useState(false);
 

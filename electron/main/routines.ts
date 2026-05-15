@@ -22,6 +22,7 @@ interface PersistedRoutine {
   condition?: string;
   lastTaskId?: string;
   recentTaskIds?: string[];
+  showInCalendar?: boolean;
 }
 
 /** How many historical run task ids to keep per routine. Enough to render
@@ -83,6 +84,8 @@ export class RoutineStore extends EventEmitter {
       condition: input.condition ?? existing?.def.condition,
       lastTaskId: existing?.def.lastTaskId ?? null,
       recentTaskIds: existing?.def.recentTaskIds ?? [],
+      showInCalendar:
+        input.showInCalendar ?? existing?.def.showInCalendar ?? true,
     };
     this.applyRoutine(def);
     this.persist();
@@ -223,6 +226,7 @@ export class RoutineStore extends EventEmitter {
             : item.lastTaskId
               ? [item.lastTaskId]
               : [],
+          showInCalendar: item.showInCalendar ?? true,
         };
         this.applyRoutine(def);
       }
@@ -245,6 +249,9 @@ export class RoutineStore extends EventEmitter {
       recentTaskIds: r.def.recentTaskIds?.length
         ? r.def.recentTaskIds
         : undefined,
+      // Only persist the flag when it's the non-default (false) — keeps
+      // routines.json small for the common case (visible).
+      showInCalendar: r.def.showInCalendar === false ? false : undefined,
     }));
     writeFileSync(this.path, JSON.stringify(list, null, 2), 'utf8');
   }

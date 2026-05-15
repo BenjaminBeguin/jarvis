@@ -256,6 +256,17 @@ export function Routines() {
     }
   };
 
+  const toggleShowInCalendar = async (r: RoutineDef) => {
+    try {
+      await window.jarvis.saveRoutine({
+        ...r,
+        showInCalendar: r.showInCalendar === false ? true : false,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return (
     <section className="briefings">
       <aside className="briefings__rail">
@@ -373,6 +384,7 @@ export function Routines() {
             onRemove={() => remove(active)}
             onRunNow={() => runNow(active)}
             onToggle={() => void toggle(active)}
+            onToggleShowInCalendar={() => void toggleShowInCalendar(active)}
           />
         )}
       </main>
@@ -402,6 +414,7 @@ function RoutineDetail({
   onRemove,
   onRunNow,
   onToggle,
+  onToggleShowInCalendar,
 }: {
   routine: RoutineDef;
   skill: SkillSummary | undefined;
@@ -410,8 +423,11 @@ function RoutineDetail({
   onRemove: () => void;
   onRunNow: () => void;
   onToggle: () => void;
+  onToggleShowInCalendar: () => void;
 }) {
   const purpose = derivePurpose(routine);
+  // Default: visible. Only hidden if explicitly set to false.
+  const showInCalendar = routine.showInCalendar !== false;
 
   return (
     <>
@@ -534,6 +550,21 @@ function RoutineDetail({
             <ToolChips skill={skill} />
           </div>
         )}
+        <div className="routine-detail__pref">
+          <label className="toggle" title="Show upcoming + recent fires of this routine in the Calendar timeline">
+            <input
+              type="checkbox"
+              checked={showInCalendar}
+              onChange={onToggleShowInCalendar}
+            />
+            <span>
+              Show in Calendar{' '}
+              <span className="routine-detail__hint" style={{ display: 'inline' }}>
+                · uncheck for high-frequency routines (every-Nmin pollers)
+              </span>
+            </span>
+          </label>
+        </div>
       </div>
 
       <RoutineOutputPanes routine={routine} purpose={purpose} />

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { AppStatus, ModuleSummary, ProjectDef, Reminder, TaskSummary } from '../../shared/types';
+import type { AppStatus, ModuleSummary, ProjectDef } from '../../shared/types';
 import { getModulePage } from '../modules/registry';
 import { Inbox } from './Inbox';
 import { Logo } from './Logo';
@@ -9,6 +9,7 @@ import { MeetingPrompt } from './MeetingPrompt';
 import { NewProjectDialog } from './projects/NewProjectDialog';
 import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
+import { Dashboard } from './Dashboard';
 import { Settings } from './Settings';
 import { Skills } from './Skills';
 import { toast } from './Toaster';
@@ -17,6 +18,7 @@ import { Observatory } from './Observatory';
 import { Routines } from './Routines';
 
 type Tab =
+  | 'dashboard'
   | 'observatory'
   | 'inbox'
   | 'projects'
@@ -28,15 +30,8 @@ interface Props {
   status: AppStatus;
 }
 
-function formatClock(d: Date): string {
-  const hh = d.getHours().toString().padStart(2, '0');
-  const mm = d.getMinutes().toString().padStart(2, '0');
-  const ss = d.getSeconds().toString().padStart(2, '0');
-  return `${hh}:${mm}:${ss}`;
-}
-
 export function Shell({ status }: Props) {
-  const [tab, setTab] = useState<Tab>('observatory');
+  const [tab, setTab] = useState<Tab>('dashboard');
   const [openModuleId, setOpenModuleId] = useState<string | null>(null);
   /** When set, the Skills view opens with this skill selected and scrolls
    * the list to it. Set by deep-link nav from Briefings / Routines. */
@@ -118,15 +113,6 @@ export function Shell({ status }: Props) {
       scopeToastSeededRef.current = true;
     }
   }, [activeProject, projectList]);
-  const [clock, setClock] = useState(() => formatClock(new Date()));
-  const [runningCount, setRunningCount] = useState(0);
-  const [awaitingCount, setAwaitingCount] = useState(0);
-  const [scheduledCount, setScheduledCount] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setClock(formatClock(new Date())), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   // Cmd+1..6 tab shortcuts. Standard pattern across editors; saves a
   // mouse round-trip when the user wants to flip between Observatory
@@ -134,6 +120,7 @@ export function Shell({ status }: Props) {
   // input so the user can still type "⌘1" in markdown.
   useEffect(() => {
     const tabsOrder: Tab[] = [
+      'dashboard',
       'observatory',
       'inbox',
       'projects',
@@ -195,37 +182,6 @@ export function Shell({ status }: Props) {
     };
   }, []);
 
-  // Keep the global status pill in sync across tabs. Pulls counts on mount
-  // then subscribes for updates.
-  useEffect(() => {
-    const tally = (tasks: TaskSummary[]) => {
-      setRunningCount(
-        tasks.filter((t) => t.status === 'running' && t.origin !== 'external')
-          .length,
-      );
-      setAwaitingCount(tasks.filter((t) => t.awaitingInput).length);
-    };
-    void window.jarvis.listTasks().then(tally);
-    void window.jarvis
-      .listReminders()
-      .then((rs: Reminder[]) =>
-        setScheduledCount(rs.filter((r) => r.status === 'pending').length),
-      );
-    const offStatus = window.jarvis.onTaskStatus(() => {
-      void window.jarvis.listTasks().then(tally);
-    });
-    const offRemoved = window.jarvis.onTaskRemoved(() => {
-      void window.jarvis.listTasks().then(tally);
-    });
-    const offRem = window.jarvis.onRemindersChanged((rs: Reminder[]) =>
-      setScheduledCount(rs.filter((r) => r.status === 'pending').length),
-    );
-    return () => {
-      offStatus();
-      offRemoved();
-      offRem();
-    };
-  }, []);
 
   // Always keep the modules list in sync so we can render the sub-nav.
   useEffect(() => {
@@ -273,12 +229,22 @@ export function Shell({ status }: Props) {
         </div>
         <div className="shell__tabs">
           <button
+            className={`shell__tab${tab === 'dashboard' && !openModuleId ? ' shell__tab--active' : ''}`}
+            onClick={() => {
+              setTab('dashboard');
+              setOpenModuleId(null);
+            }}
+            title="⌘1 · Your curated home — Inbox, briefings, routines you pinned"
+          >
+            Dashboard
+          </button>
+          <button
             className={`shell__tab${tab === 'observatory' && !openModuleId ? ' shell__tab--active' : ''}`}
             onClick={() => {
               setTab('observatory');
               setOpenModuleId(null);
             }}
-            title="⌘1"
+            title="⌘2 · Live + recent agent runs (constellation + list)"
           >
             Observatory
           </button>
@@ -288,7 +254,7 @@ export function Shell({ status }: Props) {
               setTab('inbox');
               setOpenModuleId(null);
             }}
-            title="⌘2"
+            title="⌘3"
           >
             Inbox
           </button>
@@ -298,7 +264,7 @@ export function Shell({ status }: Props) {
               setTab('projects');
               setOpenModuleId(null);
             }}
-            title="⌘3"
+            title="⌘4"
           >
             Projects
           </button>
@@ -308,7 +274,7 @@ export function Shell({ status }: Props) {
               setTab('routines');
               setOpenModuleId(null);
             }}
-            title="⌘4"
+            title="⌘5"
           >
             Routines
           </button>
@@ -319,7 +285,7 @@ export function Shell({ status }: Props) {
               setOpenModuleId(null);
               setFocusedSkillId(null);
             }}
-            title="⌘5 · Skill prompts (SKILL.md)"
+            title="⌘6 · Skill prompts (SKILL.md)"
           >
             Skills
           </button>
@@ -329,7 +295,7 @@ export function Shell({ status }: Props) {
               setTab('settings');
               setOpenModuleId(null);
             }}
-            title="⌘6 · Preferences · Modules · Integrations · API"
+            title="⌘7 · Preferences · Modules · Integrations · API"
           >
             ⚙ Settings
           </button>
@@ -341,29 +307,6 @@ export function Shell({ status }: Props) {
             onChange={setActiveProject}
             onCreate={() => setNewProjectOpen(true)}
           />
-          {(runningCount > 0 || awaitingCount > 0 || scheduledCount > 0) && (
-            <div className="shell__status-pill" title="Live counts">
-              {runningCount > 0 && (
-                <span className="shell__status-item shell__status-item--live">
-                  ● {runningCount}
-                </span>
-              )}
-              {awaitingCount > 0 && (
-                <span className="shell__status-item shell__status-item--awaiting">
-                  ◐ {awaitingCount}
-                </span>
-              )}
-              {scheduledCount > 0 && (
-                <span className="shell__status-item shell__status-item--scheduled">
-                  ⏰ {scheduledCount}
-                </span>
-              )}
-            </div>
-          )}
-          <div className="shell__clock">
-            <span className="dot" />
-            {clock}
-          </div>
           <button
             className="shell__auth-badge"
             onClick={() => {
@@ -429,6 +372,8 @@ export function Shell({ status }: Props) {
       <div className="shell__body">
         {openModuleId && PageComponent ? (
           <PageComponent />
+        ) : tab === 'dashboard' ? (
+          <Dashboard />
         ) : tab === 'observatory' ? (
           <Observatory />
         ) : tab === 'inbox' ? (

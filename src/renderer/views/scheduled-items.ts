@@ -89,6 +89,10 @@ export function buildScheduledItems(
   const horizon = now + horizonDays * 24 * 60 * 60 * 1000;
   const lookback = now - 12 * 60 * 60 * 1000;
   for (const r of routines) {
+    // Hidden routines: per-user opt-out via the Routines detail toggle.
+    // High-frequency pollers (every-10-min) clutter the timeline; this
+    // lets the user keep them running without seeing them in Calendar.
+    if (r.showInCalendar === false) continue;
     if (r.enabled) {
       // Multiple fires within the horizon for Month view — start from now
       // and walk forward until we cross the horizon.

@@ -8,12 +8,11 @@ import type {
 } from '../../shared/types';
 import { meetingRecorder, type MeetingState } from '../voice/MeetingRecorder';
 import { Constellation } from './Constellation';
-import { Dashboard } from './Dashboard';
 import { TaskDetail } from './TaskDetail';
 import { TaskList } from './TaskList';
 import { toast } from './Toaster';
 
-type ViewMode = 'dashboard' | 'constellation' | 'list';
+type ViewMode = 'constellation' | 'list';
 
 export function Observatory() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
@@ -126,39 +125,22 @@ export function Observatory() {
     <div className="observatory">
       <div className="observatory__viewbar">
         <button
-          className={`observatory__view-btn${view === 'dashboard' ? ' observatory__view-btn--active' : ''}`}
-          onClick={() => setView('dashboard')}
-          title="Dashboard view"
-        >
-          ▦ dashboard
-        </button>
-        <button
           className={`observatory__view-btn${view === 'constellation' ? ' observatory__view-btn--active' : ''}`}
           onClick={() => setView('constellation')}
-          title="Constellation view"
+          title="Constellation view — agents in space"
         >
           ◉ map
         </button>
         <button
           className={`observatory__view-btn${view === 'list' ? ' observatory__view-btn--active' : ''}`}
           onClick={() => setView('list')}
-          title="List view"
+          title="List view — chronological agent history"
         >
           ☰ list
         </button>
       </div>
       <div className="observatory__main">
-        {view === 'dashboard' ? (
-          <Dashboard
-            tasks={tasks}
-            reminders={reminders}
-            onSelectTask={setSelectedId}
-            onCancelReminder={(id) => {
-              void window.jarvis.cancelReminder(id);
-              toast({ kind: 'info', message: 'Reminder cancelled' });
-            }}
-          />
-        ) : view === 'constellation' ? (
+        {view === 'constellation' ? (
           <Constellation
             tasks={tasks}
             reminders={reminders}
