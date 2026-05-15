@@ -168,6 +168,12 @@ export function showAnswerHud(): BrowserWindow {
     },
   });
   answerHudWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Click-through by default: the window's transparent padding around the
+  // card would otherwise block clicks to Cursor / Chrome / whatever is
+  // underneath. `forward: true` keeps mouse-move events flowing so the
+  // renderer can detect when the cursor enters a card and flip
+  // interactivity back on via setAnswerHudInteractive.
+  answerHudWindow.setIgnoreMouseEvents(true, { forward: true });
   answerHudWindow.on('ready-to-show', () => answerHudWindow?.show());
   answerHudWindow.on('closed', () => {
     answerHudWindow = null;
@@ -178,6 +184,20 @@ export function showAnswerHud(): BrowserWindow {
 
 export function hideAnswerHud(): void {
   if (answerHudWindow && !answerHudWindow.isDestroyed()) answerHudWindow.hide();
+}
+
+/**
+ * Toggle whether the HUD window captures clicks. False = click-through
+ * (default, lets the user keep working in apps underneath). True = card is
+ * hovered, the user wants to interact with the reply input / buttons.
+ */
+export function setAnswerHudInteractive(interactive: boolean): void {
+  if (!answerHudWindow || answerHudWindow.isDestroyed()) return;
+  if (interactive) {
+    answerHudWindow.setIgnoreMouseEvents(false);
+  } else {
+    answerHudWindow.setIgnoreMouseEvents(true, { forward: true });
+  }
 }
 
 /**

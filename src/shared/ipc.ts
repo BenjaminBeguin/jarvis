@@ -15,6 +15,7 @@ export const IpcChannels = {
   showAnswerHud: 'hud:show',
   hideAnswerHud: 'hud:hide',
   resizeAnswerHud: 'hud:resize',
+  setAnswerHudInteractive: 'hud:setInteractive',
   answerHudTrack: 'hud:track',
 
   listSkills: 'skills:list',

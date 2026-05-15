@@ -33,12 +33,47 @@ function composeAnswer(events: TaskEvent[]): {
   text: string;
   toolCount: number;
   lastTool: string | null;
+  /** The most recent user reply text, or null if the user hasn't replied
+   * since the task started. The very first `user` event is the original
+   * palette prompt — we don't echo that (the user just typed it). Replies
+   * are the 2nd user event onward. */
+  userReply: string | null;
 } {
+  // Collect every user-event index so we can find the latest reply.
+  const userIdxs: number[] = [];
+  for (let i = 0; i < events.length; i++) {
+    if ((events[i]?.msg as { type?: string })?.type === 'user') userIdxs.push(i);
+  }
+  const lastReplyIdx =
+    userIdxs.length >= 2 ? userIdxs[userIdxs.length - 1]! : -1;
+
+  let userReply: string | null = null;
+  if (lastReplyIdx >= 0) {
+    const msg = events[lastReplyIdx]?.msg as
+      | { message?: { content?: unknown } }
+      | undefined;
+    const content = msg?.message?.content;
+    if (Array.isArray(content)) {
+      const parts = (content as Array<Record<string, unknown>>).flatMap((b) =>
+        b['type'] === 'text' && typeof b['text'] === 'string'
+          ? [b['text'] as string]
+          : [],
+      );
+      const joined = parts.join('').trim();
+      if (joined) userReply = joined;
+    }
+  }
+
+  // Assistant text since the last reply (or full transcript if no reply yet).
   let text = '';
   let toolCount = 0;
   let lastTool: string | null = null;
-  for (const e of events) {
-    const msg = e.msg as { type?: string; message?: { content?: unknown } } | undefined;
+  const start = lastReplyIdx + 1;
+  for (let i = start; i < events.length; i++) {
+    const e = events[i]!;
+    const msg = e.msg as
+      | { type?: string; message?: { content?: unknown } }
+      | undefined;
     if (!msg) continue;
     if (msg.type !== 'assistant') continue;
     const content = msg.message?.content;
@@ -52,7 +87,7 @@ function composeAnswer(events: TaskEvent[]): {
       }
     }
   }
-  return { text, toolCount, lastTool };
+  return { text, toolCount, lastTool, userReply };
 }
 
 function cleanTranscript(raw: string): string {
@@ -285,7 +320,15 @@ function AnswerCard({ card, onAck }: AnswerCardProps) {
   };
 
   return (
-    <article className={`hud__card hud__card--${answerStatus}`}>
+    <article
+      className={`hud__card hud__card--${answerStatus}`}
+      onMouseEnter={() => {
+        void window.jarvis.setAnswerHudInteractive(true);
+      }}
+      onMouseLeave={() => {
+        void window.jarvis.setAnswerHudInteractive(false);
+      }}
+    >
       <header className="hud__card-bar">
         <span className={`hud__dot hud__dot--${answerStatus}`} />
         <span className="hud__card-status">{statusLabel(answerStatus, answer.lastTool)}</span>
@@ -295,6 +338,12 @@ function AnswerCard({ card, onAck }: AnswerCardProps) {
         </div>
       </header>
       <div className="hud__card-body">
+        {answer.userReply && (
+          <div className="hud__card-user">
+            <span className="hud__card-user-label">you</span>
+            <span className="hud__card-user-text">{answer.userReply}</span>
+          </div>
+        )}
         {answer.text ? (
           <MarkdownText>{answer.text}</MarkdownText>
         ) : (

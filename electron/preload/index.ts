@@ -97,6 +97,8 @@ const api = {
     ipcRenderer.invoke(IpcChannels.hideAnswerHud),
   resizeAnswerHud: (height: number): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.resizeAnswerHud, height),
+  setAnswerHudInteractive: (interactive: boolean): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.setAnswerHudInteractive, interactive),
   onAnswerHudTrack: (listener: Listener<string>): Unsubscribe =>
     subscribe(IpcChannels.answerHudTrack, listener),
 

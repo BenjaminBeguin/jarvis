@@ -11,6 +11,7 @@ import {
   openPalette,
   resizeAnswerHud,
   resizePalette,
+  setAnswerHudInteractive,
 } from '../windows.js';
 import type { IpcDeps } from './types.js';
 
@@ -61,6 +62,13 @@ export function registerWindowIpc(_deps: IpcDeps): void {
       resizeAnswerHud(height);
     }
   });
+
+  ipcMain.handle(
+    IpcChannels.setAnswerHudInteractive,
+    (_e, interactive: boolean) => {
+      setAnswerHudInteractive(!!interactive);
+    },
+  );
 
   ipcMain.handle(IpcChannels.openExternal, async (_e, url: string) => {
     // Only allow http/https. mailto + other schemes are easy XSS vectors when
