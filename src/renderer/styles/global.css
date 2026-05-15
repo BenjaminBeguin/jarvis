@@ -3319,14 +3319,27 @@ button:disabled:hover {
 
 .dash__sections {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 28px;
+  align-items: flex-start;
 }
 
 .dash-section {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+}
+
+.dash-section--full {
+  flex: 1 1 100%;
+}
+
+.dash-section--half {
+  /* `min-width: 360px` prevents two halves crushing to unreadable width
+     on narrow windows — fall back to single-column when there's no room. */
+  flex: 1 1 calc(50% - 14px);
+  min-width: 360px;
 }
 
 .dash-section__head {
@@ -3397,6 +3410,15 @@ button:disabled:hover {
 .dash-section__delete:hover:not(:disabled) {
   color: var(--bad) !important;
   border-color: var(--bad) !important;
+}
+
+/* Width toggle wraps the longer "◧ half" / "▮ full" label. */
+.dash-section__width {
+  width: auto !important;
+  padding: 0 8px !important;
+  font-size: 10px !important;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .dash-section__items {

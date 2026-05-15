@@ -174,6 +174,11 @@ export interface DashboardSection {
   id: string;
   title: string;
   items: DashboardItem[];
+  /** Layout width on the dashboard grid. `full` (default) takes a
+   * whole row; `half` takes 50% so two halves can sit side-by-side.
+   * Sections flow left-to-right, top-to-bottom — two halves followed
+   * by a full just put the full on the next row. */
+  width?: 'full' | 'half';
 }
 
 export interface DashboardConfig {

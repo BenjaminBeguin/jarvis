@@ -102,6 +102,13 @@ export function Dashboard() {
       ),
     });
 
+  const setWidth = (sectionId: string, width: 'full' | 'half') =>
+    save({
+      sections: config.sections.map((s) =>
+        s.id === sectionId ? { ...s, width } : s,
+      ),
+    });
+
   return (
     <div className="dash">
       <header className="dash__header">
@@ -144,6 +151,7 @@ export function Dashboard() {
             onMove={(dir) => moveSection(section.id, dir)}
             onDelete={() => deleteSection(section.id)}
             onItemsChange={(items) => setItems(section.id, items)}
+            onSetWidth={(w) => setWidth(section.id, w)}
           />
         ))}
       </div>
@@ -160,6 +168,7 @@ function SectionView({
   onMove,
   onDelete,
   onItemsChange,
+  onSetWidth,
 }: {
   section: DashboardSection;
   editing: boolean;
@@ -169,6 +178,7 @@ function SectionView({
   onMove: (dir: -1 | 1) => void;
   onDelete: () => void;
   onItemsChange: (items: DashboardItem[]) => void;
+  onSetWidth: (width: 'full' | 'half') => void;
 }) {
   const [titleDraft, setTitleDraft] = useState(section.title);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -185,8 +195,10 @@ function SectionView({
   const removeItemAt = (idx: number) =>
     onItemsChange(section.items.filter((_, i) => i !== idx));
 
+  const width = section.width ?? 'full';
+
   return (
-    <section className="dash-section">
+    <section className={`dash-section dash-section--${width}`}>
       <header className="dash-section__head">
         {editing ? (
           <input
@@ -211,6 +223,18 @@ function SectionView({
         )}
         {editing && (
           <div className="dash-section__controls">
+            <button
+              onClick={() => onSetWidth(width === 'full' ? 'half' : 'full')}
+              title={
+                width === 'full'
+                  ? 'Switch to half-width (pair side-by-side with another half)'
+                  : 'Switch to full-width (own row)'
+              }
+              aria-label="Toggle width"
+              className="dash-section__width"
+            >
+              {width === 'full' ? '◧ half' : '▮ full'}
+            </button>
             <button
               onClick={() => onMove(-1)}
               disabled={isFirst}
@@ -290,7 +314,7 @@ function ItemView({
           ×
         </button>
       )}
-      {item.kind === 'inbox' && <Inbox />}
+      {item.kind === 'inbox' && <Inbox compact />}
       {item.kind === 'routine' && <RoutineItem routineId={item.routineId} />}
       {item.kind === 'calendar' && <CalendarTimeline />}
     </div>
@@ -598,7 +622,6 @@ function CalendarTimeline() {
     return (
       <div className="dash-cal">
         <header className="dash-cal__head">
-          <h3>Calendar</h3>
           <span className="dash-cal__hint">events · reminders · routines</span>
         </header>
         <div className="dash-cal__empty">
@@ -613,7 +636,6 @@ function CalendarTimeline() {
   return (
     <div className="dash-cal">
       <header className="dash-cal__head">
-        <h3>Calendar</h3>
         <span className="dash-cal__hint">
           events · reminders · routines · click any row for detail
         </span>

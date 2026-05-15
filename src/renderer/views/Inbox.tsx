@@ -22,7 +22,12 @@ function readActiveProject(): string | null {
   }
 }
 
-export function Inbox() {
+/**
+ * @param compact - when true, hides the redundant "INBOX" title.
+ * Used when the component is embedded inside a Dashboard section
+ * (which already carries the section title).
+ */
+export function Inbox({ compact = false }: { compact?: boolean } = {}) {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
@@ -131,7 +136,7 @@ export function Inbox() {
     <section className="inbox">
       <header className="inbox__head">
         <div>
-          <h2>INBOX</h2>
+          {!compact && <h2>INBOX</h2>}
           <div className="inbox__hint">
             {items.length === 0 && !refreshing
               ? 'Nothing waiting on you.'

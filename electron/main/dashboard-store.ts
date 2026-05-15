@@ -34,6 +34,13 @@ function isDashboardSection(v: unknown): v is DashboardSection {
   const s = v as Record<string, unknown>;
   if (typeof s.id !== 'string' || typeof s.title !== 'string') return false;
   if (!Array.isArray(s.items)) return false;
+  if (
+    s.width !== undefined &&
+    s.width !== 'full' &&
+    s.width !== 'half'
+  ) {
+    return false;
+  }
   return s.items.every(isDashboardItem);
 }
 
@@ -100,6 +107,7 @@ export class DashboardStore extends EventEmitter {
           id: s.id || nanoid(8),
           title: s.title.trim() || 'Untitled',
           items: s.items.filter(isDashboardItem),
+          ...(s.width ? { width: s.width } : {}),
         })),
     };
     this.cached = cleaned;
