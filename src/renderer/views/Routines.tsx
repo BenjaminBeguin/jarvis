@@ -5,10 +5,10 @@ import type {
   DashboardItem,
   RoutineDef,
   SkillSummary,
-  TaskEvent,
   TaskSummary,
 } from '../../shared/types';
 import { MarkdownDoc } from './MarkdownText';
+import { TaskAnswerPreview } from './TaskAnswerPreview';
 import { toast } from './Toaster';
 
 interface DraftRoutine {
@@ -739,7 +739,10 @@ function TaskHistory({ taskIds }: { taskIds: string[] }) {
       </aside>
       <article className="briefings__content">
         {activeId ? (
-          <TaskPreview taskId={activeId} />
+          <TaskAnswerPreview
+            taskId={activeId}
+            openLabel="open full transcript in Observatory →"
+          />
         ) : (
           <div className="briefings__empty">Pick a run on the left.</div>
         )}
@@ -748,82 +751,6 @@ function TaskHistory({ taskIds }: { taskIds: string[] }) {
   );
 }
 
-/** Compact preview of a task: latest assistant text + link to Observatory.
- * Uses the same MarkdownDoc renderer for consistency with briefings. */
-function TaskPreview({ taskId }: { taskId: string }) {
-  const [events, setEvents] = useState<TaskEvent[]>([]);
-  const [status, setStatus] = useState<string>('');
-
-  useEffect(() => {
-    let cancelled = false;
-    void window.jarvis.getTaskHistory(taskId).then((evts) => {
-      if (!cancelled) setEvents(evts);
-    });
-    // Stream incremental events so a running task fills in live.
-    const off = window.jarvis.onTaskEvent(({ taskId: id, event }) => {
-      if (id !== taskId) return;
-      setEvents((prev) => {
-        if (prev.some((e) => e.seq === event.seq)) return prev;
-        return [...prev, event];
-      });
-    });
-    const offStatus = window.jarvis.onTaskStatus((summary) => {
-      if (summary.id !== taskId) return;
-      setStatus(summary.awaitingInput ? 'awaiting' : summary.status);
-    });
-    void window.jarvis.listTasks().then((all) => {
-      if (cancelled) return;
-      const t = all.find((x) => x.id === taskId);
-      if (t) setStatus(t.awaitingInput ? 'awaiting' : t.status);
-    });
-    return () => {
-      cancelled = true;
-      off();
-      offStatus();
-    };
-  }, [taskId]);
-
-  const assistantText = useMemo(() => {
-    const parts: string[] = [];
-    for (const e of events) {
-      const msg = e.msg as
-        | { type?: string; message?: { content?: unknown } }
-        | undefined;
-      if (msg?.type !== 'assistant') continue;
-      const content = msg.message?.content;
-      if (!Array.isArray(content)) continue;
-      for (const block of content as Array<Record<string, unknown>>) {
-        if (block['type'] === 'text' && typeof block['text'] === 'string') {
-          parts.push(block['text'] as string);
-        }
-      }
-    }
-    return parts.join('\n').trim();
-  }, [events]);
-
-  return (
-    <>
-      <div className="routine-preview__head">
-        <span className="routine-preview__status">
-          ● {status || 'loading'}
-        </span>
-        <button
-          className="briefings__schedule-link"
-          onClick={() => void window.jarvis.openObservatory(taskId)}
-        >
-          open full transcript in Observatory →
-        </button>
-      </div>
-      {assistantText ? (
-        <MarkdownDoc>{assistantText}</MarkdownDoc>
-      ) : (
-        <div className="briefings__empty">
-          {status === 'running' ? 'Streaming…' : 'No assistant text yet.'}
-        </div>
-      )}
-    </>
-  );
-}
 
 /**
  * "Add to dashboard" affordance — opens a small popover listing the

@@ -144,60 +144,176 @@ export function QuickNotePage() {
         </div>
       )}
 
+      <NoteSections
+        files={files}
+        bindings={bindings}
+        pushing={pushing}
+        onPush={pushEntry}
+        onDelete={deleteEntry}
+      />
+    </div>
+  );
+}
+
+/** Splits notes by binding status — entries whose bound task has
+ * status === 'completed' are moved into a collapsed "Done" section so
+ * the Active list stays focused on what still needs attention. The
+ * Done section keeps the badge so the user can still open the
+ * Claude session that handled it. */
+function NoteSections({
+  files,
+  bindings,
+  pushing,
+  onPush,
+  onDelete,
+}: {
+  files: NoteFile[];
+  bindings: ReturnType<typeof useTaskBinding>;
+  pushing: string | null;
+  onPush: (key: string, body: string) => Promise<void> | void;
+  onDelete: (date: string, entry: NoteEntry) => Promise<void> | void;
+}) {
+  const [showDone, setShowDone] = useState(false);
+
+  const isDone = (key: string): boolean => {
+    const b = bindings.get(key);
+    return b?.status === 'completed';
+  };
+
+  const active: Array<{ file: NoteFile; entries: NoteEntry[] }> = [];
+  const done: Array<{ file: NoteFile; entries: NoteEntry[] }> = [];
+  let doneCount = 0;
+  for (const file of files) {
+    const a: NoteEntry[] = [];
+    const d: NoteEntry[] = [];
+    for (let i = 0; i < file.entries.length; i++) {
+      const entry = file.entries[i]!;
+      const key = `${file.date}-${i}`;
+      if (isDone(key)) {
+        d.push(entry);
+        doneCount++;
+      } else {
+        a.push(entry);
+      }
+    }
+    if (a.length > 0) active.push({ file, entries: a });
+    if (d.length > 0) done.push({ file, entries: d });
+  }
+
+  return (
+    <>
       <div className="module-page__list">
-        {files.map((f) => (
-          <article key={f.date} className="bracketed note-card">
-            <header className="note-card__date">{dateLabel(f.date)}</header>
-            <div className="note-card__entries">
-              {f.entries.map((entry, i) => {
-                const key = `${f.date}-${i}`;
-                return (
-                  <div key={key} className="note-card__entry">
-                    <div className="note-card__entry-head">
-                      <span className="note-card__entry-time">{entry.time}</span>
-                      {(() => {
-                        const binding = bindings.get(key);
-                        if (binding) {
-                          return (
-                            <TaskBindingBadge
-                              binding={binding}
-                              onOpen={() =>
-                                void window.jarvis.showAnswerHud(binding.taskId)
-                              }
-                              onRunAgain={() => {
-                                bindings.clear(key);
-                                void pushEntry(key, entry.body);
-                              }}
-                              onForget={() => bindings.clear(key)}
-                            />
-                          );
-                        }
-                        return (
-                          <button
-                            className="note-card__push"
-                            disabled={pushing === key}
-                            onClick={() => void pushEntry(key, entry.body)}
-                          >
-                            {pushing === key ? 'Pushing…' : '↪ Push to Claude'}
-                          </button>
-                        );
-                      })()}
-                      <button
-                        className="note-card__delete"
-                        title="Delete this note"
-                        onClick={() => void deleteEntry(f.date, entry)}
-                      >
-                        ×
-                      </button>
-                    </div>
-                    <pre className="note-card__entry-body">{entry.body}</pre>
-                  </div>
-                );
-              })}
-            </div>
-          </article>
+        {active.map(({ file, entries }) => (
+          <NoteFileCard
+            key={`active-${file.date}`}
+            file={file}
+            entries={entries}
+            bindings={bindings}
+            pushing={pushing}
+            onPush={onPush}
+            onDelete={onDelete}
+          />
         ))}
       </div>
-    </div>
+
+      {doneCount > 0 && (
+        <section className="note-done">
+          <button
+            className="note-done__head"
+            onClick={() => setShowDone((v) => !v)}
+            title={showDone ? 'Collapse done notes' : 'Expand done notes'}
+          >
+            <span className="note-done__caret">{showDone ? '▾' : '▸'}</span>
+            <span className="note-done__label">Done</span>
+            <span className="note-done__count">{doneCount}</span>
+          </button>
+          {showDone && (
+            <div className="module-page__list note-done__list">
+              {done.map(({ file, entries }) => (
+                <NoteFileCard
+                  key={`done-${file.date}`}
+                  file={file}
+                  entries={entries}
+                  bindings={bindings}
+                  pushing={pushing}
+                  onPush={onPush}
+                  onDelete={onDelete}
+                  dimmed
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+    </>
+  );
+}
+
+/** One day's worth of note entries, filtered by the parent. Lives as
+ * its own component so the Active + Done sections can each reuse the
+ * date-card markup without duplicating the per-entry render. */
+function NoteFileCard({
+  file,
+  entries,
+  bindings,
+  pushing,
+  onPush,
+  onDelete,
+  dimmed = false,
+}: {
+  file: NoteFile;
+  entries: NoteEntry[];
+  bindings: ReturnType<typeof useTaskBinding>;
+  pushing: string | null;
+  onPush: (key: string, body: string) => Promise<void> | void;
+  onDelete: (date: string, entry: NoteEntry) => Promise<void> | void;
+  dimmed?: boolean;
+}) {
+  return (
+    <article className={`bracketed note-card${dimmed ? ' note-card--dimmed' : ''}`}>
+      <header className="note-card__date">{dateLabel(file.date)}</header>
+      <div className="note-card__entries">
+        {entries.map((entry) => {
+          const key = `${file.date}-${entry.fileIndex}`;
+          const binding = bindings.get(key);
+          return (
+            <div key={key} className="note-card__entry">
+              <div className="note-card__entry-head">
+                <span className="note-card__entry-time">{entry.time}</span>
+                {binding ? (
+                  <TaskBindingBadge
+                    binding={binding}
+                    onOpen={() =>
+                      void window.jarvis.showAnswerHud(binding.taskId)
+                    }
+                    onRunAgain={() => {
+                      bindings.clear(key);
+                      void onPush(key, entry.body);
+                    }}
+                    onForget={() => bindings.clear(key)}
+                  />
+                ) : (
+                  <button
+                    className="note-card__push"
+                    disabled={pushing === key}
+                    onClick={() => void onPush(key, entry.body)}
+                  >
+                    {pushing === key ? 'Pushing…' : '↪ Push to Claude'}
+                  </button>
+                )}
+                <button
+                  className="note-card__delete"
+                  title="Delete this note"
+                  onClick={() => void onDelete(file.date, entry)}
+                >
+                  ×
+                </button>
+              </div>
+              <pre className="note-card__entry-body">{entry.body}</pre>
+            </div>
+          );
+        })}
+      </div>
+    </article>
   );
 }

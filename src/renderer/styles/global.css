@@ -6454,6 +6454,63 @@ button:disabled:hover {
   gap: 10px;
 }
 
+.note-card--dimmed {
+  opacity: 0.6;
+}
+
+.note-card--dimmed:hover {
+  opacity: 1;
+}
+
+/* Done section (collapsed by default) */
+.note-done {
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.note-done__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 2px;
+}
+
+.note-done__head:hover {
+  color: var(--accent);
+  background: rgba(0, 212, 255, 0.04);
+}
+
+.note-done__caret {
+  color: var(--text-faint);
+}
+
+.note-done__label {
+  color: inherit;
+}
+
+.note-done__count {
+  background: rgba(95, 255, 166, 0.1);
+  color: var(--good);
+  padding: 2px 7px;
+  border-radius: 2px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.note-done__list {
+  margin-top: 12px;
+}
+
 .note-card__entry {
   border-left: 2px solid var(--border-strong);
   padding-left: 12px;
@@ -7144,7 +7201,8 @@ button:disabled:hover {
 .routine-history__status--aborted { color: var(--bad); }
 .routine-history__status--awaiting { color: var(--warn); }
 
-.routine-preview__head {
+.routine-preview__head,
+.task-answer-preview__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -7154,12 +7212,18 @@ button:disabled:hover {
   border-bottom: 1px solid var(--border);
 }
 
-.routine-preview__status {
+.routine-preview__status,
+.task-answer-preview__status {
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-dim);
+}
+
+.task-answer-preview {
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .routine-detail__field-label {

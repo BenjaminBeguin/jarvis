@@ -11,6 +11,7 @@ import type {
 } from '../../shared/types';
 import { Inbox } from './Inbox';
 import { MarkdownDoc } from './MarkdownText';
+import { TaskAnswerPreview } from './TaskAnswerPreview';
 import { toast } from './Toaster';
 
 interface Props {
@@ -392,22 +393,21 @@ function RoutineItem({ routineId }: { routineId: string }) {
           </div>
         )}
         {kind === 'freeform' && (
-          <div className="dash-routine__hint">
-            {routine.lastTaskId ? (
-              <>
-                <button
-                  className="dash-routine__link"
-                  onClick={() =>
-                    void window.jarvis.openObservatory(routine.lastTaskId!)
-                  }
-                >
-                  view last transcript →
-                </button>
-              </>
-            ) : (
-              'No output yet. Click "run now" above to generate the first one.'
-            )}
-          </div>
+          routine.lastTaskId ? (
+            // Show ONLY the assistant's answer — the user explicitly does
+            // not want to see the full pipeline (tool calls, intermediate
+            // events) on the dashboard. Compact slices long answers so
+            // dashboards stay scannable; the link opens the full one.
+            <TaskAnswerPreview
+              taskId={routine.lastTaskId}
+              compact
+              openLabel="see full pipeline in Observatory →"
+            />
+          ) : (
+            <div className="dash-routine__hint">
+              No output yet. Click "run now" above to generate the first one.
+            </div>
+          )
         )}
       </div>
     </article>
