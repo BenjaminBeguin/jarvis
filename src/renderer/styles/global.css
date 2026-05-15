@@ -2188,8 +2188,7 @@ button:disabled:hover {
 }
 
 .activity__row {
-  display: grid;
-  grid-template-columns: auto auto 1fr auto;
+  display: flex;
   align-items: center;
   gap: 14px;
   width: 100%;
@@ -2206,6 +2205,14 @@ button:disabled:hover {
   border-radius: 2px;
   cursor: pointer;
   transition: background 100ms ease, border-color 100ms ease;
+}
+
+/* Preview is the flexible filler; everything else stays at its natural
+   width. min-width: 0 lets the ellipsis kick in instead of overflowing
+   the row. */
+.activity__row > .activity__preview {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .activity__row:hover {
@@ -2276,6 +2283,47 @@ button:disabled:hover {
 .activity__channel--imessage {
   color: var(--good);
   border-color: rgba(95, 255, 166, 0.4);
+}
+
+/* Category chip for ActivityEvent rows (note · meeting · integration · inbox).
+   Sits in the same column slot as the status badge for /send rows so
+   the feed reads as one column of "what kind of thing." */
+.activity__cat {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 2px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  white-space: nowrap;
+  min-width: 96px;
+  text-align: center;
+}
+
+.activity__cat--note {
+  color: #c9b3ff;
+  border-color: rgba(201, 179, 255, 0.4);
+}
+
+.activity__cat--meeting {
+  color: var(--accent);
+  border-color: rgba(0, 212, 255, 0.4);
+}
+
+.activity__cat--integration {
+  color: var(--warn);
+  border-color: rgba(255, 196, 80, 0.4);
+}
+
+.activity__cat--inbox {
+  color: var(--good);
+  border-color: rgba(95, 255, 166, 0.4);
+}
+
+.activity__cat--other {
+  color: var(--text-faint);
 }
 
 .activity__preview {

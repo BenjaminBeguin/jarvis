@@ -66,6 +66,38 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   onLaunch: 'toast',
 };
 
+/**
+ * One row in the Activity feed beyond /send (which is task-derived).
+ * Persisted in SQLite via `ActivityStore`. Emit sites are scattered:
+ * meeting-recorder when a session starts/ends, notes module when a
+ * note is created/archived, the MCP config store when a server is
+ * disabled, etc. The renderer formats per `kind`.
+ *
+ *   - `kind`  short dotted id ('meeting.started', 'note.archived',
+ *             'mcp.disabled', 'inbox.cleared').
+ *   - `label` human one-liner shown in the feed row.
+ *   - `detail` optional payload — anything the renderer needs to
+ *             format the row (skillId / project name / file path /
+ *             link target).
+ */
+export interface ActivityEvent {
+  id: number;
+  ts: number;
+  kind: string;
+  label: string;
+  detail?: unknown;
+}
+
+/** Shape that emit sites pass to `ActivityStore.record()`. */
+export interface ActivityEventInput {
+  kind: string;
+  label: string;
+  detail?: unknown;
+  /** Override the auto `Date.now()` — useful when wrapping events
+   *  whose real timestamp lives elsewhere (e.g. file mtime). */
+  ts?: number;
+}
+
 export interface TaskSummary {
   id: string;
   skillId: string | null;

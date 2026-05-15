@@ -73,6 +73,13 @@ export const quickNoteModule: Module = {
         const block = `\n## ${timeKey(now)}\n\n${text}\n`;
         appendFileSync(filePath, block, 'utf8');
         const rel = filePath.replace(ctx.jarvisRoot, '~/.jarvis');
+        ctx.logActivity({
+          kind: 'note.created',
+          label: projectName
+            ? `Note saved · ${projectName} · ${rel}`
+            : `Note saved · ${rel}`,
+          detail: { project: projectName, path: filePath, snippet: text.slice(0, 120) },
+        });
 
         // Smart-note: if the user wrote something with a time phrase
         // ("remind me in 2h about X", "ping luca at 17:30 …"), also create

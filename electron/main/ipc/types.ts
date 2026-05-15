@@ -1,5 +1,6 @@
 import type { AppStatus } from '@shared/types';
 
+import type { ActivityStore } from '../activity-store.js';
 import type { BriefingsStore } from '../briefings.js';
 import type { DashboardStore } from '../dashboard-store.js';
 import type { InboxStore } from '../inbox.js';
@@ -37,6 +38,7 @@ export interface IpcDeps {
   userContext: UserContextStore;
   preferences: PreferencesStore;
   inbox: InboxStore;
+  activity: ActivityStore;
   briefings: BriefingsStore;
   dashboard: DashboardStore;
   jarvisRoot: string;

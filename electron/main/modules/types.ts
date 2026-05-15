@@ -1,4 +1,5 @@
 import type {
+  ActivityEventInput,
   LaunchTaskRequest,
   ProjectDef,
   Reminder,
@@ -80,6 +81,12 @@ export interface ModuleContext {
    * by the same `name` replaces the previous instance.
    */
   registerContextProvider(provider: UserContextProvider): void;
+  /**
+   * Record a non-agent side-effect for the Activity tab — meeting
+   * started, note archived, MCP disabled, etc. Cheap; fire-and-forget.
+   * Renderer merges these with task-derived /send rows.
+   */
+  logActivity(event: ActivityEventInput): void;
 }
 
 /**

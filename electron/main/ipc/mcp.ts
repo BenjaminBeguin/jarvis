@@ -9,7 +9,7 @@ import { invokeMcpTool } from '../mcp-invoke.js';
 import { probeMcpTools } from '../mcp-probe.js';
 import type { IpcDeps } from './types.js';
 
-export function registerMcpIpc({ mcp, auth }: IpcDeps): void {
+export function registerMcpIpc({ mcp, auth, activity }: IpcDeps): void {
   ipcMain.handle(IpcChannels.listMcpServers, () => mcp.list());
 
   ipcMain.handle(IpcChannels.listClaudeMcps, async () => {
@@ -72,7 +72,15 @@ export function registerMcpIpc({ mcp, auth }: IpcDeps): void {
         return { ok: false, message: 'Invalid server id.' };
       }
       const removed = mcp.remove(id);
-      return removed ? { ok: true } : { ok: false, message: 'Not found.' };
+      if (removed) {
+        activity.record({
+          kind: 'mcp.removed',
+          label: `MCP removed · ${id}`,
+          detail: { id },
+        });
+        return { ok: true };
+      }
+      return { ok: false, message: 'Not found.' };
     },
   );
 
@@ -88,10 +96,21 @@ export function registerMcpIpc({ mcp, auth }: IpcDeps): void {
       // untilMs: number → disabled until that timestamp
       // untilMs: null   → disabled indefinitely
       // untilMs absent  → re-enable
-      const ok = mcp.setDisabled(
-        payload.id,
-        'untilMs' in payload ? payload.untilMs ?? null : undefined,
-      );
+      const untilArg = 'untilMs' in payload ? payload.untilMs ?? null : undefined;
+      const ok = mcp.setDisabled(payload.id, untilArg);
+      if (ok) {
+        const isEnable = untilArg === undefined;
+        const isForever = untilArg === null;
+        activity.record({
+          kind: isEnable ? 'mcp.enabled' : 'mcp.disabled',
+          label: isEnable
+            ? `MCP re-enabled · ${payload.id}`
+            : isForever
+            ? `MCP disabled · ${payload.id} (until re-enabled)`
+            : `MCP disabled · ${payload.id} until ${new Date(untilArg).toLocaleString()}`,
+          detail: { id: payload.id, untilMs: untilArg ?? null },
+        });
+      }
       return ok
         ? { ok: true }
         : { ok: false, message: 'Server not found in mcp.json.' };

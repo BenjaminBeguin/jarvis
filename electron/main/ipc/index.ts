@@ -1,3 +1,4 @@
+import { registerActivityIpc } from './activity.js';
 import { registerAuthIpc } from './auth.js';
 import { registerBriefingsIpc } from './briefings.js';
 import { registerDashboardIpc } from './dashboard.js';
@@ -24,6 +25,7 @@ export type { IpcDeps } from './types.js';
  * alphabetised so it's obvious which domains exist.
  */
 export function registerAllIpc(deps: IpcDeps): void {
+  registerActivityIpc(deps);
   registerAuthIpc(deps);
   registerBriefingsIpc(deps);
   registerDashboardIpc(deps);

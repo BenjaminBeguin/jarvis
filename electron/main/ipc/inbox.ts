@@ -61,7 +61,11 @@ const BUILTIN_SOURCE_META: Record<
  * file name is a single segment ("slack-pulse.json"); path validation
  * blocks `..` and absolute paths.
  */
-export function registerInboxIpc({ inbox, jarvisRoot }: IpcDeps): void {
+export function registerInboxIpc({
+  inbox,
+  jarvisRoot,
+  activity,
+}: IpcDeps): void {
   ipcMain.handle(IpcChannels.listInbox, () => inbox.list());
   ipcMain.handle(IpcChannels.refreshInbox, () => inbox.refresh());
   ipcMain.handle(
@@ -126,6 +130,11 @@ export function registerInboxIpc({ inbox, jarvisRoot }: IpcDeps): void {
       if (!existsSync(target)) return { ok: true };
       try {
         unlinkSync(target);
+        activity.record({
+          kind: 'inbox.cleared',
+          label: `Inbox source cleared · ${name}`,
+          detail: { name, path: target },
+        });
         // Force a fresh refresh so the renderer + tray see the items
         // disappear without waiting for the auto-refresh tick.
         await inbox.refresh();

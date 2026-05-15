@@ -13,6 +13,7 @@ export function registerProjectsIpc({
   projectMemory,
   userContext,
   jarvisRoot,
+  activity,
 }: IpcDeps): void {
   ipcMain.handle(IpcChannels.listProjects, () => projects.list());
 
@@ -149,9 +150,19 @@ export function registerProjectsIpc({
         } catch {
           // ignore
         }
+        activity.record({
+          kind: 'note.deleted',
+          label: `Note deleted · notes/${date}.md (last entry — file removed)`,
+          detail: { path, date, fileIndex },
+        });
         return { ok: true };
       }
       writeFileSync(path, blocks.join('\n') + '\n', 'utf8');
+      activity.record({
+        kind: 'note.deleted',
+        label: `Note deleted · notes/${date}.md (#${fileIndex + 1})`,
+        detail: { path, date, fileIndex },
+      });
       return { ok: true };
     },
   );
@@ -207,6 +218,13 @@ export function registerProjectsIpc({
       }
       blocks[fileIndex] = header + body;
       writeFileSync(path, blocks.join('\n') + '\n', 'utf8');
+      activity.record({
+        kind: archived ? 'note.archived' : 'note.restored',
+        label: archived
+          ? `Note archived · notes/${date}.md (#${fileIndex + 1})`
+          : `Note restored · notes/${date}.md (#${fileIndex + 1})`,
+        detail: { path, date, fileIndex },
+      });
       return { ok: true };
     },
   );

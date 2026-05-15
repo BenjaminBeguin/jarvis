@@ -30,6 +30,19 @@ const MIGRATIONS = [
   // history can still offer the "Open in Claude Code Desktop" / "Copy
   // resume command" buttons after a restart.
   `ALTER TABLE tasks ADD COLUMN sdk_session_id TEXT;`,
+  // Activity log — Phase 2. Non-agent side-effects (meeting started,
+  // note created, MCP disabled, …) so the Activity tab can show
+  // "everything that happened" alongside the task-derived /send rows.
+  // `kind` is a dotted name ('meeting.started'); `detail_json` carries
+  // arbitrary structured data the renderer can format per kind.
+  `CREATE TABLE IF NOT EXISTS activity_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    label TEXT NOT NULL,
+    detail_json TEXT
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_activity_ts ON activity_events(ts DESC);`,
 ];
 
 let db: DatabaseType | null = null;

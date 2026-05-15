@@ -9,6 +9,7 @@ import { detectClaudeBinary, loadAuthMode, loadNotificationPrefs } from './auth.
 import { BriefingsStore } from './briefings.js';
 import { closeDatabase, initDatabase, listRecentTasks } from './db.js';
 import { startHttpServer, type HttpServerHandle } from './http-server.js';
+import { ActivityStore } from './activity-store.js';
 import { InboxStore } from './inbox.js';
 import { InboxProximityWatcher } from './inbox-proximity.js';
 import { MeetingActivityWatcher } from './meeting-activity-watcher.js';
@@ -95,6 +96,7 @@ const dashboard = new DashboardStore(
 );
 const userContext = new UserContextStore();
 const inbox = new InboxStore();
+const activity = new ActivityStore();
 const briefings = new BriefingsStore(BUILTIN_BRIEFING_KINDS);
 // "Heads up" notifications when an inbox item with fireAt is within 5
 // min. Calendar events flow naturally through this; reminders are
@@ -615,6 +617,7 @@ app.whenReady().then(async () => {
     },
     broadcast: (channel, payload) => broadcast(channel, payload),
     registerContextProvider: (provider) => userContext.register(provider),
+    logActivity: (event) => activity.record(event),
   });
   await modules.register(quickNoteModule);
   await modules.register(claudeCodeWatchModule);
@@ -773,6 +776,7 @@ app.whenReady().then(async () => {
     userContext,
     preferences,
     inbox,
+    activity,
     briefings,
     dashboard,
     jarvisRoot,

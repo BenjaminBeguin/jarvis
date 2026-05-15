@@ -1,24 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { TaskSummary } from '../../shared/types';
+import type { ActivityEvent, TaskSummary } from '../../shared/types';
 
 /**
- * Activity tab — Phase 1.
+ * Activity tab — Phase 2.
  *
- * For now, this is "everything you did with /send": each row is one task
- * spawned by the send skill. Status (running / sent / failed / cancelled)
- * comes straight from task.status; the prompt preview is what you typed
- * into the palette. Click a row to open the full transcript in Observatory
- * — that's where tool calls, drafts, and the actual confirmation/send
- * trail live.
+ * Two data streams merged into one time-sorted feed:
+ *   1. `/send` tasks (filtered from TaskRegistry; same as Phase 1 — the
+ *      conversational rows with channel chip + status badge).
+ *   2. ActivityStore events (note created, meeting started, MCP
+ *      disabled, inbox source cleared, etc.).
  *
- * Phase 2 will widen this into a true event log (meeting open/close,
- * note removed, integration disabled, …) backed by a new SQLite events
- * table that modules write to. For now the data is task-derived; no new
- * schema, no new IPC. We're rendering rows the system already has.
+ * Click a /send row → opens its transcript in the Observatory. Click
+ * an event row → does whatever the `kind` warrants (open file, jump
+ * to a tab) via small per-kind handlers below. Phase 3 would add a
+ * filter bar across the top; for now everything is one stream.
  */
+
+type Row =
+  | { kind: 'send'; ts: number; task: TaskSummary }
+  | { kind: 'event'; ts: number; event: ActivityEvent };
+
 export function Activity() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
+  const [events, setEvents] = useState<ActivityEvent[]>([]);
 
   useEffect(() => {
     void window.jarvis.listTasks().then(setTasks);
@@ -40,26 +45,27 @@ export function Activity() {
     };
   }, []);
 
-  const rows = useMemo(
-    () =>
-      tasks
-        .filter((t) => t.skillId === 'send')
-        .sort((a, b) => b.startedAt - a.startedAt)
-        .slice(0, 50),
-    [tasks],
-  );
+  useEffect(() => {
+    void window.jarvis.listActivity(200).then(setEvents);
+    const off = window.jarvis.onActivityChanged((event) => {
+      setEvents((prev) => [event, ...prev]);
+    });
+    return off;
+  }, []);
 
-  const openTask = (id: string) => {
-    // Switch the Shell to Observatory, then ping Observatory to select
-    // this id. Cross-component coordination via window events — same
-    // pattern shellNav uses elsewhere.
-    window.dispatchEvent(
-      new CustomEvent('jarvis:navigate', { detail: { tab: 'observatory' } }),
-    );
-    window.dispatchEvent(
-      new CustomEvent('jarvis:focus-task', { detail: { taskId: id } }),
-    );
-  };
+  const rows = useMemo<Row[]>(() => {
+    const sendRows: Row[] = tasks
+      .filter((t) => t.skillId === 'send')
+      .map((t) => ({ kind: 'send', ts: t.startedAt, task: t }));
+    const eventRows: Row[] = events.map((e) => ({
+      kind: 'event',
+      ts: e.ts,
+      event: e,
+    }));
+    return [...sendRows, ...eventRows]
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, 200);
+  }, [tasks, events]);
 
   return (
     <section className="activity">
@@ -67,49 +73,134 @@ export function Activity() {
         <div>
           <h2>ACTIVITY</h2>
           <p>
-            Things you've done through Jarvis. Today: every <code>/send</code>{' '}
-            with its status and prompt. Coming next: meetings, notes,
-            integration toggles, and the rest of the event log.
+            Things you've done through Jarvis — <code>/send</code> messages,
+            meetings, notes, integration toggles, inbox cleanups. Click a
+            row to jump to its surface.
           </p>
         </div>
         <div className="activity__count">
-          {rows.length} {rows.length === 1 ? 'message' : 'messages'}
+          {rows.length} {rows.length === 1 ? 'row' : 'rows'}
         </div>
       </header>
 
       {rows.length === 0 ? (
         <div className="activity__empty">
-          No <code>/send</code> activity yet. When you draft a message through
-          the palette, it'll show up here with its delivery status.
+          Nothing here yet. As you use Jarvis (drafting messages,
+          recording meetings, toggling integrations) this feed fills up.
         </div>
       ) : (
         <ul className="activity__list">
-          {rows.map((task) => (
-            <ActivityRow key={task.id} task={task} onOpen={() => openTask(task.id)} />
-          ))}
+          {rows.map((row) =>
+            row.kind === 'send' ? (
+              <SendRow key={`send-${row.task.id}`} task={row.task} />
+            ) : (
+              <EventRow key={`event-${row.event.id}`} event={row.event} />
+            ),
+          )}
         </ul>
       )}
     </section>
   );
 }
 
-function ActivityRow({
-  task,
-  onOpen,
-}: {
-  task: TaskSummary;
-  onOpen: () => void;
-}) {
+function openObservatoryTask(id: string): void {
+  window.dispatchEvent(
+    new CustomEvent('jarvis:navigate', { detail: { tab: 'observatory' } }),
+  );
+  window.dispatchEvent(
+    new CustomEvent('jarvis:focus-task', { detail: { taskId: id } }),
+  );
+}
+
+function SendRow({ task }: { task: TaskSummary }) {
   const channel = inferChannel(task.inputPreview);
   return (
     <li>
-      <button className="activity__row" onClick={onOpen} title="Open transcript">
+      <button
+        className="activity__row"
+        onClick={() => openObservatoryTask(task.id)}
+        title="Open transcript"
+      >
         <StatusBadge status={statusKind(task)} />
         {channel && <ChannelChip channel={channel} />}
         <span className="activity__preview" title={task.inputPreview}>
           {task.inputPreview || '(empty prompt)'}
         </span>
         <span className="activity__time">{formatRel(task.startedAt)}</span>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * Per-kind handler maps an ActivityEvent.kind to a navigation action
+ * + a short "category" label that drives the badge color.
+ */
+const EVENT_KIND_META: Record<
+  string,
+  { category: 'note' | 'meeting' | 'integration' | 'inbox' | 'other'; label: string }
+> = {
+  'note.created': { category: 'note', label: 'note' },
+  'note.archived': { category: 'note', label: 'note · archive' },
+  'note.restored': { category: 'note', label: 'note · restore' },
+  'note.deleted': { category: 'note', label: 'note · delete' },
+  'meeting.started': { category: 'meeting', label: 'meeting' },
+  'meeting.finished': { category: 'meeting', label: 'meeting' },
+  'mcp.enabled': { category: 'integration', label: 'integration · on' },
+  'mcp.disabled': { category: 'integration', label: 'integration · off' },
+  'mcp.removed': { category: 'integration', label: 'integration · remove' },
+  'inbox.cleared': { category: 'inbox', label: 'inbox · clear' },
+};
+
+function EventRow({ event }: { event: ActivityEvent }) {
+  const meta = EVENT_KIND_META[event.kind] ?? {
+    category: 'other' as const,
+    label: event.kind,
+  };
+  const onClick = () => {
+    // Notes / meetings → jump to the relevant module page.
+    if (event.kind.startsWith('note.')) {
+      window.dispatchEvent(
+        new CustomEvent('jarvis:navigate', {
+          detail: { tab: 'settings', moduleId: 'quick-note' },
+        }),
+      );
+      return;
+    }
+    if (event.kind.startsWith('meeting.')) {
+      window.dispatchEvent(
+        new CustomEvent('jarvis:navigate', {
+          detail: { tab: 'settings', moduleId: 'meeting-recorder' },
+        }),
+      );
+      return;
+    }
+    if (event.kind.startsWith('mcp.')) {
+      window.dispatchEvent(
+        new CustomEvent('jarvis:navigate', { detail: { tab: 'settings' } }),
+      );
+      return;
+    }
+    if (event.kind.startsWith('inbox.')) {
+      window.dispatchEvent(
+        new CustomEvent('jarvis:navigate', { detail: { tab: 'inbox' } }),
+      );
+      return;
+    }
+  };
+  return (
+    <li>
+      <button className="activity__row" onClick={onClick} title={event.kind}>
+        <span
+          className={`activity__cat activity__cat--${meta.category}`}
+          title={meta.label}
+        >
+          {meta.label}
+        </span>
+        <span className="activity__preview" title={event.label}>
+          {event.label}
+        </span>
+        <span className="activity__time">{formatRel(event.ts)}</span>
       </button>
     </li>
   );
@@ -161,13 +252,6 @@ function ChannelChip({ channel }: { channel: Channel }) {
   );
 }
 
-/**
- * Best-effort channel detection from the raw palette input. The send
- * skill's UX teaches users to name the channel ("on slack", "email
- * mom personal"), so a keyword scan covers most cases. If we can't
- * tell, we just omit the chip — Phase 2 will read the channel out of
- * the task's structured events instead of guessing.
- */
 function inferChannel(input: string): Channel | null {
   if (!input) return null;
   const lower = input.toLowerCase();

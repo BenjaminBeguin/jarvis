@@ -75,6 +75,13 @@ export const meetingRecorderModule: Module = {
           project,
           startedAt: Date.now(),
         });
+        ctx.logActivity({
+          kind: 'meeting.started',
+          label: project
+            ? `Meeting started · ${project} · ${title}`
+            : `Meeting started · ${title}`,
+          detail: { title, project },
+        });
         return `Recording started · ${project ? `${project} · ${title}` : title}`;
       },
     },

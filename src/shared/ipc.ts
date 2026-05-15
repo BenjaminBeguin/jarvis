@@ -141,6 +141,9 @@ export const IpcChannels = {
   taskEvent: 'task:event',
   taskStatus: 'task:status',
   taskRemoved: 'task:removed',
+
+  listActivity: 'activity:list',
+  activityChanged: 'activity:changed',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];

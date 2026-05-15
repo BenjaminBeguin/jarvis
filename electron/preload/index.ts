@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 import { IpcChannels } from '@shared/ipc';
 import type {
+  ActivityEvent,
   AppStatus,
   AuthMode,
   ClaudeMcpEntry,
@@ -448,6 +449,11 @@ const api = {
     subscribe(IpcChannels.taskRemoved, listener),
   onAppStatus: (listener: Listener<AppStatus>): Unsubscribe =>
     subscribe(IpcChannels.appStatus, listener),
+
+  listActivity: (limit?: number): Promise<ActivityEvent[]> =>
+    ipcRenderer.invoke(IpcChannels.listActivity, limit),
+  onActivityChanged: (listener: Listener<ActivityEvent>): Unsubscribe =>
+    subscribe(IpcChannels.activityChanged, listener),
 };
 
 export type JarvisApi = typeof api;

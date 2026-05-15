@@ -11,7 +11,12 @@ import type { IpcDeps } from './types.js';
  * Microphone access, audio transcription, and the meeting-finish pipeline
  * (persists the markdown + kicks off the auto-debrief skill).
  */
-export function registerMediaIpc({ runner, hud, jarvisRoot }: IpcDeps): void {
+export function registerMediaIpc({
+  runner,
+  hud,
+  jarvisRoot,
+  activity,
+}: IpcDeps): void {
   ipcMain.handle(
     IpcChannels.requestMicAccess,
     async (): Promise<{ granted: boolean; status: string }> => {
@@ -64,6 +69,19 @@ export function registerMediaIpc({ runner, hud, jarvisRoot }: IpcDeps): void {
         pcm: new Float32Array(payload.pcm),
       });
       const relPath = `~/.jarvis/meetings/${filename}`;
+      const durationSec = Math.round((payload.endedAt - payload.startedAt) / 1000);
+      activity.record({
+        kind: 'meeting.finished',
+        label: payload.project
+          ? `Meeting saved · ${payload.project} · ${payload.title} (${formatDuration(durationSec)})`
+          : `Meeting saved · ${payload.title} (${formatDuration(durationSec)})`,
+        detail: {
+          title: payload.title,
+          project: payload.project,
+          path: relPath,
+          durationSec,
+        },
+      });
       new Notification({ title: 'Meeting saved', body: relPath })
         .on('click', () => openObservatory())
         .show();
@@ -82,4 +100,11 @@ export function registerMediaIpc({ runner, hud, jarvisRoot }: IpcDeps): void {
       return { filename };
     },
   );
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return s === 0 ? `${m}m` : `${m}m ${s}s`;
 }
