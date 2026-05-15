@@ -445,6 +445,26 @@ function InboxRow({
             Open
           </button>
         )}
+        {item.source === 'reminders' && (
+          <button
+            className="inbox__row-done"
+            onClick={async () => {
+              // Item id is `reminder-<reminderId>` (see remindersInboxSource).
+              const reminderId = item.id.replace(/^reminder-/, '');
+              try {
+                await window.jarvis.markReminderDone(reminderId);
+              } catch (e) {
+                toast({
+                  kind: 'error',
+                  message: e instanceof Error ? e.message : String(e),
+                });
+              }
+            }}
+            title="I did this — drop it from the inbox (keeps history in the Reminders page)"
+          >
+            ✓ Done
+          </button>
+        )}
         {item.action && !binding && (
           <button
             className="inbox__row-primary"

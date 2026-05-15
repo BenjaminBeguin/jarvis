@@ -4,10 +4,14 @@ import type { InboxSource } from '../inbox.js';
 import type { ReminderStore } from '../reminders.js';
 
 /**
- * Reminders firing in the next 24 hours. Today's events are the most
- * actionable — older pending reminders are usually noise the user has
- * dismissed in their head. We show fireAt as relative time ("in 2h") in
- * the renderer; main just hands over the ms.
+ * Reminders in the inbox — both:
+ *   - pending reminders firing in the next 24h (so the user sees them
+ *     before they fire and can re-arrange if needed), and
+ *   - fired reminders that haven't been marked done yet (the to-do
+ *     list semantics: the row stays until you say you did it).
+ *
+ * Done and cancelled reminders never appear — they live in history
+ * (Reminders page → Done / Cancelled groups).
  */
 export function remindersInboxSource(reminders: ReminderStore): InboxSource {
   return {
@@ -18,15 +22,31 @@ export function remindersInboxSource(reminders: ReminderStore): InboxSource {
       const horizon = now + 24 * 60 * 60 * 1000;
       return reminders
         .list()
-        .filter((r) => r.status === 'pending' && r.fireAt <= horizon)
-        .map((r) => ({
-          id: `reminder-${r.id}`,
-          source: 'reminders',
-          title: r.body,
-          subtitle: r.mode === 'scheduled' ? 'Scheduled action' : 'Reminder',
-          fireAt: r.fireAt,
-          createdAt: r.fireAt, // we don't track createdAt separately
-        }));
+        .filter((r) => {
+          if (r.status === 'pending') return r.fireAt <= horizon;
+          if (r.status === 'fired') return true;
+          return false; // done / cancelled
+        })
+        .map((r) => {
+          const fired = r.status === 'fired';
+          return {
+            id: `reminder-${r.id}`,
+            source: 'reminders',
+            title: r.body,
+            subtitle: fired
+              ? r.mode === 'scheduled'
+                ? 'Scheduled action · awaiting done'
+                : 'Reminder · awaiting done'
+              : r.mode === 'scheduled'
+                ? 'Scheduled action'
+                : 'Reminder',
+            // For fired reminders we surface firedAt so the row sorts
+            // by "when you got the nudge" rather than the original
+            // fireAt (which is now in the past).
+            fireAt: fired ? (r.firedAt ?? r.fireAt) : r.fireAt,
+            createdAt: r.createdAt,
+          };
+        });
     },
   };
 }

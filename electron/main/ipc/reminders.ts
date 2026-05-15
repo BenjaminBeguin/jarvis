@@ -24,6 +24,18 @@ export function registerRemindersIpc({ reminders, activity }: IpcDeps): void {
   ipcMain.handle(IpcChannels.fireReminderNow, (_e, id: string) =>
     reminders.fireNow(id),
   );
+  ipcMain.handle(IpcChannels.markReminderDone, (_e, id: string) => {
+    const before = reminders.list().find((r) => r.id === id);
+    const ok = reminders.markDone(id);
+    if (ok && before) {
+      activity.record({
+        kind: 'reminder.done',
+        label: `Reminder marked done · ${truncate(before.body, 80)}`,
+        detail: { id, body: before.body },
+      });
+    }
+    return ok;
+  });
 }
 
 function truncate(s: string, max: number): string {

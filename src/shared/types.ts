@@ -236,7 +236,16 @@ export interface SkillSuggestion {
   status: SkillSuggestionStatus;
 }
 
-export type ReminderStatus = 'pending' | 'fired' | 'cancelled';
+/**
+ * Reminder lifecycle:
+ *   - pending   — set, hasn't fired yet
+ *   - fired     — fired (notification went out / scheduled task launched),
+ *                 awaiting user acknowledgement. Stays in inbox.
+ *   - done      — user marked it done from the inbox. Drops out of inbox,
+ *                 stays in history (Reminders page) for the audit trail.
+ *   - cancelled — user cancelled before it fired.
+ */
+export type ReminderStatus = 'pending' | 'fired' | 'done' | 'cancelled';
 
 /**
  * `reminder` = user wants to be told. Notification is the point; the spawned
@@ -256,6 +265,8 @@ export interface Reminder {
   status: ReminderStatus;
   /** ms epoch when it actually fired; null while pending. */
   firedAt: number | null;
+  /** ms epoch when the user marked it done (from inbox); null otherwise. */
+  doneAt?: number | null;
   /** Task ID we kicked off when firing — lets the constellation link them. */
   firedTaskId: string | null;
 }

@@ -145,6 +145,22 @@ export class ReminderStore extends EventEmitter {
     this.emit('changed', this.list());
   }
 
+  /**
+   * Mark a fired reminder as done — the user acted on it from the inbox.
+   * Drops the row from the inbox source but keeps the reminder in
+   * history (Reminders page shows it under "Done").
+   */
+  markDone(id: string): boolean {
+    const r = this.reminders.get(id);
+    if (!r) return false;
+    if (r.status === 'done') return true; // idempotent
+    r.status = 'done';
+    r.doneAt = Date.now();
+    this.persist();
+    this.emit('changed', this.list());
+    return true;
+  }
+
   disposeAll(): void {
     for (const t of this.timers.values()) clearTimeout(t);
     this.timers.clear();

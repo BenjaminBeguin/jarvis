@@ -116,11 +116,27 @@ export function RemindersPage() {
       />
 
       <ReminderGroup
-        label="Fired"
+        label="Fired (awaiting done)"
         rows={groups.fired}
-        emptyHint="Nothing has fired yet."
+        emptyHint="Nothing fired and unhandled."
         renderActions={(r) => (
           <>
+            <button
+              onClick={async () => {
+                try {
+                  await window.jarvis.markReminderDone(r.id);
+                  toast({ message: 'Marked done' });
+                } catch (e) {
+                  toast({
+                    kind: 'error',
+                    message: e instanceof Error ? e.message : String(e),
+                  });
+                }
+              }}
+              title="I did this — drop it from the inbox"
+            >
+              ✓ Done
+            </button>
             {r.firedTaskId && (
               <button
                 onClick={() => {
@@ -147,6 +163,20 @@ export function RemindersPage() {
               ✕ Remove
             </button>
           </>
+        )}
+      />
+
+      <ReminderGroup
+        label="Done"
+        rows={groups.done}
+        emptyHint="No reminders marked done yet."
+        renderActions={(r) => (
+          <button
+            onClick={() => void remove(r.id)}
+            className="reminders-page__btn--danger"
+          >
+            ✕ Remove
+          </button>
         )}
       />
 
@@ -217,21 +247,24 @@ function ReminderGroup({
 function groupByStatus(reminders: Reminder[]): {
   upcoming: Reminder[];
   fired: Reminder[];
+  done: Reminder[];
   cancelled: Reminder[];
 } {
   const upcoming: Reminder[] = [];
   const fired: Reminder[] = [];
+  const done: Reminder[] = [];
   const cancelled: Reminder[] = [];
   for (const r of reminders) {
     if (r.status === 'fired') fired.push(r);
+    else if (r.status === 'done') done.push(r);
     else if (r.status === 'cancelled') cancelled.push(r);
     else upcoming.push(r);
   }
-  // Upcoming: soonest first. Fired/cancelled: newest first.
   upcoming.sort((a, b) => a.fireAt - b.fireAt);
   fired.sort((a, b) => (b.firedAt ?? b.fireAt) - (a.firedAt ?? a.fireAt));
+  done.sort((a, b) => (b.doneAt ?? b.firedAt ?? b.fireAt) - (a.doneAt ?? a.firedAt ?? a.fireAt));
   cancelled.sort((a, b) => b.createdAt - a.createdAt);
-  return { upcoming, fired, cancelled };
+  return { upcoming, fired, done, cancelled };
 }
 
 function formatWhen(r: Reminder): string {

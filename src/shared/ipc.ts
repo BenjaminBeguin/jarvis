@@ -133,6 +133,7 @@ export const IpcChannels = {
   cancelReminder: 'reminders:cancel',
   removeReminder: 'reminders:remove',
   fireReminderNow: 'reminders:fireNow',
+  markReminderDone: 'reminders:markDone',
   remindersChanged: 'reminders:changed',
 
   launchTask: 'task:launch',

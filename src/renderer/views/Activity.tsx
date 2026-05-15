@@ -197,6 +197,8 @@ const EVENT_KIND_META: Record<
   'reminder.created': { category: 'reminder', label: 'reminder' },
   'reminder.scheduled': { category: 'reminder', label: 'reminder · scheduled' },
   'reminder.cancelled': { category: 'reminder', label: 'reminder · cancel' },
+  'reminder.fired': { category: 'reminder', label: 'reminder · fired' },
+  'reminder.done': { category: 'reminder', label: 'reminder · done' },
 };
 
 function EventRow({ event }: { event: ActivityEvent }) {
