@@ -220,6 +220,9 @@ export function Shell({ status }: Props) {
       action?: 'open-new-project';
       initial?: string;
       skillId?: string;
+      /** When opening the merged Notes & Reminders page, which tab to
+       *  land on. The CapturePage subscribes to 'jarvis:capture-tab'. */
+      captureTab?: 'notes' | 'reminders';
     }) => {
       if (payload.tab) setTab(payload.tab);
       if (payload.tab) setOpenModuleId(payload.moduleId ?? null);
@@ -230,6 +233,13 @@ export function Shell({ status }: Props) {
       }
       if (payload.tab === 'skills' && payload.skillId) {
         setFocusedSkillId(payload.skillId);
+      }
+      if (payload.captureTab) {
+        window.dispatchEvent(
+          new CustomEvent('jarvis:capture-tab', {
+            detail: { tab: payload.captureTab },
+          }),
+        );
       }
     };
     const offIpc = window.jarvis.onShellNavigate(applyNav);

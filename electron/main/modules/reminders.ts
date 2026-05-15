@@ -29,9 +29,12 @@ export const remindersModule: Module = {
         'my reminders',
       ],
       handler: (_input, ctx) => {
+        // Reminders + Notes share the same merged page now; the
+        // captureTab field tells CapturePage which tab to land on.
         ctx.broadcast('shell:navigate', {
           tab: 'settings',
-          moduleId: 'reminders',
+          moduleId: 'quick-note',
+          captureTab: 'reminders',
         });
         return 'Opening reminders';
       },

@@ -65,7 +65,7 @@ function dateLabel(iso: string): string {
 const PUSH_PROMPT_PREFIX =
   'I jotted this down earlier — help me act on it. If it looks like a question, answer it. If it looks like a task, propose the next concrete step and offer to do it.\n\n';
 
-export function QuickNotePage() {
+export function QuickNotePage({ compact = false }: { compact?: boolean } = {}) {
   const [files, setFiles] = useState<NoteFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -182,32 +182,21 @@ export function QuickNotePage() {
   };
 
   return (
-    <div className="module-page">
+    <div className={`module-page${compact ? ' module-page--compact' : ''}`}>
+      {!compact && (
       <header className="module-page__header">
         <div>
           <h2>NOTES</h2>
           <p>
             Type <code>/note &lt;text&gt;</code> in the palette · saved to{' '}
-            <code>~/.jarvis/notes/</code> · for time-pressured things use{' '}
-            <button
-              className="module-page__crosslink"
-              onClick={() =>
-                window.dispatchEvent(
-                  new CustomEvent('jarvis:navigate', {
-                    detail: { tab: 'settings', moduleId: 'reminders' },
-                  }),
-                )
-              }
-              title="Open the Reminders page"
-            >
-              Reminders ↗
-            </button>
+            <code>~/.jarvis/notes/</code>
           </p>
         </div>
         <button onClick={() => void refresh()} disabled={loading}>
           Refresh
         </button>
       </header>
+      )}
 
       {error && <div className="module-page__error">{error}</div>}
 

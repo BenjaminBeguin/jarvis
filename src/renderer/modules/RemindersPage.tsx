@@ -16,7 +16,7 @@ import { toast } from '../views/Toaster';
  *
  * Powered by the existing reminders IPC — no new plumbing.
  */
-export function RemindersPage() {
+export function RemindersPage({ compact = false }: { compact?: boolean } = {}) {
   const [reminders, setReminders] = useState<Reminder[]>([]);
 
   useEffect(() => {
@@ -66,7 +66,8 @@ export function RemindersPage() {
   };
 
   return (
-    <section className="reminders-page">
+    <section className={`reminders-page${compact ? ' reminders-page--compact' : ''}`}>
+      {!compact && (
       <header className="reminders-page__header">
         <div>
           <h2>REMINDERS</h2>
@@ -74,26 +75,14 @@ export function RemindersPage() {
             Everything you've set via "remind me…" or "in 2h, …" — pending,
             fired, cancelled. Set new ones from the palette
             (<code>⌘⇧J</code>) or by typing them anywhere Jarvis takes
-            free text · for free-form jottings use{' '}
-            <button
-              className="module-page__crosslink"
-              onClick={() =>
-                window.dispatchEvent(
-                  new CustomEvent('jarvis:navigate', {
-                    detail: { tab: 'settings', moduleId: 'quick-note' },
-                  }),
-                )
-              }
-              title="Open the Notes page"
-            >
-              Notes ↗
-            </button>
+            free text.
           </p>
         </div>
         <div className="reminders-page__count">
           {reminders.length} {reminders.length === 1 ? 'total' : 'total'}
         </div>
       </header>
+      )}
 
       <ReminderGroup
         label="Upcoming"
