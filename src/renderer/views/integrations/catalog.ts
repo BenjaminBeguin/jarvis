@@ -147,14 +147,15 @@ export const CATALOG: CatalogEntry[] = [
     name: 'Calendar · personal',
     description: 'Read + create events on your personal Google Calendar',
     aliases: ['calendar-personal', 'google-calendar-personal'],
-    // @cocal/google-calendar-mcp uses GOOGLE_OAUTH_CREDENTIALS for the
-    // OAuth keys path and stores the refresh token in the same dir by
-    // default. Pointing at our consolidated secrets dir gives us the
-    // same per-identity isolation Gmail gets.
+    // @cocal/google-calendar-mcp respects GOOGLE_OAUTH_CREDENTIALS (the
+    // OAuth keys path) + GOOGLE_CALENDAR_MCP_TOKEN_PATH (where the
+    // refresh token gets cached after auth). Pointing both at our
+    // consolidated secrets dir gives us per-identity isolation that
+    // mirrors the Gmail layout.
     command: 'sh',
     args: [
       '-c',
-      'GOOGLE_OAUTH_CREDENTIALS="$HOME/.jarvis/secrets/google-personal/gcp-oauth.keys.json" exec npx -y @cocal/google-calendar-mcp',
+      'GOOGLE_OAUTH_CREDENTIALS="$HOME/.jarvis/secrets/google-personal/gcp-oauth.keys.json" GOOGLE_CALENDAR_MCP_TOKEN_PATH="$HOME/.jarvis/secrets/google-personal/calendar-tokens.json" exec npx -y @cocal/google-calendar-mcp',
     ],
     fields: [],
     setupUrl: 'https://console.cloud.google.com',
@@ -168,7 +169,7 @@ export const CATALOG: CatalogEntry[] = [
     command: 'sh',
     args: [
       '-c',
-      'GOOGLE_OAUTH_CREDENTIALS="$HOME/.jarvis/secrets/google-work/gcp-oauth.keys.json" exec npx -y @cocal/google-calendar-mcp',
+      'GOOGLE_OAUTH_CREDENTIALS="$HOME/.jarvis/secrets/google-work/gcp-oauth.keys.json" GOOGLE_CALENDAR_MCP_TOKEN_PATH="$HOME/.jarvis/secrets/google-work/calendar-tokens.json" exec npx -y @cocal/google-calendar-mcp',
     ],
     fields: [],
     setupUrl: 'https://console.cloud.google.com',
@@ -329,7 +330,7 @@ function GOOGLE_SETUP_STEPS(
       command:
         service === 'gmail'
           ? `GMAIL_OAUTH_PATH=${dir}/gcp-oauth.keys.json GMAIL_CREDENTIALS_PATH=${dir}/credentials.json npx -y ${mcpPkg} auth`
-          : `GOOGLE_OAUTH_CREDENTIALS=${dir}/gcp-oauth.keys.json npx -y ${mcpPkg} auth`,
+          : `GOOGLE_OAUTH_CREDENTIALS=${dir}/gcp-oauth.keys.json GOOGLE_CALENDAR_MCP_TOKEN_PATH=${dir}/calendar-tokens.json npx -y ${mcpPkg} auth`,
     },
     {
       title: 'Register the MCP in Jarvis',
