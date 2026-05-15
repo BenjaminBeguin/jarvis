@@ -1224,6 +1224,45 @@ button:disabled:hover {
   font-weight: 500;
 }
 
+/* Browser-style back / forward arrows next to the brand. Disabled
+   when there's nothing in that direction of the history stack. */
+.shell__nav-history {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding-left: 8px;
+  margin-right: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.shell__nav-arrow {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  transition: color 100ms ease, border-color 100ms ease;
+}
+
+.shell__nav-arrow:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.shell__nav-arrow:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 /* ----- Boot overlay (cold-start futuristic intro) ---------------------- */
 
 .boot-overlay {
@@ -7991,6 +8030,25 @@ button:disabled:hover {
   font-size: 12px;
 }
 
+/* Inline cross-link in module page headers — used to point between
+   related modules ("see also: Reminders"). Styled as a subtle accent
+   button that reads as a link. */
+.module-page__crosslink {
+  background: transparent;
+  border: 0;
+  padding: 1px 4px;
+  color: var(--accent);
+  font: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  border-bottom: 1px dashed rgba(0, 212, 255, 0.35);
+}
+
+.module-page__crosslink:hover {
+  border-bottom-color: var(--accent);
+  text-shadow: var(--accent-glow);
+}
+
 .module-page__header code {
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
@@ -8460,6 +8518,18 @@ button:disabled:hover {
 
 .note-done__list {
   margin-top: 12px;
+}
+
+.note-done__empty {
+  margin-top: 10px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px dashed var(--border);
+  border-radius: 2px;
+  line-height: 1.55;
 }
 
 .note-card__entry {

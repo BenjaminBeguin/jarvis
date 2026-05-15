@@ -116,10 +116,9 @@ export function Shell({ status }: Props) {
     }
   }, [activeProject, projectList]);
 
-  // Cmd+1..5 tab shortcuts. Standard pattern across editors; saves a
-  // mouse round-trip when the user wants to flip between Observatory
-  // and Inbox dozens of times a day. Skipped when focus is in a text
-  // input so the user can still type "⌘1" in markdown.
+  // Cmd+1..5 tab shortcuts + Cmd+[ / Cmd+] for back / forward.
+  // Skipped when focus is in a text input so the user can still type
+  // "⌘1" in markdown.
   //
   // Projects + Settings aren't in the row: Projects lives inside the
   // scope dropdown ("See all projects"), Settings inside the auth-badge
@@ -139,6 +138,17 @@ export function Shell({ status }: Props) {
         document.activeElement instanceof HTMLTextAreaElement ||
         (document.activeElement as HTMLElement | null)?.isContentEditable;
       if (inField) return;
+      // Browser-style back / forward.
+      if (e.key === '[') {
+        e.preventDefault();
+        goBack();
+        return;
+      }
+      if (e.key === ']') {
+        e.preventDefault();
+        goForward();
+        return;
+      }
       const idx = parseInt(e.key, 10);
       if (Number.isFinite(idx) && idx >= 1 && idx <= tabsOrder.length) {
         e.preventDefault();
@@ -148,7 +158,55 @@ export function Shell({ status }: Props) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Navigation history (browser-style back/forward). Each entry is the
+  // (tab, moduleId) pair the user was looking at. New navigations push
+  // a new entry; back/forward move the cursor without pushing. A ref
+  // skip-flag suppresses the push when we set state from history.
+  const [history, setHistory] = useState<Array<{ tab: Tab; moduleId: string | null }>>(
+    () => [{ tab: 'dashboard', moduleId: null }],
+  );
+  const [histIdx, setHistIdx] = useState(0);
+  const skipHistoryPushRef = useRef(false);
+
+  useEffect(() => {
+    if (skipHistoryPushRef.current) {
+      skipHistoryPushRef.current = false;
+      return;
+    }
+    setHistory((h) => {
+      const truncated = h.slice(0, histIdx + 1);
+      const last = truncated[truncated.length - 1];
+      if (last && last.tab === tab && last.moduleId === openModuleId) {
+        return h; // no real change; dedupe identical consecutive entries
+      }
+      const next = [...truncated, { tab, moduleId: openModuleId }];
+      setHistIdx(next.length - 1);
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, openModuleId]);
+
+  const goBack = () => {
+    if (histIdx <= 0) return;
+    const target = history[histIdx - 1]!;
+    skipHistoryPushRef.current = true;
+    setTab(target.tab);
+    setOpenModuleId(target.moduleId);
+    setHistIdx(histIdx - 1);
+  };
+  const goForward = () => {
+    if (histIdx >= history.length - 1) return;
+    const target = history[histIdx + 1]!;
+    skipHistoryPushRef.current = true;
+    setTab(target.tab);
+    setOpenModuleId(target.moduleId);
+    setHistIdx(histIdx + 1);
+  };
+  const canBack = histIdx > 0;
+  const canForward = histIdx < history.length - 1;
 
   // Verbal nav: the shell-nav module fires shell:navigate when the user
   // says "open settings", "show observatory", etc. Switch the tab + module
@@ -230,6 +288,26 @@ export function Shell({ status }: Props) {
         <div className="shell__brand">
           <Logo />
           <span className="shell__brand-text">JARVIS</span>
+        </div>
+        <div className="shell__nav-history">
+          <button
+            className="shell__nav-arrow"
+            onClick={goBack}
+            disabled={!canBack}
+            title="Back (⌘[)"
+            aria-label="Navigate back"
+          >
+            ←
+          </button>
+          <button
+            className="shell__nav-arrow"
+            onClick={goForward}
+            disabled={!canForward}
+            title="Forward (⌘])"
+            aria-label="Navigate forward"
+          >
+            →
+          </button>
         </div>
         <div className="shell__tabs">
           <button

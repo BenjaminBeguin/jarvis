@@ -188,7 +188,20 @@ export function QuickNotePage() {
           <h2>NOTES</h2>
           <p>
             Type <code>/note &lt;text&gt;</code> in the palette · saved to{' '}
-            <code>~/.jarvis/notes/</code>
+            <code>~/.jarvis/notes/</code> · for time-pressured things use{' '}
+            <button
+              className="module-page__crosslink"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent('jarvis:navigate', {
+                    detail: { tab: 'settings', moduleId: 'reminders' },
+                  }),
+                )
+              }
+              title="Open the Reminders page"
+            >
+              Reminders ↗
+            </button>
           </p>
         </div>
         <button onClick={() => void refresh()} disabled={loading}>
@@ -291,18 +304,24 @@ function NoteSections({
         ))}
       </div>
 
-      {doneCount > 0 && (
-        <section className="note-done">
-          <button
-            className="note-done__head"
-            onClick={() => setShowDone((v) => !v)}
-            title={showDone ? 'Collapse done notes' : 'Expand done notes'}
-          >
-            <span className="note-done__caret">{showDone ? '▾' : '▸'}</span>
-            <span className="note-done__label">Done</span>
-            <span className="note-done__count">{doneCount}</span>
-          </button>
-          {showDone && (
+      {/* Always render Done + Archived buckets so the user knows
+          where future archives/done items will land — even when empty. */}
+      <section className="note-done">
+        <button
+          className="note-done__head"
+          onClick={() => setShowDone((v) => !v)}
+          title={showDone ? 'Collapse done notes' : 'Expand done notes'}
+        >
+          <span className="note-done__caret">{showDone ? '▾' : '▸'}</span>
+          <span className="note-done__label">Done</span>
+          <span className="note-done__count">{doneCount}</span>
+        </button>
+        {showDone && (
+          doneCount === 0 ? (
+            <div className="note-done__empty">
+              Notes you push to Claude land here once the task completes.
+            </div>
+          ) : (
             <div className="module-page__list note-done__list">
               {done.map(({ file, entries }) => (
                 <NoteFileCard
@@ -317,26 +336,31 @@ function NoteSections({
                 />
               ))}
             </div>
-          )}
-        </section>
-      )}
+          )
+        )}
+      </section>
 
-      {archivedCount > 0 && (
-        <section className="note-done">
-          <button
-            className="note-done__head"
-            onClick={() => setShowArchived((v) => !v)}
-            title={showArchived ? 'Collapse archived' : 'Expand archived'}
-          >
-            <span className="note-done__caret">
-              {showArchived ? '▾' : '▸'}
-            </span>
-            <span className="note-done__label">Archived</span>
-            <span className="note-done__count note-done__count--archived">
-              {archivedCount}
-            </span>
-          </button>
-          {showArchived && (
+      <section className="note-done">
+        <button
+          className="note-done__head"
+          onClick={() => setShowArchived((v) => !v)}
+          title={showArchived ? 'Collapse archived' : 'Expand archived'}
+        >
+          <span className="note-done__caret">
+            {showArchived ? '▾' : '▸'}
+          </span>
+          <span className="note-done__label">Archived</span>
+          <span className="note-done__count note-done__count--archived">
+            {archivedCount}
+          </span>
+        </button>
+        {showArchived && (
+          archivedCount === 0 ? (
+            <div className="note-done__empty">
+              Click × on an active note to archive it (soft-delete) —
+              restore from here anytime.
+            </div>
+          ) : (
             <div className="module-page__list note-done__list">
               {archived.map(({ file, entries }) => (
                 <ArchivedNoteFileCard
@@ -348,9 +372,9 @@ function NoteSections({
                 />
               ))}
             </div>
-          )}
-        </section>
-      )}
+          )
+        )}
+      </section>
     </>
   );
 }

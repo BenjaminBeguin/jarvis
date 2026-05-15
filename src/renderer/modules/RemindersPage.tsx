@@ -74,7 +74,20 @@ export function RemindersPage() {
             Everything you've set via "remind me…" or "in 2h, …" — pending,
             fired, cancelled. Set new ones from the palette
             (<code>⌘⇧J</code>) or by typing them anywhere Jarvis takes
-            free text.
+            free text · for free-form jottings use{' '}
+            <button
+              className="module-page__crosslink"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent('jarvis:navigate', {
+                    detail: { tab: 'settings', moduleId: 'quick-note' },
+                  }),
+                )
+              }
+              title="Open the Notes page"
+            >
+              Notes ↗
+            </button>
           </p>
         </div>
         <div className="reminders-page__count">
