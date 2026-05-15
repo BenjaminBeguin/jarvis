@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { nextCronFire } from '../../shared/cron';
 import type {
   DashboardConfig,
   DashboardItem,
@@ -13,6 +12,17 @@ import type {
 } from '../../shared/types';
 import { Inbox } from './Inbox';
 import { MarkdownDoc } from './MarkdownText';
+import {
+  ScheduledItemDetail,
+  formatClockTime,
+  formatRel,
+  startOfDay,
+} from './ScheduledItemDetail';
+import {
+  KIND_LABEL,
+  buildScheduledItems,
+  type ScheduledItem,
+} from './scheduled-items';
 import { TaskAnswerPreview } from './TaskAnswerPreview';
 import { toast } from './Toaster';
 
@@ -579,72 +589,10 @@ function CalendarTimeline() {
     };
   }, []);
 
-  const items = useMemo<ScheduledItem[]>(() => {
-    const out: ScheduledItem[] = [];
-    // Reminders + scheduled actions
-    for (const r of reminders) {
-      if (r.status !== 'pending') continue;
-      out.push({
-        id: `rem-${r.id}`,
-        kind: r.mode === 'scheduled' ? 'scheduled-action' : 'reminder',
-        title: r.body,
-        fireAt: r.fireAt,
-        source: r.mode,
-        raw: r,
-      });
-    }
-    // Inbox items with a fireAt (calendar events, time-pressured items)
-    for (const it of inboxItems) {
-      if (it.fireAt == null) continue;
-      // Reminders already surfaced above — inbox mirrors them as
-      // source='reminders', skip to avoid duplicates.
-      if (it.source === 'reminders') continue;
-      out.push({
-        id: `inbox-${it.id}`,
-        kind: it.source === 'calendar' ? 'event' : 'inbox-task',
-        title: it.title,
-        subtitle: it.subtitle,
-        fireAt: it.fireAt,
-        url: it.url,
-        source: it.source,
-        raw: it,
-      });
-    }
-    // Routines' next-fire (7-day horizon) + recent fires (12h
-    // lookback) so the timeline answers both "what's coming up" and
-    // "what just ran." Last-fire rows are clickable to open the
-    // transcript via the detail panel.
-    const horizon = now + 7 * 24 * 60 * 60 * 1000;
-    const lookback = now - 12 * 60 * 60 * 1000;
-    for (const r of routines) {
-      if (r.enabled) {
-        const next = nextCronFire(r.cron, now);
-        if (next != null && next <= horizon) {
-          out.push({
-            id: `routine-next-${r.id}`,
-            kind: 'routine-next',
-            title: r.id.replace(/^briefing-/, ''),
-            subtitle: r.input || undefined,
-            fireAt: next,
-            source: r.skillId,
-            raw: r,
-          });
-        }
-      }
-      if (r.lastRunAt && r.lastRunAt >= lookback) {
-        out.push({
-          id: `routine-last-${r.id}`,
-          kind: 'routine-last',
-          title: r.id.replace(/^briefing-/, ''),
-          subtitle: r.input || undefined,
-          fireAt: r.lastRunAt,
-          source: r.skillId,
-          raw: r,
-        });
-      }
-    }
-    return out.sort((a, b) => a.fireAt - b.fireAt);
-  }, [inboxItems, reminders, routines, now]);
+  const items = useMemo(
+    () => buildScheduledItems(inboxItems, reminders, routines, now, 7),
+    [inboxItems, reminders, routines, now],
+  );
 
   const groups = useMemo(() => groupByDay(items, now), [items, now]);
 
@@ -699,23 +647,6 @@ function CalendarTimeline() {
   );
 }
 
-interface ScheduledItem {
-  id: string;
-  kind:
-    | 'event'
-    | 'reminder'
-    | 'scheduled-action'
-    | 'inbox-task'
-    | 'routine-next'
-    | 'routine-last';
-  title: string;
-  subtitle?: string;
-  fireAt: number;
-  url?: string;
-  source?: string;
-  raw: InboxItem | Reminder | RoutineDef;
-}
-
 function ScheduledItemRow({
   item,
   now,
@@ -757,201 +688,6 @@ function KindBadge({ kind }: { kind: ScheduledItem['kind'] }) {
   );
 }
 
-const KIND_LABEL: Record<ScheduledItem['kind'], string> = {
-  event: 'EVENT',
-  reminder: 'REMINDER',
-  'scheduled-action': 'AUTOPILOT',
-  'inbox-task': 'INBOX',
-  'routine-next': 'ROUTINE',
-  'routine-last': 'JUST RAN',
-};
-
-/**
- * Detail panel — shows the full item + kind-appropriate actions:
- *   - event: Open meeting URL, Open in source
- *   - reminder: Fire now, Cancel
- *   - scheduled-action: Fire now, Cancel
- *   - inbox-task: Open URL, Snooze
- *   - routine-next: Run now, Edit, Open output
- */
-function ScheduledItemDetail({
-  item,
-  onClose,
-}: {
-  item: ScheduledItem;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  const meta: Array<{ label: string; value: string }> = [
-    { label: 'When', value: new Date(item.fireAt).toLocaleString() },
-    { label: 'Type', value: KIND_LABEL[item.kind] },
-  ];
-  if (item.source) meta.push({ label: 'Source', value: item.source });
-  if (item.url) meta.push({ label: 'URL', value: item.url });
-
-  return (
-    <div
-      className="project-dialog-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="project-dialog" role="dialog">
-        <header className="project-dialog__head">
-          <div>
-            <h2>{item.title}</h2>
-            <div className="preferences-dialog__path">{KIND_LABEL[item.kind]}</div>
-          </div>
-          <button
-            className="project-dialog__close"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </header>
-        <div className="project-dialog__body">
-          <dl className="dash-cal-detail__meta">
-            {meta.map((m) => (
-              <div key={m.label} className="dash-cal-detail__meta-row">
-                <dt>{m.label}</dt>
-                <dd>{m.value}</dd>
-              </div>
-            ))}
-          </dl>
-          {item.subtitle && (
-            <p className="dash-cal-detail__body">{item.subtitle}</p>
-          )}
-          <ItemActions item={item} onAfter={onClose} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ItemActions({
-  item,
-  onAfter,
-}: {
-  item: ScheduledItem;
-  onAfter: () => void;
-}) {
-  const buttons: Array<{ label: string; onClick: () => void; danger?: boolean }> = [];
-
-  if (item.url) {
-    buttons.push({
-      label: '↗ Open URL',
-      onClick: () => void window.jarvis.openExternal(item.url!),
-    });
-  }
-
-  if (item.kind === 'reminder' || item.kind === 'scheduled-action') {
-    const reminder = item.raw as Reminder;
-    buttons.push({
-      label: 'Fire now',
-      onClick: async () => {
-        await window.jarvis.fireReminderNow(reminder.id);
-        toast({ message: 'Fired' });
-        onAfter();
-      },
-    });
-    buttons.push({
-      label: 'Cancel',
-      danger: true,
-      onClick: async () => {
-        await window.jarvis.cancelReminder(reminder.id);
-        toast({ kind: 'info', message: 'Reminder cancelled' });
-        onAfter();
-      },
-    });
-  }
-
-  if (item.kind === 'routine-next') {
-    const routine = item.raw as RoutineDef;
-    buttons.push({
-      label: 'Run now',
-      onClick: async () => {
-        await window.jarvis.runRoutineNow(routine.id);
-        toast({ message: `Fired · ${routine.id}` });
-        onAfter();
-      },
-    });
-    buttons.push({
-      label: 'Open in Routines',
-      onClick: () => {
-        window.dispatchEvent(
-          new CustomEvent('jarvis:navigate', { detail: { tab: 'routines' } }),
-        );
-        onAfter();
-      },
-    });
-  }
-
-  if (item.kind === 'routine-last') {
-    const routine = item.raw as RoutineDef;
-    if (routine.lastTaskId) {
-      buttons.push({
-        label: '↗ View output',
-        onClick: () => {
-          void window.jarvis.openObservatory(routine.lastTaskId!);
-          onAfter();
-        },
-      });
-    }
-    buttons.push({
-      label: 'Run again',
-      onClick: async () => {
-        await window.jarvis.runRoutineNow(routine.id);
-        toast({ message: `Fired · ${routine.id}` });
-        onAfter();
-      },
-    });
-    buttons.push({
-      label: 'Open in Routines',
-      onClick: () => {
-        window.dispatchEvent(
-          new CustomEvent('jarvis:navigate', { detail: { tab: 'routines' } }),
-        );
-        onAfter();
-      },
-    });
-  }
-
-  if (item.kind === 'inbox-task' || item.kind === 'event') {
-    buttons.push({
-      label: 'Open Inbox',
-      onClick: () => {
-        window.dispatchEvent(
-          new CustomEvent('jarvis:navigate', { detail: { tab: 'inbox' } }),
-        );
-        onAfter();
-      },
-    });
-  }
-
-  if (buttons.length === 0) return null;
-  return (
-    <div className="dash-cal-detail__actions">
-      {buttons.map((b) => (
-        <button
-          key={b.label}
-          onClick={b.onClick}
-          className={b.danger ? 'project-dialog__danger' : ''}
-        >
-          {b.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function groupByDay(
   items: ScheduledItem[],
   now: number,
@@ -974,32 +710,6 @@ function groupByDay(
   return order
     .filter((k) => groups[k])
     .map((k) => ({ label: k, items: groups[k]! }));
-}
-
-function startOfDay(ms: number): number {
-  const d = new Date(ms);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function formatClockTime(ms: number): string {
-  return new Date(ms).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function formatRel(diffMs: number): string {
-  const abs = Math.abs(diffMs);
-  const m = Math.round(abs / 60_000);
-  const h = Math.round(m / 60);
-  const d = Math.round(h / 24);
-  let s: string;
-  if (m < 1) s = 'now';
-  else if (m < 60) s = `${m}m`;
-  else if (h < 24) s = `${h}h`;
-  else s = `${d}d`;
-  return diffMs < 0 ? `${s} ago` : `in ${s}`;
 }
 
 /**

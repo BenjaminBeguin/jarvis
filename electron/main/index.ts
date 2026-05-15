@@ -24,6 +24,7 @@ import { McpConfigStore } from './mcp-config.js';
 import { ModuleRegistry } from './module-registry.js';
 import { DashboardStore } from './dashboard-store.js';
 import { PreferencesStore } from './preferences-store.js';
+import { calendarModule } from './modules/calendar.js';
 import { claudeCodeWatchModule } from './modules/claude-code-watch.js';
 import { meetingRecorderModule } from './modules/meeting-recorder.js';
 import { prWorkflowsModule } from './modules/pr-workflows.js';
@@ -515,6 +516,7 @@ app.whenReady().then(async () => {
   await modules.register(skillSuggesterModule);
   await modules.register(sendModule);
   await modules.register(prWorkflowsModule);
+  await modules.register(calendarModule);
   await modules.register(shellNavModule);
   await modules.register(shellModule);
 

@@ -26,6 +26,7 @@ export class ModuleRegistry extends EventEmitter {
     'quick-note',
     'meeting-recorder',
     'send',
+    'calendar',
   ]);
 
   setContext(ctx: ModuleContext): void {

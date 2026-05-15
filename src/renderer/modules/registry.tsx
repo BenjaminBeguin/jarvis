@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 
+import { CalendarPage } from './CalendarPage';
 import { MeetingsPage } from './MeetingsPage';
 import { QuickNotePage } from './QuickNotePage';
 import { SendPage } from './SendPage';
@@ -16,6 +17,7 @@ export const MODULE_PAGES: Record<string, ComponentType> = {
   'quick-note': QuickNotePage,
   'meeting-recorder': MeetingsPage,
   send: SendPage,
+  calendar: CalendarPage,
 };
 
 export function getModulePage(id: string): ComponentType | null {
