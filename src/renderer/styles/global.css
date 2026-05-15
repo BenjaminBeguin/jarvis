@@ -1074,6 +1074,50 @@ button:disabled:hover {
   opacity: 0.6;
 }
 
+/* "System ready" pulse — fires once when the boot overlay finishes
+   fading out. The body gets `.jarvis-just-loaded` for ~1.6s; we
+   scope a one-shot animation on the nav's accent line under it.
+   Bright sweep + lift, then settles to the resting 0.6 opacity. */
+.jarvis-just-loaded .shell__nav::after {
+  animation: shell-ready-pulse 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes shell-ready-pulse {
+  0% {
+    opacity: 1;
+    height: 2px;
+    box-shadow: 0 0 12px var(--accent), 0 0 28px rgba(0, 212, 255, 0.45);
+  }
+  60% {
+    opacity: 0.85;
+    height: 1px;
+    box-shadow: 0 0 6px rgba(0, 212, 255, 0.4);
+  }
+  100% {
+    opacity: 0.6;
+    height: 1px;
+    box-shadow: none;
+  }
+}
+
+/* Brief logo flash in the brand bar matches the pulse — same trigger,
+   same body class. Reuses the existing brand text without a separate
+   element. */
+.jarvis-just-loaded .shell__brand-text {
+  animation: shell-brand-ready 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes shell-brand-ready {
+  0% {
+    text-shadow: 0 0 14px var(--accent), 0 0 30px rgba(0, 212, 255, 0.5);
+    color: var(--accent);
+  }
+  100% {
+    text-shadow: none;
+    color: inherit;
+  }
+}
+
 .shell__brand {
   display: flex;
   align-items: center;
@@ -1114,6 +1158,236 @@ button:disabled:hover {
 
 .shell__brand-text {
   font-weight: 500;
+}
+
+/* ----- Boot overlay (cold-start futuristic intro) ---------------------- */
+
+.boot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(7, 11, 15, 0.92) 0%,
+    rgba(2, 4, 7, 0.98) 70%
+  );
+  backdrop-filter: blur(18px) saturate(140%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  /* The whole overlay fades when phase === 'fading'. Subtle scale-up
+     on exit reads as "stepping into the system" rather than "modal
+     dismiss". */
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 320ms ease, transform 320ms ease;
+}
+
+.boot-overlay--fading {
+  opacity: 0;
+  transform: scale(1.04);
+  pointer-events: none;
+}
+
+/* Scanline overlay — fine repeating gradient + slow vertical drift.
+   Same visual language as the Shell's ambient scanlines, just denser
+   on the boot screen for the "CRT power-on" feel. */
+.boot-overlay__scanlines {
+  position: absolute;
+  inset: -2px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 212, 255, 0.05) 0px,
+    rgba(0, 212, 255, 0.05) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  pointer-events: none;
+  animation: boot-scanline-drift 6s linear infinite;
+}
+
+@keyframes boot-scanline-drift {
+  from { background-position: 0 0; }
+  to { background-position: 0 60px; }
+}
+
+/* Bright sweep band that travels down once at boot — the "system
+   coming online" reveal. Position resets at 100% to be invisible at
+   rest; the long single sweep is enough. */
+.boot-overlay__sweep {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 24%;
+  top: -24%;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 212, 255, 0.06) 40%,
+    rgba(0, 212, 255, 0.18) 50%,
+    rgba(0, 212, 255, 0.06) 60%,
+    transparent 100%
+  );
+  pointer-events: none;
+  animation: boot-sweep 1600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes boot-sweep {
+  0% { top: -24%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+.boot-overlay__center {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 0 24px;
+  /* Soft container glow + bracketed corner accents — drawn via
+     ::before / ::after on the logo block for the corner brackets. */
+}
+
+.boot-overlay__logo {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 14px;
+  /* The Logo SVG re-uses .shell__logo sizing internally; bump via
+     direct transform to read as the "hero" mark, not the chip. */
+  animation: boot-logo-emerge 900ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.boot-overlay__logo .shell__logo {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0 18px rgba(0, 212, 255, 0.55))
+    drop-shadow(0 0 36px rgba(0, 212, 255, 0.25));
+}
+
+@keyframes boot-logo-emerge {
+  0% { opacity: 0; transform: scale(0.4); filter: blur(8px); }
+  60% { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+
+.boot-overlay__brand {
+  font-family: var(--mono);
+  font-size: 28px;
+  letter-spacing: 0.42em;
+  font-weight: 500;
+  color: var(--accent);
+  text-shadow: var(--accent-glow), 0 0 20px rgba(0, 212, 255, 0.45);
+  /* Letterspacing animation: starts tight, spreads to spec. Reads as
+     "the word resolving." */
+  animation: boot-brand-spread 1200ms cubic-bezier(0.16, 1, 0.3, 1) 200ms both;
+}
+
+@keyframes boot-brand-spread {
+  0% {
+    opacity: 0;
+    letter-spacing: 0.05em;
+    filter: blur(6px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    letter-spacing: 0.42em;
+    filter: blur(0);
+  }
+}
+
+.boot-overlay__sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-top: 2px;
+  animation: boot-fade-in 600ms ease 1000ms both;
+}
+
+@keyframes boot-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Terminal-style boot lines (first-launch variant only). Each line
+   fades in as it appears in state. */
+.boot-overlay__lines {
+  list-style: none;
+  margin: 22px 0 0;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 320px;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: left;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  border-radius: 2px;
+}
+
+.boot-overlay__line {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--text-dim);
+  animation: boot-line-in 220ms ease both;
+}
+
+@keyframes boot-line-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.boot-overlay__line-tick {
+  color: var(--accent);
+  opacity: 0.7;
+}
+
+.boot-overlay__line-status {
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--good);
+}
+
+.boot-overlay__line--ready {
+  color: var(--accent);
+  text-shadow: 0 0 12px rgba(0, 212, 255, 0.4);
+}
+
+.boot-overlay__line--ready .boot-overlay__line-status {
+  color: var(--accent);
+}
+
+/* Quick-launch variant: hide the lines block entirely, smaller logo
+   pulse. Tighter and faster. */
+.boot-overlay--quick .boot-overlay__logo {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 10px;
+}
+
+.boot-overlay--quick .boot-overlay__brand {
+  font-size: 20px;
+  letter-spacing: 0.36em;
+}
+
+.boot-overlay--quick .boot-overlay__sub {
+  font-size: 9px;
 }
 
 .shell__tabs {
