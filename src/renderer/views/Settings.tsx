@@ -608,6 +608,66 @@ function ApiPanel() {
         </li>
       </ul>
 
+      <h3 style={{ marginTop: 28 }}>Jarvis MCP (in-process)</h3>
+      <p className="settings__hint">
+        A second, fundamentally different surface: an in-process{' '}
+        <strong>MCP server</strong> registered automatically with every
+        agent task. Lets a Claude run inside Jarvis call back into Jarvis
+        without leaving the model loop — pop a notification, log an
+        activity row, schedule a reminder, read the active project. Runs
+        as a programmatic SDK MCP, no subprocess, no auth, no IPC dance.
+        Tools appear in agent context as <code>mcp__jarvis__&lt;name&gt;</code>.
+      </p>
+      <p className="settings__hint settings__hint--dim">
+        Skills with restrictive <code>allowed-tools</code> in their
+        frontmatter can scope or exclude individual tools (e.g.
+        <code> allowed-tools: [Read, mcp__jarvis__notify]</code> for a
+        skill that's only allowed to notify). Skills with no
+        <code> allowed-tools</code> get the full set.
+      </p>
+
+      <h4 className="settings__subhead">Tools</h4>
+      <ul className="settings__endpoints">
+        <li>
+          <code>mcp__jarvis__notify</code> — pop a macOS notification
+          ({'{ title, body }'})
+        </li>
+        <li>
+          <code>mcp__jarvis__log_activity</code> — append a row to the
+          Activity feed ({'{ kind, label, detail? }'})
+        </li>
+        <li>
+          <code>mcp__jarvis__create_reminder</code> — schedule a future
+          reminder or scheduled action ({'{ body, mode, fireAt }'})
+        </li>
+        <li>
+          <code>mcp__jarvis__open_url</code> — open a URL in the default
+          browser ({'{ url }'})
+        </li>
+        <li>
+          <code>mcp__jarvis__get_active_project</code> — currently scoped
+          project ({'{ name, path?, repo? }'} or null)
+        </li>
+        <li>
+          <code>mcp__jarvis__list_recent_meetings</code> /{' '}
+          <code>list_recent_notes</code> — recent file enumeration
+          ({'{ project?, limit? }'})
+        </li>
+        <li>
+          <code>mcp__jarvis__read_project_memory</code> /{' '}
+          <code>write_project_memory</code> — per-project markdown memory
+        </li>
+      </ul>
+
+      <h4 className="settings__subhead">When to use</h4>
+      <p className="settings__hint">
+        Prefer these over Bash equivalents — they're faster and keep the
+        transcript clean. <code>notify</code> beats <code>osascript -e
+        'display notification'</code>; <code>log_activity</code> beats
+        writing your own progress text. The system prompt for every task
+        already advertises these so the agent knows they exist.
+      </p>
+
       <h4 className="settings__subhead">Want more inbox sources?</h4>
       <p className="settings__hint">
         Drop a skill at <code>~/.jarvis/skills/&lt;name&gt;/SKILL.md</code> that
