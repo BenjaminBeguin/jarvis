@@ -25,6 +25,42 @@ export interface NotificationPrefs {
   onLaunch: LaunchAttention;
 }
 
+/**
+ * One row in the Settings → Inbox source list. Combines:
+ *   - InboxStore-registered built-ins (reminders, pr-review, …)
+ *   - User-authored JSON files under ~/.jarvis/inbox/*.json
+ * The renderer doesn't care about the distinction at registration
+ * time — what it needs is "show this name with this count, and on
+ * click do this," so the summary is flat.
+ */
+export interface InboxSourceSummary {
+  /** Internal id — matches InboxItem.source for items from this source. */
+  name: string;
+  /** Human label shown in the Settings list. */
+  label: string;
+  /** One-line "what this surfaces". */
+  description: string;
+  /** Current item count after dedupe/snooze. */
+  itemCount: number;
+  /** Built-in source vs JSON file under ~/.jarvis/inbox/. */
+  kind: 'built-in' | 'file';
+  /** Absolute path when kind === 'file'. Used by the Reveal button. */
+  filePath?: string;
+  /** mtime when kind === 'file'. */
+  mtimeMs?: number;
+  /** Skill that writes this file (detected by matching basename → skill id). */
+  relatedSkillId?: string;
+  /**
+   * Renderer hint for the "Configure" link:
+   *   - 'inbox-scope': jump to Settings → Inbox (PR project scope)
+   *   - 'routines':    jump to Routines tab
+   *   - 'reminders':   reminders surface in Inbox; jump to Inbox tab
+   *   - 'skill':       jump to the related skill (uses relatedSkillId)
+   *   - null:          no configure action
+   */
+  configureHint?: 'inbox-scope' | 'routines' | 'reminders' | 'skill' | null;
+}
+
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   onAsk: 'toast',
   onLaunch: 'toast',

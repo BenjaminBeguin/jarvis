@@ -1761,6 +1761,106 @@ button:disabled:hover {
   line-height: 1.5;
 }
 
+/* Inbox sources list (Settings → Inbox). One row per registered
+   source; each shows kind, count, description, and a small action
+   row for navigation. */
+.inbox-sources {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inbox-source {
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  border-radius: 2px;
+  font-family: var(--mono);
+}
+
+.inbox-source__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.inbox-source__name {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.inbox-source__kind {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 2px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+}
+
+.inbox-source__kind--file {
+  color: var(--good);
+  border-color: rgba(95, 255, 166, 0.4);
+}
+
+.inbox-source__count {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.06em;
+}
+
+.inbox-source__desc {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+.inbox-source__meta {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+}
+
+.inbox-source__meta code {
+  color: var(--text-dim);
+}
+
+.inbox-source__actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.inbox-source__actions button {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.inbox-source__actions button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .settings__kv {
   display: grid;
   grid-template-columns: 90px 1fr;

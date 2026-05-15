@@ -77,6 +77,8 @@ export const IpcChannels = {
   rotateHttpApiToken: 'http:rotateToken',
 
   listInbox: 'inbox:list',
+  listInboxSources: 'inbox:listSources',
+  revealInboxFile: 'inbox:revealFile',
   refreshInbox: 'inbox:refresh',
   inboxChanged: 'inbox:changed',
   inboxRefreshing: 'inbox:refreshing',

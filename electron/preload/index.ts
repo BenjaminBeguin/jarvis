@@ -10,6 +10,7 @@ import type {
   CostSummary,
   HttpApiStatus,
   InboxItem,
+  InboxSourceSummary,
   LaunchTaskRequest,
   McpInvokeResult,
   McpProbeResult,
@@ -267,6 +268,12 @@ const api = {
 
   listInbox: (): Promise<InboxItem[]> =>
     ipcRenderer.invoke(IpcChannels.listInbox),
+  listInboxSources: (skillIds: string[]): Promise<InboxSourceSummary[]> =>
+    ipcRenderer.invoke(IpcChannels.listInboxSources, skillIds),
+  revealInboxFile: (
+    name: string,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.revealInboxFile, name),
   refreshInbox: (): Promise<InboxItem[]> =>
     ipcRenderer.invoke(IpcChannels.refreshInbox),
   onInboxChanged: (listener: Listener<InboxItem[]>): Unsubscribe =>

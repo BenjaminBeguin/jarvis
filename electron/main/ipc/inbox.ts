@@ -1,10 +1,54 @@
-import { ipcMain } from 'electron';
-import { existsSync, readFileSync, statSync, unlinkSync } from 'node:fs';
+import { ipcMain, shell } from 'electron';
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+} from 'node:fs';
 import { join, normalize, resolve } from 'node:path';
 
 import { IpcChannels } from '@shared/ipc';
+import type { InboxSourceSummary } from '@shared/types';
 
 import type { IpcDeps } from './types.js';
+
+/**
+ * Static descriptions for the built-in inbox sources. The InboxStore
+ * registers each one by name; we pair that with a human-readable
+ * label + one-line "what this surfaces" + the right "configure" link
+ * so the Settings panel can show them as a real list, not just opaque
+ * ids.
+ */
+const BUILTIN_SOURCE_META: Record<
+  string,
+  Pick<InboxSourceSummary, 'label' | 'description' | 'configureHint'>
+> = {
+  reminders: {
+    label: 'Reminders',
+    description:
+      'One-shot reminders + scheduled actions you set. Surfaces when fireAt is near.',
+    configureHint: 'reminders',
+  },
+  'failed-routines': {
+    label: 'Failed routines',
+    description:
+      'Routine tasks that errored on their last run — click to inspect or re-fire.',
+    configureHint: 'routines',
+  },
+  'pr-review': {
+    label: 'PR reviews waiting on you',
+    description:
+      'gh-CLI scan of pull requests where you owe a review. Scope per project in the panel below.',
+    configureHint: 'inbox-scope',
+  },
+  'pr-comments': {
+    label: 'Comments on your PRs',
+    description:
+      "gh-CLI scan of unresolved threads on PRs you opened. Drops out as soon as you reply.",
+    configureHint: 'inbox-scope',
+  },
+};
 
 /**
  * Inbox IPC: list (cheap, returns cached items) + refresh (re-runs every
@@ -62,6 +106,19 @@ export function registerInboxIpc({ inbox, jarvisRoot }: IpcDeps): void {
   );
 
   ipcMain.handle(
+    IpcChannels.revealInboxFile,
+    (_e, name: string): { ok: boolean; message?: string } => {
+      const target = resolveInboxFile(name);
+      if (!target) return { ok: false, message: 'Invalid inbox file name.' };
+      if (!existsSync(target)) {
+        return { ok: false, message: 'File not found yet (skill may not have run).' };
+      }
+      shell.showItemInFolder(target);
+      return { ok: true };
+    },
+  );
+
+  ipcMain.handle(
     IpcChannels.clearInboxSource,
     async (_e, name: string): Promise<{ ok: boolean; message?: string }> => {
       const target = resolveInboxFile(name);
@@ -79,6 +136,97 @@ export function registerInboxIpc({ inbox, jarvisRoot }: IpcDeps): void {
           message: err instanceof Error ? err.message : String(err),
         };
       }
+    },
+  );
+
+  /**
+   * Inspector surface for Settings → Inbox. Lists every source the
+   * inbox knows about — built-ins (from InboxStore) and user-authored
+   * JSON files under ~/.jarvis/inbox/. Augments each with item count,
+   * file mtime when applicable, and a heuristic skill match so the
+   * UI can offer a "Jump to skill" shortcut.
+   */
+  ipcMain.handle(
+    IpcChannels.listInboxSources,
+    (_e, skillIds: string[] = []): InboxSourceSummary[] => {
+      const items = inbox.list();
+      // Count items per logical source. Items from user files carry
+      // their wrapper's source string (e.g. 'slack-pulse'), so this
+      // groups them correctly.
+      const countBySource = new Map<string, number>();
+      for (const item of items) {
+        countBySource.set(item.source, (countBySource.get(item.source) ?? 0) + 1);
+      }
+
+      const skills = new Set(skillIds);
+      const rows: InboxSourceSummary[] = [];
+
+      // Built-ins: emit one row per known meta entry, even when the
+      // current count is 0 (the row's existence is its own signal).
+      for (const [name, meta] of Object.entries(BUILTIN_SOURCE_META)) {
+        rows.push({
+          name,
+          label: meta.label,
+          description: meta.description,
+          itemCount: countBySource.get(name) ?? 0,
+          kind: 'built-in',
+          configureHint: meta.configureHint,
+        });
+      }
+
+      // User files: enumerate ~/.jarvis/inbox/*.json. File basename is
+      // the source id; if a skill exists with the same id, link to it.
+      if (existsSync(inboxDir)) {
+        let entries: import('node:fs').Dirent[];
+        try {
+          entries = readdirSync(inboxDir, { withFileTypes: true });
+        } catch {
+          entries = [];
+        }
+        for (const entry of entries) {
+          if (
+            !entry.isFile()
+            || !entry.name.endsWith('.json')
+            || entry.name.startsWith('.')
+          ) continue;
+          const base = entry.name.replace(/\.json$/, '');
+          const full = join(inboxDir, entry.name);
+          let mtimeMs: number | undefined;
+          let fileItemCount = 0;
+          try {
+            mtimeMs = statSync(full).mtimeMs;
+            const parsed: unknown = JSON.parse(readFileSync(full, 'utf8'));
+            if (Array.isArray(parsed)) fileItemCount = parsed.length;
+            else if (
+              parsed && typeof parsed === 'object'
+              && Array.isArray((parsed as { items?: unknown[] }).items)
+            ) {
+              fileItemCount = (parsed as { items: unknown[] }).items.length;
+            }
+          } catch {
+            // Bad JSON — show the row so the user can spot the broken
+            // file, count stays 0.
+          }
+          // Prefer the live count from inbox.list() (post snooze/dismiss)
+          // when available; fall back to the raw file count.
+          const itemCount = countBySource.get(base) ?? fileItemCount;
+          const relatedSkillId = skills.has(base) ? base : undefined;
+          rows.push({
+            name: base,
+            label: base,
+            description: relatedSkillId
+              ? `Written by the ${base} skill. Edit it to change what gets surfaced.`
+              : `User-authored inbox file. Anything that writes ${entry.name} feeds this source.`,
+            itemCount,
+            kind: 'file',
+            filePath: full,
+            mtimeMs,
+            relatedSkillId,
+            configureHint: relatedSkillId ? 'skill' : null,
+          });
+        }
+      }
+      return rows;
     },
   );
 }

@@ -4,8 +4,10 @@ import type {
   AppStatus,
   AuthMode,
   HttpApiStatus,
+  InboxSourceSummary,
   NotificationPrefs,
   ProjectDef,
+  SkillSummary,
 } from '../../shared/types';
 import { Integrations } from './integrations/Integrations';
 import { ModulesPage } from './ModulesPage';
@@ -626,10 +628,34 @@ function ApiPanel() {
 function InboxPanel() {
   const [projects, setProjects] = useState<ProjectDef[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [sources, setSources] = useState<InboxSourceSummary[]>([]);
+  const [skills, setSkills] = useState<SkillSummary[]>([]);
 
   useEffect(() => {
     void window.jarvis.listProjects().then(setProjects);
     return window.jarvis.onProjectsChanged(setProjects);
+  }, []);
+
+  // Reload sources whenever skills or the inbox content changes — that
+  // covers "user dropped a new SKILL.md that writes inbox/x.json" and
+  // "routine just refreshed inbox/x.json with new item counts."
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      const skillList = await window.jarvis.listSkills();
+      if (cancelled) return;
+      setSkills(skillList);
+      const ids = skillList.map((s) => s.id);
+      const rows = await window.jarvis.listInboxSources(ids);
+      if (cancelled) return;
+      setSources(rows);
+    };
+    void refresh();
+    const offInbox = window.jarvis.onInboxChanged(() => void refresh());
+    return () => {
+      cancelled = true;
+      offInbox();
+    };
   }, []);
 
   const projectsWithRepo = projects.filter((p) => p.repo);
@@ -655,7 +681,15 @@ function InboxPanel() {
 
   return (
     <div className="settings__section">
-      <h3>PR inbox scope</h3>
+      <h3>Sources</h3>
+      <p className="settings__hint">
+        Everything that feeds the Inbox tab. Built-in sources are baked in;
+        the others come from skills writing JSON to{' '}
+        <code>~/.jarvis/inbox/&lt;name&gt;.json</code>.
+      </p>
+      <InboxSourcesList sources={sources} skills={skills} />
+
+      <h3 style={{ marginTop: 28 }}>PR inbox scope</h3>
       <p className="settings__hint">
         The PR inbox sources (Reviews waiting on you, Comments on your PRs)
         scan repos for activity. By default they scan every tracked
@@ -714,4 +748,120 @@ function InboxPanel() {
       </p>
     </div>
   );
+}
+
+/**
+ * Read-only inspector for the inbox sources. Each row shows where the
+ * data comes from, current count, and the most useful shortcut:
+ *   - PR sources → "Configure scope" jumps to the panel below
+ *   - Failed routines → opens the Routines tab
+ *   - Reminders → opens the Inbox tab (where reminders show up)
+ *   - File-backed (skill-written) → "Reveal in Finder" + (if the file
+ *     name matches a skill id) "Open skill"
+ */
+function InboxSourcesList({
+  sources,
+  skills,
+}: {
+  sources: InboxSourceSummary[];
+  skills: SkillSummary[];
+}) {
+  if (sources.length === 0) {
+    return (
+      <div className="settings__hint settings__hint--dim">
+        No sources registered yet — boot the app and check back.
+      </div>
+    );
+  }
+  return (
+    <ul className="inbox-sources">
+      {sources.map((src) => (
+        <InboxSourceRow key={src.name} src={src} skills={skills} />
+      ))}
+    </ul>
+  );
+}
+
+function InboxSourceRow({
+  src,
+  skills,
+}: {
+  src: InboxSourceSummary;
+  skills: SkillSummary[];
+}) {
+  const reveal = async () => {
+    const r = await window.jarvis.revealInboxFile(`${src.name}.json`);
+    if (!r.ok)
+      toast({ kind: 'error', message: r.message ?? 'Reveal failed' });
+  };
+  const openSkill = () => {
+    if (!src.relatedSkillId) return;
+    window.dispatchEvent(
+      new CustomEvent('jarvis:navigate', {
+        detail: { tab: 'skills', skillId: src.relatedSkillId },
+      }),
+    );
+  };
+  const openRoutines = () => {
+    window.dispatchEvent(
+      new CustomEvent('jarvis:navigate', { detail: { tab: 'routines' } }),
+    );
+  };
+  const openInbox = () => {
+    window.dispatchEvent(
+      new CustomEvent('jarvis:navigate', { detail: { tab: 'inbox' } }),
+    );
+  };
+  const sk = src.relatedSkillId
+    ? skills.find((s) => s.id === src.relatedSkillId)
+    : undefined;
+
+  return (
+    <li className="inbox-source">
+      <div className="inbox-source__head">
+        <span className="inbox-source__name">{src.label}</span>
+        <span className={`inbox-source__kind inbox-source__kind--${src.kind}`}>
+          {src.kind === 'built-in' ? 'built-in' : 'file'}
+        </span>
+        <span className="inbox-source__count">
+          {src.itemCount} {src.itemCount === 1 ? 'item' : 'items'}
+        </span>
+      </div>
+      <div className="inbox-source__desc">{src.description}</div>
+      {src.kind === 'file' && (
+        <div className="inbox-source__meta">
+          <code>~/.jarvis/inbox/{src.name}.json</code>
+          {src.mtimeMs && (
+            <span> · last write {formatRelTime(src.mtimeMs)}</span>
+          )}
+          {sk && <span> · written by skill {sk.name}</span>}
+        </div>
+      )}
+      <div className="inbox-source__actions">
+        {src.kind === 'file' && (
+          <button onClick={() => void reveal()}>Reveal in Finder</button>
+        )}
+        {src.configureHint === 'skill' && src.relatedSkillId && (
+          <button onClick={openSkill}>Open skill ↗</button>
+        )}
+        {src.configureHint === 'routines' && (
+          <button onClick={openRoutines}>Open Routines ↗</button>
+        )}
+        {src.configureHint === 'reminders' && (
+          <button onClick={openInbox}>Open Inbox ↗</button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function formatRelTime(ms: number): string {
+  const diff = Date.now() - ms;
+  if (diff < 60_000) return 'just now';
+  const m = Math.round(diff / 60_000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  return `${d}d ago`;
 }
