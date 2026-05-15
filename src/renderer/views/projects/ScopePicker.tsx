@@ -5,6 +5,9 @@ interface ScopePickerProps {
   active: string | null;
   onChange: (next: string | null) => void;
   onCreate: () => void;
+  /** Open the full Projects view — used as the "See all projects"
+   * entry, since the Projects tab moved into this dropdown. */
+  onManage: () => void;
 }
 
 /**
@@ -13,7 +16,13 @@ interface ScopePickerProps {
  * meetings default to that project, and skills load that project's memory.
  * Persisted to localStorage by the Shell so it survives a restart.
  */
-export function ScopePicker({ projects, active, onChange, onCreate }: ScopePickerProps) {
+export function ScopePicker({
+  projects,
+  active,
+  onChange,
+  onCreate,
+  onManage,
+}: ScopePickerProps) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -94,6 +103,17 @@ export function ScopePicker({ projects, active, onChange, onCreate }: ScopePicke
           >
             + New project
             <span className="shell__scope-item-hint">scope</span>
+          </button>
+          <button
+            className="shell__scope-item shell__scope-item--manage"
+            onClick={() => {
+              setOpen(false);
+              onManage();
+            }}
+            title="Open the full Projects view — edit aliases, paths, memory"
+          >
+            See all projects
+            <span className="shell__scope-item-hint">manage</span>
           </button>
         </div>
       )}

@@ -114,19 +114,21 @@ export function Shell({ status }: Props) {
     }
   }, [activeProject, projectList]);
 
-  // Cmd+1..6 tab shortcuts. Standard pattern across editors; saves a
+  // Cmd+1..5 tab shortcuts. Standard pattern across editors; saves a
   // mouse round-trip when the user wants to flip between Observatory
   // and Inbox dozens of times a day. Skipped when focus is in a text
   // input so the user can still type "⌘1" in markdown.
+  //
+  // Projects + Settings aren't in the row: Projects lives inside the
+  // scope dropdown ("See all projects"), Settings inside the auth-badge
+  // dropdown. They're still reachable programmatically by setTab().
   useEffect(() => {
     const tabsOrder: Tab[] = [
       'dashboard',
       'observatory',
       'inbox',
-      'projects',
       'routines',
       'skills',
-      'settings',
     ];
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
@@ -259,22 +261,12 @@ export function Shell({ status }: Props) {
             Inbox
           </button>
           <button
-            className={`shell__tab${tab === 'projects' && !openModuleId ? ' shell__tab--active' : ''}`}
-            onClick={() => {
-              setTab('projects');
-              setOpenModuleId(null);
-            }}
-            title="⌘4"
-          >
-            Projects
-          </button>
-          <button
             className={`shell__tab${tab === 'routines' && !openModuleId ? ' shell__tab--active' : ''}`}
             onClick={() => {
               setTab('routines');
               setOpenModuleId(null);
             }}
-            title="⌘5"
+            title="⌘4"
           >
             Routines
           </button>
@@ -285,19 +277,9 @@ export function Shell({ status }: Props) {
               setOpenModuleId(null);
               setFocusedSkillId(null);
             }}
-            title="⌘6 · Skill prompts (SKILL.md)"
+            title="⌘5 · Skill prompts (SKILL.md)"
           >
             Skills
-          </button>
-          <button
-            className={`shell__tab shell__tab--settings${tab === 'settings' && !openModuleId ? ' shell__tab--active' : ''}`}
-            onClick={() => {
-              setTab('settings');
-              setOpenModuleId(null);
-            }}
-            title="⌘7 · Preferences · Modules · Integrations · API"
-          >
-            ⚙ Settings
           </button>
         </div>
         <div className="shell__right">
@@ -306,17 +288,19 @@ export function Shell({ status }: Props) {
             active={activeProject}
             onChange={setActiveProject}
             onCreate={() => setNewProjectOpen(true)}
+            onManage={() => {
+              setTab('projects');
+              setOpenModuleId(null);
+            }}
           />
-          <button
-            className="shell__auth-badge"
-            onClick={() => {
+          <AuthBadgeMenu
+            label={badge}
+            settingsActive={tab === 'settings' && !openModuleId}
+            onOpenSettings={() => {
               setTab('settings');
               setOpenModuleId(null);
             }}
-            title="Auth mode — click for Settings"
-          >
-            {badge}
-          </button>
+          />
           <button
             className="shell__palette-hint"
             onClick={() => void window.jarvis.openPalette()}
@@ -403,6 +387,66 @@ export function Shell({ status }: Props) {
         initialName={newProjectInitial}
       />
       <Toaster />
+    </div>
+  );
+}
+
+/**
+ * Auth-mode badge + menu. The badge is the current auth label
+ * (subscription / api key); clicking it pops a small dropdown holding
+ * the "Settings" entry that used to live in the tab bar. The badge gets
+ * accent styling when Settings is the active view so the user can still
+ * tell where they are without a dedicated tab.
+ */
+function AuthBadgeMenu({
+  label,
+  settingsActive,
+  onOpenSettings,
+}: {
+  label: string;
+  settingsActive: boolean;
+  onOpenSettings: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  return (
+    <div className="shell__auth-wrap" ref={wrapRef}>
+      <button
+        className={`shell__auth-badge${
+          settingsActive ? ' shell__auth-badge--active' : ''
+        }`}
+        onClick={() => setOpen((v) => !v)}
+        title="Auth mode · click for Settings"
+      >
+        {label}
+        <span className="shell__auth-caret">▾</span>
+      </button>
+      {open && (
+        <div className="shell__auth-menu">
+          <button
+            onClick={() => {
+              setOpen(false);
+              onOpenSettings();
+            }}
+            title="Preferences · Modules · Integrations · API"
+          >
+            ⚙ Settings
+            <span className="shell__auth-hint">
+              Preferences · Modules · Integrations · API
+            </span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
