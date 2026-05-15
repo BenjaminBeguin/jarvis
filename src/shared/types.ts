@@ -173,6 +173,10 @@ export interface RoutineDef {
   /** When the most recent condition check fired vs. skipped, for debugging. */
   lastConditionAt?: number;
   lastConditionResult?: 'fired' | 'skipped' | 'errored';
+  /** Task id produced by the most recent fire — lets the UI deep-link
+   * "view last run" to the actual transcript in the Observatory. Cleared
+   * if the task was later deleted (the lookup just becomes a no-op). */
+  lastTaskId?: string | null;
 }
 
 /**

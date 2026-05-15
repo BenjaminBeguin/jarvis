@@ -20,6 +20,7 @@ interface PersistedRoutine {
   enabled?: boolean;
   lastRunAt?: number;
   condition?: string;
+  lastTaskId?: string;
 }
 
 interface ScheduledRoutine {
@@ -75,6 +76,7 @@ export class RoutineStore extends EventEmitter {
       lastRunAt: existing?.def.lastRunAt ?? null,
       nextRunAt: null,
       condition: input.condition ?? existing?.def.condition,
+      lastTaskId: existing?.def.lastTaskId ?? null,
     };
     this.applyRoutine(def);
     this.persist();
@@ -159,19 +161,20 @@ export class RoutineStore extends EventEmitter {
 
   private fire(def: RoutineDef): void {
     if (!this.runner) return;
+    const task = this.runner.launch({
+      skillId: def.skillId,
+      prompt: def.input || 'Run.',
+      origin: 'routine',
+    });
     const updated: RoutineDef = {
       ...def,
       lastRunAt: Date.now(),
       lastConditionAt: def.condition ? Date.now() : def.lastConditionAt,
       lastConditionResult: def.condition ? 'fired' : def.lastConditionResult,
+      lastTaskId: task.id,
     };
     const rec = this.routines.get(def.id);
     if (rec) rec.def = updated;
-    this.runner.launch({
-      skillId: def.skillId,
-      prompt: def.input || 'Run.',
-      origin: 'routine',
-    });
     this.persist();
     this.emit('changed', this.list());
   }
@@ -200,6 +203,7 @@ export class RoutineStore extends EventEmitter {
           lastRunAt: item.lastRunAt ?? null,
           nextRunAt: null,
           condition: item.condition,
+          lastTaskId: item.lastTaskId ?? null,
         };
         this.applyRoutine(def);
       }
@@ -218,6 +222,7 @@ export class RoutineStore extends EventEmitter {
       enabled: r.def.enabled,
       lastRunAt: r.def.lastRunAt ?? undefined,
       condition: r.def.condition,
+      lastTaskId: r.def.lastTaskId ?? undefined,
     }));
     writeFileSync(this.path, JSON.stringify(list, null, 2), 'utf8');
   }

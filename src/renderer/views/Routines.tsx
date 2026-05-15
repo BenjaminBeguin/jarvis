@@ -382,7 +382,23 @@ function RoutineCard({ routine, skill, onEdit, onRemove, onRunNow, onToggle }: C
 
       <ToolChips skill={skill} />
 
-      <div className="routine-card__last">last run · {formatTimestamp(routine.lastRunAt)}</div>
+      <div className="routine-card__last">
+        last run · {formatTimestamp(routine.lastRunAt)}
+        {routine.lastTaskId && (
+          <>
+            {' · '}
+            <button
+              className="routine-card__view-run"
+              onClick={() => {
+                void window.jarvis.openObservatory(routine.lastTaskId!);
+              }}
+              title={`Open the transcript of the last run (task ${routine.lastTaskId})`}
+            >
+              view output →
+            </button>
+          </>
+        )}
+      </div>
 
       <div className="routine-card__actions">
         <button onClick={onRunNow}>Run now</button>
