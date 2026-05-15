@@ -143,7 +143,7 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
   const hiddenCount = items.length - filteredItems.length;
 
   return (
-    <section className="inbox">
+    <section className={`inbox${compact ? ' inbox--compact' : ''}`}>
       <header className="inbox__head">
         <div>
           {!compact && <h2>INBOX</h2>}

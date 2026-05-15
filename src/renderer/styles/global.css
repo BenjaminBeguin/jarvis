@@ -1910,6 +1910,14 @@ button:disabled:hover {
   overflow-y: auto;
 }
 
+/* When the Inbox is embedded inside a Dashboard section the section
+   already has its own padding. Drop ours so the content aligns flush
+   with the section header instead of indenting twice. */
+.inbox--compact {
+  padding: 0;
+  overflow: visible;
+}
+
 .inbox__head {
   display: flex;
   align-items: flex-end;
