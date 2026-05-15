@@ -9494,6 +9494,157 @@ button:disabled:hover {
   background: rgba(0, 212, 255, 0.12);
 }
 
+/* Modal for editing per-integration config files (e.g. slack-watchlist.md).
+   Reuses project-dialog visual language. Larger than project-dialog because
+   markdown editing needs room. */
+.config-file-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 4, 7, 0.62);
+  backdrop-filter: blur(6px);
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+
+.config-file-modal {
+  width: min(720px, calc(100% - 60px));
+  height: min(640px, calc(100vh - 80px));
+  background: rgba(7, 11, 15, 0.96);
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), var(--accent-glow-soft);
+  display: flex;
+  flex-direction: column;
+}
+
+.config-file-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.config-file-modal__head h3 {
+  margin: 0 0 4px;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-shadow: var(--accent-glow);
+}
+
+.config-file-modal__path {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+
+.config-file-modal__desc {
+  margin: 6px 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  max-width: 560px;
+}
+
+.config-file-modal__close {
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.config-file-modal__close:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.config-file-modal__error {
+  margin: 0;
+  padding: 8px 18px;
+  background: rgba(255, 80, 80, 0.08);
+  border-bottom: 1px solid rgba(255, 80, 80, 0.2);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #ff8a8a;
+}
+
+.config-file-modal__loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.config-file-modal__textarea {
+  flex: 1;
+  margin: 0;
+  padding: 14px 18px;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  resize: none;
+  outline: none;
+  tab-size: 2;
+}
+
+.config-file-modal__textarea:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(0, 212, 255, 0.25);
+}
+
+.config-file-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-strong);
+}
+
+.config-file-modal__actions button {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.config-file-modal__actions button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.config-file-modal__save {
+  background: rgba(0, 212, 255, 0.1) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+
+.config-file-modal__save:hover:not(:disabled) {
+  background: rgba(0, 212, 255, 0.16) !important;
+}
+
 .integrations__section-title {
   margin: 0 0 8px;
   font-family: var(--mono);
@@ -9637,6 +9788,45 @@ button:disabled:hover {
   font-size: 10px;
   color: var(--warn);
   letter-spacing: 0.04em;
+}
+
+.integration-card__inbox-hint {
+  margin: 6px 0 10px;
+  padding: 6px 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  background: rgba(0, 212, 255, 0.04);
+  border-left: 2px solid rgba(0, 212, 255, 0.25);
+  letter-spacing: 0.02em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.integration-card__inbox-hint--stale {
+  color: var(--warn);
+  background: rgba(255, 173, 0, 0.06);
+  border-left-color: var(--warn);
+}
+
+.integration-card__inbox-clear {
+  background: transparent;
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.integration-card__inbox-clear:hover {
+  background: rgba(255, 173, 0, 0.12);
 }
 
 .integration-card__tools {

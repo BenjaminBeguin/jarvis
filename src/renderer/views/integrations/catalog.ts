@@ -79,6 +79,27 @@ export interface CatalogEntry {
    * warning badge.
    */
   claudeAiOnly?: boolean;
+  /**
+   * Optional config file under ~/.jarvis/ that this integration reads.
+   * Renders an "Edit" button that opens an inline markdown editor. Used
+   * by skills that need user-controlled scope (e.g. Slack watchlist:
+   * which channels / DMs to scan).
+   */
+  configFile?: {
+    /** Path relative to ~/.jarvis/ (e.g. "slack-watchlist.md"). */
+    path: string;
+    /** Button label ("Edit watchlist", "Edit team"). */
+    label: string;
+    /** Optional one-liner shown in the modal header. */
+    description?: string;
+  };
+  /**
+   * Inbox JSON files this integration's skills populate (relative to
+   * `~/.jarvis/inbox/`). When the user disables or removes the
+   * integration, the Integrations UI shows how many items will go
+   * stale, and the Remove flow offers to clear these files.
+   */
+  inboxFiles?: string[];
 }
 
 export const CATALOG: CatalogEntry[] = [
@@ -109,6 +130,13 @@ export const CATALOG: CatalogEntry[] = [
     setupUrl: 'https://api.slack.com/apps?new_app=1',
     setupNotes:
       "Create a Slack app (From scratch), add Bot Token Scopes: chat:write, chat:write.public, im:write, users:read, users:read.email, channels:read, files:write. Install to workspace, then copy the Bot User OAuth Token (xoxb-…).",
+    configFile: {
+      path: 'slack-watchlist.md',
+      label: 'Edit watchlist',
+      description:
+        'Channels, DMs, and people the slack-pulse / daily-recap skills scan. Markdown; edit freely.',
+    },
+    inboxFiles: ['slack-pulse.json'],
   },
   {
     id: 'gmail-personal',
@@ -147,6 +175,7 @@ export const CATALOG: CatalogEntry[] = [
     name: 'Calendar · personal',
     description: 'Read + create events on your personal Google Calendar',
     aliases: ['calendar-personal', 'google-calendar-personal'],
+    inboxFiles: ['calendar.json'],
     // @cocal/google-calendar-mcp respects GOOGLE_OAUTH_CREDENTIALS (the
     // OAuth keys path) + GOOGLE_CALENDAR_MCP_TOKEN_PATH (where the
     // refresh token gets cached after auth). Pointing both at our
@@ -166,6 +195,7 @@ export const CATALOG: CatalogEntry[] = [
     name: 'Calendar · work',
     description: 'Read + create events on your work Google Calendar',
     aliases: ['calendar-work', 'google-calendar-work'],
+    inboxFiles: ['calendar.json'],
     command: 'sh',
     args: [
       '-c',

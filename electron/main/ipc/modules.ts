@@ -1,5 +1,12 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import {
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname } from 'node:path';
 import { join, normalize, relative, resolve } from 'node:path';
 
 import { IpcChannels } from '@shared/ipc';
@@ -75,6 +82,38 @@ export function registerModulesIpc({ modules, jarvisRoot }: IpcDeps): void {
     const target = resolveSafe(rel);
     return readFileSync(target, 'utf8');
   });
+
+  /**
+   * Write a file under ~/.jarvis. Used by the catalog config-file editor
+   * (slack-watchlist.md, team.md, …) so the user can edit per-integration
+   * config from inside the app. Creates parent directories if needed.
+   * Path is validated via resolveSafe — can't escape ~/.jarvis.
+   */
+  ipcMain.handle(
+    IpcChannels.writeJarvisFile,
+    (
+      _e,
+      payload: { path: string; contents: string },
+    ): { ok: boolean; message?: string } => {
+      try {
+        if (typeof payload?.path !== 'string' || !payload.path) {
+          return { ok: false, message: 'Invalid path.' };
+        }
+        if (typeof payload.contents !== 'string') {
+          return { ok: false, message: 'Contents must be a string.' };
+        }
+        const target = resolveSafe(payload.path);
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, payload.contents, 'utf8');
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
 
   // Native folder picker — used by the palette session-config chip to pick
   // extra directories the agent can read/write beyond cwd.

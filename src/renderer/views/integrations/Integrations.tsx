@@ -34,6 +34,8 @@ export function Integrations() {
   const [showFile, setShowFile] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
+  const [configEntry, setConfigEntry] = useState<CatalogEntry | null>(null);
+  const [inboxCounts, setInboxCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     void window.jarvis.listMcpServers().then(setLocalServers);
@@ -69,6 +71,30 @@ export function Integrations() {
   useEffect(() => {
     void refreshFile();
   }, [localServers]);
+
+  /** Refresh inbox counts for every catalog entry that declares inboxFiles.
+   * Counts are per-file (multiple entries can share the same file, e.g.
+   * both calendar-personal + calendar-work write calendar.json). On
+   * server-list changes we re-fetch so the UI updates after a clear. */
+  const refreshInboxCounts = async () => {
+    const fileNames = new Set<string>();
+    for (const e of CATALOG) {
+      for (const f of e.inboxFiles ?? []) fileNames.add(f);
+    }
+    const entries = await Promise.all(
+      [...fileNames].map(async (name) => {
+        const r = await window.jarvis.countInboxSource(name);
+        return [name, r.count] as const;
+      }),
+    );
+    setInboxCounts(Object.fromEntries(entries));
+  };
+  useEffect(() => {
+    void refreshInboxCounts();
+    const off = window.jarvis.onInboxChanged(() => void refreshInboxCounts());
+    return () => off();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const localIds = useMemo(
     () => new Set(localServers.map((s) => s.id.toLowerCase())),
@@ -149,18 +175,24 @@ export function Integrations() {
         <div className="integrations__grid">
           {CATALOG.map((entry) => {
             const status = statusFor(entry);
+            const inboxItemCount = (entry.inboxFiles ?? []).reduce(
+              (sum, f) => sum + (inboxCounts[f] ?? 0),
+              0,
+            );
+            const local = localServers.find((s) => s.id === entry.id);
             return (
               <CatalogCard
                 key={entry.id}
                 entry={entry}
                 status={status}
+                disabled={!!local?.disabled}
+                inboxItemCount={inboxItemCount}
                 editing={editingId === entry.id}
                 onEdit={() => setEditingId(entry.id)}
                 onClose={() => setEditingId(null)}
+                onEditConfig={() => setConfigEntry(entry)}
                 onRemove={async () => {
-                  const r = await window.jarvis.removeMcpServer(entry.id);
-                  if (r.ok) toast({ kind: 'info', message: `Removed ${entry.name}` });
-                  else toast({ kind: 'error', message: r.message ?? 'Remove failed' });
+                  await removeIntegrationWithCleanup(entry);
                   await refreshFile();
                 }}
               />
@@ -219,6 +251,13 @@ export function Integrations() {
           }}
         />
       </section>
+
+      {configEntry?.configFile && (
+        <ConfigFileEditor
+          entry={configEntry}
+          onClose={() => setConfigEntry(null)}
+        />
+      )}
     </section>
   );
 }
@@ -343,21 +382,205 @@ function defaultJsonScaffold(): string {
   return JSON.stringify({ mcpServers: {} }, null, 2);
 }
 
+/**
+ * Remove an MCP + offer to clear any inbox JSON it populated. We don't
+ * silent-delete — the user might want to keep historical items around —
+ * but we surface counts so they can decide. The IPC handler does atomic
+ * delete + force-refresh so the renderer sees items disappear without
+ * waiting for the auto-refresh tick.
+ */
+async function removeIntegrationWithCleanup(entry: CatalogEntry): Promise<void> {
+  const files = entry.inboxFiles ?? [];
+  // Pre-count so the prompt can show "Also clear 4 items?"
+  const counts = await Promise.all(
+    files.map(async (name) => ({
+      name,
+      count: (await window.jarvis.countInboxSource(name)).count,
+    })),
+  );
+  const withItems = counts.filter((c) => c.count > 0);
+  const baseMsg = `Remove ${entry.name} from ~/.jarvis/mcp.json?`;
+  let cleanupConfirmed = false;
+  if (withItems.length > 0) {
+    const list = withItems.map((c) => `inbox/${c.name} (${c.count} items)`).join(', ');
+    const msg = `${baseMsg}\n\nAlso clear ${list}?\n\n[OK] Remove + clear inbox\n[Cancel] Keep inbox (or abort)`;
+    if (!confirm(msg)) {
+      // Cancel: don't even remove the MCP. Two-stage prompt is too
+      // noisy; one decision per click.
+      return;
+    }
+    cleanupConfirmed = true;
+  } else if (!confirm(baseMsg)) {
+    return;
+  }
+  const r = await window.jarvis.removeMcpServer(entry.id);
+  if (!r.ok) {
+    toast({ kind: 'error', message: r.message ?? 'Remove failed' });
+    return;
+  }
+  toast({ kind: 'info', message: `Removed ${entry.name}` });
+  if (cleanupConfirmed) {
+    for (const c of withItems) {
+      const cr = await window.jarvis.clearInboxSource(c.name);
+      if (!cr.ok) {
+        toast({
+          kind: 'error',
+          message: `Couldn't clear inbox/${c.name}: ${cr.message ?? 'unknown'}`,
+        });
+      }
+    }
+    toast({ message: `Cleared ${withItems.length} inbox file(s)` });
+  }
+}
+
+/**
+ * Modal editor for an integration's config markdown file (e.g.
+ * slack-watchlist.md). Opens with the on-disk contents pre-loaded;
+ * Cmd+S or Save writes via writeJarvisFile. Esc / Cancel discards.
+ * Resolved relative to ~/.jarvis/ — path validation lives main-side
+ * in resolveSafe().
+ */
+function ConfigFileEditor({
+  entry,
+  onClose,
+}: {
+  entry: CatalogEntry;
+  onClose: () => void;
+}) {
+  const cf = entry.configFile!;
+  const [draft, setDraft] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    void window.jarvis
+      .readJarvisFile(cf.path)
+      .then((s) => {
+        if (!cancelled) setDraft(s);
+      })
+      .catch((e: unknown) => {
+        // ENOENT is fine — the file may not exist yet. Start with empty.
+        if (!cancelled) setDraft('');
+        if (!cancelled) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (!msg.includes('ENOENT')) setError(msg);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cf.path]);
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await window.jarvis.writeJarvisFile(cf.path, draft);
+      if (!r.ok) {
+        setError(r.message ?? 'Save failed');
+        return;
+      }
+      toast({ message: `${cf.path} saved` });
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="config-file-modal__backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !saving) onClose();
+      }}
+    >
+      <div className="config-file-modal">
+        <header className="config-file-modal__head">
+          <div>
+            <h3>
+              {cf.label} · {entry.name}
+            </h3>
+            <code className="config-file-modal__path">~/.jarvis/{cf.path}</code>
+            {cf.description && (
+              <p className="config-file-modal__desc">{cf.description}</p>
+            )}
+          </div>
+          <button
+            className="config-file-modal__close"
+            onClick={onClose}
+            disabled={saving}
+            title="Close (Esc)"
+          >
+            ×
+          </button>
+        </header>
+        {error && <div className="config-file-modal__error">{error}</div>}
+        {loading ? (
+          <div className="config-file-modal__loading">Loading…</div>
+        ) : (
+          <textarea
+            className="config-file-modal__textarea"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            spellCheck={false}
+            autoFocus
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+                e.preventDefault();
+                void save();
+              }
+              if (e.key === 'Escape' && !saving) onClose();
+            }}
+          />
+        )}
+        <footer className="config-file-modal__actions">
+          <button onClick={onClose} disabled={saving}>
+            Cancel
+          </button>
+          <button
+            className="config-file-modal__save"
+            onClick={() => void save()}
+            disabled={saving || loading}
+            title="Cmd+S"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 interface CatalogCardProps {
   entry: CatalogEntry;
   status: Status;
+  /** True if the matching Jarvis-local server has been temp-disabled. */
+  disabled: boolean;
+  /** Total items currently in the inbox files this entry populates. */
+  inboxItemCount: number;
   editing: boolean;
   onEdit: () => void;
   onClose: () => void;
+  onEditConfig: () => void;
   onRemove: () => Promise<void>;
 }
 
 function CatalogCard({
   entry,
   status,
+  disabled,
+  inboxItemCount,
   editing,
   onEdit,
   onClose,
+  onEditConfig,
   onRemove,
 }: CatalogCardProps) {
   const statusLabel =
@@ -410,6 +633,50 @@ function CatalogCard({
         <CatalogForm entry={entry} onClose={onClose} onSaved={onClose} />
       ) : (
         <>
+          {entry.inboxFiles && entry.inboxFiles.length > 0 && inboxItemCount > 0 && (
+            <div
+              className={`integration-card__inbox-hint${
+                disabled ? ' integration-card__inbox-hint--stale' : ''
+              }`}
+            >
+              <span>
+                {disabled
+                  ? `⚠ ${inboxItemCount} stale item${inboxItemCount === 1 ? '' : 's'} in your inbox (skill won't refresh while disabled)`
+                  : `📥 ${inboxItemCount} item${inboxItemCount === 1 ? '' : 's'} currently in your inbox from this integration`}
+              </span>
+              {disabled && (
+                <button
+                  className="integration-card__inbox-clear"
+                  onClick={async () => {
+                    if (
+                      !confirm(
+                        `Clear ${inboxItemCount} item${
+                          inboxItemCount === 1 ? '' : 's'
+                        } from ${(entry.inboxFiles ?? [])
+                          .map((f) => `inbox/${f}`)
+                          .join(', ')}?`,
+                      )
+                    )
+                      return;
+                    for (const name of entry.inboxFiles ?? []) {
+                      const r = await window.jarvis.clearInboxSource(name);
+                      if (!r.ok) {
+                        toast({
+                          kind: 'error',
+                          message: `Couldn't clear inbox/${name}: ${
+                            r.message ?? 'unknown'
+                          }`,
+                        });
+                      }
+                    }
+                    toast({ message: 'Inbox cleared' });
+                  }}
+                >
+                  Clear inbox
+                </button>
+              )}
+            </div>
+          )}
           <footer className="integration-card__actions">
             {entry.claudeAiOnly && (
               <span className="integration-card__note">
@@ -435,6 +702,15 @@ function CatalogCard({
                   : toolsOpen
                   ? '▾ Hide tools'
                   : `▸ ${tools ? `${tools.length} tools` : 'Show tools'}`}
+              </button>
+            )}
+            {entry.configFile && (
+              <button
+                className="integration-card__btn"
+                onClick={onEditConfig}
+                title={`Edit ~/.jarvis/${entry.configFile.path}`}
+              >
+                ✎ {entry.configFile.label}
               </button>
             )}
             {entry.setupUrl && (

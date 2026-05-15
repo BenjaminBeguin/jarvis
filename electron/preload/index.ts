@@ -186,6 +186,11 @@ const api = {
     ipcRenderer.invoke(IpcChannels.listJarvisDir, rel),
   readJarvisFile: (rel: string): Promise<string> =>
     ipcRenderer.invoke(IpcChannels.readJarvisFile, rel),
+  writeJarvisFile: (
+    path: string,
+    contents: string,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.writeJarvisFile, { path, contents }),
   pickDirectory: (
     options?: { multi?: boolean; defaultPath?: string },
   ): Promise<string[]> =>
@@ -261,6 +266,14 @@ const api = {
     subscribe(IpcChannels.inboxRefreshing, listener),
   dismissInboxItem: (id: string, snoozeMs: number): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.dismissInboxItem, { id, snoozeMs }),
+  countInboxSource: (
+    name: string,
+  ): Promise<{ count: number; mtimeMs: number | null }> =>
+    ipcRenderer.invoke(IpcChannels.countInboxSource, name),
+  clearInboxSource: (
+    name: string,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.clearInboxSource, name),
   onMeetingImminent: (
     listener: Listener<{ item: InboxItem; minutesUntil: number }>,
   ): Unsubscribe => subscribe(IpcChannels.meetingImminent, listener),

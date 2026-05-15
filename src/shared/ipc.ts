@@ -43,6 +43,7 @@ export const IpcChannels = {
 
   listJarvisDir: 'fs:listJarvisDir',
   readJarvisFile: 'fs:readJarvisFile',
+  writeJarvisFile: 'fs:writeJarvisFile',
 
   listProjects: 'projects:list',
   createProject: 'projects:create',
@@ -76,6 +77,8 @@ export const IpcChannels = {
   inboxChanged: 'inbox:changed',
   inboxRefreshing: 'inbox:refreshing',
   dismissInboxItem: 'inbox:dismiss',
+  countInboxSource: 'inbox:countSource',
+  clearInboxSource: 'inbox:clearSource',
   meetingImminent: 'inbox:meetingImminent',
   suppressMeetingPrompt: 'inbox:suppressMeetingPrompt',
 
