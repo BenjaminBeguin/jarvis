@@ -1340,6 +1340,32 @@ button:disabled:hover {
   position: relative;
 }
 
+/* Square icon-only buttons in the shell's top-right (e.g. Activity).
+   Sized to match the auth-badge height so the row stays aligned. */
+.shell__icon-btn {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+.shell__icon-btn:hover,
+.shell__icon-btn--active {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
 .shell__auth-wrap {
   position: relative;
 }

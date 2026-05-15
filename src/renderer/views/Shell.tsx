@@ -129,7 +129,6 @@ export function Shell({ status }: Props) {
       'dashboard',
       'observatory',
       'inbox',
-      'activity',
       'routines',
       'skills',
     ];
@@ -264,22 +263,12 @@ export function Shell({ status }: Props) {
             Inbox
           </button>
           <button
-            className={`shell__tab${tab === 'activity' && !openModuleId ? ' shell__tab--active' : ''}`}
-            onClick={() => {
-              setTab('activity');
-              setOpenModuleId(null);
-            }}
-            title="⌘4 · /send history + (later) every other thing you did"
-          >
-            Activity
-          </button>
-          <button
             className={`shell__tab${tab === 'routines' && !openModuleId ? ' shell__tab--active' : ''}`}
             onClick={() => {
               setTab('routines');
               setOpenModuleId(null);
             }}
-            title="⌘5"
+            title="⌘4"
           >
             Routines
           </button>
@@ -290,7 +279,7 @@ export function Shell({ status }: Props) {
               setOpenModuleId(null);
               setFocusedSkillId(null);
             }}
-            title="⌘6 · Skill prompts (SKILL.md)"
+            title="⌘5 · Skill prompts (SKILL.md)"
           >
             Skills
           </button>
@@ -306,6 +295,19 @@ export function Shell({ status }: Props) {
               setOpenModuleId(null);
             }}
           />
+          <button
+            className={`shell__icon-btn${
+              tab === 'activity' && !openModuleId ? ' shell__icon-btn--active' : ''
+            }`}
+            onClick={() => {
+              setTab('activity');
+              setOpenModuleId(null);
+            }}
+            title="Activity · /send history (and later, every other thing you did)"
+            aria-label="Activity"
+          >
+            ≡
+          </button>
           <AuthBadgeMenu
             label={badge}
             settingsActive={tab === 'settings' && !openModuleId}
