@@ -152,6 +152,28 @@ export type RoutePromptResult =
   | { kind: 'reminder'; reminder: Reminder }
   | { kind: 'task'; task: TaskSummary };
 
+/**
+ * User-defined dashboard layout. The Dashboard tab is just a renderer for
+ * this config: sections in order, each with a title + ordered items.
+ * Persisted to ~/.jarvis/dashboard.json.
+ *
+ * Item kinds are intentionally a discriminated union so future kinds
+ * (pinned tasks, notes, external links) just add a variant.
+ */
+export type DashboardItem =
+  | { kind: 'inbox' }
+  | { kind: 'routine'; routineId: string };
+
+export interface DashboardSection {
+  id: string;
+  title: string;
+  items: DashboardItem[];
+}
+
+export interface DashboardConfig {
+  sections: DashboardSection[];
+}
+
 export interface RoutineDef {
   id: string;
   skillId: string;

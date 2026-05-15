@@ -22,6 +22,7 @@ import {
 import { registerAllIpc } from './ipc/index.js';
 import { McpConfigStore } from './mcp-config.js';
 import { ModuleRegistry } from './module-registry.js';
+import { DashboardStore } from './dashboard-store.js';
 import { PreferencesStore } from './preferences-store.js';
 import { claudeCodeWatchModule } from './modules/claude-code-watch.js';
 import { meetingRecorderModule } from './modules/meeting-recorder.js';
@@ -85,6 +86,9 @@ const modules = new ModuleRegistry();
 const shellRunner = new ShellRunner(runner);
 const preferences = new PreferencesStore(
   join(homedir(), '.jarvis', 'preferences.md'),
+);
+const dashboard = new DashboardStore(
+  join(homedir(), '.jarvis', 'dashboard.json'),
 );
 const userContext = new UserContextStore();
 const inbox = new InboxStore();
@@ -404,6 +408,7 @@ app.whenReady().then(async () => {
   mcp.init();
   projects.init();
   preferences.init();
+  dashboard.init();
   briefings.init();
   routines.init();
 
@@ -549,6 +554,7 @@ app.whenReady().then(async () => {
     broadcast(IpcChannels.inboxRefreshing, flag),
   );
   briefings.on('changed', () => broadcast(IpcChannels.briefingsChanged, null));
+  dashboard.on('changed', (cfg) => broadcast(IpcChannels.dashboardChanged, cfg));
   // Proactive Jarvis: ping the user once when new inbox items appear since
   // the previous refresh. Grouped — one notification for N items, not N
   // notifications. Click jumps to the Inbox tab.
@@ -657,6 +663,7 @@ app.whenReady().then(async () => {
     preferences,
     inbox,
     briefings,
+    dashboard,
     jarvisRoot,
     auth: {
       refresh: refreshAuth,

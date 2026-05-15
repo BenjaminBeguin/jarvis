@@ -76,6 +76,10 @@ export const IpcChannels = {
   meetingImminent: 'inbox:meetingImminent',
   suppressMeetingPrompt: 'inbox:suppressMeetingPrompt',
 
+  readDashboard: 'dashboard:read',
+  writeDashboard: 'dashboard:write',
+  dashboardChanged: 'dashboard:changed',
+
   listBriefingKinds: 'briefings:listKinds',
   listBriefingFiles: 'briefings:listFiles',
   readBriefingFile: 'briefings:readFile',

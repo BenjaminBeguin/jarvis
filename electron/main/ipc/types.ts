@@ -1,6 +1,7 @@
 import type { AppStatus } from '@shared/types';
 
 import type { BriefingsStore } from '../briefings.js';
+import type { DashboardStore } from '../dashboard-store.js';
 import type { InboxStore } from '../inbox.js';
 import type { McpConfigStore } from '../mcp-config.js';
 import type { ModuleRegistry } from '../module-registry.js';
@@ -37,6 +38,7 @@ export interface IpcDeps {
   preferences: PreferencesStore;
   inbox: InboxStore;
   briefings: BriefingsStore;
+  dashboard: DashboardStore;
   jarvisRoot: string;
   auth: {
     /** Reconcile auth state from disk + keychain; returns the next status. */

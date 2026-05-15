@@ -21,6 +21,7 @@ import type {
   ProjectMemoryFile,
   ProjectTemplateSummary,
   Reminder,
+  DashboardConfig,
   RoutePromptResult,
   RoutineDef,
   SessionConfig,
@@ -236,6 +237,13 @@ const api = {
   ): Unsubscribe => subscribe(IpcChannels.meetingImminent, listener),
   suppressMeetingPrompt: (id: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.suppressMeetingPrompt, id),
+
+  readDashboard: (): Promise<DashboardConfig> =>
+    ipcRenderer.invoke(IpcChannels.readDashboard),
+  writeDashboard: (cfg: DashboardConfig): Promise<DashboardConfig> =>
+    ipcRenderer.invoke(IpcChannels.writeDashboard, cfg),
+  onDashboardChanged: (listener: Listener<DashboardConfig>): Unsubscribe =>
+    subscribe(IpcChannels.dashboardChanged, listener),
 
   listBriefingKinds: (): Promise<
     Array<{
