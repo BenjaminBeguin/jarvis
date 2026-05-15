@@ -59,10 +59,18 @@ const api = {
     subscribe(IpcChannels.observatoryFocusTask, listener),
   onShellNavigate: (
     listener: Listener<{
-      tab?: 'observatory' | 'inbox' | 'briefings' | 'projects' | 'routines' | 'settings';
+      tab?:
+        | 'observatory'
+        | 'inbox'
+        | 'briefings'
+        | 'projects'
+        | 'routines'
+        | 'skills'
+        | 'settings';
       moduleId?: string;
       action?: 'open-new-project';
       initial?: string;
+      skillId?: string;
     }>,
   ): Unsubscribe => subscribe(IpcChannels.shellNavigate, listener),
   openPalette: (): Promise<void> =>
