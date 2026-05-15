@@ -3263,16 +3263,8 @@ button:disabled:hover {
 .dash__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 18px;
-}
-
-.dash__title {
-  font-family: var(--mono);
-  font-size: 13px;
-  letter-spacing: 0.32em;
-  color: var(--accent);
-  text-shadow: var(--accent-glow);
+  justify-content: flex-end;
+  margin-bottom: 12px;
 }
 
 .dash__actions {
@@ -3328,7 +3320,7 @@ button:disabled:hover {
 .dash__sections {
   display: flex;
   flex-wrap: wrap;
-  gap: 28px;
+  gap: 20px;
   align-items: flex-start;
 }
 
@@ -3337,6 +3329,31 @@ button:disabled:hover {
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+  padding: 14px 18px 18px;
+  background: rgba(7, 11, 15, 0.45);
+  border: 1px solid var(--border);
+  border-top: 1px solid rgba(0, 212, 255, 0.28);
+  border-radius: 2px;
+  position: relative;
+}
+
+.dash-section::before {
+  /* Subtle accent glow above the top border so each section reads as a
+     distinct module without heavy chrome. */
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 212, 255, 0.55) 12%,
+    rgba(0, 212, 255, 0.55) 88%,
+    transparent 100%
+  );
+  pointer-events: none;
 }
 
 .dash-section--full {
@@ -3344,9 +3361,12 @@ button:disabled:hover {
 }
 
 .dash-section--half {
-  /* `min-width: 360px` prevents two halves crushing to unreadable width
-     on narrow windows — fall back to single-column when there's no room. */
-  flex: 1 1 calc(50% - 14px);
+  /* flex: 0 1 keeps a half-section visually at half-width even when it's
+     alone on a row (otherwise flex-grow would expand it back to full and
+     the user wouldn't see the toggle take effect). `min-width: 360px`
+     prevents two halves crushing to unreadable width on narrow windows
+     — fall back to single-column when there's no room. */
+  flex: 0 1 calc(50% - 10px);
   min-width: 360px;
 }
 
@@ -3354,7 +3374,7 @@ button:disabled:hover {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding-bottom: 6px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -3708,12 +3728,10 @@ button:disabled:hover {
 .dash-cal {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  background: rgba(4, 7, 11, 0.5);
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--accent);
-  border-radius: 2px;
-  padding: 14px 18px;
+  gap: 12px;
+  /* The Dashboard section wrapper already provides padding + border; we
+     used to nest a second card here and it read as a "double box". Now
+     transparent so the timeline content flows inside the section. */
 }
 
 .dash-cal__head {
@@ -3785,6 +3803,8 @@ button:disabled:hover {
   color: var(--text);
   font-family: var(--sans);
   font-size: 12.5px;
+  letter-spacing: 0;
+  text-transform: none;
   text-align: left;
   padding: 6px 10px;
   border-radius: 2px;

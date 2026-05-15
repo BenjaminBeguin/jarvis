@@ -112,7 +112,6 @@ export function Dashboard() {
   return (
     <div className="dash">
       <header className="dash__header">
-        <div className="dash__title">DASHBOARD</div>
         <div className="dash__actions">
           {editing && (
             <button onClick={addSection} className="dash__add-section">
