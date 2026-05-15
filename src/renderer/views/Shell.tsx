@@ -9,6 +9,7 @@ import { MeetingPrompt } from './MeetingPrompt';
 import { NewProjectDialog } from './projects/NewProjectDialog';
 import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
+import { Activity } from './Activity';
 import { Dashboard } from './Dashboard';
 import { Settings } from './Settings';
 import { Skills } from './Skills';
@@ -21,6 +22,7 @@ type Tab =
   | 'dashboard'
   | 'observatory'
   | 'inbox'
+  | 'activity'
   | 'projects'
   | 'routines'
   | 'skills'
@@ -127,6 +129,7 @@ export function Shell({ status }: Props) {
       'dashboard',
       'observatory',
       'inbox',
+      'activity',
       'routines',
       'skills',
     ];
@@ -261,12 +264,22 @@ export function Shell({ status }: Props) {
             Inbox
           </button>
           <button
+            className={`shell__tab${tab === 'activity' && !openModuleId ? ' shell__tab--active' : ''}`}
+            onClick={() => {
+              setTab('activity');
+              setOpenModuleId(null);
+            }}
+            title="⌘4 · /send history + (later) every other thing you did"
+          >
+            Activity
+          </button>
+          <button
             className={`shell__tab${tab === 'routines' && !openModuleId ? ' shell__tab--active' : ''}`}
             onClick={() => {
               setTab('routines');
               setOpenModuleId(null);
             }}
-            title="⌘4"
+            title="⌘5"
           >
             Routines
           </button>
@@ -277,7 +290,7 @@ export function Shell({ status }: Props) {
               setOpenModuleId(null);
               setFocusedSkillId(null);
             }}
-            title="⌘5 · Skill prompts (SKILL.md)"
+            title="⌘6 · Skill prompts (SKILL.md)"
           >
             Skills
           </button>
@@ -362,6 +375,8 @@ export function Shell({ status }: Props) {
           <Observatory />
         ) : tab === 'inbox' ? (
           <Inbox />
+        ) : tab === 'activity' ? (
+          <Activity />
         ) : tab === 'projects' ? (
           <Projects />
         ) : tab === 'routines' ? (

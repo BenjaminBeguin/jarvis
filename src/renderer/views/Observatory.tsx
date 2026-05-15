@@ -45,11 +45,23 @@ export function Observatory() {
     const offFocus = window.jarvis.onObservatoryFocusTask((taskId) => {
       setSelectedId(taskId);
     });
+    // Same focus signal but from sibling renderer views (Activity row
+    // click etc.) — they fire a window event instead of round-tripping
+    // through main since both views live in the same BrowserWindow.
+    const onWindowFocus = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { taskId?: string };
+      if (detail?.taskId) {
+        setSelectedId(detail.taskId);
+        setView('list');
+      }
+    };
+    window.addEventListener('jarvis:focus-task', onWindowFocus);
     return () => {
       offStatus();
       offRemoved();
       offFocus();
       offReminders();
+      window.removeEventListener('jarvis:focus-task', onWindowFocus);
     };
   }, []);
 

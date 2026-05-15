@@ -1913,6 +1913,184 @@ button:disabled:hover {
 
 /* ----- Inbox: daily-driver triage list ----------------------------------- */
 
+/* Activity tab — Phase 1 (only /send rows; full event log lands in
+   Phase 2). Borrows the Inbox container padding so the page has the
+   same gutters as its tab siblings. */
+.activity {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 36px;
+  gap: 18px;
+  overflow-y: auto;
+}
+
+.activity__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border-strong);
+  padding-bottom: 14px;
+}
+
+.activity__header h2 {
+  margin: 0 0 4px;
+  font-family: var(--mono);
+  font-size: 18px;
+  letter-spacing: 0.32em;
+  color: var(--accent);
+  text-shadow: var(--accent-glow);
+}
+
+.activity__header p {
+  margin: 0;
+  max-width: 640px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.activity__count {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.activity__empty {
+  padding: 28px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-faint);
+  background: rgba(4, 7, 11, 0.35);
+  border: 1px dashed var(--border);
+  border-radius: 2px;
+}
+
+.activity__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.activity__row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid transparent;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+
+.activity__row:hover {
+  background: rgba(0, 212, 255, 0.05);
+  border-left-color: var(--accent);
+}
+
+.activity__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  min-width: 96px;
+}
+
+.activity__status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.activity__status--in-progress { color: var(--accent); }
+.activity__status--in-progress .activity__status-dot {
+  background: var(--accent);
+  animation: activity-pulse 1.4s ease-in-out infinite;
+}
+.activity__status--awaiting { color: var(--warn); }
+.activity__status--awaiting .activity__status-dot { background: var(--warn); }
+.activity__status--sent { color: var(--good); }
+.activity__status--sent .activity__status-dot { background: var(--good); }
+.activity__status--failed { color: var(--bad); }
+.activity__status--failed .activity__status-dot { background: var(--bad); }
+.activity__status--cancelled { color: var(--text-faint); }
+.activity__status--cancelled .activity__status-dot { background: var(--text-faint); }
+
+@keyframes activity-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.activity__channel {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 2px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.activity__channel--slack {
+  color: #ecb22e;
+  border-color: rgba(236, 178, 46, 0.4);
+}
+
+.activity__channel--gmail {
+  color: var(--accent);
+  border-color: rgba(0, 212, 255, 0.4);
+}
+
+.activity__channel--imessage {
+  color: var(--good);
+  border-color: rgba(95, 255, 166, 0.4);
+}
+
+.activity__preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  min-width: 0;
+}
+
+.activity__time {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .inbox {
   flex: 1;
   min-height: 0;
