@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { AppStatus } from '../shared/types';
 import { AnswerHUD } from './views/AnswerHUD';
-import { BootOverlay, shouldShowBootOverlay } from './views/BootOverlay';
+import { BootOverlay } from './views/BootOverlay';
 import { CommandPalette } from './views/CommandPalette';
 import { Setup } from './views/Setup';
 import { Shell } from './views/Shell';
@@ -16,15 +16,12 @@ export function App() {
   const [route, setRoute] = useState(getRoute());
   const [status, setStatus] = useState<AppStatus | null>(null);
   /**
-   * Show the boot overlay only on a cold start of this BrowserWindow
-   * — `shouldShowBootOverlay()` reads sessionStorage which resets on
-   * every window load (true cold start of the app) and persists
-   * across renderer reloads (⌘R in dev). Palette + HUD routes always
-   * skip it. If we're skipping, `bootDone` is true from the start so
-   * the "system ready" pulse effect doesn't fire either.
+   * Show the boot overlay on every initial mount of the main window.
+   * Cold start (quit + reopen) and renderer reload (⌘R in dev) both
+   * count — the user explicitly wanted the animation on reload too.
+   * Palette + HUD routes still skip it.
    */
-  const [shouldShowBoot] = useState(() => shouldShowBootOverlay());
-  const [bootDone, setBootDone] = useState(!shouldShowBoot);
+  const [bootDone, setBootDone] = useState(false);
 
   useEffect(() => {
     void window.jarvis.getStatus().then(setStatus);
@@ -47,19 +44,18 @@ export function App() {
 
   // "System came online" pulse: add a transient class right when the
   // boot overlay finishes fading out, which scopes a one-shot CSS
-  // animation on the Shell's nav border. Cold-start only — on a
-  // reload (shouldShowBoot is false, bootDone is true from mount)
-  // we don't fire the pulse since nothing actually "came online."
+  // animation on the Shell's nav border + the dashboard section
+  // reveal. Class is auto-removed after the longest child animation
+  // completes so subsequent renders stay passive.
   useEffect(() => {
-    if (!shouldShowBoot) return;
     if (!bootDone) return;
     document.body.classList.add('jarvis-just-loaded');
     const t = setTimeout(
       () => document.body.classList.remove('jarvis-just-loaded'),
-      1600,
+      2200,
     );
     return () => clearTimeout(t);
-  }, [shouldShowBoot, bootDone]);
+  }, [bootDone]);
 
   // Transparent windows (palette / answer HUD) skip the boot overlay
   // entirely and just wait for status.
@@ -85,7 +81,7 @@ export function App() {
   return (
     <>
       {baseView}
-      {shouldShowBoot && !bootDone && (
+      {!bootDone && (
         <BootOverlay ready={!!status} onDone={() => setBootDone(true)} />
       )}
     </>

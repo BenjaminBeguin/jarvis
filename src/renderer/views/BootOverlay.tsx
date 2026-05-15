@@ -3,41 +3,17 @@ import { useEffect, useState } from 'react';
 import { Logo } from './Logo';
 
 /**
- * Cold-boot overlay. Mounts before the Shell, plays a short animated
- * sequence, then fades out once both:
+ * Cold-boot overlay. Mounts before the Shell on every initial render
+ * of the main window (cold start AND renderer reload), plays a short
+ * animated sequence, then fades out once both:
  *   1. main has sent the first AppStatus payload (`ready` prop), AND
  *   2. the minimum on-screen duration has elapsed.
  *
- * "First launch" = every cold start of the app (BrowserWindow loaded
- * fresh, including after a full system close + reopen). Reload of the
- * renderer (⌘R during dev) keeps the same browser session and skips
- * the overlay — the App component renders the Shell directly. The
- * gate is `sessionStorage`, which resets on every BrowserWindow load
- * but persists across page reloads in the same window.
- *
- * Two cadences:
- *   - Cold start (no sessionStorage flag) → full sequence with the
- *     terminal-style "INITIALIZING" lines. ~2200ms minimum.
- *   - In-session reload → renderer never mounts this overlay (App's
- *     gate skips it); falls straight through to the Shell.
- *
- * Force-replay the full intro in dev: `sessionStorage.clear()` then
- * ⌘R in DevTools.
+ * Palette + HUD routes don't mount this; App.tsx skips it for them.
  */
 
-const SEEN_KEY = 'jarvis.bootSeen';
 const COLD_START_MIN_MS = 2200;
 const FADE_OUT_MS = 320;
-
-/** Public helper so App.tsx can decide whether to mount the overlay
- *  at all. Cold start = no flag in sessionStorage. */
-export function shouldShowBootOverlay(): boolean {
-  try {
-    return !window.sessionStorage.getItem(SEEN_KEY);
-  } catch {
-    return true;
-  }
-}
 
 type Phase = 'playing' | 'fading' | 'done';
 
@@ -55,17 +31,6 @@ export function BootOverlay({ ready, onDone }: { ready: boolean; onDone: () => v
   const [phase, setPhase] = useState<Phase>('playing');
   const [linesShown, setLinesShown] = useState(0);
   const [minDurationElapsed, setMinDurationElapsed] = useState(false);
-
-  useEffect(() => {
-    // Mark seen for this BrowserWindow session so an in-session reload
-    // (⌘R) skips the overlay. Cleared automatically when the window
-    // closes; next cold start replays the full sequence.
-    try {
-      window.sessionStorage.setItem(SEEN_KEY, '1');
-    } catch {
-      // ignore (private-mode storage failures)
-    }
-  }, []);
 
   // Incrementally reveal terminal lines.
   useEffect(() => {
