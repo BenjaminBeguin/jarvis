@@ -231,6 +231,16 @@ const api = {
     fileIndex: number,
   ): Promise<{ ok: boolean; message?: string }> =>
     ipcRenderer.invoke(IpcChannels.deleteNoteEntry, { date, fileIndex }),
+  setNoteEntryArchived: (
+    date: string,
+    fileIndex: number,
+    archived: boolean,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.setNoteEntryArchived, {
+      date,
+      fileIndex,
+      archived,
+    }),
 
   readPreferences: (): Promise<{ path: string; contents: string }> =>
     ipcRenderer.invoke(IpcChannels.readPreferences),

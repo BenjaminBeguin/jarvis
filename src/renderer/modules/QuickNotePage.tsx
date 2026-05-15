@@ -10,6 +10,12 @@ interface NoteEntry {
   body: string;
   /** 0-based index in file order — used by the delete IPC to splice. */
   fileIndex: number;
+  /** True if the entry has a jarvis:archived marker. Archived entries
+   * are hidden from the active list and surfaced in the Archived
+   * section. The marker is stripped from `body` for display. */
+  archived: boolean;
+  /** ISO timestamp from the archive marker, if present. */
+  archivedAt?: string;
 }
 
 interface NoteFile {
@@ -18,6 +24,8 @@ interface NoteFile {
   entries: NoteEntry[];
   raw: string;
 }
+
+const ARCHIVE_MARKER_RX = /<!-- jarvis:archived:([^>]*?)-->\n/;
 
 function parseEntries(raw: string): NoteEntry[] {
   // The file is appended as: "\n## HH:MM\n\n<text>\n" — split on those
@@ -29,8 +37,16 @@ function parseEntries(raw: string): NoteEntry[] {
   let i = 0;
   while ((m = re.exec(raw)) !== null) {
     const time = m[1];
-    const body = m[2].trim();
-    if (body) entries.push({ time, body, fileIndex: i });
+    let body = m[2].trim();
+    let archived = false;
+    let archivedAt: string | undefined;
+    const marker = body.match(ARCHIVE_MARKER_RX);
+    if (marker) {
+      archived = true;
+      archivedAt = marker[1]!.trim();
+      body = body.replace(ARCHIVE_MARKER_RX, '').trim();
+    }
+    if (body) entries.push({ time, body, fileIndex: i, archived, archivedAt });
     i++;
   }
   return entries.reverse(); // newest first within the day
@@ -103,10 +119,54 @@ export function QuickNotePage() {
     }
   };
 
-  const deleteEntry = async (date: string, entry: NoteEntry) => {
+  /**
+   * Soft-archive: × on an active note routes here. The entry stays on
+   * disk with a marker so the Archived section can show + restore it.
+   * Permanent removal is `permaDeleteEntry` (used only from inside the
+   * Archived section).
+   */
+  const archiveEntry = async (date: string, entry: NoteEntry) => {
+    try {
+      const r = await window.jarvis.setNoteEntryArchived(
+        date,
+        entry.fileIndex,
+        true,
+      );
+      if (!r.ok) {
+        setError(r.message ?? 'Could not archive.');
+        toast({ kind: 'error', message: r.message ?? 'Could not archive note.' });
+        return;
+      }
+      toast({ message: 'Note archived · view under "Archived"' });
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const restoreEntry = async (date: string, entry: NoteEntry) => {
+    try {
+      const r = await window.jarvis.setNoteEntryArchived(
+        date,
+        entry.fileIndex,
+        false,
+      );
+      if (!r.ok) {
+        setError(r.message ?? 'Could not restore.');
+        toast({ kind: 'error', message: r.message ?? 'Could not restore note.' });
+        return;
+      }
+      toast({ message: 'Note restored' });
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const permaDeleteEntry = async (date: string, entry: NoteEntry) => {
     const preview =
       entry.body.length > 60 ? `${entry.body.slice(0, 60)}…` : entry.body;
-    if (!confirm(`Delete note from ${date} ${entry.time}?\n\n"${preview}"`)) return;
+    if (!confirm(`Permanently delete this archived note from ${date} ${entry.time}?\n\n"${preview}"\n\nThis can't be undone.`)) return;
     try {
       const r = await window.jarvis.deleteNoteEntry(date, entry.fileIndex);
       if (!r.ok) {
@@ -149,31 +209,40 @@ export function QuickNotePage() {
         bindings={bindings}
         pushing={pushing}
         onPush={pushEntry}
-        onDelete={deleteEntry}
+        onArchive={archiveEntry}
+        onRestore={restoreEntry}
+        onPermaDelete={permaDeleteEntry}
       />
     </div>
   );
 }
 
-/** Splits notes by binding status — entries whose bound task has
- * status === 'completed' are moved into a collapsed "Done" section so
- * the Active list stays focused on what still needs attention. The
- * Done section keeps the badge so the user can still open the
- * Claude session that handled it. */
+/** Splits notes three ways:
+ *   - Active: not archived, binding NOT completed (or no binding)
+ *   - Done: not archived, binding completed
+ *   - Archived: archived (regardless of binding state)
+ *
+ * Done + Archived are collapsed by default so the Active list stays
+ * focused. Archived entries can be Restored or permanently deleted. */
 function NoteSections({
   files,
   bindings,
   pushing,
   onPush,
-  onDelete,
+  onArchive,
+  onRestore,
+  onPermaDelete,
 }: {
   files: NoteFile[];
   bindings: ReturnType<typeof useTaskBinding>;
   pushing: string | null;
   onPush: (key: string, body: string) => Promise<void> | void;
-  onDelete: (date: string, entry: NoteEntry) => Promise<void> | void;
+  onArchive: (date: string, entry: NoteEntry) => Promise<void> | void;
+  onRestore: (date: string, entry: NoteEntry) => Promise<void> | void;
+  onPermaDelete: (date: string, entry: NoteEntry) => Promise<void> | void;
 }) {
   const [showDone, setShowDone] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   const isDone = (key: string): boolean => {
     const b = bindings.get(key);
@@ -182,14 +251,19 @@ function NoteSections({
 
   const active: Array<{ file: NoteFile; entries: NoteEntry[] }> = [];
   const done: Array<{ file: NoteFile; entries: NoteEntry[] }> = [];
+  const archived: Array<{ file: NoteFile; entries: NoteEntry[] }> = [];
   let doneCount = 0;
+  let archivedCount = 0;
   for (const file of files) {
     const a: NoteEntry[] = [];
     const d: NoteEntry[] = [];
-    for (let i = 0; i < file.entries.length; i++) {
-      const entry = file.entries[i]!;
-      const key = `${file.date}-${i}`;
-      if (isDone(key)) {
+    const ar: NoteEntry[] = [];
+    for (const entry of file.entries) {
+      const key = `${file.date}-${entry.fileIndex}`;
+      if (entry.archived) {
+        ar.push(entry);
+        archivedCount++;
+      } else if (isDone(key)) {
         d.push(entry);
         doneCount++;
       } else {
@@ -198,6 +272,7 @@ function NoteSections({
     }
     if (a.length > 0) active.push({ file, entries: a });
     if (d.length > 0) done.push({ file, entries: d });
+    if (ar.length > 0) archived.push({ file, entries: ar });
   }
 
   return (
@@ -211,7 +286,7 @@ function NoteSections({
             bindings={bindings}
             pushing={pushing}
             onPush={onPush}
-            onDelete={onDelete}
+            onArchive={onArchive}
           />
         ))}
       </div>
@@ -237,8 +312,39 @@ function NoteSections({
                   bindings={bindings}
                   pushing={pushing}
                   onPush={onPush}
-                  onDelete={onDelete}
+                  onArchive={onArchive}
                   dimmed
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {archivedCount > 0 && (
+        <section className="note-done">
+          <button
+            className="note-done__head"
+            onClick={() => setShowArchived((v) => !v)}
+            title={showArchived ? 'Collapse archived' : 'Expand archived'}
+          >
+            <span className="note-done__caret">
+              {showArchived ? '▾' : '▸'}
+            </span>
+            <span className="note-done__label">Archived</span>
+            <span className="note-done__count note-done__count--archived">
+              {archivedCount}
+            </span>
+          </button>
+          {showArchived && (
+            <div className="module-page__list note-done__list">
+              {archived.map(({ file, entries }) => (
+                <ArchivedNoteFileCard
+                  key={`archived-${file.date}`}
+                  file={file}
+                  entries={entries}
+                  onRestore={onRestore}
+                  onPermaDelete={onPermaDelete}
                 />
               ))}
             </div>
@@ -249,16 +355,15 @@ function NoteSections({
   );
 }
 
-/** One day's worth of note entries, filtered by the parent. Lives as
- * its own component so the Active + Done sections can each reuse the
- * date-card markup without duplicating the per-entry render. */
+/** One day's worth of active/done note entries. The × button archives
+ * (soft-delete); permanent removal lives in ArchivedNoteFileCard. */
 function NoteFileCard({
   file,
   entries,
   bindings,
   pushing,
   onPush,
-  onDelete,
+  onArchive,
   dimmed = false,
 }: {
   file: NoteFile;
@@ -266,7 +371,7 @@ function NoteFileCard({
   bindings: ReturnType<typeof useTaskBinding>;
   pushing: string | null;
   onPush: (key: string, body: string) => Promise<void> | void;
-  onDelete: (date: string, entry: NoteEntry) => Promise<void> | void;
+  onArchive: (date: string, entry: NoteEntry) => Promise<void> | void;
   dimmed?: boolean;
 }) {
   return (
@@ -303,8 +408,8 @@ function NoteFileCard({
                 )}
                 <button
                   className="note-card__delete"
-                  title="Delete this note"
-                  onClick={() => void onDelete(file.date, entry)}
+                  title="Archive this note (you can restore it from the Archived section)"
+                  onClick={() => void onArchive(file.date, entry)}
                 >
                   ×
                 </button>
@@ -316,4 +421,72 @@ function NoteFileCard({
       </div>
     </article>
   );
+}
+
+/**
+ * Archived-only variant: Restore + permanent delete (no push action,
+ * since archived notes shouldn't be re-pushed to Claude without restoring
+ * first — otherwise the user loses track of why they archived it).
+ */
+function ArchivedNoteFileCard({
+  file,
+  entries,
+  onRestore,
+  onPermaDelete,
+}: {
+  file: NoteFile;
+  entries: NoteEntry[];
+  onRestore: (date: string, entry: NoteEntry) => Promise<void> | void;
+  onPermaDelete: (date: string, entry: NoteEntry) => Promise<void> | void;
+}) {
+  return (
+    <article className="bracketed note-card note-card--dimmed">
+      <header className="note-card__date">{dateLabel(file.date)}</header>
+      <div className="note-card__entries">
+        {entries.map((entry) => (
+          <div key={entry.fileIndex} className="note-card__entry">
+            <div className="note-card__entry-head">
+              <span className="note-card__entry-time">{entry.time}</span>
+              {entry.archivedAt && (
+                <span className="note-card__archived-meta">
+                  archived {formatArchivedAt(entry.archivedAt)}
+                </span>
+              )}
+              <button
+                className="note-card__push"
+                onClick={() => void onRestore(file.date, entry)}
+                title="Move back to Active"
+              >
+                ↶ Restore
+              </button>
+              <button
+                className="note-card__delete"
+                title="Delete forever — can't be undone"
+                onClick={() => void onPermaDelete(file.date, entry)}
+              >
+                ×
+              </button>
+            </div>
+            <pre className="note-card__entry-body">{entry.body}</pre>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function formatArchivedAt(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const diff = Date.now() - d.getTime();
+    const m = Math.round(diff / 60_000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.round(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const days = Math.round(h / 24);
+    return `${days}d ago`;
+  } catch {
+    return iso;
+  }
 }

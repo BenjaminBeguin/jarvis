@@ -155,4 +155,59 @@ export function registerProjectsIpc({
       return { ok: true };
     },
   );
+
+  /**
+   * Soft-archive (or restore) a note entry. Inserts/removes an
+   * `<!-- jarvis:archived: <ISO> -->` marker as the first body line of
+   * the entry. The entry stays in its original date file; the UI parser
+   * looks for the marker and splits Active vs. Archived. Restore = pass
+   * archived:false. Permanent delete still goes through deleteNoteEntry.
+   */
+  ipcMain.handle(
+    IpcChannels.setNoteEntryArchived,
+    (
+      _e,
+      {
+        date,
+        fileIndex,
+        archived,
+      }: { date: string; fileIndex: number; archived: boolean },
+    ): { ok: boolean; message?: string } => {
+      if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return { ok: false, message: 'Invalid date' };
+      }
+      if (!Number.isInteger(fileIndex) || fileIndex < 0) {
+        return { ok: false, message: 'Invalid entry index' };
+      }
+      const path = resolveSafe(join('notes', `${date}.md`));
+      let raw: string;
+      try {
+        raw = readFileSync(path, 'utf8');
+      } catch {
+        return { ok: false, message: 'Note file not found' };
+      }
+      const re = /(?:^|\n)(## \d{2}:\d{2}\n[\s\S]*?)(?=\n## \d{2}:\d{2}|$)/g;
+      const blocks: string[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(raw)) !== null) blocks.push(m[1]!);
+      if (fileIndex >= blocks.length) {
+        return { ok: false, message: 'Entry not found' };
+      }
+      const ARCHIVE_RX = /<!-- jarvis:archived:[^\n]*-->\n/;
+      const block = blocks[fileIndex]!;
+      const headerMatch = block.match(/^(## \d{2}:\d{2}\n)([\s\S]*)$/);
+      if (!headerMatch) {
+        return { ok: false, message: 'Malformed entry header' };
+      }
+      const header = headerMatch[1]!;
+      let body = headerMatch[2]!;
+      body = body.replace(ARCHIVE_RX, '');
+      if (archived) {
+        body = `<!-- jarvis:archived:${new Date().toISOString()} -->\n${body}`;
+      }
+      blocks[fileIndex] = header + body;
+      writeFileSync(path, blocks.join('\n') + '\n', 'utf8');
+      return { ok: true };
+    },
+  );
 }

@@ -57,6 +57,7 @@ export const IpcChannels = {
   writeProjectMemory: 'projects:writeMemory',
   deleteProjectMemory: 'projects:deleteMemory',
   deleteNoteEntry: 'notes:deleteEntry',
+  setNoteEntryArchived: 'notes:setEntryArchived',
 
   readPreferences: 'preferences:read',
   writePreferences: 'preferences:write',
