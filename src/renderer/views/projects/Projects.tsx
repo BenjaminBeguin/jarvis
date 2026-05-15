@@ -131,6 +131,22 @@ export function Projects() {
     }
   };
 
+  const refreshProfile = async (projectName: string) => {
+    try {
+      const summary = await window.jarvis.launchTask({
+        prompt: `Build / refresh the profile for project "${projectName}". Read CLAUDE.md, README.md, top-level manifests, git log, and any open PRs. Write the profile to ~/.jarvis/projects/<slug>/memory/profile.md. Preserve any existing "## Operator notes" section verbatim.`,
+        skillId: 'project-profile',
+        origin: 'palette',
+      });
+      void window.jarvis.showAnswerHud(summary.id);
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
   const onDelete = async () => {
     if (!activeProject || !selectedFile) return;
     if (!confirm(`Delete memory file "${selectedFile}"? This can't be undone.`))
@@ -214,6 +230,14 @@ export function Projects() {
       <main className="projects__main">
         {activeDef && (
           <div className="projects__main-actions">
+            <button
+              className="projects__audit-btn"
+              title="Build a profile of this project — reads CLAUDE.md, README, manifests, git log, open PRs. Saves to profile.md. Tasks scoped to this project will get it in ambient context."
+              onClick={() => void refreshProfile(activeDef.name)}
+              disabled={!activeDef.path}
+            >
+              📖 Refresh profile
+            </button>
             <button
               className="projects__audit-btn"
               title="Run the memory-trim skill — proposes which notes to drop, merge, or keep"

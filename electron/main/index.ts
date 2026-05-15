@@ -52,6 +52,7 @@ import { SkillSuggestionStore } from './skill-suggestions.js';
 import { asTaskOrigin, TaskRunner } from './task-runner.js';
 import { setProgressEmitter } from './transcribe.js';
 import {
+  activeProjectProfileProvider,
   activeProjectProvider,
   projectsProvider,
   recentTaskProvider,
@@ -160,6 +161,7 @@ ipcMain.handle(IpcChannels.suppressMeetingPrompt, (_e, id: string) => {
 // `ctx.registerContextProvider(...)`.
 userContext.register(timeProvider);
 userContext.register(activeProjectProvider(userContext));
+userContext.register(activeProjectProfileProvider(userContext, projects));
 userContext.register(projectsProvider(projects));
 userContext.register(recentTaskProvider(runner));
 

@@ -1,4 +1,7 @@
 import { execFile } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import type { TaskSummary } from '@shared/types';
@@ -101,6 +104,56 @@ export function activeProjectProvider(store: UserContextStore): UserContextProvi
     build() {
       const active = store.getActiveProject();
       return active ? `- Active project scope: ${active}` : null;
+    },
+  };
+}
+
+/**
+ * When a project scope is active, load that project's profile.md
+ * (built by the project-profile skill) and surface it inline. Lets
+ * any task scoped to "csai" or "hivecore" start with full project
+ * context — what the codebase is, conventions, recent direction —
+ * without re-deriving it every time.
+ *
+ * Capped at ~3KB so long profiles don't blow out the task's prompt
+ * budget. Profile not present / dir missing → silent skip.
+ */
+export function activeProjectProfileProvider(
+  store: UserContextStore,
+  projects: ProjectStore,
+): UserContextProvider {
+  return {
+    name: 'active-project-profile',
+    build() {
+      const active = store.getActiveProject();
+      if (!active) return null;
+      const def = projects.resolve(active);
+      if (!def) return null;
+      const slug = def.name
+        .toLowerCase()
+        .replace(/[^a-z0-9-_]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      const path = join(
+        homedir(),
+        '.jarvis',
+        'projects',
+        slug,
+        'memory',
+        'profile.md',
+      );
+      if (!existsSync(path)) return null;
+      let body: string;
+      try {
+        body = readFileSync(path, 'utf8');
+      } catch {
+        return null;
+      }
+      // Trim front matter if present (the renderer cares about it; the
+      // agent doesn't need it taking up the budget).
+      body = body.replace(/^---\n[\s\S]*?\n---\n+/, '');
+      const MAX = 3000;
+      const truncated = body.length > MAX ? body.slice(0, MAX) + '\n…' : body;
+      return `- Active project profile (${def.name}):\n${truncated}`;
     },
   };
 }
