@@ -261,10 +261,24 @@ async function broadcastStatus(): Promise<AppStatus> {
 
 // ─── HUD: show Answer HUD + push a taskId so the renderer focuses it ─────────
 
+/**
+ * The HUD pop is the launch signal — so it has to respect the
+ * 'onLaunch' notification pref. Silent: don't conjure a new HUD
+ * window; we still update the tracked task on an already-visible HUD
+ * so manual-open users stay in sync. Toast (default): pop the HUD as
+ * before.
+ */
 function pushTaskToHud(taskId: string): void {
-  showAnswerHud();
-  const hud = getAnswerHudWindow();
-  if (!hud) return;
+  const launchLevel = loadNotificationPrefs().onLaunch;
+  let hud: ReturnType<typeof getAnswerHudWindow>;
+  if (launchLevel === 'silent') {
+    hud = getAnswerHudWindow();
+    if (!hud) return;
+  } else {
+    showAnswerHud();
+    hud = getAnswerHudWindow();
+    if (!hud) return;
+  }
   if (hud.webContents.isLoading()) {
     hud.webContents.once('did-finish-load', () => {
       hud.webContents.send(IpcChannels.answerHudTrack, taskId);
