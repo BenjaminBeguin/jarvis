@@ -639,6 +639,32 @@ app.whenReady().then(async () => {
     broadcast(IpcChannels.remindersChanged, list);
     setPendingRemindersCount(reminders.pendingCount());
   });
+  // Activity log: reminders cover all four call paths (palette,
+  // quick-note, intent-router, HTTP API) by hooking the store's
+  // 'created' event instead of each caller individually.
+  reminders.on('created', (reminder) => {
+    const when = new Date(reminder.fireAt).toLocaleString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+      day: 'numeric',
+      month: 'short',
+    });
+    const body =
+      reminder.body.length > 80
+        ? `${reminder.body.slice(0, 79)}…`
+        : reminder.body;
+    activity.record({
+      kind:
+        reminder.mode === 'scheduled'
+          ? 'reminder.scheduled'
+          : 'reminder.created',
+      label:
+        reminder.mode === 'scheduled'
+          ? `Scheduled action · ${when} · ${body}`
+          : `Reminder set · ${when} · ${body}`,
+      detail: { id: reminder.id, body: reminder.body, fireAt: reminder.fireAt },
+    });
+  });
   setPendingRemindersCount(reminders.pendingCount());
 
   skillSuggestions.on('changed', (list) =>

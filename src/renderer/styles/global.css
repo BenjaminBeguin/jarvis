@@ -2339,6 +2339,11 @@ button:disabled:hover {
   border-color: rgba(95, 255, 166, 0.4);
 }
 
+.activity__cat--reminder {
+  color: #ff9ec7;
+  border-color: rgba(255, 158, 199, 0.4);
+}
+
 .activity__cat--other {
   color: var(--text-faint);
 }

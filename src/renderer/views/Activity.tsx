@@ -173,7 +173,16 @@ function SendRow({ task }: { task: TaskSummary }) {
  */
 const EVENT_KIND_META: Record<
   string,
-  { category: 'note' | 'meeting' | 'integration' | 'inbox' | 'other'; label: string }
+  {
+    category:
+      | 'note'
+      | 'meeting'
+      | 'integration'
+      | 'inbox'
+      | 'reminder'
+      | 'other';
+    label: string;
+  }
 > = {
   'note.created': { category: 'note', label: 'note' },
   'note.archived': { category: 'note', label: 'note · archive' },
@@ -185,6 +194,9 @@ const EVENT_KIND_META: Record<
   'mcp.disabled': { category: 'integration', label: 'integration · off' },
   'mcp.removed': { category: 'integration', label: 'integration · remove' },
   'inbox.cleared': { category: 'inbox', label: 'inbox · clear' },
+  'reminder.created': { category: 'reminder', label: 'reminder' },
+  'reminder.scheduled': { category: 'reminder', label: 'reminder · scheduled' },
+  'reminder.cancelled': { category: 'reminder', label: 'reminder · cancel' },
 };
 
 function EventRow({ event }: { event: ActivityEvent }) {
@@ -217,6 +229,13 @@ function EventRow({ event }: { event: ActivityEvent }) {
       return;
     }
     if (event.kind.startsWith('inbox.')) {
+      window.dispatchEvent(
+        new CustomEvent('jarvis:navigate', { detail: { tab: 'inbox' } }),
+      );
+      return;
+    }
+    if (event.kind.startsWith('reminder.')) {
+      // Reminders surface in the Inbox tab (time-pressured rows there).
       window.dispatchEvent(
         new CustomEvent('jarvis:navigate', { detail: { tab: 'inbox' } }),
       );

@@ -94,6 +94,7 @@ export class ReminderStore extends EventEmitter {
     this.reminders.set(reminder.id, reminder);
     this.persist();
     this.schedule(reminder);
+    this.emit('created', reminder);
     this.emit('changed', this.list());
     return reminder;
   }
