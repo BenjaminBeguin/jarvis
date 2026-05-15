@@ -20,6 +20,24 @@ import type { PreferencesStore } from './preferences-store.js';
 import type { SkillRecord, SkillStore } from './skill-store.js';
 import type { UserContextStore } from './user-context.js';
 
+/**
+ * Always prepended to every system prompt — including skill bodies that
+ * fully override the default Jarvis prompt below. Without this, skills
+ * have no signal that they're running inside Jarvis, and when an MCP
+ * fails the model falls back to general training and tells the user to
+ * "run /mcp in Claude Code" or "check ~/.claude/settings.json". Both
+ * are wrong here: MCPs are configured in ~/.jarvis/mcp.json and managed
+ * via the Jarvis Integrations tab.
+ */
+const ENVIRONMENT_PROMPT = `## Environment
+
+You are running inside Jarvis — a macOS Electron app, not a terminal Claude Code session. MCP servers come from ~/.jarvis/mcp.json (managed by the Jarvis Integrations tab), not from ~/.claude/settings.json or claude.ai connectors.
+
+If an MCP tool fails or returns no result:
+- Diagnose like normal (look at the error, try a different tool).
+- If recovery requires the user, tell them to open Jarvis's Integrations tab — that's where they enable, disable, edit, or restart MCP servers.
+- Do NOT instruct the user to run \`/mcp\`, restart Claude Code, edit ~/.claude/settings.json, or visit claude.ai. Those are not the right surfaces.`;
+
 const DEFAULT_SYSTEM_PROMPT = `You are Jarvis, the user's personal AI operating layer running through Claude Code.
 
 You have a full toolbox — Bash, Read, Write, Edit, Glob, Grep, WebSearch, WebFetch, plus any MCP servers the user has configured. Use them. Don't bluff with disclaimers when a tool can give you a real answer.
@@ -139,16 +157,19 @@ export class TaskRunner extends EventEmitter {
 
   /**
    * Build the system prompt for a task. Order:
-   *   1. Skill body (or default Jarvis prompt) — the task's framing.
-   *   2. The user's preferences — their hard rules + how-I-work overlay.
-   *   3. Ambient context block — time, active project, recent task.
+   *   1. Environment header — "you're inside Jarvis, MCPs come from
+   *      ~/.jarvis/mcp.json". Always prepended so skills that override
+   *      the default prompt still know where they're running.
+   *   2. Skill body (or default Jarvis prompt) — the task's framing.
+   *   3. The user's preferences — their hard rules + how-I-work overlay.
+   *   4. Ambient context block — time, active project, recent task.
    *
    * Appending rather than templating means skills with their own prompts
-   * still get the same preferences + context for free.
+   * still get the same environment, preferences, and context for free.
    */
   private async composeSystemPrompt(skill: SkillRecord | null): Promise<string> {
     const base = skill?.hasBody ? skill.body : DEFAULT_SYSTEM_PROMPT;
-    const sections: string[] = [base];
+    const sections: string[] = [ENVIRONMENT_PROMPT, base];
     if (this.preferences) {
       const prefs = this.preferences.read().trim();
       if (prefs) {
