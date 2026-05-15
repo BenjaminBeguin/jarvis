@@ -32,18 +32,33 @@ export function Integrations() {
   const [fileContents, setFileContents] = useState<string | null>(null);
   const [filePath, setFilePath] = useState<string>('~/.jarvis/mcp.json');
   const [showFile, setShowFile] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
 
   useEffect(() => {
     void window.jarvis.listMcpServers().then(setLocalServers);
     return window.jarvis.onMcpServersChanged(setLocalServers);
   }, []);
 
+  /** Force-refresh the claude mcp list. The bg poll runs every 20s, but
+   * the user often wants instant feedback right after running
+   * `claude mcp add` or authenticating an MCP outside Jarvis. */
+  const refreshConnections = async () => {
+    setRefreshing(true);
+    try {
+      const list = await window.jarvis.listClaudeMcps();
+      setClaudeMcps(list);
+      setLastRefreshedAt(Date.now());
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
-    const refresh = () =>
-      void window.jarvis.listClaudeMcps().then(setClaudeMcps);
-    refresh();
-    const id = setInterval(refresh, 20_000);
+    void refreshConnections();
+    const id = setInterval(() => void refreshConnections(), 20_000);
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refreshFile = async () => {
@@ -98,6 +113,17 @@ export function Integrations() {
           </p>
         </div>
         <div className="integrations__actions">
+          <button
+            onClick={() => void refreshConnections()}
+            disabled={refreshing}
+            title={
+              lastRefreshedAt
+                ? `Last checked ${new Date(lastRefreshedAt).toLocaleTimeString()}`
+                : 'Re-run claude mcp list now'
+            }
+          >
+            {refreshing ? '↻ Refreshing…' : '↻ Refresh'}
+          </button>
           <button onClick={() => setShowFile((v) => !v)}>
             {showFile ? '▾ Hide JSON' : '▸ View JSON'}
           </button>
