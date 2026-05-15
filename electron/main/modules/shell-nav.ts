@@ -41,6 +41,8 @@ export const shellNavModule: Module = {
         'show settings',
         'open integrations',
         'show integrations',
+        'open channels',
+        'show channels',
         'open the mcp config',
         'open mcp',
         'show mcp',
@@ -187,20 +189,6 @@ export const shellNavModule: Module = {
           moduleId: 'meeting-recorder',
         } as NavPayload);
         return 'Opening meetings';
-      },
-    },
-    {
-      id: 'channels',
-      prefix: '/open-channels',
-      label: 'Open Channels',
-      description: '/send integration setup',
-      verbalTriggers: ['open channels', 'show channels'],
-      handler: (_input, ctx) => {
-        ctx.broadcast(CHANNEL, {
-          tab: 'settings',
-          moduleId: 'send',
-        } as NavPayload);
-        return 'Opening channels';
       },
     },
     {

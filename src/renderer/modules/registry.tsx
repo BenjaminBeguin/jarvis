@@ -3,7 +3,6 @@ import type { ComponentType } from 'react';
 import { CalendarPage } from './CalendarPage';
 import { MeetingsPage } from './MeetingsPage';
 import { QuickNotePage } from './QuickNotePage';
-import { SendPage } from './SendPage';
 
 /**
  * Maps module id → renderer page component. A module appears with a "View"
@@ -16,7 +15,6 @@ import { SendPage } from './SendPage';
 export const MODULE_PAGES: Record<string, ComponentType> = {
   'quick-note': QuickNotePage,
   'meeting-recorder': MeetingsPage,
-  send: SendPage,
   calendar: CalendarPage,
 };
 
