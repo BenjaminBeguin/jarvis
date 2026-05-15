@@ -7057,13 +7057,109 @@ button:disabled:hover {
   opacity: 0.55;
 }
 
+.routines__rail-card--running {
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.briefings__kind-on-dot--running {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  animation: routine-running-pulse 1.2s ease-in-out infinite;
+}
+
+.briefings__schedule-dot--running {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  animation: routine-running-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes routine-running-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.routine-detail__running {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+  padding: 3px 9px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  box-shadow: var(--accent-glow-soft);
+}
+
+.routine-detail__running-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: routine-running-pulse 1.2s ease-in-out infinite;
+}
+
 /* Detail pane body (below the schedule strip). */
-.routine-detail {
-  padding: 20px 28px;
+.routine-detail__meta {
+  padding: 14px 28px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  overflow-y: auto;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.routine-detail__panes {
+  flex: 1;
+  min-height: 0;
+}
+
+/* History rail badges */
+.routine-history__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.routine-history__status {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.routine-history__status--running,
+.routine-history__status--queued {
+  color: var(--accent);
+  animation: routine-running-pulse 1.2s ease-in-out infinite;
+}
+
+.routine-history__status--completed { color: var(--good); }
+.routine-history__status--errored,
+.routine-history__status--aborted { color: var(--bad); }
+.routine-history__status--awaiting { color: var(--warn); }
+
+.routine-preview__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.routine-preview__status {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
 }
 
 .routine-detail__field-label {

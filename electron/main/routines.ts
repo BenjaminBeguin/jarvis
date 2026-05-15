@@ -21,7 +21,12 @@ interface PersistedRoutine {
   lastRunAt?: number;
   condition?: string;
   lastTaskId?: string;
+  recentTaskIds?: string[];
 }
+
+/** How many historical run task ids to keep per routine. Enough to render
+ * a "last week's runs" history without bloating routines.json. */
+const RECENT_TASK_IDS_MAX = 20;
 
 interface ScheduledRoutine {
   def: RoutineDef;
@@ -77,6 +82,7 @@ export class RoutineStore extends EventEmitter {
       nextRunAt: null,
       condition: input.condition ?? existing?.def.condition,
       lastTaskId: existing?.def.lastTaskId ?? null,
+      recentTaskIds: existing?.def.recentTaskIds ?? [],
     };
     this.applyRoutine(def);
     this.persist();
@@ -166,12 +172,20 @@ export class RoutineStore extends EventEmitter {
       prompt: def.input || 'Run.',
       origin: 'routine',
     });
+    // Prepend the new task id to the history, dedup just in case, cap at
+    // RECENT_TASK_IDS_MAX so routines.json doesn't grow unbounded.
+    const priorRecents = def.recentTaskIds ?? [];
+    const recentTaskIds = [
+      task.id,
+      ...priorRecents.filter((id) => id !== task.id),
+    ].slice(0, RECENT_TASK_IDS_MAX);
     const updated: RoutineDef = {
       ...def,
       lastRunAt: Date.now(),
       lastConditionAt: def.condition ? Date.now() : def.lastConditionAt,
       lastConditionResult: def.condition ? 'fired' : def.lastConditionResult,
       lastTaskId: task.id,
+      recentTaskIds,
     };
     const rec = this.routines.get(def.id);
     if (rec) rec.def = updated;
@@ -204,6 +218,11 @@ export class RoutineStore extends EventEmitter {
           nextRunAt: null,
           condition: item.condition,
           lastTaskId: item.lastTaskId ?? null,
+          recentTaskIds: Array.isArray(item.recentTaskIds)
+            ? item.recentTaskIds.filter((s) => typeof s === 'string')
+            : item.lastTaskId
+              ? [item.lastTaskId]
+              : [],
         };
         this.applyRoutine(def);
       }
@@ -223,6 +242,9 @@ export class RoutineStore extends EventEmitter {
       lastRunAt: r.def.lastRunAt ?? undefined,
       condition: r.def.condition,
       lastTaskId: r.def.lastTaskId ?? undefined,
+      recentTaskIds: r.def.recentTaskIds?.length
+        ? r.def.recentTaskIds
+        : undefined,
     }));
     writeFileSync(this.path, JSON.stringify(list, null, 2), 'utf8');
   }

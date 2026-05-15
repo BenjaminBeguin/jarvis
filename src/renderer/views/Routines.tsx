@@ -5,7 +5,10 @@ import type {
   DashboardItem,
   RoutineDef,
   SkillSummary,
+  TaskEvent,
+  TaskSummary,
 } from '../../shared/types';
+import { MarkdownDoc } from './MarkdownText';
 import { toast } from './Toaster';
 
 interface DraftRoutine {
@@ -113,6 +116,45 @@ export function Routines() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [presetsOpen, setPresetsOpen] = useState(false);
+  /** Task ids currently in 'running'/'queued' state — used to flash a
+   * "running" dot on each affected routine. Maintained by subscribing
+   * to onTaskStatus on the live task feed. */
+  const [runningTaskIds, setRunningTaskIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  useEffect(() => {
+    const refresh = async () => {
+      const all = await window.jarvis.listTasks();
+      const next = new Set<string>();
+      for (const t of all) {
+        if (t.status === 'running' || t.status === 'queued') next.add(t.id);
+      }
+      setRunningTaskIds(next);
+    };
+    void refresh();
+    const off = window.jarvis.onTaskStatus((summary) => {
+      setRunningTaskIds((prev) => {
+        const isLive =
+          summary.status === 'running' || summary.status === 'queued';
+        if (isLive && !prev.has(summary.id)) {
+          return new Set([...prev, summary.id]);
+        }
+        if (!isLive && prev.has(summary.id)) {
+          const next = new Set(prev);
+          next.delete(summary.id);
+          return next;
+        }
+        return prev;
+      });
+    });
+    return off;
+  }, []);
+
+  const isRoutineRunning = (r: RoutineDef): boolean => {
+    if (!r.recentTaskIds || r.recentTaskIds.length === 0) return false;
+    return r.recentTaskIds.some((id) => runningTaskIds.has(id));
+  };
 
   useEffect(() => {
     void window.jarvis.listRoutines().then(setRoutines);
@@ -279,27 +321,33 @@ export function Routines() {
             {items.map((r) => {
               const skill = skillsById.get(r.skillId);
               const isActive = r.id === activeId;
+              const running = isRoutineRunning(r);
               return (
                 <button
                   key={r.id}
-                  className={`briefings__kind${isActive ? ' briefings__kind--active' : ''}${r.enabled ? '' : ' routines__rail-card--off'}`}
+                  className={`briefings__kind${isActive ? ' briefings__kind--active' : ''}${r.enabled ? '' : ' routines__rail-card--off'}${running ? ' routines__rail-card--running' : ''}`}
                   onClick={() => setActiveId(r.id)}
                 >
                   <div className="briefings__kind-label">
-                    {r.enabled && (
+                    {running ? (
+                      <span
+                        className="briefings__kind-on-dot briefings__kind-on-dot--running"
+                        title="A task spawned by this routine is currently running"
+                      />
+                    ) : r.enabled ? (
                       <span
                         className="briefings__kind-on-dot"
                         title="Enabled"
                       />
-                    )}
+                    ) : null}
                     {skill?.name ?? r.skillId}
                   </div>
                   <div className="briefings__kind-desc">
                     {r.input || <em>no input</em>}
                   </div>
                   <div className="briefings__kind-schedule">
-                    {humanCron(r.cron)}
-                    {!r.enabled && ' · disabled'}
+                    {running ? 'running…' : humanCron(r.cron)}
+                    {!r.enabled && !running && ' · disabled'}
                   </div>
                 </button>
               );
@@ -320,6 +368,7 @@ export function Routines() {
           <RoutineDetail
             routine={active}
             skill={skillsById.get(active.skillId)}
+            isRunning={isRoutineRunning(active)}
             onEdit={() => edit(active)}
             onRemove={() => remove(active)}
             onRunNow={() => runNow(active)}
@@ -348,6 +397,7 @@ export function Routines() {
 function RoutineDetail({
   routine,
   skill,
+  isRunning,
   onEdit,
   onRemove,
   onRunNow,
@@ -355,6 +405,7 @@ function RoutineDetail({
 }: {
   routine: RoutineDef;
   skill: SkillSummary | undefined;
+  isRunning: boolean;
   onEdit: () => void;
   onRemove: () => void;
   onRunNow: () => void;
@@ -370,6 +421,15 @@ function RoutineDetail({
             {skill?.name ?? (
               <span style={{ color: 'var(--bad)' }}>
                 missing: {routine.skillId}
+              </span>
+            )}
+            {isRunning && (
+              <span
+                className="routine-detail__running"
+                title="A task spawned by this routine is currently running"
+              >
+                <span className="routine-detail__running-dot" />
+                running
               </span>
             )}
           </h3>
@@ -406,7 +466,7 @@ function RoutineDetail({
       <div className="briefings__schedule">
         <div className="briefings__schedule-status">
           <span
-            className={`briefings__schedule-dot${routine.enabled ? ' briefings__schedule-dot--on' : ' briefings__schedule-dot--off'}`}
+            className={`briefings__schedule-dot${isRunning ? ' briefings__schedule-dot--running' : routine.enabled ? ' briefings__schedule-dot--on' : ' briefings__schedule-dot--off'}`}
           />
           <span className="briefings__schedule-label">
             {humanCron(routine.cron)}
@@ -421,20 +481,6 @@ function RoutineDetail({
             {routine.lastRunAt
               ? `last run ${formatTimestamp(routine.lastRunAt)}`
               : 'never run'}
-            {routine.lastTaskId && (
-              <>
-                {' · '}
-                <button
-                  className="briefings__schedule-link"
-                  onClick={() =>
-                    void window.jarvis.openObservatory(routine.lastTaskId!)
-                  }
-                  title="Open the last run's transcript"
-                >
-                  view output →
-                </button>
-              </>
-            )}
           </span>
         </div>
         <div className="briefings__schedule-actions">
@@ -450,7 +496,7 @@ function RoutineDetail({
         </div>
       </div>
 
-      <div className="routine-detail">
+      <div className="routine-detail__meta">
         {purpose && (
           <button
             className={`routine-card__purpose routine-card__purpose--${purpose.kind}`}
@@ -467,7 +513,12 @@ function RoutineDetail({
             {purpose.label}
           </button>
         )}
-
+        {routine.input && (
+          <div className="routine-detail__input">
+            <div className="routine-detail__field-label">Input prompt</div>
+            <blockquote>{routine.input}</blockquote>
+          </div>
+        )}
         {routine.condition && (
           <div className="routine-detail__condition">
             <div className="routine-detail__field-label">Watch condition</div>
@@ -477,14 +528,6 @@ function RoutineDetail({
             </div>
           </div>
         )}
-
-        {routine.input && (
-          <div className="routine-detail__input">
-            <div className="routine-detail__field-label">Input prompt</div>
-            <blockquote>{routine.input}</blockquote>
-          </div>
-        )}
-
         {skill && (
           <div className="routine-detail__tools">
             <div className="routine-detail__field-label">Tool access</div>
@@ -492,6 +535,292 @@ function RoutineDetail({
           </div>
         )}
       </div>
+
+      <RoutineOutputPanes routine={routine} purpose={purpose} />
+    </>
+  );
+}
+
+/**
+ * Briefings-style three-column block: history list on the left, rendered
+ * output on the right. Two shapes:
+ *
+ *   - briefing routines (id prefix briefing-…) — left rail = every file
+ *     under ~/.jarvis/briefings/<kindId>/, right = MarkdownDoc render of
+ *     the selected file. Matches the Briefings tab exactly so the user
+ *     reads the same markdown reader they already know.
+ *
+ *   - everything else — left rail = recentTaskIds the routine has spawned
+ *     (newest first, status badge per row), right = the latest assistant
+ *     text of the selected task + a link to open the full Observatory
+ *     transcript. The view stays useful for freeform routines that don't
+ *     produce a structured artefact.
+ */
+function RoutineOutputPanes({
+  routine,
+  purpose,
+}: {
+  routine: RoutineDef;
+  purpose: RoutinePurpose | null;
+}) {
+  const isBriefing = purpose?.kind === 'briefing';
+  const briefingKindId = isBriefing
+    ? routine.id.slice('briefing-'.length)
+    : null;
+
+  if (isBriefing && briefingKindId) {
+    return <BriefingHistory kindId={briefingKindId} />;
+  }
+  return <TaskHistory taskIds={routine.recentTaskIds ?? []} />;
+}
+
+function BriefingHistory({ kindId }: { kindId: string }) {
+  const [files, setFiles] = useState<
+    Array<{ filename: string; mtimeMs: number; title: string }>
+  >([]);
+  const [activeFile, setActiveFile] = useState<string | null>(null);
+  const [content, setContent] = useState<string>('');
+
+  useEffect(() => {
+    const refresh = async () => {
+      try {
+        const list = await window.jarvis.listBriefingFiles(kindId);
+        setFiles(list);
+        if (list.length > 0 && !list.some((f) => f.filename === activeFile)) {
+          setActiveFile(list[0]!.filename);
+        }
+      } catch {
+        setFiles([]);
+      }
+    };
+    void refresh();
+    return window.jarvis.onBriefingsChanged(refresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kindId]);
+
+  useEffect(() => {
+    if (!activeFile) {
+      setContent('');
+      return;
+    }
+    void window.jarvis.readBriefingFile(kindId, activeFile).then(setContent);
+  }, [kindId, activeFile]);
+
+  return (
+    <div className="briefings__panes routine-detail__panes">
+      <aside className="briefings__files">
+        {files.length === 0 ? (
+          <div className="briefings__empty">
+            No briefings yet. Click <strong>Run now</strong> above to
+            generate the first one.
+          </div>
+        ) : (
+          files.map((f) => (
+            <button
+              key={f.filename}
+              className={`briefings__file${f.filename === activeFile ? ' briefings__file--active' : ''}`}
+              onClick={() => setActiveFile(f.filename)}
+            >
+              <div className="briefings__file-title">{f.title}</div>
+              <div className="briefings__file-meta">
+                {new Date(f.mtimeMs).toLocaleString()}
+              </div>
+            </button>
+          ))
+        )}
+      </aside>
+      <article className="briefings__content">
+        {!activeFile ? (
+          <div className="briefings__empty">Pick a run on the left.</div>
+        ) : content ? (
+          <MarkdownDoc>{content}</MarkdownDoc>
+        ) : (
+          <div className="briefings__empty">Loading…</div>
+        )}
+      </article>
+    </div>
+  );
+}
+
+function TaskHistory({ taskIds }: { taskIds: string[] }) {
+  const [summaries, setSummaries] = useState<Map<string, TaskSummary>>(
+    () => new Map(),
+  );
+  const [activeId, setActiveId] = useState<string | null>(taskIds[0] ?? null);
+
+  // Fetch summaries for every known task id; refresh whenever any status
+  // changes (covers in-flight runs streaming to completion).
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      if (taskIds.length === 0) {
+        if (!cancelled) setSummaries(new Map());
+        return;
+      }
+      const all = await window.jarvis.listTasks();
+      if (cancelled) return;
+      const next = new Map<string, TaskSummary>();
+      for (const id of taskIds) {
+        const t = all.find((x) => x.id === id);
+        if (t) next.set(id, t);
+      }
+      setSummaries(next);
+    };
+    void refresh();
+    const off = window.jarvis.onTaskStatus(() => void refresh());
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [taskIds]);
+
+  // Keep activeId synced with the list — pick newest available if the
+  // selected one fell out (e.g. on first mount with stale state).
+  useEffect(() => {
+    if (taskIds.length === 0) {
+      setActiveId(null);
+      return;
+    }
+    if (!activeId || !taskIds.includes(activeId)) {
+      setActiveId(taskIds[0]!);
+    }
+  }, [taskIds, activeId]);
+
+  if (taskIds.length === 0) {
+    return (
+      <div className="briefings__panes routine-detail__panes">
+        <aside className="briefings__files">
+          <div className="briefings__empty">
+            No runs yet. Click <strong>Run now</strong> to generate one.
+          </div>
+        </aside>
+        <article className="briefings__content">
+          <div className="briefings__empty">No history.</div>
+        </article>
+      </div>
+    );
+  }
+
+  return (
+    <div className="briefings__panes routine-detail__panes">
+      <aside className="briefings__files">
+        {taskIds.map((id) => {
+          const s = summaries.get(id);
+          const isActive = id === activeId;
+          const statusLabel = !s
+            ? 'loading'
+            : s.status === 'running'
+              ? 'running'
+              : s.awaitingInput
+                ? 'awaiting'
+                : s.status;
+          return (
+            <button
+              key={id}
+              className={`briefings__file${isActive ? ' briefings__file--active' : ''}`}
+              onClick={() => setActiveId(id)}
+            >
+              <div className="briefings__file-title">
+                {s ? new Date(s.startedAt).toLocaleString() : id}
+              </div>
+              <div className="briefings__file-meta routine-history__meta">
+                <span
+                  className={`routine-history__status routine-history__status--${s?.status ?? 'unknown'}${s?.awaitingInput ? ' routine-history__status--awaiting' : ''}`}
+                >
+                  ● {statusLabel}
+                </span>
+                {s?.costUsd != null && s.costUsd > 0 && (
+                  <span> · ${s.costUsd.toFixed(4)}</span>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </aside>
+      <article className="briefings__content">
+        {activeId ? (
+          <TaskPreview taskId={activeId} />
+        ) : (
+          <div className="briefings__empty">Pick a run on the left.</div>
+        )}
+      </article>
+    </div>
+  );
+}
+
+/** Compact preview of a task: latest assistant text + link to Observatory.
+ * Uses the same MarkdownDoc renderer for consistency with briefings. */
+function TaskPreview({ taskId }: { taskId: string }) {
+  const [events, setEvents] = useState<TaskEvent[]>([]);
+  const [status, setStatus] = useState<string>('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.jarvis.getTaskHistory(taskId).then((evts) => {
+      if (!cancelled) setEvents(evts);
+    });
+    // Stream incremental events so a running task fills in live.
+    const off = window.jarvis.onTaskEvent(({ taskId: id, event }) => {
+      if (id !== taskId) return;
+      setEvents((prev) => {
+        if (prev.some((e) => e.seq === event.seq)) return prev;
+        return [...prev, event];
+      });
+    });
+    const offStatus = window.jarvis.onTaskStatus((summary) => {
+      if (summary.id !== taskId) return;
+      setStatus(summary.awaitingInput ? 'awaiting' : summary.status);
+    });
+    void window.jarvis.listTasks().then((all) => {
+      if (cancelled) return;
+      const t = all.find((x) => x.id === taskId);
+      if (t) setStatus(t.awaitingInput ? 'awaiting' : t.status);
+    });
+    return () => {
+      cancelled = true;
+      off();
+      offStatus();
+    };
+  }, [taskId]);
+
+  const assistantText = useMemo(() => {
+    const parts: string[] = [];
+    for (const e of events) {
+      const msg = e.msg as
+        | { type?: string; message?: { content?: unknown } }
+        | undefined;
+      if (msg?.type !== 'assistant') continue;
+      const content = msg.message?.content;
+      if (!Array.isArray(content)) continue;
+      for (const block of content as Array<Record<string, unknown>>) {
+        if (block['type'] === 'text' && typeof block['text'] === 'string') {
+          parts.push(block['text'] as string);
+        }
+      }
+    }
+    return parts.join('\n').trim();
+  }, [events]);
+
+  return (
+    <>
+      <div className="routine-preview__head">
+        <span className="routine-preview__status">
+          ● {status || 'loading'}
+        </span>
+        <button
+          className="briefings__schedule-link"
+          onClick={() => void window.jarvis.openObservatory(taskId)}
+        >
+          open full transcript in Observatory →
+        </button>
+      </div>
+      {assistantText ? (
+        <MarkdownDoc>{assistantText}</MarkdownDoc>
+      ) : (
+        <div className="briefings__empty">
+          {status === 'running' ? 'Streaming…' : 'No assistant text yet.'}
+        </div>
+      )}
     </>
   );
 }

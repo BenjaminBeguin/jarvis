@@ -199,6 +199,10 @@ export interface RoutineDef {
    * "view last run" to the actual transcript in the Observatory. Cleared
    * if the task was later deleted (the lookup just becomes a no-op). */
   lastTaskId?: string | null;
+  /** History of recent task ids spawned by this routine, newest first.
+   * Capped at RECENT_TASK_IDS_MAX in main. Drives the per-routine run
+   * history pane in the UI. */
+  recentTaskIds?: string[];
 }
 
 /**
