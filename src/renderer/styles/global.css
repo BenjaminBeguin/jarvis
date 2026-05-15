@@ -1373,23 +1373,6 @@ button:disabled:hover {
   color: var(--accent);
 }
 
-/* Quick-launch variant: hide the lines block entirely, smaller logo
-   pulse. Tighter and faster. */
-.boot-overlay--quick .boot-overlay__logo {
-  width: 48px;
-  height: 48px;
-  margin-bottom: 10px;
-}
-
-.boot-overlay--quick .boot-overlay__brand {
-  font-size: 20px;
-  letter-spacing: 0.36em;
-}
-
-.boot-overlay--quick .boot-overlay__sub {
-  font-size: 9px;
-}
-
 .shell__tabs {
   display: flex;
   gap: 4px;

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { AppStatus } from '../shared/types';
 import { AnswerHUD } from './views/AnswerHUD';
-import { BootOverlay } from './views/BootOverlay';
+import { BootOverlay, shouldShowBootOverlay } from './views/BootOverlay';
 import { CommandPalette } from './views/CommandPalette';
 import { Setup } from './views/Setup';
 import { Shell } from './views/Shell';
@@ -16,12 +16,15 @@ export function App() {
   const [route, setRoute] = useState(getRoute());
   const [status, setStatus] = useState<AppStatus | null>(null);
   /**
-   * Show the boot overlay on cold start of the main window only.
-   * Palette + HUD routes load instantly into transparent frames; an
-   * overlay there would just flash awkwardly. The Shell's first paint
-   * triggers the fade-out once status is in hand.
+   * Show the boot overlay only on a cold start of this BrowserWindow
+   * — `shouldShowBootOverlay()` reads sessionStorage which resets on
+   * every window load (true cold start of the app) and persists
+   * across renderer reloads (⌘R in dev). Palette + HUD routes always
+   * skip it. If we're skipping, `bootDone` is true from the start so
+   * the "system ready" pulse effect doesn't fire either.
    */
-  const [bootDone, setBootDone] = useState(false);
+  const [shouldShowBoot] = useState(() => shouldShowBootOverlay());
+  const [bootDone, setBootDone] = useState(!shouldShowBoot);
 
   useEffect(() => {
     void window.jarvis.getStatus().then(setStatus);
@@ -44,9 +47,11 @@ export function App() {
 
   // "System came online" pulse: add a transient class right when the
   // boot overlay finishes fading out, which scopes a one-shot CSS
-  // animation on the Shell's nav border. ~1.4s, then we drop the
-  // class so it stays passive after.
+  // animation on the Shell's nav border. Cold-start only — on a
+  // reload (shouldShowBoot is false, bootDone is true from mount)
+  // we don't fire the pulse since nothing actually "came online."
   useEffect(() => {
+    if (!shouldShowBoot) return;
     if (!bootDone) return;
     document.body.classList.add('jarvis-just-loaded');
     const t = setTimeout(
@@ -54,7 +59,7 @@ export function App() {
       1600,
     );
     return () => clearTimeout(t);
-  }, [bootDone]);
+  }, [shouldShowBoot, bootDone]);
 
   // Transparent windows (palette / answer HUD) skip the boot overlay
   // entirely and just wait for status.
@@ -80,7 +85,7 @@ export function App() {
   return (
     <>
       {baseView}
-      {!bootDone && (
+      {shouldShowBoot && !bootDone && (
         <BootOverlay ready={!!status} onDone={() => setBootDone(true)} />
       )}
     </>
