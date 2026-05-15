@@ -367,21 +367,59 @@ function InboxRow({
     }
   };
 
-  // Clicking the title area opens the item's URL (if any) — matches
-  // "click row to open" UX of most list views. The action buttons on
-  // the right stay primary; this is just the intuitive shortcut.
-  const titleClick = () => {
+  // Clicking the row routes to whatever surface owns this item — URL
+  // for PR / calendar rows, the Reminders page for reminders, Routines
+  // for failed routines, etc. Action buttons on the right stay primary;
+  // this is the intuitive secondary shortcut. Every row gets a
+  // destination so the click affordance is consistent across sources.
+  const rowDestination = ((): { title: string; run: () => void } | null => {
     if (item.url) {
-      void window.jarvis.openExternal(item.url);
+      return {
+        title: `Click to open ${item.url}`,
+        run: () => void window.jarvis.openExternal(item.url!),
+      };
     }
-  };
+    if (item.source === 'reminders') {
+      return {
+        title: 'Click to open the Reminders page',
+        run: () =>
+          window.dispatchEvent(
+            new CustomEvent('jarvis:navigate', {
+              detail: { tab: 'settings', moduleId: 'reminders' },
+            }),
+          ),
+      };
+    }
+    if (item.source === 'failed-routines') {
+      return {
+        title: 'Click to open the Routines tab',
+        run: () =>
+          window.dispatchEvent(
+            new CustomEvent('jarvis:navigate', { detail: { tab: 'routines' } }),
+          ),
+      };
+    }
+    if (item.source === 'calendar') {
+      // Calendar items without a meeting URL — open the Calendar page.
+      return {
+        title: 'Click to open the Calendar',
+        run: () =>
+          window.dispatchEvent(
+            new CustomEvent('jarvis:navigate', {
+              detail: { tab: 'settings', moduleId: 'calendar' },
+            }),
+          ),
+      };
+    }
+    return null;
+  })();
 
   return (
     <li className={`inbox__row${startsSoon ? ' inbox__row--soon' : ''}`}>
       <div
-        className={`inbox__row-main${item.url ? ' inbox__row-main--clickable' : ''}`}
-        onClick={item.url ? titleClick : undefined}
-        title={item.url ? `Click to open ${item.url}` : undefined}
+        className={`inbox__row-main${rowDestination ? ' inbox__row-main--clickable' : ''}`}
+        onClick={rowDestination ? rowDestination.run : undefined}
+        title={rowDestination?.title}
       >
         <div className="inbox__row-title">
           {startsSoon && <span className="inbox__row-pulse" aria-hidden />}
