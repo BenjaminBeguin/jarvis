@@ -11,6 +11,7 @@ import { closeDatabase, initDatabase, listRecentTasks } from './db.js';
 import { startHttpServer, type HttpServerHandle } from './http-server.js';
 import { InboxStore } from './inbox.js';
 import { InboxProximityWatcher } from './inbox-proximity.js';
+import { MeetingActivityWatcher } from './meeting-activity-watcher.js';
 import { BUILTIN_BRIEFING_KINDS } from './seeds/briefing-kinds.js';
 import {
   failedRoutinesInboxSource,
@@ -152,8 +153,36 @@ const inboxProximity = new InboxProximityWatcher(
 
 // Wire the renderer's "Skip" button so we don't re-prompt for the same
 // item every minute when the user dismissed it.
+// Ad-hoc meeting detection: when macOS reports the system mic or
+// camera went active and no calendar prompt is in flight, fire the
+// same "want to record this?" toast. Catches Google Meet, Zoom,
+// Discord, FaceTime, etc. — anything that touches Core Audio / CMIO.
+// macOS-only; no-op on other platforms.
+const meetingActivity = new MeetingActivityWatcher((item) => {
+  try {
+    const win = openObservatory();
+    win.focus();
+    const send = () =>
+      win.webContents.send(IpcChannels.meetingImminent, {
+        item,
+        minutesUntil: 0,
+      });
+    if (win.webContents.isLoading()) {
+      win.webContents.once('did-finish-load', send);
+    } else {
+      send();
+    }
+  } catch (err) {
+    console.warn('Meeting activity broadcast failed:', err);
+  }
+});
+
 ipcMain.handle(IpcChannels.suppressMeetingPrompt, (_e, id: string) => {
-  if (typeof id === 'string') inboxProximity.suppressMeetingPrompt(id);
+  if (typeof id !== 'string') return;
+  // Route to whichever watcher owns this id. Ad-hoc ids carry the
+  // 'ad-hoc-' prefix; everything else is a calendar item id.
+  if (id.startsWith('ad-hoc-')) meetingActivity.suppress(id);
+  else inboxProximity.suppressMeetingPrompt(id);
 });
 // Built-in context providers: time + active project (set from renderer) +
 // projects list + recent task. Order matters — first registered is first
@@ -601,6 +630,8 @@ app.whenReady().then(async () => {
   // Watch every minute for fireAt items in the next 5 min so the user
   // gets a "starting soon" popup. Click → opens the meeting URL.
   inboxProximity.start();
+  // Ad-hoc meeting detection via macOS Core Audio / CMIO log stream.
+  meetingActivity.start();
 
   // Localhost HTTP API. Auto-generates a bearer token on first launch
   // and binds 127.0.0.1:4747. Lets iOS Shortcuts / CLI / future phone
@@ -704,6 +735,7 @@ app.on('before-quit', () => {
   preferences.close();
   inbox.stopAutoRefresh();
   inboxProximity.stop();
+  meetingActivity.stop();
   briefings.close();
   void httpServer?.close();
   closeDatabase();

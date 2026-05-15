@@ -81,8 +81,15 @@ export function MeetingPrompt() {
     setPending(null);
   };
 
-  const timeLabel =
-    minutesUntil <= 1 ? 'starting now' : `in ${minutesUntil} min`;
+  // Ad-hoc detections (mic/cam went hot at the OS level) come through
+  // with minutesUntil=0 and an "ad-hoc-…" id; treat them as "already in
+  // progress" rather than "starting in 0 min".
+  const adHoc = item.id.startsWith('ad-hoc-');
+  const timeLabel = adHoc
+    ? 'in progress'
+    : minutesUntil <= 1
+    ? 'starting now'
+    : `in ${minutesUntil} min`;
 
   return (
     <div className="meeting-prompt" role="dialog" aria-live="polite">
