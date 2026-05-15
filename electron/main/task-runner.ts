@@ -36,7 +36,21 @@ You are running inside Jarvis — a macOS Electron app, not a terminal Claude Co
 If an MCP tool fails or returns no result:
 - Diagnose like normal (look at the error, try a different tool).
 - If recovery requires the user, tell them to open Jarvis's Integrations tab — that's where they enable, disable, edit, or restart MCP servers.
-- Do NOT instruct the user to run \`/mcp\`, restart Claude Code, edit ~/.claude/settings.json, or visit claude.ai. Those are not the right surfaces.`;
+- Do NOT instruct the user to run \`/mcp\`, restart Claude Code, edit ~/.claude/settings.json, or visit claude.ai. Those are not the right surfaces.
+
+## Jarvis host capabilities (mcp__jarvis__*)
+
+You always have access to an in-process Jarvis MCP — use these instead of writing transcript text whenever you can:
+
+- \`mcp__jarvis__notify\` — pop a macOS notification (title + body). Use for short signals you want the user to see without reading transcript.
+- \`mcp__jarvis__log_activity\` — write to the Activity feed (kind + label + optional detail). Use for side-effects the user might want to look back at.
+- \`mcp__jarvis__create_reminder\` — schedule a future reminder/scheduled action (body + mode + fireAt ms epoch).
+- \`mcp__jarvis__open_url\` — open a URL in the user's default browser.
+- \`mcp__jarvis__get_active_project\` — read the user's currently scoped project (name + path + repo, or null).
+- \`mcp__jarvis__list_recent_meetings\` / \`list_recent_notes\` — enumerate recent files under ~/.jarvis/meetings or ~/.jarvis/notes.
+- \`mcp__jarvis__read_project_memory\` / \`write_project_memory\` — read/append per-project memory files.
+
+Prefer these over Bash equivalents (e.g. notify over \`osascript\`) — they're faster and keep the transcript clean.`;
 
 const DEFAULT_SYSTEM_PROMPT = `You are Jarvis, the user's personal AI operating layer running through Claude Code.
 
@@ -108,6 +122,7 @@ export class TaskRunner extends EventEmitter {
   private projects: ProjectStore | null = null;
   private userContext: UserContextStore | null = null;
   private preferences: PreferencesStore | null = null;
+  private jarvisMcp: unknown = null;
   private auth: AuthContext = { mode: 'subscription' };
 
   setSkillStore(store: SkillStore): void {
@@ -116,6 +131,13 @@ export class TaskRunner extends EventEmitter {
 
   setMcpStore(store: McpConfigStore): void {
     this.mcp = store;
+  }
+
+  /** In-process MCP server exposing Jarvis-side capabilities (notify,
+   *  log_activity, create_reminder, …). Constructed once in main and
+   *  injected here so it lives for the runner's lifetime. */
+  setJarvisMcp(mcp: unknown): void {
+    this.jarvisMcp = mcp;
   }
 
   setProjectStore(store: ProjectStore): void {
@@ -472,13 +494,20 @@ export class TaskRunner extends EventEmitter {
       if (cfg.model) options.model = cfg.model;
       else if (skill?.model) options.model = skill.model;
       if (cfg.fallbackModel) options.fallbackModel = cfg.fallbackModel;
+      // Compose MCP servers: skill-opt-in stdio servers from mcp.json
+      // PLUS the in-process "jarvis" server (always-on host capability).
+      // Skills with restrictive `allowed-tools` can scope `mcp__jarvis__*`
+      // there if they want to limit the host surface.
+      const mcpServers: Record<string, unknown> = {};
       if (skill?.mcpServers.length && this.mcp) {
         const resolved = this.mcp.resolve(skill.mcpServers);
-        if (Object.keys(resolved).length > 0) {
-          // The SDK's mcpServers type narrows to its own McpServerConfig union;
-          // our stored configs match its shape so we cast through unknown.
-          (options as unknown as { mcpServers?: unknown }).mcpServers = resolved;
-        }
+        for (const [k, v] of Object.entries(resolved)) mcpServers[k] = v;
+      }
+      if (this.jarvisMcp) {
+        mcpServers['jarvis'] = this.jarvisMcp;
+      }
+      if (Object.keys(mcpServers).length > 0) {
+        (options as unknown as { mcpServers?: unknown }).mcpServers = mcpServers;
       }
 
       if (!record.inputs) {

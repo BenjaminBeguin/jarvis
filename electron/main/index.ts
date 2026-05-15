@@ -10,6 +10,7 @@ import { BriefingsStore } from './briefings.js';
 import { closeDatabase, initDatabase, listRecentTasks } from './db.js';
 import { startHttpServer, type HttpServerHandle } from './http-server.js';
 import { ActivityStore } from './activity-store.js';
+import { createJarvisMcp } from './jarvis-mcp.js';
 import { InboxStore } from './inbox.js';
 import { InboxProximityWatcher } from './inbox-proximity.js';
 import { MeetingActivityWatcher } from './meeting-activity-watcher.js';
@@ -213,6 +214,30 @@ runner.setMcpStore(mcp);
 runner.setProjectStore(projects);
 runner.setUserContextStore(userContext);
 runner.setPreferencesStore(preferences);
+
+// In-process Jarvis MCP — always available to every task. Tools:
+// notify, log_activity, create_reminder, open_url, get_active_project,
+// list_recent_meetings/notes, read/write_project_memory.
+runner.setJarvisMcp(
+  createJarvisMcp({
+    notify: (title, body) => {
+      try {
+        new Notification({ title, body, silent: false })
+          .on('click', () => openObservatory())
+          .show();
+      } catch {
+        // pre-permission, not fatal
+      }
+    },
+    activity,
+    reminders,
+    projects,
+    projectMemory,
+    userContext,
+    jarvisRoot: join(homedir(), '.jarvis'),
+  }),
+);
+
 routines.setRunner(runner);
 
 let claudeBinaryPath: string | null = null;
@@ -524,27 +549,72 @@ app.whenReady().then(async () => {
 
   // Reminder fire handler must be set BEFORE init() so past-due reminders
   // that fire on this tick land in the runner.
+  //
+  // Two modes, two paths:
+  //   - 'reminder' (a nudge: "remind me to check email") → fires a native
+  //     macOS Notification only. No Claude task, no cost, no transcript.
+  //     Click opens the Inbox so the user can act on it. Logs to Activity
+  //     so the user has a record of what was nudged.
+  //   - 'scheduled' (an action: "in 2h, send the email") → spawns a Claude
+  //     task with a "carry it out now" framing. Same flow as before.
+  //
+  // If the user wanted an agent to *think* about a nudge ("check if Luca
+  // replied and then ping me"), they should phrase it as a scheduled
+  // action — the parser already routes those to 'scheduled' based on
+  // verbs / conditions.
   reminders.setFireHandler((reminder) => {
+    const preview =
+      reminder.body.length > 80 ? `${reminder.body.slice(0, 80)}…` : reminder.body;
+
+    if (reminder.mode === 'reminder') {
+      // Pure nudge — no Claude. Native notification + activity log.
+      try {
+        const notif = new Notification({
+          title: 'Reminder',
+          body: preview,
+          silent: false,
+        });
+        notif.on('click', () => {
+          const win = openObservatory();
+          win.focus();
+          if (win.webContents.isLoading()) {
+            win.webContents.once('did-finish-load', () =>
+              win.webContents.send(IpcChannels.shellNavigate, { tab: 'inbox' }),
+            );
+          } else {
+            win.webContents.send(IpcChannels.shellNavigate, { tab: 'inbox' });
+          }
+        });
+        notif.show();
+      } catch {
+        // Notifications can fail pre-permission; not fatal.
+      }
+      activity.record({
+        kind: 'reminder.fired',
+        label: `Reminder fired · ${preview}`,
+        detail: { id: reminder.id, body: reminder.body },
+      });
+      reminders.markFired(reminder.id, null);
+      return;
+    }
+
+    // 'scheduled' — agent does the thing.
     let firedTaskId: string | null = null;
-    // Reminders nudge the user; scheduled actions tell Claude to do the
-    // thing. Both end up as a normal task — only the system framing differs.
-    const prompt =
-      reminder.mode === 'scheduled'
-        ? `It's the scheduled time you set earlier for this. Carry it out now using whatever tools fit (gh, slack, fs, etc.). If a precondition isn't met (e.g. "if Luca hasn't reviewed"), check first and skip the action accordingly. Task:\n\n${reminder.body}`
-        : `Earlier I asked you to remind me about this. Surface it clearly. If it's a question, answer it; if it's a task, propose the concrete next step.\n\n${reminder.body}`;
+    const prompt = `It's the scheduled time you set earlier for this. Carry it out now using whatever tools fit (gh, slack, fs, etc.). If a precondition isn't met (e.g. "if Luca hasn't reviewed"), check first and skip the action accordingly. Task:\n\n${reminder.body}`;
     try {
       const t = runner.launch({ prompt, origin: 'palette' });
       firedTaskId = t.id;
       pushTaskToHud(t.id);
     } catch (e) {
-      console.error('Reminder fire failed:', e);
+      console.error('Scheduled action fire failed:', e);
     }
     reminders.markFired(reminder.id, firedTaskId);
     try {
-      const preview =
-        reminder.body.length > 80 ? `${reminder.body.slice(0, 80)}…` : reminder.body;
-      const title = reminder.mode === 'scheduled' ? 'Jarvis is on it' : 'Reminder';
-      const notif = new Notification({ title, body: preview, silent: false });
+      const notif = new Notification({
+        title: 'Jarvis is on it',
+        body: preview,
+        silent: false,
+      });
       notif.on('click', () => {
         if (firedTaskId) {
           const win = openObservatory();
