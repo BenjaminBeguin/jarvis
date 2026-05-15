@@ -56,6 +56,47 @@ function saveSessionConfig(cfg: SessionConfig): void {
   }
 }
 
+/** Folders the user has picked at least once via the +dirs chip. Persist
+ * the full history so the dropdown can offer "pick from before" instead
+ * of forcing a native file dialog on every launch. Newest first. */
+const RECENT_DIRS_KEY = 'jarvis.palette.recentDirs';
+const RECENT_DIRS_MAX = 12;
+
+function loadRecentDirs(): string[] {
+  try {
+    const raw = window.localStorage.getItem(RECENT_DIRS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? (parsed.filter((p) => typeof p === 'string') as string[])
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentDirs(list: string[]): void {
+  try {
+    window.localStorage.setItem(
+      RECENT_DIRS_KEY,
+      JSON.stringify(list.slice(0, RECENT_DIRS_MAX)),
+    );
+  } catch {
+    // ignore
+  }
+}
+
+function addRecentDirs(picked: string[]): string[] {
+  const cur = loadRecentDirs();
+  // Dedup, with the newly-picked entries bumped to the front.
+  const merged = [
+    ...picked,
+    ...cur.filter((p) => !picked.includes(p)),
+  ].slice(0, RECENT_DIRS_MAX);
+  saveRecentDirs(merged);
+  return merged;
+}
+
 function readActiveProject(): string | null {
   try {
     return window.localStorage.getItem(ACTIVE_PROJECT_KEY) || null;
@@ -823,6 +864,8 @@ function SessionConfigBar({
 }) {
   const [modeOpen, setModeOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
+  const [dirsOpen, setDirsOpen] = useState(false);
+  const [recentDirs, setRecentDirs] = useState<string[]>(() => loadRecentDirs());
 
   const currentMode = config.permissionMode ?? 'bypassPermissions';
   const currentModeOpt =
@@ -831,18 +874,50 @@ function SessionConfigBar({
   const currentModel = config.model ?? '';
   const currentModelOpt =
     MODEL_OPTIONS.find((o) => o.value === currentModel) ?? MODEL_OPTIONS[0]!;
-  const dirCount = config.additionalDirectories?.length ?? 0;
+  const activeDirs = config.additionalDirectories ?? [];
+  const dirCount = activeDirs.length;
 
-  const addDir = async () => {
+  // Make sure any dir currently active also lives in the recent list —
+  // covers configs that pre-date the recent-dirs feature.
+  useEffect(() => {
+    if (activeDirs.length > 0) {
+      const merged = addRecentDirs(activeDirs);
+      if (merged.length !== recentDirs.length) setRecentDirs(merged);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDirs.length]);
+
+  const toggleDir = (path: string) => {
+    const cur = new Set(activeDirs);
+    if (cur.has(path)) cur.delete(path);
+    else cur.add(path);
+    const next = Array.from(cur);
+    onChange({ additionalDirectories: next.length > 0 ? next : undefined });
+  };
+
+  const pickNewDir = async () => {
     const picked = await window.jarvis.pickDirectory({ multi: true });
     if (!picked.length) return;
-    const merged = Array.from(
-      new Set([...(config.additionalDirectories ?? []), ...picked]),
-    );
+    setRecentDirs(addRecentDirs(picked));
+    const merged = Array.from(new Set([...activeDirs, ...picked]));
     onChange({ additionalDirectories: merged });
   };
 
-  const clearDirs = () => onChange({ additionalDirectories: undefined });
+  const clearDirs = () =>
+    onChange({ additionalDirectories: undefined });
+
+  const removeRecent = (path: string) => {
+    const next = recentDirs.filter((p) => p !== path);
+    saveRecentDirs(next);
+    setRecentDirs(next);
+    // If this dir was active, deactivate it too.
+    if (activeDirs.includes(path)) {
+      const remaining = activeDirs.filter((p) => p !== path);
+      onChange({
+        additionalDirectories: remaining.length > 0 ? remaining : undefined,
+      });
+    }
+  };
 
   return (
     <div className="session-config">
@@ -916,33 +991,105 @@ function SessionConfigBar({
         )}
       </div>
 
-      <button
-        className={`session-config__chip${
-          dirCount > 0 ? ' session-config__chip--set' : ''
-        }`}
-        onClick={() => void addDir()}
-        title={
-          dirCount > 0
-            ? `${dirCount} extra dir${dirCount === 1 ? '' : 's'}: ${(
-                config.additionalDirectories ?? []
-              ).join(', ')}\nClick to add more`
-            : 'Add directories the agent can read/write beyond cwd'
-        }
-      >
-        <span className="session-config__chip-label">+dirs</span>
-        <span className="session-config__chip-value">
-          {dirCount > 0 ? dirCount : '—'}
-        </span>
-      </button>
-      {dirCount > 0 && (
+      <div className="session-config__chip-group">
         <button
-          className="session-config__clear"
-          onClick={clearDirs}
-          title="Clear extra directories"
+          className={`session-config__chip${
+            dirCount > 0 ? ' session-config__chip--set' : ''
+          }`}
+          onClick={() => {
+            setDirsOpen((v) => !v);
+            setModeOpen(false);
+            setModelOpen(false);
+          }}
+          title={
+            dirCount > 0
+              ? `${dirCount} extra dir${dirCount === 1 ? '' : 's'}: ${activeDirs.join(', ')}`
+              : 'Add directories the agent can read/write beyond cwd'
+          }
         >
-          ×
+          <span className="session-config__chip-label">+dirs</span>
+          <span className="session-config__chip-value">
+            {dirCount > 0 ? dirCount : '—'}
+          </span>
         </button>
-      )}
+        {dirsOpen && (
+          <div className="session-config__menu session-config__menu--dirs">
+            {recentDirs.length === 0 ? (
+              <div className="session-config__menu-empty">
+                No folders picked yet.
+              </div>
+            ) : (
+              recentDirs.map((path) => {
+                const checked = activeDirs.includes(path);
+                return (
+                  <div
+                    key={path}
+                    className={`session-config__dir-row${checked ? ' session-config__dir-row--on' : ''}`}
+                  >
+                    <button
+                      className="session-config__dir-toggle"
+                      onClick={() => toggleDir(path)}
+                      title={checked ? 'Remove from this launch' : 'Add to this launch'}
+                    >
+                      <span className="session-config__dir-check">
+                        {checked ? '✓' : ' '}
+                      </span>
+                      <span className="session-config__dir-path" title={path}>
+                        {compactPath(path)}
+                      </span>
+                    </button>
+                    <button
+                      className="session-config__dir-remove"
+                      onClick={() => removeRecent(path)}
+                      title="Forget this folder"
+                      aria-label="Forget this folder"
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })
+            )}
+            <button
+              className="session-config__menu-row session-config__menu-row--add"
+              onClick={() => {
+                setDirsOpen(false);
+                void pickNewDir();
+              }}
+            >
+              <div className="session-config__menu-label">+ Add new folder…</div>
+              <div className="session-config__menu-hint">
+                Opens the native folder picker
+              </div>
+            </button>
+            {dirCount > 0 && (
+              <button
+                className="session-config__menu-row session-config__menu-row--clear"
+                onClick={() => {
+                  clearDirs();
+                  setDirsOpen(false);
+                }}
+              >
+                <div className="session-config__menu-label">Clear selection</div>
+                <div className="session-config__menu-hint">
+                  Untick all; recents stay
+                </div>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+/** Shrink a long path for display in the chip dropdown — keep the last
+ * two segments + truncate the home prefix. The full path is in `title`. */
+function compactPath(path: string): string {
+  const home = path.match(/^\/Users\/[^/]+/);
+  const stripped = home ? '~' + path.slice(home[0].length) : path;
+  if (stripped.length <= 50) return stripped;
+  const segs = stripped.split('/');
+  if (segs.length <= 3) return stripped;
+  return `${segs[0]}/…/${segs.slice(-2).join('/')}`;
 }
