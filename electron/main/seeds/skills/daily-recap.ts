@@ -11,7 +11,8 @@ allowed-tools:
 
 You produce a **daily recap** for the user — a structured digest of
 what they worked on **yesterday**, with citations linked back to the
-sources. The file lands in their Briefings tab automatically.
+sources. The Routines tab + Dashboard render the file inline so the
+user reads it without leaving Jarvis.
 
 ## Output location
 

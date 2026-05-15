@@ -64,7 +64,6 @@ const api = {
       tab?:
         | 'observatory'
         | 'inbox'
-        | 'briefings'
         | 'projects'
         | 'routines'
         | 'skills'

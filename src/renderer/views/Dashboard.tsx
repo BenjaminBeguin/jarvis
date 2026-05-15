@@ -430,7 +430,7 @@ function inferBriefingKindId(r: RoutineDef): string {
 
 /**
  * Reads the latest briefing markdown file for a kind and renders it
- * with the same MarkdownDoc viewer Skills + Briefings tab use. Self-
+ * with the same MarkdownDoc viewer Skills + Routines use. Self-
  * refreshes on briefings:changed so a freshly-fired routine updates
  * the preview without manual reload.
  */

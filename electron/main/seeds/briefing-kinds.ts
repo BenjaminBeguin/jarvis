@@ -1,10 +1,13 @@
 import type { DigestKind } from '../briefings.js';
 
 /**
- * Built-in briefing kinds. Each is rendered as a section in the
- * Briefings tab. Add more by appending to this list and authoring the
- * matching skill — the same shape supports any future generated-doc
- * collection (status reports, ADRs, cost reports, …).
+ * Built-in briefing kinds. The Routines tab uses these to identify
+ * which routines are briefings (id pattern: `briefing-<kindId>`) and
+ * to render their markdown output inline in the per-routine history
+ * pane. The Dashboard uses the same lookup for pinned routine items.
+ * Add more by appending to this list and authoring the matching skill
+ * — the same shape supports any future generated-doc collection
+ * (status reports, ADRs, cost reports, …).
  */
 export const BUILTIN_BRIEFING_KINDS: DigestKind[] = [
   {

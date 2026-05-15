@@ -11,7 +11,13 @@ import type { Module } from './types.js';
 const CHANNEL = 'shell:navigate';
 
 interface NavPayload {
-  tab?: 'observatory' | 'inbox' | 'briefings' | 'projects' | 'routines' | 'settings';
+  tab?:
+    | 'observatory'
+    | 'inbox'
+    | 'projects'
+    | 'routines'
+    | 'skills'
+    | 'settings';
   moduleId?: string;
   action?: 'open-new-project';
   /** Free-text payload that accompanies an action (e.g. pre-filled name). */
@@ -84,8 +90,8 @@ export const shellNavModule: Module = {
     {
       id: 'briefings',
       prefix: '/open-briefings',
-      label: 'Open Briefings',
-      description: 'Daily recap, weekly retro, today\'s focus — generated digests',
+      label: 'Open briefings',
+      description: 'Routines that generate the daily / weekly / focus digests',
       verbalTriggers: [
         'open briefings',
         'show briefings',
@@ -95,8 +101,11 @@ export const shellNavModule: Module = {
         "what's the recap",
       ],
       handler: (_input, ctx) => {
-        ctx.broadcast(CHANNEL, { tab: 'briefings' } as NavPayload);
-        return 'Opening briefings';
+        // Briefings tab was retired; routines is now the home for both
+        // the schedules AND the rendered markdown output (per-routine
+        // history pane).
+        ctx.broadcast(CHANNEL, { tab: 'routines' } as NavPayload);
+        return 'Opening routines';
       },
     },
     {

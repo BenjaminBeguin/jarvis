@@ -545,10 +545,10 @@ function RoutineDetail({
  * Briefings-style three-column block: history list on the left, rendered
  * output on the right. Two shapes:
  *
- *   - briefing routines (id prefix briefing-…) — left rail = every file
+*   - briefing routines (id prefix briefing-…) — left rail = every file
  *     under ~/.jarvis/briefings/<kindId>/, right = MarkdownDoc render of
- *     the selected file. Matches the Briefings tab exactly so the user
- *     reads the same markdown reader they already know.
+ *     the selected file. Routines IS the place to read briefings now;
+ *     the standalone Briefings tab was retired.
  *
  *   - everything else — left rail = recentTaskIds the routine has spawned
  *     (newest first, status badge per row), right = the latest assistant
@@ -972,16 +972,17 @@ function AddToDashboardButton({ routineId }: { routineId: string }) {
 interface RoutinePurpose {
   kind: 'briefing' | 'inbox' | 'freeform';
   label: string;
-  tab?: 'briefings' | 'inbox';
+  tab?: 'inbox';
 }
 
 function derivePurpose(r: RoutineDef): RoutinePurpose | null {
   if (r.id.startsWith('briefing-')) {
     const kindId = r.id.slice('briefing-'.length);
+    // No cross-link tab — the briefing's rendered output lives directly
+    // below this chip in the routine detail panes.
     return {
       kind: 'briefing',
       label: `Briefing · ${kindId}`,
-      tab: 'briefings',
     };
   }
   if (r.skillId.endsWith('-inbox') || r.skillId === 'calendar-today') {

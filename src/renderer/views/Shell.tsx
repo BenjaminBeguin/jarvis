@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { AppStatus, ModuleSummary, ProjectDef, Reminder, TaskSummary } from '../../shared/types';
 import { getModulePage } from '../modules/registry';
-import { Briefings } from './Briefings';
 import { Inbox } from './Inbox';
 import { Logo } from './Logo';
 import { MeetingOverlay } from './MeetingOverlay';
@@ -20,7 +19,6 @@ import { Routines } from './Routines';
 type Tab =
   | 'observatory'
   | 'inbox'
-  | 'briefings'
   | 'projects'
   | 'routines'
   | 'skills'
@@ -138,7 +136,6 @@ export function Shell({ status }: Props) {
     const tabsOrder: Tab[] = [
       'observatory',
       'inbox',
-      'briefings',
       'projects',
       'routines',
       'skills',
@@ -296,22 +293,12 @@ export function Shell({ status }: Props) {
             Inbox
           </button>
           <button
-            className={`shell__tab${tab === 'briefings' && !openModuleId ? ' shell__tab--active' : ''}`}
-            onClick={() => {
-              setTab('briefings');
-              setOpenModuleId(null);
-            }}
-            title="⌘3"
-          >
-            Briefings
-          </button>
-          <button
             className={`shell__tab${tab === 'projects' && !openModuleId ? ' shell__tab--active' : ''}`}
             onClick={() => {
               setTab('projects');
               setOpenModuleId(null);
             }}
-            title="⌘4"
+            title="⌘3"
           >
             Projects
           </button>
@@ -321,7 +308,7 @@ export function Shell({ status }: Props) {
               setTab('routines');
               setOpenModuleId(null);
             }}
-            title="⌘5"
+            title="⌘4"
           >
             Routines
           </button>
@@ -332,7 +319,7 @@ export function Shell({ status }: Props) {
               setOpenModuleId(null);
               setFocusedSkillId(null);
             }}
-            title="⌘6 · Skill prompts (SKILL.md)"
+            title="⌘5 · Skill prompts (SKILL.md)"
           >
             Skills
           </button>
@@ -342,7 +329,7 @@ export function Shell({ status }: Props) {
               setTab('settings');
               setOpenModuleId(null);
             }}
-            title="⌘7 · Preferences · Modules · Integrations · API"
+            title="⌘6 · Preferences · Modules · Integrations · API"
           >
             ⚙ Settings
           </button>
@@ -446,8 +433,6 @@ export function Shell({ status }: Props) {
           <Observatory />
         ) : tab === 'inbox' ? (
           <Inbox />
-        ) : tab === 'briefings' ? (
-          <Briefings />
         ) : tab === 'projects' ? (
           <Projects />
         ) : tab === 'routines' ? (
