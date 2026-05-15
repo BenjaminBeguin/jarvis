@@ -33,129 +33,219 @@ function formatCwd(cwd: string): string {
   return cwd;
 }
 
-interface RenderedEvent {
-  key: string;
-  kind: 'text' | 'user' | 'tool_use' | 'tool_result' | 'result' | 'error' | 'system';
-  label: string;
-  body: string;
-  /** Timestamp from the wire event, ms epoch. */
-  ts: number;
+/**
+ * One renderable item in the chat timeline. Tool calls are paired with
+ * their matching tool_result by tool_use_id so the UI can render them as
+ * a single collapsible row (Claude Code-style) instead of two unrelated
+ * blocks far apart in the transcript.
+ */
+type ChatItem =
+  | { kind: 'assistant'; key: string; ts: number; text: string }
+  | { kind: 'user'; key: string; ts: number; text: string }
+  | {
+      kind: 'tool';
+      key: string;
+      ts: number;
+      name: string;
+      input: unknown;
+      result: string | null;
+      isError: boolean;
+    }
+  | { kind: 'system'; key: string; ts: number; subtype: string; body: string }
+  | { kind: 'result'; key: string; ts: number; durationMs: number; costUsd: number }
+  | { kind: 'error'; key: string; ts: number; body: string; aborted: boolean };
+
+function toolResultBody(content: unknown): { text: string; isError: boolean } {
+  // tool_result content shape: string OR array of {type:'text', text} blocks,
+  // sometimes carrying an is_error flag at the block or parent level.
+  if (typeof content === 'string') return { text: content, isError: false };
+  if (Array.isArray(content)) {
+    const parts = (content as Array<Record<string, unknown>>).map((b) =>
+      b['type'] === 'text' && typeof b['text'] === 'string'
+        ? (b['text'] as string)
+        : JSON.stringify(b),
+    );
+    return { text: parts.join('\n'), isError: false };
+  }
+  return { text: JSON.stringify(content, null, 2), isError: false };
 }
 
-function renderEvent(event: TaskEvent): RenderedEvent | null {
-  const msg = event.msg as { type?: string } & Record<string, unknown>;
-  if (!msg || typeof msg !== 'object') return null;
-  const ts = event.ts;
+function buildChatTimeline(events: TaskEvent[]): ChatItem[] {
+  const items: ChatItem[] = [];
+  const toolIndexById = new Map<string, number>();
 
-  if (msg.type === 'assistant') {
-    const content = (msg['message'] as { content?: unknown })?.content;
-    if (Array.isArray(content)) {
-      const text = content
-        .filter((c): c is { type: 'text'; text: string } => (c as { type?: string }).type === 'text')
-        .map((c) => c.text)
-        .join('');
-      const tools = content.filter(
-        (c): c is { type: 'tool_use'; name: string; input: unknown } =>
-          (c as { type?: string }).type === 'tool_use',
-      );
-      if (tools.length > 0) {
-        return {
-          key: `${event.seq}-tool`,
-          kind: 'tool_use',
-          label: `tool · ${tools.map((t) => t.name).join(', ')}`,
-          body: tools
-            .map((t) => `${t.name}\n${JSON.stringify(t.input, null, 2)}`)
-            .join('\n\n'),
-          ts,
-        };
+  for (const event of events) {
+    const msg = event.msg as
+      | ({ type?: string } & Record<string, unknown>)
+      | undefined;
+    if (!msg || typeof msg !== 'object') continue;
+    const ts = event.ts;
+
+    if (msg.type === 'assistant') {
+      const content = (msg['message'] as { content?: unknown })?.content;
+      if (!Array.isArray(content)) continue;
+      for (const block of content as Array<Record<string, unknown>>) {
+        if (block['type'] === 'text' && typeof block['text'] === 'string') {
+          const text = (block['text'] as string).trim();
+          if (text) {
+            items.push({
+              kind: 'assistant',
+              key: `${event.seq}-a-${items.length}`,
+              ts,
+              text,
+            });
+          }
+        } else if (
+          block['type'] === 'tool_use' &&
+          typeof block['name'] === 'string'
+        ) {
+          const id =
+            typeof block['id'] === 'string' ? (block['id'] as string) : null;
+          const idx = items.length;
+          items.push({
+            kind: 'tool',
+            key: `${event.seq}-t-${idx}`,
+            ts,
+            name: block['name'] as string,
+            input: block['input'],
+            result: null,
+            isError: false,
+          });
+          if (id) toolIndexById.set(id, idx);
+        }
       }
-      if (text) {
-        return { key: `${event.seq}-text`, kind: 'text', label: 'assistant', body: text, ts };
-      }
+      continue;
     }
-    return null;
-  }
 
-  if (msg.type === 'user') {
-    const content = (msg['message'] as { content?: unknown })?.content;
-    if (Array.isArray(content)) {
-      const results = content.filter(
-        (c): c is { type: 'tool_result'; content: unknown; tool_use_id: string } =>
-          (c as { type?: string }).type === 'tool_result',
-      );
-      if (results.length > 0) {
-        return {
-          key: `${event.seq}-result`,
-          kind: 'tool_result',
-          label: 'tool result',
-          body: results
-            .map((r) =>
-              typeof r.content === 'string'
-                ? r.content
-                : JSON.stringify(r.content, null, 2),
-            )
-            .join('\n\n'),
+    if (msg.type === 'user') {
+      const content = (msg['message'] as { content?: unknown })?.content;
+      if (Array.isArray(content)) {
+        // Tool results land as user messages — fold them into the matching
+        // tool entry so they share one collapsible row.
+        let consumedAsResult = false;
+        for (const block of content as Array<Record<string, unknown>>) {
+          if (block['type'] === 'tool_result') {
+            const id =
+              typeof block['tool_use_id'] === 'string'
+                ? (block['tool_use_id'] as string)
+                : null;
+            const { text } = toolResultBody(block['content']);
+            const isError = block['is_error'] === true;
+            if (id && toolIndexById.has(id)) {
+              const idx = toolIndexById.get(id)!;
+              const tool = items[idx] as ChatItem & { kind: 'tool' };
+              tool.result = text;
+              tool.isError = isError || tool.isError;
+              consumedAsResult = true;
+            } else {
+              // Orphan result — render as its own tool row with no name.
+              items.push({
+                kind: 'tool',
+                key: `${event.seq}-r-${items.length}`,
+                ts,
+                name: 'result',
+                input: null,
+                result: text,
+                isError,
+              });
+              consumedAsResult = true;
+            }
+          }
+        }
+        if (consumedAsResult) continue;
+        // Plain user text.
+        const text = (content as Array<Record<string, unknown>>)
+          .filter(
+            (b) => b['type'] === 'text' && typeof b['text'] === 'string',
+          )
+          .map((b) => b['text'] as string)
+          .join('')
+          .trim();
+        if (text) {
+          items.push({
+            kind: 'user',
+            key: `${event.seq}-u`,
+            ts,
+            text,
+          });
+        }
+        continue;
+      }
+      if (typeof content === 'string' && content.trim()) {
+        items.push({
+          kind: 'user',
+          key: `${event.seq}-u`,
           ts,
-        };
+          text: content.trim(),
+        });
       }
-      // Plain user text — the shape claude-code-watch produces from a
-      // queue-operation/enqueue line, and what the SDK emits when the
-      // user types a free-form prompt.
-      const text = content
-        .filter((c): c is { type: 'text'; text: string } => (c as { type?: string }).type === 'text')
-        .map((c) => c.text)
-        .join('');
-      if (text) {
-        return { key: `${event.seq}-user`, kind: 'user', label: 'user', body: text, ts };
-      }
-    } else if (typeof content === 'string' && content) {
-      // Some SDK message shapes inline the prompt as a plain string.
-      return { key: `${event.seq}-user`, kind: 'user', label: 'user', body: content, ts };
+      continue;
     }
-    return null;
+
+    if (msg.type === 'result') {
+      const r = msg as { total_cost_usd?: number; duration_ms?: number };
+      items.push({
+        kind: 'result',
+        key: `${event.seq}-final`,
+        ts,
+        durationMs: r.duration_ms ?? 0,
+        costUsd: r.total_cost_usd ?? 0,
+      });
+      continue;
+    }
+
+    if (msg.type === 'system') {
+      const m = msg as { subtype?: string };
+      items.push({
+        kind: 'system',
+        key: `${event.seq}-sys`,
+        ts,
+        subtype: m.subtype ?? 'system',
+        body: JSON.stringify(msg, null, 2),
+      });
+      continue;
+    }
+
+    if (msg.type === 'jarvis_error') {
+      items.push({
+        kind: 'error',
+        key: `${event.seq}-err`,
+        ts,
+        body: String(msg['error'] ?? ''),
+        aborted: !!msg['aborted'],
+      });
+      continue;
+    }
   }
 
-  if (msg.type === 'result') {
-    // The full assistant text already streamed via 'assistant' events
-    // earlier in the loop — the result message just terminates the turn
-    // and carries the cost/duration metadata. Render that as a thin
-    // footer line instead of repeating the body.
-    const r = msg as { total_cost_usd?: number; duration_ms?: number };
-    const dur = r.duration_ms ?? 0;
-    const cost = r.total_cost_usd ?? 0;
-    return {
-      key: `${event.seq}-final`,
-      kind: 'result',
-      label: 'turn complete',
-      body: `${dur}ms · $${cost.toFixed(4)}`,
-      ts,
-    };
-  }
+  return items;
+}
 
-  if (msg.type === 'system') {
-    // System events (init, api_retry, etc.) are diagnostic noise for the
-    // typical user. Render them but tag with kind:'system' so the panel
-    // can hide them behind a toggle.
-    const m = msg as { subtype?: string };
-    return {
-      key: `${event.seq}-sys`,
-      kind: 'system',
-      label: m.subtype ? `system · ${m.subtype}` : 'system',
-      body: JSON.stringify(msg, null, 2),
-      ts,
-    };
+/**
+ * Build a one-line preview of a tool call from its input object — picks
+ * the first identifying arg (path, command, url, query…). Keeps the
+ * collapsed row compact while still showing what the tool is touching.
+ */
+function toolPreview(input: unknown): string | null {
+  if (!input || typeof input !== 'object') return null;
+  const i = input as Record<string, unknown>;
+  for (const key of [
+    'file_path',
+    'path',
+    'filename',
+    'command',
+    'url',
+    'query',
+    'pattern',
+    'description',
+    'prompt',
+  ]) {
+    const v = i[key];
+    if (typeof v === 'string' && v.trim()) {
+      const compact = v.length > 90 ? v.slice(0, 90) + '…' : v;
+      return compact.replace(/\n/g, ' ');
+    }
   }
-
-  if (msg.type === 'jarvis_error') {
-    return {
-      key: `${event.seq}-err`,
-      kind: 'error',
-      label: msg['aborted'] ? 'aborted' : 'error',
-      body: String(msg['error'] ?? ''),
-      ts,
-    };
-  }
-
   return null;
 }
 
@@ -188,27 +278,19 @@ export function TaskDetail({ task, onSelectTask }: Props) {
     el.scrollTop = el.scrollHeight;
   }, [events.length]);
 
-  const rendered = events.map(renderEvent).filter((e): e is RenderedEvent => e !== null);
+  const items = useMemo(() => buildChatTimeline(events), [events]);
   const isAwaiting = !!task.awaitingInput;
-  // 'compact' = just the reply the user cares about (user text + assistant
-  // text + final result + errors). Hides tool_use, tool_result, and system
-  // events — all the noise of the agentic loop. 'raw' = everything.
-  const [mode, setMode] = useState<'compact' | 'raw'>('compact');
-  const hiddenCount = useMemo(
-    () =>
-      rendered.filter(
-        (e) =>
-          e.kind === 'tool_use' || e.kind === 'tool_result' || e.kind === 'system',
-      ).length,
-    [rendered],
+  // Show diagnostic 'system' events (init, api_retry, …) behind a toggle.
+  // Default off — they're never what the user wants to read first.
+  const [showSystem, setShowSystem] = useState(false);
+  const systemCount = useMemo(
+    () => items.filter((i) => i.kind === 'system').length,
+    [items],
   );
-  const visible = useMemo(() => {
-    if (mode === 'raw') return rendered;
-    return rendered.filter(
-      (e) =>
-        e.kind !== 'tool_use' && e.kind !== 'tool_result' && e.kind !== 'system',
-    );
-  }, [rendered, mode]);
+  const visible = useMemo(
+    () => (showSystem ? items : items.filter((i) => i.kind !== 'system')),
+    [items, showSystem],
+  );
 
   return (
     <section className="detail">
@@ -235,58 +317,22 @@ export function TaskDetail({ task, onSelectTask }: Props) {
         )}
       </header>
       {isAwaiting && <AwaitingBanner />}
-      {hiddenCount > 0 && (
+      {systemCount > 0 && (
         <div className="detail__filter-bar">
           <button
             className="detail__filter-toggle"
-            onClick={() => setMode((m) => (m === 'compact' ? 'raw' : 'compact'))}
-            title={
-              mode === 'compact'
-                ? 'Show tool calls + system events'
-                : 'Hide intermediate steps; show only the reply'
-            }
+            onClick={() => setShowSystem((s) => !s)}
+            title={showSystem ? 'Hide system diagnostics' : 'Show system diagnostics'}
           >
-            {mode === 'compact'
-              ? `▸ Show ${hiddenCount} intermediate step${hiddenCount === 1 ? '' : 's'}`
-              : `▾ Hide ${hiddenCount} intermediate step${hiddenCount === 1 ? '' : 's'}`}
+            {showSystem ? '▾' : '▸'} {systemCount} system event
+            {systemCount === 1 ? '' : 's'}
           </button>
         </div>
       )}
       <div className="detail__body" ref={bodyRef}>
-        {visible.length === 0 && (
-          <div className="empty">Waiting for output…</div>
-        )}
-        {visible.map((e) => (
-          <div
-            key={e.key}
-            className={`event ${
-              e.kind === 'tool_use' || e.kind === 'tool_result'
-                ? 'event--tool'
-                : e.kind === 'result'
-                ? 'event--result'
-                : e.kind === 'error'
-                ? 'event--error'
-                : e.kind === 'user'
-                ? 'event--user'
-                : e.kind === 'system'
-                ? 'event--system'
-                : ''
-            }`}
-          >
-            <div className="event__kind">
-              <span>{e.label}</span>
-              <span className="event__time" title={new Date(e.ts).toLocaleString()}>
-                {formatTime(e.ts)}
-              </span>
-            </div>
-            <div className="event__text">
-              {e.kind === 'text' || e.kind === 'user' ? (
-                <MarkdownText>{e.body}</MarkdownText>
-              ) : (
-                e.body
-              )}
-            </div>
-          </div>
+        {visible.length === 0 && <div className="empty">Waiting for output…</div>}
+        {visible.map((it) => (
+          <ChatRow key={it.key} item={it} />
         ))}
       </div>
       {isAwaiting && task.origin === 'external' && (
@@ -294,6 +340,128 @@ export function TaskDetail({ task, onSelectTask }: Props) {
       )}
       {isAwaiting && task.origin !== 'external' && <SendReply task={task} />}
     </section>
+  );
+}
+
+/**
+ * Single timeline row. Each kind renders very differently so the chat
+ * reads like a conversation, not a uniform stream of cards. Tools are
+ * collapsed to a one-line summary by default; click to expand input +
+ * result. Assistant text gets no header (it IS the content); user
+ * messages get a distinct "you" chip + sans-serif prose.
+ */
+function ChatRow({ item }: { item: ChatItem }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (item.kind === 'assistant') {
+    return (
+      <div className="chat-row chat-row--assistant">
+        <div className="chat-row__body">
+          <MarkdownText>{item.text}</MarkdownText>
+        </div>
+        <div className="chat-row__time" title={new Date(item.ts).toLocaleString()}>
+          {formatTime(item.ts)}
+        </div>
+      </div>
+    );
+  }
+
+  if (item.kind === 'user') {
+    return (
+      <div className="chat-row chat-row--user">
+        <span className="chat-row__chip">you</span>
+        <div className="chat-row__body">
+          <MarkdownText>{item.text}</MarkdownText>
+        </div>
+        <div className="chat-row__time" title={new Date(item.ts).toLocaleString()}>
+          {formatTime(item.ts)}
+        </div>
+      </div>
+    );
+  }
+
+  if (item.kind === 'tool') {
+    const preview = toolPreview(item.input);
+    return (
+      <div
+        className={`chat-row chat-row--tool${item.isError ? ' chat-row--tool-error' : ''}${
+          item.result === null ? ' chat-row--tool-pending' : ''
+        }`}
+      >
+        <button
+          className="chat-row__tool-head"
+          onClick={() => setExpanded((v) => !v)}
+          title={expanded ? 'Collapse' : 'Expand to see input + output'}
+        >
+          <span className="chat-row__tool-caret">{expanded ? '▾' : '▸'}</span>
+          <span
+            className={`chat-row__tool-dot${
+              item.isError
+                ? ' chat-row__tool-dot--error'
+                : item.result === null
+                  ? ' chat-row__tool-dot--pending'
+                  : ''
+            }`}
+          />
+          <span className="chat-row__tool-name">{item.name}</span>
+          {preview && <span className="chat-row__tool-preview">{preview}</span>}
+          {item.result === null && (
+            <span className="chat-row__tool-status">running…</span>
+          )}
+        </button>
+        {expanded && (
+          <div className="chat-row__tool-body">
+            {item.input !== null && item.input !== undefined && (
+              <>
+                <div className="chat-row__tool-label">input</div>
+                <pre className="chat-row__tool-pre">
+                  {JSON.stringify(item.input, null, 2)}
+                </pre>
+              </>
+            )}
+            {item.result !== null && (
+              <>
+                <div className="chat-row__tool-label">output</div>
+                <pre className="chat-row__tool-pre">{item.result}</pre>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (item.kind === 'result') {
+    return (
+      <div className="chat-row chat-row--result">
+        turn complete · {item.durationMs}ms · ${item.costUsd.toFixed(4)}
+      </div>
+    );
+  }
+
+  if (item.kind === 'error') {
+    return (
+      <div className="chat-row chat-row--error">
+        <span className="chat-row__chip chat-row__chip--error">
+          {item.aborted ? 'aborted' : 'error'}
+        </span>
+        <div className="chat-row__body">{item.body}</div>
+      </div>
+    );
+  }
+
+  // system — single dim diagnostic line, expandable
+  return (
+    <div className="chat-row chat-row--system">
+      <button
+        className="chat-row__tool-head"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <span className="chat-row__tool-caret">{expanded ? '▾' : '▸'}</span>
+        <span className="chat-row__tool-name">system · {item.subtype}</span>
+      </button>
+      {expanded && <pre className="chat-row__tool-pre">{item.body}</pre>}
+    </div>
   );
 }
 
@@ -356,11 +524,11 @@ function ContinueExternal({
         ref={taRef}
         value={text}
         rows={3}
-        placeholder="Continue this conversation in Jarvis. ⌘↵ to send."
+        placeholder="Continue this conversation in Jarvis. ↵ to send, ⇧↵ for newline."
         disabled={sending}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
             e.preventDefault();
             void send();
           }
@@ -425,11 +593,11 @@ function SendReply({ task }: { task: TaskSummary }) {
         ref={taRef}
         value={text}
         rows={3}
-        placeholder="Reply to keep the conversation going. ⌘↵ to send."
+        placeholder="Reply to keep the conversation going. ↵ to send, ⇧↵ for newline."
         disabled={sending}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
             e.preventDefault();
             void send();
           }
@@ -488,11 +656,22 @@ function SessionAffordances({ task }: { task: TaskSummary }) {
       );
       if (!ok) return;
     }
+    // Claude Code Desktop has no deep-link scheme to resume a specific
+    // session, so the best we can do is bring the app forward AND copy
+    // the resume command — the user pastes it once Claude is open.
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(resumeCmd);
+      copied = true;
+    } catch {
+      // clipboard can fail in some webview contexts; we'll still open the app
+    }
     const res = await window.jarvis.openInClaudeDesktop(sessionId);
     if (res.ok) {
       toast({
-        message:
-          'Opened Claude Code Desktop — your session is in the Recents tab.',
+        message: copied
+          ? `Claude opened · ${resumeCmd.slice(0, 36)}… copied — paste it to resume`
+          : 'Claude opened — session is in Recents (couldn’t copy resume cmd)',
       });
     } else {
       toast({
