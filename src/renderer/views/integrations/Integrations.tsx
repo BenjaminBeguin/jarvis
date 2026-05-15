@@ -134,11 +134,14 @@ export function Integrations() {
       </header>
 
       {showFile && (
-        <pre className="integrations__file">
-          <span className="integrations__file-path">{filePath}</span>
-          {'\n\n'}
-          {fileContents ?? '_(file not yet created — first save will write it)_'}
-        </pre>
+        <McpFileEditor
+          path={filePath}
+          contents={fileContents}
+          onSaved={() => {
+            toast({ message: 'mcp.json saved' });
+            void refreshFile();
+          }}
+        />
       )}
 
       <section>
@@ -218,6 +221,126 @@ export function Integrations() {
       </section>
     </section>
   );
+}
+
+/**
+ * Read + edit panel for ~/.jarvis/mcp.json. Default state is read-only
+ * with the JSON pretty-rendered; click ✎ Edit to swap to a textarea
+ * with Save/Cancel. Save round-trips through the main process
+ * mcp.replaceAll() which validates JSON shape before writing — bad
+ * input is rejected with an error toast, the file on disk is never
+ * touched, so a stray keystroke can't blow away the user's servers.
+ */
+function McpFileEditor({
+  path,
+  contents,
+  onSaved,
+}: {
+  path: string;
+  contents: string | null;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(contents ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Re-sync the draft when the on-disk contents change (chokidar
+  // → onMcpServersChanged → parent refreshes contents). Skip while the
+  // user is actively editing so we don't clobber their typing.
+  useEffect(() => {
+    if (!editing) setDraft(contents ?? '');
+  }, [contents, editing]);
+
+  const startEditing = () => {
+    setDraft(contents ?? defaultJsonScaffold());
+    setError(null);
+    setEditing(true);
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    setError(null);
+    setDraft(contents ?? '');
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await window.jarvis.writeMcpFile(draft);
+      if (!r.ok) {
+        setError(r.message ?? 'Save failed');
+        return;
+      }
+      setEditing(false);
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="integrations__file">
+      <header className="integrations__file-head">
+        <code className="integrations__file-path">{path}</code>
+        <div className="integrations__file-actions">
+          {editing ? (
+            <>
+              <button onClick={cancel} disabled={saving}>
+                Cancel
+              </button>
+              <button
+                className="integrations__file-save"
+                onClick={() => void save()}
+                disabled={saving}
+                title="Validate the JSON and write to disk"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </>
+          ) : (
+            <button onClick={startEditing}>✎ Edit</button>
+          )}
+        </div>
+      </header>
+      {error && <div className="integrations__file-error">{error}</div>}
+      {editing ? (
+        <textarea
+          className="integrations__file-textarea"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          spellCheck={false}
+          autoFocus
+          rows={Math.max(8, Math.min(40, draft.split('\n').length + 2))}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+              e.preventDefault();
+              void save();
+            }
+            if (e.key === 'Escape' && !saving) cancel();
+          }}
+        />
+      ) : contents ? (
+        <pre className="integrations__file-body">{contents}</pre>
+      ) : (
+        <div className="integrations__file-empty">
+          File not yet created — saving a catalog entry (or this editor)
+          will write it.
+          <button
+            className="integrations__file-empty-cta"
+            onClick={startEditing}
+          >
+            Start editing
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function defaultJsonScaffold(): string {
+  return JSON.stringify({ mcpServers: {} }, null, 2);
 }
 
 interface CatalogCardProps {

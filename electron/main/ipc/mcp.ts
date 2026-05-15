@@ -103,6 +103,24 @@ export function registerMcpIpc({ mcp, auth }: IpcDeps): void {
     contents: mcp.rawFileContents(),
   }));
 
+  ipcMain.handle(
+    IpcChannels.writeMcpFile,
+    (_e, json: string): { ok: boolean; message?: string } => {
+      if (typeof json !== 'string') {
+        return { ok: false, message: 'JSON body must be a string.' };
+      }
+      try {
+        mcp.replaceAll(json);
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
+
   ipcMain.handle(IpcChannels.revealMcpFile, async () => {
     const target =
       mcp.rawFileContents() !== null ? mcp.path : join(homedir(), '.jarvis');

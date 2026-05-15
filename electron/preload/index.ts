@@ -155,6 +155,10 @@ const api = {
     }),
   readMcpFile: (): Promise<{ path: string; contents: string | null }> =>
     ipcRenderer.invoke(IpcChannels.readMcpFile),
+  writeMcpFile: (
+    json: string,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.writeMcpFile, json),
   revealMcpFile: (): Promise<void> => ipcRenderer.invoke(IpcChannels.revealMcpFile),
   probeMcpTools: (id: string): Promise<McpProbeResult> =>
     ipcRenderer.invoke(IpcChannels.probeMcpTools, id),

@@ -31,6 +31,7 @@ export const IpcChannels = {
   removeMcpServer: 'mcp:remove',
   setMcpDisabled: 'mcp:setDisabled',
   readMcpFile: 'mcp:readFile',
+  writeMcpFile: 'mcp:writeFile',
   revealMcpFile: 'mcp:revealFile',
   probeMcpTools: 'mcp:probeTools',
   invokeMcpTool: 'mcp:invokeTool',

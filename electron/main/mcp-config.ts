@@ -158,6 +158,45 @@ export class McpConfigStore extends EventEmitter {
     }
   }
 
+  /**
+   * Replace the entire config from a JSON string. Validates the shape
+   * before writing — partial / malformed input is rejected so a stray
+   * keystroke can't blow away the user's existing servers. Throws on
+   * parse / shape errors.
+   */
+  replaceAll(json: string): void {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(json);
+    } catch (err) {
+      throw new Error(
+        `Invalid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('Root must be an object with a "mcpServers" field.');
+    }
+    const raw = parsed as Record<string, unknown>;
+    const entries = raw['mcpServers'];
+    if (!entries || typeof entries !== 'object') {
+      throw new Error('Missing or invalid "mcpServers" object.');
+    }
+    const next = new Map<string, McpServerConfig>();
+    for (const [id, cfg] of Object.entries(entries as Record<string, unknown>)) {
+      if (!/^[a-z0-9][a-z0-9_-]*$/i.test(id)) {
+        throw new Error(`Invalid server id "${id}".`);
+      }
+      if (!isMcpServerConfig(cfg)) {
+        throw new Error(
+          `Entry "${id}" is missing a valid type (stdio / sse / http).`,
+        );
+      }
+      next.set(id, cfg);
+    }
+    this.servers = next;
+    this.writeAll();
+  }
+
   private writeAll(): void {
     mkdirSync(dirname(this.path), { recursive: true });
     const out: RawConfig = { mcpServers: {} };
