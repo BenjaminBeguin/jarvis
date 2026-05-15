@@ -67,6 +67,24 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
 };
 
 /**
+ * Per-source visibility for the Inbox. When a source name is in
+ * `disabledSources`, items from that source are filtered out of the
+ * Inbox tab + the Inbox-in-Dashboard section. They stay readable from
+ * other surfaces (Calendar tab reads its own raw data, etc.).
+ *
+ * Defaults reflect "ambient flow you care about" — calendar starts
+ * off because the user already has a dedicated Calendar tab; toggle
+ * it on if you want meetings to surface in the triage feed too.
+ */
+export interface InboxPrefs {
+  disabledSources: string[];
+}
+
+export const DEFAULT_INBOX_PREFS: InboxPrefs = {
+  disabledSources: ['calendar'],
+};
+
+/**
  * One row in the Activity feed beyond /send (which is task-derived).
  * Persisted in SQLite via `ActivityStore`. Emit sites are scattered:
  * meeting-recorder when a session starts/ends, notes module when a

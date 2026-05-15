@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { InboxItem } from '../../shared/types';
+import type { InboxItem, InboxPrefs } from '../../shared/types';
+import { DEFAULT_INBOX_PREFS } from '../../shared/types';
 import { TaskBindingBadge } from './TaskBindingBadge';
 import { toast } from './Toaster';
 import { useTaskBinding, type TaskBindingState } from './useTaskBinding';
@@ -39,6 +40,7 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
   const [filterByScope, setFilterByScope] = useState<boolean>(() =>
     readActiveProject() !== null,
   );
+  const [inboxPrefs, setInboxPrefs] = useState<InboxPrefs>(DEFAULT_INBOX_PREFS);
   const bindings = useTaskBinding('inbox');
 
   // Drop bindings for items that are no longer in the inbox.
@@ -90,6 +92,21 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
     setFilterByScope(activeProject !== null);
   }, [activeProject]);
 
+  // Live inbox prefs — per-source toggles from Settings → Inbox. Read
+  // once on mount + subscribe to changes so the filter updates without
+  // a reload.
+  useEffect(() => {
+    let cancelled = false;
+    void window.jarvis.readInboxPrefs().then((p) => {
+      if (!cancelled) setInboxPrefs(p);
+    });
+    const off = window.jarvis.onInboxPrefsChanged(setInboxPrefs);
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
+
   const doRefresh = async () => {
     setError(null);
     try {
@@ -129,28 +146,31 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
   };
 
   const filteredItems = useMemo(() => {
-    // Calendar events outside the next 24h are dropped from the Inbox
-    // so it stays a "what's happening today" view. The Calendar tab
-    // and Dashboard Calendar timeline read the same source file but
-    // through different paths (raw listInbox in main), so they still
-    // see the full 7-day window. Solo events are already filtered at
-    // the skill level so they're absent everywhere.
-    const CALENDAR_INBOX_WINDOW_MS = 24 * 60 * 60 * 1000;
-    const cutoff = Date.now() + CALENDAR_INBOX_WINDOW_MS;
-    const inWindow = items.filter((it) => {
-      if (it.source !== 'calendar') return true;
-      if (it.fireAt == null) return true;
-      return it.fireAt <= cutoff;
-    });
-    if (!filterByScope || !activeProject) return inWindow;
-    // Show items matching the active project AND items with no project
-    // tag (calendar events, generic reminders, etc.) — those are
-    // ambient and useful regardless of scope. Items belonging to OTHER
-    // projects (e.g. a different repo's PRs) are hidden.
-    return inWindow.filter(
-      (it) => !it.project || it.project === activeProject,
-    );
-  }, [items, filterByScope, activeProject]);
+    // 1. Drop items whose source is disabled in Settings → Inbox.
+    const disabledSet = new Set(inboxPrefs.disabledSources);
+    let next = items.filter((it) => !disabledSet.has(it.source));
+
+    // 2. For sources still enabled: calendar items outside the next 24h
+    //    are dropped from the Inbox so it stays a "what's happening
+    //    today" view. The Calendar tab and Dashboard Calendar timeline
+    //    read the same JSON file through other paths and still see the
+    //    full 7-day window.
+    if (!disabledSet.has('calendar')) {
+      const CAL_WINDOW_MS = 24 * 60 * 60 * 1000;
+      const cutoff = Date.now() + CAL_WINDOW_MS;
+      next = next.filter((it) => {
+        if (it.source !== 'calendar') return true;
+        if (it.fireAt == null) return true;
+        return it.fireAt <= cutoff;
+      });
+    }
+
+    // 3. Project scope: items matching the active project AND items
+    //    with no project tag (calendar events, generic reminders, …)
+    //    stay; items belonging to OTHER projects are hidden.
+    if (!filterByScope || !activeProject) return next;
+    return next.filter((it) => !it.project || it.project === activeProject);
+  }, [items, filterByScope, activeProject, inboxPrefs]);
 
   const grouped = useMemo(() => groupBySource(filteredItems), [filteredItems]);
   const hiddenCount = items.length - filteredItems.length;

@@ -4,8 +4,10 @@ import { delimiter, join } from 'node:path';
 import { homedir } from 'node:os';
 
 import {
+  DEFAULT_INBOX_PREFS,
   DEFAULT_NOTIFICATION_PREFS,
   type AuthMode,
+  type InboxPrefs,
   type NotificationPrefs,
 } from '@shared/types';
 
@@ -13,6 +15,7 @@ interface PersistedConfig {
   authMode?: AuthMode;
   disabledModules?: string[];
   notificationPrefs?: Partial<NotificationPrefs>;
+  inboxPrefs?: Partial<InboxPrefs>;
 }
 
 const CONFIG_PATH = join(homedir(), '.jarvis', 'config.json');
@@ -114,4 +117,18 @@ export function loadNotificationPrefs(): NotificationPrefs {
 
 export function saveNotificationPrefs(prefs: NotificationPrefs): void {
   writeConfig({ ...readConfig(), notificationPrefs: prefs });
+}
+
+export function loadInboxPrefs(): InboxPrefs {
+  const cfg = readConfig();
+  const stored = cfg.inboxPrefs ?? {};
+  return {
+    disabledSources: Array.isArray(stored.disabledSources)
+      ? stored.disabledSources.filter((x): x is string => typeof x === 'string')
+      : DEFAULT_INBOX_PREFS.disabledSources,
+  };
+}
+
+export function saveInboxPrefs(prefs: InboxPrefs): void {
+  writeConfig({ ...readConfig(), inboxPrefs: prefs });
 }

@@ -69,6 +69,10 @@ export const IpcChannels = {
   writeNotificationPrefs: 'notif:write',
   notificationPrefsChanged: 'notif:changed',
 
+  readInboxPrefs: 'inboxPrefs:read',
+  writeInboxPrefs: 'inboxPrefs:write',
+  inboxPrefsChanged: 'inboxPrefs:changed',
+
   openInClaudeDesktop: 'tasks:openInClaudeDesktop',
   costSummary: 'tasks:costSummary',
   pickDirectory: 'fs:pickDirectory',

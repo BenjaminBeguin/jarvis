@@ -6,6 +6,7 @@ import type {
   AppStatus,
   AuthMode,
   ClaudeMcpEntry,
+  InboxPrefs,
   DispatchIntentResult,
   JarvisFileEntry,
   CostSummary,
@@ -266,6 +267,14 @@ const api = {
   onNotificationPrefsChanged: (
     listener: Listener<NotificationPrefs>,
   ): Unsubscribe => subscribe(IpcChannels.notificationPrefsChanged, listener),
+
+  readInboxPrefs: (): Promise<InboxPrefs> =>
+    ipcRenderer.invoke(IpcChannels.readInboxPrefs),
+  writeInboxPrefs: (prefs: InboxPrefs): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.writeInboxPrefs, prefs),
+  onInboxPrefsChanged: (
+    listener: Listener<InboxPrefs>,
+  ): Unsubscribe => subscribe(IpcChannels.inboxPrefsChanged, listener),
 
   listInbox: (): Promise<InboxItem[]> =>
     ipcRenderer.invoke(IpcChannels.listInbox),

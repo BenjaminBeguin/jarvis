@@ -4,11 +4,13 @@ import type {
   AppStatus,
   AuthMode,
   HttpApiStatus,
+  InboxPrefs,
   InboxSourceSummary,
   NotificationPrefs,
   ProjectDef,
   SkillSummary,
 } from '../../shared/types';
+import { DEFAULT_INBOX_PREFS } from '../../shared/types';
 import { Integrations } from './integrations/Integrations';
 import { ModulesPage } from './ModulesPage';
 import { toast } from './Toaster';
@@ -630,11 +632,34 @@ function InboxPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [sources, setSources] = useState<InboxSourceSummary[]>([]);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
+  const [inboxPrefs, setInboxPrefs] = useState<InboxPrefs>(DEFAULT_INBOX_PREFS);
 
   useEffect(() => {
     void window.jarvis.listProjects().then(setProjects);
     return window.jarvis.onProjectsChanged(setProjects);
   }, []);
+
+  useEffect(() => {
+    void window.jarvis.readInboxPrefs().then(setInboxPrefs);
+    const off = window.jarvis.onInboxPrefsChanged(setInboxPrefs);
+    return off;
+  }, []);
+
+  const toggleSource = async (name: string, enable: boolean) => {
+    const set = new Set(inboxPrefs.disabledSources);
+    if (enable) set.delete(name);
+    else set.add(name);
+    const next: InboxPrefs = { ...inboxPrefs, disabledSources: [...set] };
+    setInboxPrefs(next); // optimistic
+    try {
+      await window.jarvis.writeInboxPrefs(next);
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
 
   // Reload sources whenever skills or the inbox content changes — that
   // covers "user dropped a new SKILL.md that writes inbox/x.json" and
@@ -687,7 +712,12 @@ function InboxPanel() {
         the others come from skills writing JSON to{' '}
         <code>~/.jarvis/inbox/&lt;name&gt;.json</code>.
       </p>
-      <InboxSourcesList sources={sources} skills={skills} />
+      <InboxSourcesList
+        sources={sources}
+        skills={skills}
+        disabledSources={new Set(inboxPrefs.disabledSources)}
+        onToggle={toggleSource}
+      />
 
       <h3 style={{ marginTop: 28 }}>PR inbox scope</h3>
       <p className="settings__hint">
@@ -762,9 +792,13 @@ function InboxPanel() {
 function InboxSourcesList({
   sources,
   skills,
+  disabledSources,
+  onToggle,
 }: {
   sources: InboxSourceSummary[];
   skills: SkillSummary[];
+  disabledSources: Set<string>;
+  onToggle: (name: string, enable: boolean) => void;
 }) {
   if (sources.length === 0) {
     return (
@@ -776,7 +810,13 @@ function InboxSourcesList({
   return (
     <ul className="inbox-sources">
       {sources.map((src) => (
-        <InboxSourceRow key={src.name} src={src} skills={skills} />
+        <InboxSourceRow
+          key={src.name}
+          src={src}
+          skills={skills}
+          enabled={!disabledSources.has(src.name)}
+          onToggle={(v) => onToggle(src.name, v)}
+        />
       ))}
     </ul>
   );
@@ -785,9 +825,13 @@ function InboxSourcesList({
 function InboxSourceRow({
   src,
   skills,
+  enabled,
+  onToggle,
 }: {
   src: InboxSourceSummary;
   skills: SkillSummary[];
+  enabled: boolean;
+  onToggle: (next: boolean) => void;
 }) {
   const reveal = async () => {
     const r = await window.jarvis.revealInboxFile(`${src.name}.json`);
@@ -817,8 +861,18 @@ function InboxSourceRow({
     : undefined;
 
   return (
-    <li className="inbox-source">
+    <li className={`inbox-source${enabled ? '' : ' inbox-source--off'}`}>
       <div className="inbox-source__head">
+        <label
+          className="inbox-source__toggle"
+          title={enabled ? 'Hide this source from the Inbox' : 'Show this source in the Inbox'}
+        >
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => onToggle(e.target.checked)}
+          />
+        </label>
         <span className="inbox-source__name">{src.label}</span>
         <span className={`inbox-source__kind inbox-source__kind--${src.kind}`}>
           {src.kind === 'built-in' ? 'built-in' : 'file'}
@@ -827,7 +881,10 @@ function InboxSourceRow({
           {src.itemCount} {src.itemCount === 1 ? 'item' : 'items'}
         </span>
       </div>
-      <div className="inbox-source__desc">{src.description}</div>
+      <div className="inbox-source__desc">
+        {!enabled && <em>Hidden from Inbox. </em>}
+        {src.description}
+      </div>
       {src.kind === 'file' && (
         <div className="inbox-source__meta">
           <code>~/.jarvis/inbox/{src.name}.json</code>

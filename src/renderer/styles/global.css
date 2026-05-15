@@ -2117,6 +2117,29 @@ button:disabled:hover {
   color: var(--accent);
 }
 
+.inbox-source__toggle {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.inbox-source__toggle input {
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+/* Visual demote for "off" sources: dim the whole card + grey out the
+   accent border so the eye reads "hidden" at a glance. */
+.inbox-source--off {
+  opacity: 0.6;
+  border-left-color: var(--border-strong);
+}
+
+.inbox-source--off .inbox-source__name {
+  color: var(--text-faint);
+}
+
 .inbox-source__kind {
   font-size: 9px;
   letter-spacing: 0.18em;
@@ -4289,6 +4312,11 @@ button:disabled:hover {
 
 .dash-item {
   position: relative;
+  /* Long content (busy Inbox, expanded briefing, dense Calendar
+     timeline) is bounded so a single section doesn't grow taller
+     than a screen. Scroll inside the item instead. */
+  max-height: 500px;
+  overflow-y: auto;
 }
 
 .dash-item__remove {

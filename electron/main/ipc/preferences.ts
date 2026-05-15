@@ -1,9 +1,14 @@
 import { BrowserWindow, ipcMain, shell } from 'electron';
 
 import { IpcChannels } from '@shared/ipc';
-import type { NotificationPrefs } from '@shared/types';
+import type { InboxPrefs, NotificationPrefs } from '@shared/types';
 
-import { loadNotificationPrefs, saveNotificationPrefs } from '../auth.js';
+import {
+  loadInboxPrefs,
+  loadNotificationPrefs,
+  saveInboxPrefs,
+  saveNotificationPrefs,
+} from '../auth.js';
 import type { IpcDeps } from './types.js';
 
 /**
@@ -45,6 +50,17 @@ export function registerPreferencesIpc({ preferences }: IpcDeps): void {
       saveNotificationPrefs(prefs);
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send(IpcChannels.notificationPrefsChanged, prefs);
+      }
+    },
+  );
+
+  ipcMain.handle(IpcChannels.readInboxPrefs, () => loadInboxPrefs());
+  ipcMain.handle(
+    IpcChannels.writeInboxPrefs,
+    (_e, prefs: InboxPrefs) => {
+      saveInboxPrefs(prefs);
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send(IpcChannels.inboxPrefsChanged, prefs);
       }
     },
   );
