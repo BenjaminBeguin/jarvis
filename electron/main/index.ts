@@ -32,6 +32,7 @@ import { claudeCodeWatchModule } from './modules/claude-code-watch.js';
 import { meetingRecorderModule } from './modules/meeting-recorder.js';
 import { prWorkflowsModule } from './modules/pr-workflows.js';
 import { quickNoteModule } from './modules/quick-note.js';
+import { remindersModule } from './modules/reminders.js';
 import { sendModule } from './modules/send.js';
 import { shellModule } from './modules/shell.js';
 import { shellNavModule } from './modules/shell-nav.js';
@@ -697,6 +698,7 @@ app.whenReady().then(async () => {
   await modules.register(sendModule);
   await modules.register(prWorkflowsModule);
   await modules.register(calendarModule);
+  await modules.register(remindersModule);
   await modules.register(shellNavModule);
   await modules.register(shellModule);
 
