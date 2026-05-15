@@ -392,18 +392,47 @@ export function CommandPalette() {
   const matches = useMemo<PickerRow[]>(() => {
     if (!pickerOpen) return [];
     const tokens = filter.split(/\s+/).filter(Boolean);
-    const score = (haystack: string): boolean => {
-      if (tokens.length === 0) return true;
-      const h = haystack.toLowerCase();
-      return tokens.every((t) => h.includes(t));
+    const head = tokens[0] ?? '';
+    /**
+     * Score a row against the tokens. All tokens must match somewhere
+     * (substring) or we drop the row; on top of that, an exact / prefix
+     * hit on the "anchor" field (intent prefix or skill name) bumps the
+     * score so typing `/send` ranks `/send` above `/suggest-skills` even
+     * though the latter's description contains the word "send".
+     */
+    const rowScore = (anchor: string, rest: string): number => {
+      if (tokens.length === 0) return 1;
+      const a = anchor.toLowerCase();
+      const r = rest.toLowerCase();
+      const haystack = `${a} ${r}`;
+      if (!tokens.every((t) => haystack.includes(t))) return 0;
+      // Highest band: anchor exactly matches the leading token.
+      // Strip a leading slash on the anchor so `/send` vs `send` ties.
+      const anchorBare = a.startsWith('/') ? a.slice(1) : a;
+      const headBare = head.startsWith('/') ? head.slice(1) : head;
+      if (anchorBare === headBare) return 100;
+      if (anchorBare.startsWith(headBare)) return 80;
+      if (a.includes(headBare)) return 60;
+      if (r.startsWith(headBare)) return 40;
+      return 20;
     };
-    const intentRows: PickerRow[] = intents
-      .filter((i) => score(`${i.prefix} ${i.label} ${i.description ?? ''}`))
-      .map((value) => ({ kind: 'intent', value }));
-    const skillRows: PickerRow[] = skills
-      .filter((s) => score(`${s.name} ${s.description}`))
-      .map((value) => ({ kind: 'skill', value }));
-    return [...intentRows, ...skillRows];
+    const intentRows = intents
+      .map((value) => ({
+        row: { kind: 'intent' as const, value },
+        score: rowScore(value.prefix, `${value.label} ${value.description ?? ''}`),
+      }))
+      .filter((r) => r.score > 0);
+    const skillRows = skills
+      .map((value) => ({
+        row: { kind: 'skill' as const, value },
+        score: rowScore(value.name, value.description),
+      }))
+      .filter((r) => r.score > 0);
+    // Intents win ties with skills (when the user typed a prefix
+    // they're almost certainly going for the intent).
+    intentRows.sort((a, b) => b.score - a.score);
+    skillRows.sort((a, b) => b.score - a.score);
+    return [...intentRows, ...skillRows].map((r) => r.row);
   }, [intents, skills, filter, pickerOpen]);
 
   useEffect(() => {
