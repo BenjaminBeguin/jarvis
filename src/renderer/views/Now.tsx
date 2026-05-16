@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { byUrgency, urgencyScore } from '../../shared/inbox-urgency';
 import type {
   InboxItem,
   MeetingDetectionStatus,
@@ -147,7 +148,29 @@ export function Now() {
     return items.sort((a, b) => a.fireAt - b.fireAt);
   }, [reminders, inbox, now]);
 
-  // ── Band 3: broken today ─────────────────────────────────────────
+  // ── Band 3: top of mind — high-urgency items not already shown ──
+  // Pull the top-N inbox items by urgency score, dropping anything
+  // already covered by the imminent band (so we don't double-show
+  // a reminder firing in 5 min). Also skip the reminders-as-inbox
+  // mirror to dedup with the reminders-direct rows used above.
+  const topOfMind = useMemo(() => {
+    const seenIds = new Set(imminent.map((i) => i.id));
+    return inbox
+      .filter((it) => {
+        if (seenIds.has(it.id)) return false;
+        if (it.id.startsWith('reminder-')) return false;
+        // Skip routine items + future events further than 4h out —
+        // those are not "right now."
+        if (it.fireAt != null && it.fireAt - now > 4 * 60 * 60_000) return false;
+        // Only items scoring above a usable threshold. 100 is roughly
+        // "today, or a real source like reminders/PR/Linear."
+        return urgencyScore(it, now) >= 100;
+      })
+      .sort((a, b) => byUrgency(a, b, now))
+      .slice(0, 5);
+  }, [inbox, imminent, now]);
+
+  // ── Band 4: broken today ─────────────────────────────────────────
   // Tasks errored today that came from a routine. Uses the new
   // routineId link so this is now an exact filter, not a guess.
   const dayStart = useMemo(() => {
@@ -176,7 +199,8 @@ export function Now() {
     return { completed, errored, running, cost, total: today.length };
   }, [tasks, dayStart]);
 
-  const totalNeedsAttention = awaitingInput.length + imminent.length + brokenToday.length;
+  const totalNeedsAttention =
+    awaitingInput.length + imminent.length + topOfMind.length + brokenToday.length;
 
   return (
     <div className="now">
@@ -243,6 +267,31 @@ export function Now() {
             primary={it.title}
             secondary={it.subtitle}
             time={formatCountdown(it.fireAt - now)}
+            onOpen={() => navigateTo('inbox')}
+          />
+        ))}
+      </Band>
+
+      <Band
+        title="Top of mind"
+        emptyHint={
+          topOfMind.length === 0
+            ? 'Nothing else scoring above the urgency floor right now.'
+            : undefined
+        }
+        count={topOfMind.length}
+      >
+        {topOfMind.map((it) => (
+          <Row
+            key={it.id}
+            kind="imminent-inbox"
+            primary={it.title}
+            secondary={it.subtitle ?? it.source}
+            time={
+              it.fireAt != null
+                ? formatCountdown(it.fireAt - now)
+                : formatRel(now - it.createdAt)
+            }
             onOpen={() => navigateTo('inbox')}
           />
         ))}
