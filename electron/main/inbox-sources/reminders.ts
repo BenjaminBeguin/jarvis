@@ -29,17 +29,17 @@ export function remindersInboxSource(reminders: ReminderStore): InboxSource {
         })
         .map((r) => {
           const fired = r.status === 'fired';
+          const baseLabel =
+            r.mode === 'scheduled' ? 'Scheduled action' : 'Reminder';
+          const recurringTag = r.cron ? ' · 🔁 recurring' : '';
+          const subtitle = fired
+            ? `${baseLabel} · awaiting done${recurringTag}`
+            : `${baseLabel}${recurringTag}`;
           return {
             id: `reminder-${r.id}`,
             source: 'reminders',
             title: r.body,
-            subtitle: fired
-              ? r.mode === 'scheduled'
-                ? 'Scheduled action · awaiting done'
-                : 'Reminder · awaiting done'
-              : r.mode === 'scheduled'
-                ? 'Scheduled action'
-                : 'Reminder',
+            subtitle,
             // For fired reminders we surface firedAt so the row sorts
             // by "when you got the nudge" rather than the original
             // fireAt (which is now in the past).

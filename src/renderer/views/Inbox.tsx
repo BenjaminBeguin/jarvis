@@ -549,7 +549,12 @@ function InboxRow({
             Open
           </button>
         )}
-        {item.source === 'reminders' && (
+        {item.source === 'reminders' && !item.subtitle?.includes('🔁') && (
+          // Hidden for recurring reminders (subtitle carries the
+          // 🔁 marker from remindersInboxSource): "Mark done" there
+          // would cancel the whole series instead of just this
+          // occurrence, which is rarely what the user wants. To end
+          // a recurring series, go to the Reminders page → Cancel.
           <button
             className="inbox__row-done"
             onClick={async () => {
