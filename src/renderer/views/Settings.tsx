@@ -12,6 +12,7 @@ import type {
 } from '../../shared/types';
 import { DEFAULT_INBOX_PREFS } from '../../shared/types';
 import { Integrations } from './integrations/Integrations';
+import { BuilderPanel } from './BuilderPanel';
 import { ModulesPage } from './ModulesPage';
 import { toast } from './Toaster';
 
@@ -22,7 +23,8 @@ type Section =
   | 'inbox'
   | 'modules'
   | 'integrations'
-  | 'api';
+  | 'api'
+  | 'builder';
 
 interface Props {
   status: AppStatus;
@@ -72,6 +74,9 @@ export function Settings({ status, onOpenModulePage, initialSection }: Props) {
         <SectionTab name="api" active={section} onClick={setSection}>
           API
         </SectionTab>
+        <SectionTab name="builder" active={section} onClick={setSection}>
+          Builder
+        </SectionTab>
       </aside>
       <main className="settings__panel">
         {section === 'general' && <GeneralPanel status={status} />}
@@ -81,6 +86,11 @@ export function Settings({ status, onOpenModulePage, initialSection }: Props) {
         {section === 'modules' && <ModulesPage onOpenPage={onOpenModulePage} />}
         {section === 'integrations' && <Integrations />}
         {section === 'api' && <ApiPanel />}
+        {section === 'builder' && (
+          <div className="settings__section">
+            <BuilderPanel status={status} />
+          </div>
+        )}
       </main>
     </section>
   );
