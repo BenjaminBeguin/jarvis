@@ -31,6 +31,7 @@ export function registerMcpIpc({ mcp, auth, activity }: IpcDeps): void {
       },
     ): { ok: boolean; message?: string } => {
       try {
+        const wasPresent = mcp.list().some((s) => s.id === input.id);
         if (input.type === 'stdio') {
           if (!input.command) {
             return { ok: false, message: 'stdio servers require a command.' };
@@ -55,6 +56,13 @@ export function registerMcpIpc({ mcp, auth, activity }: IpcDeps): void {
                 : undefined,
           });
         }
+        activity.record({
+          kind: wasPresent ? 'mcp.updated' : 'mcp.added',
+          label: wasPresent
+            ? `MCP updated · ${input.id}`
+            : `MCP added · ${input.id} (${input.type})`,
+          detail: { id: input.id, type: input.type },
+        });
         return { ok: true };
       } catch (err) {
         return {
@@ -129,7 +137,16 @@ export function registerMcpIpc({ mcp, auth, activity }: IpcDeps): void {
         return { ok: false, message: 'JSON body must be a string.' };
       }
       try {
+        const before = new Set(mcp.list().map((s) => s.id));
         mcp.replaceAll(json);
+        const after = new Set(mcp.list().map((s) => s.id));
+        const added = [...after].filter((id) => !before.has(id));
+        const removed = [...before].filter((id) => !after.has(id));
+        activity.record({
+          kind: 'mcp.file-replaced',
+          label: `mcp.json replaced · ${after.size} servers`,
+          detail: { added, removed, total: after.size },
+        });
         return { ok: true };
       } catch (err) {
         return {
