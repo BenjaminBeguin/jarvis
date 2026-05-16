@@ -43,16 +43,20 @@ export interface TelegramBotConfig {
 
 const TELEGRAM_MESSAGE_LIMIT = 4096;
 const REPLY_TIMEOUT_MS = 180_000;
-/** How long after the last message in a chat the bridge keeps the
- *  same agent task. Matches the skill-session pool — long enough for
- *  "I'll be right back" follow-ups, short enough that resuming a
- *  yesterday's thread doesn't surprise you. The SDK auto-compacts
- *  long conversations, so we don't need to cap on tokens. */
-const TELEGRAM_AGENT_TTL_MS = 60 * 60 * 1000;
-/** After this many turns we fork a new task even within the TTL.
- *  Auto-compacted summaries grow turn-over-turn; rotating early
- *  caps the cost-per-turn climb. */
-const TELEGRAM_AGENT_TURN_CAP = 12;
+/** How long the bridge keeps a chat's agent task after the last
+ *  message in. The clock resets on every turn, so this is really
+ *  "how long of total silence before we fork fresh." 24h means a
+ *  conversation survives lunch, a meeting, a commute, even an
+ *  overnight gap — same shape as a Claude.ai chat you come back to
+ *  the next morning. The SDK auto-compacts long contexts, so token
+ *  overflow handles itself; we don't need a tighter window. */
+const TELEGRAM_AGENT_TTL_MS = 24 * 60 * 60 * 1000;
+/** Soft ceiling on turns per task. Set high so back-and-forth chats
+ *  feel unbounded (Claude.ai parity). Auto-compacted summaries grow
+ *  turn-over-turn, but the per-turn cost stays reasonable up to a
+ *  few hundred turns. Use /new in the bot to fork early if a thread
+ *  is getting expensive or you're switching topics. */
+const TELEGRAM_AGENT_TURN_CAP = 200;
 
 /**
  * Long-polling Telegram bot wired to Jarvis. See plan.md / SKILL design
@@ -118,6 +122,7 @@ export class TelegramBot {
     this.bot.command('pause', (ctx) => this.handlePauseCmd(ctx, true));
     this.bot.command('resume', (ctx) => this.handlePauseCmd(ctx, false));
     this.bot.command('spend', (ctx) => this.handleSpendCmd(ctx));
+    this.bot.command('new', (ctx) => this.handleNewCmd(ctx));
 
     this.bot.on('text', (ctx) => this.handleText(ctx as TextContext));
     this.bot.on('voice', (ctx) => this.handleVoice(ctx as VoiceContext));
@@ -153,7 +158,7 @@ export class TelegramBot {
     // the user can't find out their chat id to add it.
     if (this.isAllowed(chatId)) {
       await ctx.reply(
-        `You're connected. Chat id: \`${chatId}\` (${chatType ?? 'unknown'}).\n\nSend a text or voice note to trigger a Jarvis task, or use /skills, /status, /spend, /afk, /pause.`,
+        `You're connected. Chat id: \`${chatId}\` (${chatType ?? 'unknown'}).\n\nText or voice notes continue the same agent thread (up to ~200 turns over 24h). Use /new to fork a fresh thread. Other commands: /skills, /status, /spend, /afk, /pause.`,
         { parse_mode: 'Markdown' },
       );
       return;
@@ -236,6 +241,24 @@ export class TelegramBot {
       paused
         ? '⏸ Jarvis paused. Routines + scheduled actions will skip until /resume.'
         : '▶ Jarvis resumed. Routines + scheduled actions fire on their normal cadence.',
+    );
+  }
+
+  /**
+   * /new — fork the current agent thread for this chat. The next
+   * message starts a fresh task; the prior task stays available in
+   * the Observatory but stops receiving new turns here. The
+   * Claude.ai "New chat" equivalent.
+   */
+  private async handleNewCmd(ctx: Context): Promise<void> {
+    const chatId = ctx.chat?.id;
+    if (typeof chatId !== 'number' || !this.isAllowed(chatId)) return;
+    const prior = this.bridge.lastTaskFor(chatId);
+    if (prior) this.bridge.forget(prior);
+    await ctx.reply(
+      prior
+        ? '🔄 Fresh thread. Your next message starts a new agent — the prior conversation is still in the Observatory if you need to look back.'
+        : 'No active thread to fork — your next message will start a new agent.',
     );
   }
 
