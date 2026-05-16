@@ -695,10 +695,21 @@ export class TaskRunner extends EventEmitter {
         if (m.type === 'result') {
           if (typeof m.total_cost_usd === 'number') cost = m.total_cost_usd;
           console.log(`[task ${id}] result received, awaiting next user msg (queue closed: ${record.inputs?.isClosed()})`);
-          // End of one turn — the SDK is now waiting for the next user
-          // message from our queue. Flip the meta so the UI exposes a
-          // reply box.
-          record.summary = { ...record.summary, awaitingInput: true, costUsd: cost };
+          // End of one turn — the SDK is waiting for the next user
+          // message from our queue.
+          //   - attended: flip awaiting=true so the UI exposes a reply
+          //     box and the task-awaiting notifier fires (Telegram bot
+          //     gets the heads-up with Approve/Edit/Cancel buttons).
+          //   - unattended (routine / scheduled-action): leave awaiting
+          //     alone. No one's going to reply; flipping it briefly
+          //     before the finally block resets it would still leak a
+          //     "ready for your reply" notification through the
+          //     awaitingFlipped watcher.
+          if (record.unattended) {
+            record.summary = { ...record.summary, costUsd: cost };
+          } else {
+            record.summary = { ...record.summary, awaitingInput: true, costUsd: cost };
+          }
           this.emit('status', record.summary);
         } else if (m.type === 'assistant' || m.type === 'user') {
           // New turn underway — clear the awaiting flag if it was set.
