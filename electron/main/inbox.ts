@@ -181,17 +181,65 @@ export class InboxStore extends EventEmitter {
 }
 
 /**
- * Inbox sort key. Time-pressured items (reminders firing today) float
- * above everything else; otherwise newest first. The agent uses the same
- * priority ranking when an item is acted on, so order matters for
- * implicit "what should I do first" framing.
+ * Inbox sort key. We compute an urgency score per item that combines:
+ *   - Time pressure (fireAt distance / past-due penalty)
+ *   - Source weight (reminders + failed routines + PR comments rank
+ *     higher than dedupe / generic items)
+ *   - Age (very old items get a small bump so they don't rot)
+ *
+ * Then sort by score desc, with `fireAt asc` as a tiebreaker so two
+ * equally-urgent items still order by the soonest one. Newer items
+ * float above older when neither has a fireAt.
+ *
+ * Why a score and not just fireAt: a 4-day-old PR-review row with no
+ * fireAt SHOULD outrank a calendar event tomorrow night. The old
+ * "fireAt floats above non-fireAt" rule reversed those.
  */
+const SOURCE_WEIGHTS: Record<string, number> = {
+  reminders: 100, // direct user-scheduled — bias toward respect
+  'failed-routines': 80,
+  'pr-comments': 60,
+  linear: 50,
+  slack: 50,
+  'pr-review': 40,
+  calendar: 30,
+  'meeting-activity': 30,
+  dedupe: 10,
+};
+
+export function urgencyScore(item: InboxItem, now: number): number {
+  let s = 0;
+  // Time pressure dominates everything else. Past-due reminders that
+  // haven't been acted on stay urgent for 24h.
+  if (item.fireAt != null) {
+    const dt = item.fireAt - now;
+    if (dt > 0) {
+      if (dt < 30 * 60_000) s += 1000;
+      else if (dt < 4 * 60 * 60_000) s += 200;
+      else if (dt < 24 * 60 * 60_000) s += 50;
+      else s += 10;
+    } else if (dt > -24 * 60 * 60_000) {
+      // Fired but not yet handled — still demanding attention.
+      s += 500;
+    }
+  }
+  s += SOURCE_WEIGHTS[item.source] ?? 20;
+  // Aging: items waiting > 24h get a small bump so a quiet PR review
+  // doesn't fall below today's calendar fluff forever.
+  if (item.createdAt && now - item.createdAt > 24 * 60 * 60_000) {
+    s += 20;
+  }
+  return s;
+}
+
 function byPriority(a: InboxItem, b: InboxItem): number {
-  // Both have fireAt → soonest first.
+  const now = Date.now();
+  const sa = urgencyScore(a, now);
+  const sb = urgencyScore(b, now);
+  if (sa !== sb) return sb - sa; // higher score first
+  // Tiebreakers: soonest fireAt, then newest createdAt.
   if (a.fireAt != null && b.fireAt != null) return a.fireAt - b.fireAt;
-  // Only one has fireAt → that one wins.
   if (a.fireAt != null) return -1;
   if (b.fireAt != null) return 1;
-  // Neither has fireAt → newer first.
   return b.createdAt - a.createdAt;
 }
