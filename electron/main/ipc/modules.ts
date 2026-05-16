@@ -19,7 +19,7 @@ import type {
 import { hidePalette } from '../windows.js';
 import type { IpcDeps } from './types.js';
 
-export function registerModulesIpc({ modules, jarvisRoot }: IpcDeps): void {
+export function registerModulesIpc({ modules, activity, jarvisRoot }: IpcDeps): void {
   ipcMain.handle(IpcChannels.listModules, () => modules.list());
 
   ipcMain.handle(
@@ -38,6 +38,15 @@ export function registerModulesIpc({ modules, jarvisRoot }: IpcDeps): void {
     IpcChannels.setModuleEnabled,
     async (_e, { moduleId, enabled }: { moduleId: string; enabled: boolean }) => {
       await modules.setEnabled(moduleId, enabled);
+      // History pipe: every module toggle becomes a row in the Activity
+      // feed and the module's own history pane in Settings → Modules. The
+      // dotted kind `module.<state>` matches the convention used by other
+      // sources (note.created, meeting.started, etc.).
+      activity.record({
+        kind: enabled ? 'module.enabled' : 'module.disabled',
+        label: `Module ${enabled ? 'enabled' : 'disabled'} · ${moduleId}`,
+        detail: { moduleId },
+      });
     },
   );
 
@@ -51,6 +60,15 @@ export function registerModulesIpc({ modules, jarvisRoot }: IpcDeps): void {
         return { ok: false, message: 'Invalid moduleId.' };
       }
       const ok = modules.writeSettings(payload.moduleId, payload.values ?? {});
+      if (ok) {
+        // We don't diff the values here — just record that they changed.
+        // The new values are queryable via listModules() afterwards.
+        activity.record({
+          kind: 'module.settings-changed',
+          label: `Settings changed · ${payload.moduleId}`,
+          detail: { moduleId: payload.moduleId, values: payload.values ?? {} },
+        });
+      }
       return ok
         ? { ok: true }
         : { ok: false, message: 'Module has no settings schema.' };
