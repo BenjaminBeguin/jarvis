@@ -123,7 +123,11 @@ export function SpendPanel() {
                       data.pool.pooledTaskCount + data.pool.freshTaskCount;
                     if (total === 0) return null;
                     const ratio = (data.pool.pooledTaskCount / total) * 100;
-                    return `${ratio.toFixed(0)}% pooled`;
+                    // Rough estimate: middle of the $0.005-0.02 range
+                    // documented below. Real savings vary by skill but
+                    // this gives a useful order-of-magnitude.
+                    const estUsd = data.pool.pooledTaskCount * 0.01;
+                    return `${ratio.toFixed(0)}% pooled · ~$${estUsd.toFixed(2)} saved`;
                   })()}
                 </span>
               </div>
