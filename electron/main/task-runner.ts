@@ -95,6 +95,25 @@ interface TaskRecord {
   config?: SessionConfig;
 }
 
+/**
+ * One-line invariant: a task in a terminal status (completed / errored
+ * / aborted) cannot be `awaitingInput`. Applied at every external-task
+ * write point on the runner so no caller can leak the bad combo into
+ * downstream consumers (Inbox AwaitingStrip, TaskList row, Constellation
+ * pulse, Tray badge, …). Owned tasks never hit this — the runner's own
+ * flow controls both fields directly.
+ */
+function normalizeAwaiting(summary: TaskSummary): TaskSummary {
+  const isTerminal =
+    summary.status === 'completed' ||
+    summary.status === 'errored' ||
+    summary.status === 'aborted';
+  if (isTerminal && summary.awaitingInput) {
+    return { ...summary, awaitingInput: false };
+  }
+  return summary;
+}
+
 function userMessage(text: string, sessionId: string): SDKUserMessage {
   return {
     type: 'user',
@@ -338,15 +357,21 @@ export class TaskRunner extends EventEmitter {
    */
   registerExternal(summary: TaskSummary): void {
     if (this.records.has(summary.id)) return;
+    // Enforce the invariant at the entry point too — claude-code-watch
+    // computes awaitingInput from "last log event was an assistant
+    // message" before it knows whether the task is being registered
+    // as already-stale (completed). If status is terminal at ingest,
+    // awaitingInput cannot be true.
+    const normalized = normalizeAwaiting(summary);
     const record: TaskRecord = {
-      summary,
+      summary: normalized,
       abort: new AbortController(),
       events: [],
       nextSeq: 0,
       external: true,
     };
     this.records.set(summary.id, record);
-    this.emit('status', summary);
+    this.emit('status', normalized);
   }
 
   recordExternalEvent(taskId: string, msg: unknown): void {
@@ -397,10 +422,12 @@ export class TaskRunner extends EventEmitter {
   updateExternalMeta(taskId: string, patch: Partial<TaskSummary>): void {
     const rec = this.records.get(taskId);
     if (!rec || !rec.external) return;
-    const next = { ...rec.summary, ...patch };
-    // Bail if nothing actually changed — avoids broadcast noise.
+    // Normalize after merge — if the patch tries to set awaitingInput=true
+    // on a terminal task (e.g. the watcher tailed a late log line on a
+    // completed session), clamp it. The status field is authoritative.
+    const next = normalizeAwaiting({ ...rec.summary, ...patch });
     let dirty = false;
-    for (const key of Object.keys(patch) as (keyof TaskSummary)[]) {
+    for (const key of Object.keys(next) as (keyof TaskSummary)[]) {
       if (rec.summary[key] !== next[key]) {
         dirty = true;
         break;
