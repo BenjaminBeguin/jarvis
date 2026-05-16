@@ -362,13 +362,15 @@ export class TaskRunner extends EventEmitter {
    * Continue a Jarvis-owned task with a follow-up user message. Two paths:
    *
    *   1. Stream still alive (the multi-turn happy path) — push the message
-   *      onto the input queue, the SDK feeds it to claude on stdin.
-   *   2. Stream ended (the SDK closes after result in some configurations
-   *      we haven't fully pinned down — claude exits despite stdin staying
-   *      open). If we have an sdkSessionId from the previous turn, spawn
-   *      a fresh query with `resume: sessionId` so claude reloads the
-   *      conversation history and picks up where it left off. The same
-   *      TaskRecord stays selected, events keep flowing into it.
+   *      onto the input queue, the SDK feeds it to claude on stdin. With
+   *      `maxTurns: 200` set on the SDK options for attended tasks, this
+   *      is now the default — Claude.ai-style sessions where one query()
+   *      call handles the whole back-and-forth without restarting.
+   *   2. Stream ended (max turns hit, abort, error, or the unattended path
+   *      where maxTurns is 1). If we have an sdkSessionId from the prior
+   *      turn, spawn a fresh query with `resume: sessionId` so claude
+   *      reloads the conversation history and picks up where it left off.
+   *      The same TaskRecord stays selected, events keep flowing into it.
    *
    * Returns false only for unknown/external tasks or owned tasks that
    * never got a session id (e.g. died before init).
@@ -616,6 +618,20 @@ export class TaskRunner extends EventEmitter {
         // Desktop sessions.
         settingSources: ['user', 'project', 'local'],
         cwd: this.resolveCwd(cfg.cwd),
+        // Long-lasting sessions: keep ONE query() call alive across many
+        // back-and-forth turns from the input queue, like Claude.ai does.
+        // Without this, the SDK closes the stream after each turn and
+        // we'd pay a fresh cold start (system prompt + tool inventory)
+        // on every reply.
+        //
+        //   - unattended: 1 turn — a routine / scheduled action fires
+        //     once and closes; we don't want the SDK subprocess hanging
+        //     around waiting for input that's never coming.
+        //   - attended:  200 turns — high enough to feel unbounded for
+        //     human chat (palette, voice, Telegram). The SDK auto-
+        //     compacts context as it grows, so token overflow handles
+        //     itself; this is just a soft ceiling on per-session cost.
+        maxTurns: record.unattended ? 1 : 200,
       };
       if (cfg.additionalDirectories?.length) {
         options.additionalDirectories = cfg.additionalDirectories;
