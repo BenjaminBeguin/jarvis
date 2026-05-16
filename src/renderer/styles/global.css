@@ -12641,6 +12641,71 @@ button:disabled:hover {
   color: var(--text-dim);
   white-space: nowrap;
 }
+.now__band--meeting .now__band-head {
+  border-bottom-color: rgba(255, 180, 84, 0.25);
+}
+.now__meeting-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(4, 7, 11, 0.5);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.now__record-btn {
+  background: rgba(255, 85, 119, 0.08);
+  color: var(--text);
+  border: 1px solid rgba(255, 85, 119, 0.4);
+  padding: 6px 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  border-radius: 2px;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
+.now__record-btn:hover:not(:disabled) {
+  background: rgba(255, 85, 119, 0.16);
+  border-color: var(--bad);
+}
+.now__record-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.now__meeting-hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+.now__detect {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: help;
+}
+.now__detect--live {
+  color: var(--good);
+  border-color: rgba(95, 255, 166, 0.32);
+}
+.now__detect--quiet {
+  color: var(--warn);
+  border-color: rgba(255, 180, 84, 0.32);
+}
+.now__detect--fault {
+  color: var(--bad);
+  border-color: rgba(255, 85, 119, 0.42);
+}
+.now__detect--off {
+  color: var(--text-faint);
+}
 .now__stats {
   margin-top: 8px;
   padding: 10px 14px;

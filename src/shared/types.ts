@@ -408,6 +408,23 @@ export interface DashboardConfig {
   sections: DashboardSection[];
 }
 
+/**
+ * Snapshot of the ad-hoc meeting watcher's state. Exposed so the
+ * renderer can show "auto-detect is quiet — use manual record"
+ * instead of pretending the watcher is working when macOS 15
+ * silences the audio log channel.
+ */
+export interface MeetingDetectionStatus {
+  running: boolean;
+  eventsSeen: number;
+  inputEventsSeen: number;
+  lastInputAt: number | null;
+  lastCameraAt: number | null;
+  lastPromptAt: number | null;
+  startedAt: number;
+  fault: string | null;
+}
+
 export interface RoutineDef {
   id: string;
   skillId: string;

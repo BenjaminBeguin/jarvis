@@ -170,6 +170,16 @@ ipcMain.handle(IpcChannels.suppressMeetingPrompt, (_e, id: string) => {
   if (id.startsWith('ad-hoc-')) meetingActivity.suppress(id);
   else inboxProximity.suppressMeetingPrompt(id);
 });
+
+// Renderer can pull the current watcher state on demand (e.g. when
+// the Now view mounts and wants to show "auto-detect quiet → record
+// manually" instead of pretending it's working).
+ipcMain.handle(IpcChannels.meetingDetectionStatus, () => meetingActivity.status());
+// Broadcast on every status change so a permanently-mounted status
+// pill in the Shell can react without polling.
+meetingActivity.on('status', (status) => {
+  broadcast(IpcChannels.meetingDetectionChanged, status);
+});
 // Built-in context providers: time + active project (set from renderer) +
 // projects list + recent task. Order matters — first registered is first
 // in the prepended block. Modules can add more via

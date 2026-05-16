@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type {
   InboxItem,
+  MeetingDetectionStatus,
   Reminder,
   RoutineDef,
   TaskSummary,
 } from '../../shared/types';
+import { toast } from './Toaster';
 
 /**
  * "Now" — the attention synthesis surface. Pulls live state from
@@ -40,6 +42,7 @@ export function Now() {
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [routines, setRoutines] = useState<RoutineDef[]>([]);
+  const [detection, setDetection] = useState<MeetingDetectionStatus | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -48,6 +51,7 @@ export function Now() {
     void window.jarvis.listInbox().then(setInbox);
     void window.jarvis.listReminders().then(setReminders);
     void window.jarvis.listRoutines().then(setRoutines);
+    void window.jarvis.meetingDetectionStatus().then(setDetection);
     const offTaskStatus = window.jarvis.onTaskStatus((summary) => {
       setTasks((prev) => {
         const i = prev.findIndex((t) => t.id === summary.id);
@@ -63,6 +67,7 @@ export function Now() {
     const offInbox = window.jarvis.onInboxChanged(setInbox);
     const offReminders = window.jarvis.onRemindersChanged(setReminders);
     const offRoutines = window.jarvis.onRoutinesChanged(setRoutines);
+    const offDetection = window.jarvis.onMeetingDetectionChanged(setDetection);
     // Re-tick every 20s so relative times stay fresh + items cross
     // the 30-min threshold organically.
     const tick = window.setInterval(() => setNow(Date.now()), 20_000);
@@ -72,6 +77,7 @@ export function Now() {
       offInbox();
       offReminders();
       offRoutines();
+      offDetection();
       window.clearInterval(tick);
     };
   }, []);
@@ -186,6 +192,8 @@ export function Now() {
         </span>
       </header>
 
+      <MeetingBand detection={detection} now={now} />
+
       <Band
         title="In progress"
         emptyHint={
@@ -286,6 +294,121 @@ export function Now() {
         <span>${stats.cost.toFixed(2)} spent</span>
       </footer>
     </div>
+  );
+}
+
+/**
+ * Meeting band — manual "Record now" button + auto-detect status pill.
+ * Sits at the top of Now because catching a meeting fast matters; if
+ * the user is already mid-call, this is the action they want.
+ *
+ * The detection pill is honest about what's happening:
+ *   - "auto-detect: live"     log stream is alive AND has seen
+ *                              recent mic activity
+ *   - "auto-detect: quiet"    log stream alive but silent for >60s
+ *                              after start (the macOS 15 case)
+ *   - "auto-detect: fault"    spawn / stream error
+ *
+ * In all cases the Record button works — it doesn't depend on
+ * detection. The pill is just transparency.
+ */
+function MeetingBand({
+  detection,
+  now,
+}: {
+  detection: MeetingDetectionStatus | null;
+  now: number;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  const detectState: 'live' | 'quiet' | 'fault' | 'off' = (() => {
+    if (!detection) return 'off';
+    if (detection.fault) return 'fault';
+    if (!detection.running) return 'off';
+    if (detection.inputEventsSeen > 0) {
+      // "Live" only if we saw mic activity recently (last 5 min) —
+      // otherwise the stream is just running, not actively reporting.
+      if (
+        detection.lastInputAt &&
+        now - detection.lastInputAt < 5 * 60_000
+      ) {
+        return 'live';
+      }
+      return 'quiet';
+    }
+    // Running but zero matching events yet. Quiet if past the
+    // grace window.
+    return now - detection.startedAt > 60_000 ? 'quiet' : 'live';
+  })();
+
+  const pillText =
+    detectState === 'live'
+      ? 'auto-detect: live'
+      : detectState === 'quiet'
+      ? 'auto-detect: quiet'
+      : detectState === 'fault'
+      ? 'auto-detect: fault'
+      : 'auto-detect: off';
+
+  const pillTitle =
+    detectState === 'fault'
+      ? detection?.fault ?? 'Watcher errored.'
+      : detectState === 'quiet'
+      ? 'macOS 15 quiets the audio log channel — auto-detect is best-effort. Use Record manually for ad-hoc calls.'
+      : detectState === 'live'
+      ? `Saw ${detection?.inputEventsSeen ?? 0} mic event(s) since start.`
+      : 'Watcher not started yet.';
+
+  const record = async () => {
+    setBusy(true);
+    try {
+      const result = await window.jarvis.dispatchIntent(
+        'meeting-recorder',
+        'start',
+        '',
+      );
+      if (result.ok) {
+        toast({ message: result.message ?? 'Recording started' });
+      } else {
+        toast({ kind: 'error', message: result.message ?? 'Failed to start' });
+      }
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="now__band now__band--meeting">
+      <header className="now__band-head">
+        <h3>Meeting</h3>
+        <span
+          className={`now__detect now__detect--${detectState}`}
+          title={pillTitle}
+        >
+          {pillText}
+        </span>
+      </header>
+      <div className="now__meeting-row">
+        <button
+          className="now__record-btn"
+          onClick={record}
+          disabled={busy}
+          title="Start recording the current meeting (Whisper, local)"
+        >
+          🎙 {busy ? 'Starting…' : 'Record now'}
+        </button>
+        <span className="now__meeting-hint">
+          {detectState === 'quiet' || detectState === 'fault'
+            ? 'Auto-detect is unreliable on macOS 15 — the calendar prompt + this button are the reliable paths.'
+            : 'Click to start a manual recording, or wait for the calendar / mic prompt.'}
+        </span>
+      </div>
+    </section>
   );
 }
 

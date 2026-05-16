@@ -18,6 +18,7 @@ import type {
   McpProbeResult,
   McpServerInput,
   McpServerSummary,
+  MeetingDetectionStatus,
   ModuleSettingsValues,
   ModuleSummary,
   NotificationPrefs,
@@ -315,6 +316,11 @@ const api = {
   ): Unsubscribe => subscribe(IpcChannels.meetingImminent, listener),
   suppressMeetingPrompt: (id: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.suppressMeetingPrompt, id),
+  meetingDetectionStatus: (): Promise<MeetingDetectionStatus> =>
+    ipcRenderer.invoke(IpcChannels.meetingDetectionStatus),
+  onMeetingDetectionChanged: (
+    listener: Listener<MeetingDetectionStatus>,
+  ): Unsubscribe => subscribe(IpcChannels.meetingDetectionChanged, listener),
 
   readDashboard: (): Promise<DashboardConfig> =>
     ipcRenderer.invoke(IpcChannels.readDashboard),
