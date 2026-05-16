@@ -6,6 +6,7 @@ import { Inbox } from './Inbox';
 import { Logo } from './Logo';
 import { MeetingOverlay } from './MeetingOverlay';
 import { MeetingPrompt } from './MeetingPrompt';
+import { SessionSidebar } from './SessionSidebar';
 import { NewProjectDialog } from './projects/NewProjectDialog';
 import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
@@ -323,6 +324,51 @@ export function Shell({ status }: Props) {
 
   const badge = status.authMode === 'subscription' ? 'subscription' : 'api key';
 
+  const [afk, setAfk] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void window.jarvis.getAfk().then((v) => {
+      if (!cancelled) setAfk(v);
+    });
+    const off = window.jarvis.onAfkChanged((v) => setAfk(v));
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
+  const toggleAfk = (): void => {
+    const next = !afk;
+    setAfk(next);
+    void window.jarvis.setAfk(next);
+  };
+
+  // Whether AFK has anywhere to mirror events. Today the only subscriber
+  // is the Telegram bot; AFK with no subscriber would be a confusing
+  // no-op, so hide the toggle until the bot is configured.
+  // "Ready" = module enabled + token in Keychain + at least one allowed
+  // chat id. Refresh on modulesChanged (covers token writes too — those
+  // reload the module which broadcasts changed).
+  const [telegramReady, setTelegramReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async (): Promise<void> => {
+      const [list, hasToken] = await Promise.all([
+        window.jarvis.listModules(),
+        window.jarvis.hasTelegramBotToken(),
+      ]);
+      if (cancelled) return;
+      const tg = list.find((m) => m.id === 'telegram-bot');
+      const allowed = String((tg?.settingsValues?.allowedChatIds ?? '') as string).trim();
+      setTelegramReady(!!tg?.enabled && hasToken && allowed.length > 0);
+    };
+    void refresh();
+    const off = window.jarvis.onModulesChanged(() => void refresh());
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
+
   const PageComponent = openModuleId ? getModulePage(openModuleId) : null;
 
   return (
@@ -446,6 +492,64 @@ export function Shell({ status }: Props) {
               />
             </svg>
           </button>
+          {telegramReady && (
+            <button
+              className={`shell__afk-btn${afk ? ' shell__afk-btn--on' : ''}`}
+              onClick={toggleAfk}
+              title={
+                afk
+                  ? 'AFK on — reminders + cockpit prompts + task results all mirror to your Telegram bot. Click to turn off.'
+                  : 'AFK off — only events tied to chats your bot started reach the phone. Click to mirror everything (reminders firing, palette tasks asking for confirmation, etc.) to your bot.'
+              }
+              aria-label={afk ? 'Turn off AFK mode' : 'Turn on AFK mode'}
+            >
+              <svg viewBox="0 0 18 16" aria-hidden width="22" height="14">
+                {/* phone body */}
+                <rect
+                  x="5"
+                  y="1.5"
+                  width="8"
+                  height="13"
+                  rx="1.5"
+                  fill={afk ? 'currentColor' : 'none'}
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                />
+                {/* speaker slot */}
+                <line
+                  x1="8"
+                  y1="3"
+                  x2="10"
+                  y2="3"
+                  stroke={afk ? 'var(--bg, #000)' : 'currentColor'}
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                />
+                {/* signal waves only when on */}
+                {afk && (
+                  <>
+                    <path
+                      d="M14.5 5.5 Q15.5 7 14.5 8.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M16 4 Q17.4 7 16 10"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                      opacity="0.6"
+                    />
+                  </>
+                )}
+              </svg>
+              <span className="shell__afk-label">AFK</span>
+              <span className={`shell__afk-dot${afk ? ' shell__afk-dot--on' : ''}`} aria-hidden />
+            </button>
+          )}
           <AuthBadgeMenu
             label={badge}
             settingsActive={tab === 'settings' && !openModuleId}
@@ -548,6 +652,7 @@ export function Shell({ status }: Props) {
       </div>
       <MeetingOverlay />
       <MeetingPrompt />
+      <SessionSidebar />
       <NewProjectDialog
         open={newProjectOpen}
         onClose={() => setNewProjectOpen(false)}

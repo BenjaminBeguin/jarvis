@@ -93,8 +93,17 @@ export function TaskBindingBadge({
           <button
             onClick={() => {
               setMenuOpen(false);
-              onOpen();
+              // Open the in-window Session Sidebar (mounted at Shell
+              // level). This preserves the user's current tab + scroll
+              // — distinct from the main pill click which routes to
+              // the consumer's onOpen (typically the Answer HUD window).
+              window.dispatchEvent(
+                new CustomEvent('jarvis:open-session', {
+                  detail: { taskId: binding.taskId },
+                }),
+              );
             }}
+            title="Peek at the session here without leaving this view"
           >
             Open Claude session
           </button>

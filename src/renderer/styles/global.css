@@ -3288,6 +3288,66 @@ button:disabled:hover {
   color: var(--text-dim);
 }
 
+/* ----- AFK toggle in the Shell header --------------------------------- */
+
+.shell__afk-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px 4px 7px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.shell__afk-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.shell__afk-btn--on {
+  background: rgba(255, 153, 0, 0.12);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.shell__afk-btn--on:hover {
+  background: rgba(255, 153, 0, 0.2);
+  color: var(--accent);
+}
+
+.shell__afk-label {
+  font-weight: 600;
+}
+
+.shell__afk-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--text-dim);
+}
+
+.shell__afk-dot--on {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  animation: shell__afk-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes shell__afk-pulse {
+  0%, 100% { box-shadow: 0 0 4px var(--accent); }
+  50% { box-shadow: 0 0 10px var(--accent); }
+}
+
 /* ----- Keychain-backed `secret` field (e.g. Telegram bot token) ------ */
 
 .module-settings__secret {
@@ -3341,6 +3401,20 @@ button:disabled:hover {
   letter-spacing: 0.06em;
   color: var(--text-dim);
   font-family: var(--mono);
+}
+
+.module-settings__secret-helper {
+  /* Make the helper visually distinct from Save/Replace/Clear —
+     it's a navigation aid, not a state-changing action. */
+  background: transparent !important;
+  border-color: var(--border) !important;
+  color: var(--text-dim) !important;
+  margin-left: auto;
+}
+
+.module-settings__secret-helper:hover:not(:disabled) {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
 }
 
 /* ----- Capture page (Notes + Reminders merged) ----------------------- */
@@ -13124,6 +13198,11 @@ button:disabled:hover {
   font-size: 11.5px;
   color: var(--text-dim);
   line-height: 1.6;
+  /* Preserve newlines in module descriptions so step-by-step setup
+     guides (Telegram bot, etc.) render as a list, not one long
+     wrapped paragraph. Modules whose description is a single
+     sentence are unaffected. */
+  white-space: pre-line;
 }
 .module-settings-modal__empty,
 .module-settings-modal__loading {
@@ -13535,6 +13614,163 @@ button:disabled:hover {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+}
+
+/* ── Session sidebar — peek at any task without leaving the view ──── */
+.session-sidebar-host {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  pointer-events: none;
+}
+.session-sidebar-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 8, 16, 0.4);
+  backdrop-filter: blur(2px);
+  pointer-events: auto;
+  animation: session-fade 140ms ease-out;
+}
+.session-sidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(520px, 92vw);
+  background: var(--bg-elev);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  animation: session-slide 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes session-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes session-slide {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+.session-sidebar__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.session-sidebar__head-text { min-width: 0; flex: 1 1 auto; }
+.session-sidebar__head h3 {
+  margin: 0 0 6px;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-sidebar__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.session-sidebar__status {
+  padding: 1px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.session-sidebar__status--running { color: var(--accent); border-color: rgba(0, 212, 255, 0.4); }
+.session-sidebar__status--completed { color: var(--good); border-color: rgba(95, 255, 166, 0.32); }
+.session-sidebar__status--errored,
+.session-sidebar__status--aborted { color: var(--bad); border-color: rgba(255, 85, 119, 0.42); }
+.session-sidebar__chip {
+  padding: 1px 7px;
+  background: rgba(0, 212, 255, 0.06);
+  border-radius: 2px;
+  color: var(--text-dim);
+}
+.session-sidebar__close {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  width: 28px;
+  height: 28px;
+  border-radius: 2px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.session-sidebar__close:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.session-sidebar__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.session-sidebar__empty {
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 12px;
+}
+.session-sidebar__turn { display: flex; flex-direction: column; gap: 4px; }
+.session-sidebar__role {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.session-sidebar__turn--user .session-sidebar__role { color: var(--warn); }
+.session-sidebar__turn--assistant .session-sidebar__role { color: var(--accent); }
+.session-sidebar__text {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+.session-sidebar__tools {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 4px 8px;
+  background: rgba(0, 212, 255, 0.04);
+  border-left: 2px solid var(--border-strong);
+}
+.session-sidebar__footer {
+  border-top: 1px solid var(--border);
+  padding: 10px 18px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.session-sidebar__action {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 5px 12px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.session-sidebar__action:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* Scrollbar — slim and on-theme */
