@@ -14,6 +14,7 @@ import { DEFAULT_INBOX_PREFS } from '../../shared/types';
 import { Integrations } from './integrations/Integrations';
 import { BuilderPanel } from './BuilderPanel';
 import { ModulesPage } from './ModulesPage';
+import { SpendPanel } from './SpendPanel';
 import { toast } from './Toaster';
 
 type Section =
@@ -24,6 +25,7 @@ type Section =
   | 'modules'
   | 'integrations'
   | 'api'
+  | 'spend'
   | 'builder';
 
 interface Props {
@@ -88,6 +90,9 @@ export function Settings({
         <SectionTab name="api" active={section} onClick={setSection}>
           API
         </SectionTab>
+        <SectionTab name="spend" active={section} onClick={setSection}>
+          Spend
+        </SectionTab>
         <SectionTab name="builder" active={section} onClick={setSection}>
           Builder
         </SectionTab>
@@ -100,6 +105,7 @@ export function Settings({
         {section === 'modules' && <ModulesPage onOpenPage={onOpenModulePage} />}
         {section === 'integrations' && <Integrations />}
         {section === 'api' && <ApiPanel />}
+        {section === 'spend' && <SpendPanel />}
         {section === 'builder' && (
           <div className="settings__section">
             <BuilderPanel status={status} />

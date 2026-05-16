@@ -628,6 +628,21 @@ export interface CostSummary {
 }
 
 /**
+ * Detailed cost breakdown for the Spend dashboard. Each bucket is sorted
+ * by totalUsd desc except `byDay` which is chronological ascending so
+ * the renderer can chart a time series. Zero-spend days are filled in
+ * so the chart doesn't have gaps.
+ */
+export interface CostBreakdown {
+  windowDays: number;
+  total: number;
+  bySkill: Array<{ skillId: string | null; totalUsd: number; taskCount: number }>;
+  byOrigin: Array<{ origin: string; totalUsd: number; taskCount: number }>;
+  byRoutine: Array<{ routineId: string; totalUsd: number; taskCount: number }>;
+  byDay: Array<{ date: string; totalUsd: number; taskCount: number }>;
+}
+
+/**
  * One row in the Inbox. Built by InboxSource implementations in main and
  * shipped to the renderer for the daily-driver triage list. Optional
  * `action` lets the user dispatch a skill / prompt with one click.

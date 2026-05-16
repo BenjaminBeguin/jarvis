@@ -200,6 +200,133 @@ interface SkillCostRow {
  * External-origin tasks (claude-code mirrors) are excluded — their cost
  * is unknown to Jarvis (Claude Code spends, not us).
  */
+/**
+ * Detailed cost breakdown for the Spend dashboard. Returns:
+ *   - total: sum of cost_usd for non-external tasks in [now - windowDays, now]
+ *   - bySkill: per-skill totals, descending. skill_id null = palette free-text.
+ *   - byOrigin: palette / routine / reminder / voice / api buckets.
+ *   - byRoutine: per-routine totals (only rows with routine_id set), so the
+ *     user can spot a rogue routine eating the budget.
+ *   - byDay: time series, YYYY-MM-DD keyed, ascending date. Zero-spend days
+ *     are filled in so the renderer can chart a continuous line.
+ *
+ * `windowDays` 1 = today, 7 = last week, 30 = last 30 days.
+ */
+export function getCostBreakdown(windowDays: number): {
+  windowDays: number;
+  total: number;
+  bySkill: Array<{ skillId: string | null; totalUsd: number; taskCount: number }>;
+  byOrigin: Array<{ origin: string; totalUsd: number; taskCount: number }>;
+  byRoutine: Array<{ routineId: string; totalUsd: number; taskCount: number }>;
+  byDay: Array<{ date: string; totalUsd: number; taskCount: number }>;
+} {
+  const db = getDb();
+  const now = new Date();
+  // Start at local midnight `windowDays - 1` ago so "last 7 days" includes
+  // today + 6 prior days (7 buckets).
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  start.setDate(start.getDate() - (windowDays - 1));
+  const since = start.getTime();
+
+  const totalRow = db
+    .prepare<[number], { total: number | null }>(
+      `SELECT COALESCE(SUM(cost_usd), 0) AS total
+       FROM tasks
+       WHERE started_at >= ? AND origin != 'external'`,
+    )
+    .get(since);
+  const total = totalRow?.total ?? 0;
+
+  const bySkill = db
+    .prepare<[number], SkillCostRow>(
+      `SELECT skill_id, SUM(cost_usd) AS total, COUNT(*) AS task_count
+       FROM tasks
+       WHERE started_at >= ? AND origin != 'external'
+       GROUP BY skill_id
+       ORDER BY total DESC`,
+    )
+    .all(since)
+    .map((r) => ({
+      skillId: r.skill_id,
+      totalUsd: r.total,
+      taskCount: r.task_count,
+    }));
+
+  const byOrigin = db
+    .prepare<[number], { origin: string; total: number; task_count: number }>(
+      `SELECT origin, SUM(cost_usd) AS total, COUNT(*) AS task_count
+       FROM tasks
+       WHERE started_at >= ? AND origin != 'external'
+       GROUP BY origin
+       ORDER BY total DESC`,
+    )
+    .all(since)
+    .map((r) => ({
+      origin: r.origin,
+      totalUsd: r.total,
+      taskCount: r.task_count,
+    }));
+
+  const byRoutine = db
+    .prepare<[number], { routine_id: string; total: number; task_count: number }>(
+      `SELECT routine_id, SUM(cost_usd) AS total, COUNT(*) AS task_count
+       FROM tasks
+       WHERE started_at >= ? AND origin != 'external' AND routine_id IS NOT NULL
+       GROUP BY routine_id
+       ORDER BY total DESC`,
+    )
+    .all(since)
+    .map((r) => ({
+      routineId: r.routine_id,
+      totalUsd: r.total,
+      taskCount: r.task_count,
+    }));
+
+  // Bucket by local day. SQLite's strftime works on epoch seconds, so we
+  // pass started_at/1000 and tag with the user's local UTC offset to keep
+  // the day boundary aligned with what the user sees on a clock.
+  const tzOffsetMin = -now.getTimezoneOffset();
+  const tzMod = `${tzOffsetMin >= 0 ? '+' : '-'}${Math.abs(tzOffsetMin)} minutes`;
+  const dayRows = db
+    .prepare<
+      [string, number],
+      { day: string; total: number; task_count: number }
+    >(
+      `SELECT strftime('%Y-%m-%d', started_at/1000, 'unixepoch', ?) AS day,
+              SUM(cost_usd) AS total,
+              COUNT(*) AS task_count
+       FROM tasks
+       WHERE started_at >= ? AND origin != 'external'
+       GROUP BY day
+       ORDER BY day ASC`,
+    )
+    .all(tzMod, since)
+    .map((r) => ({
+      date: r.day,
+      totalUsd: r.total,
+      taskCount: r.task_count,
+    }));
+
+  // Fill in zero-spend days so the renderer can render a flat line
+  // instead of a gap on quiet days.
+  const dayMap = new Map(dayRows.map((d) => [d.date, d]));
+  const byDay: Array<{ date: string; totalUsd: number; taskCount: number }> = [];
+  for (let i = 0; i < windowDays; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    const key = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    byDay.push(
+      dayMap.get(key) ?? { date: key, totalUsd: 0, taskCount: 0 },
+    );
+  }
+
+  return { windowDays, total, bySkill, byOrigin, byRoutine, byDay };
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
 export function getCostSummary(): {
   today: number;
   last7days: number;

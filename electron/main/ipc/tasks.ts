@@ -3,7 +3,12 @@ import { ipcMain } from 'electron';
 import { IpcChannels } from '@shared/ipc';
 import type { LaunchTaskRequest } from '@shared/types';
 
-import { getCostSummary, getTaskEvents, listRecentTasks } from '../db.js';
+import {
+  getCostBreakdown,
+  getCostSummary,
+  getTaskEvents,
+  listRecentTasks,
+} from '../db.js';
 import { asTaskOrigin } from '../task-runner.js';
 import type { IpcDeps } from './types.js';
 
@@ -63,4 +68,12 @@ export function registerTasksIpc({
   });
 
   ipcMain.handle(IpcChannels.costSummary, () => getCostSummary());
+  ipcMain.handle(IpcChannels.costBreakdown, (_e, windowDays: unknown) => {
+    // Clamp to a sensible range; default to 7 if the caller didn't say.
+    const n =
+      typeof windowDays === 'number' && Number.isFinite(windowDays)
+        ? Math.max(1, Math.min(90, Math.round(windowDays)))
+        : 7;
+    return getCostBreakdown(n);
+  });
 }

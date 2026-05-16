@@ -88,6 +88,7 @@ export const IpcChannels = {
 
   openInClaudeDesktop: 'tasks:openInClaudeDesktop',
   costSummary: 'tasks:costSummary',
+  costBreakdown: 'tasks:costBreakdown',
   pickDirectory: 'fs:pickDirectory',
 
   httpApiStatus: 'http:status',

@@ -9,6 +9,7 @@ import type {
   InboxPrefs,
   DispatchIntentResult,
   JarvisFileEntry,
+  CostBreakdown,
   CostSummary,
   HttpApiStatus,
   InboxItem,
@@ -105,6 +106,8 @@ const api = {
     ipcRenderer.invoke(IpcChannels.openInClaudeDesktop, sessionId),
   costSummary: (): Promise<CostSummary> =>
     ipcRenderer.invoke(IpcChannels.costSummary),
+  costBreakdown: (windowDays: number): Promise<CostBreakdown> =>
+    ipcRenderer.invoke(IpcChannels.costBreakdown, windowDays),
 
   httpApiStatus: (): Promise<HttpApiStatus> =>
     ipcRenderer.invoke(IpcChannels.httpApiStatus),
