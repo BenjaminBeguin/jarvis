@@ -143,6 +143,16 @@ export function registerModulesIpc({ modules, activity, jarvisRoot }: IpcDeps): 
         const target = resolveSafe(payload.path);
         mkdirSync(dirname(target), { recursive: true });
         writeFileSync(target, payload.contents, 'utf8');
+        // Audit row — useful when wondering "did I edit team.md last
+        // week?". Skip skills/ writes — those flow through writeSkillBody
+        // which already records a more specific skill.edited row.
+        if (!payload.path.startsWith('skills/')) {
+          activity.record({
+            kind: 'jarvis-file.written',
+            label: `Edited · ~/.jarvis/${payload.path}`,
+            detail: { path: payload.path, bytes: payload.contents.length },
+          });
+        }
         return { ok: true };
       } catch (err) {
         return {

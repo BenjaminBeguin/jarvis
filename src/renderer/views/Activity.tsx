@@ -279,6 +279,7 @@ const EVENT_KIND_META: Record<
   'skill.created': { category: 'integration', label: 'skill · created' },
   'skill.edited': { category: 'integration', label: 'skill · edited' },
   'skill.deleted': { category: 'integration', label: 'skill · deleted' },
+  'jarvis-file.written': { category: 'integration', label: 'file · edited' },
 };
 
 function EventRow({ event }: { event: ActivityEvent }) {
