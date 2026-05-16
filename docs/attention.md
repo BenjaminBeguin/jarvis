@@ -87,30 +87,46 @@ Built so far:
   adding skills / modules / routines / MCPs / inbox sources.
 - **Now** — attention synthesis, new with this iteration.
 
-## Open questions
+## What shipped after the foundation
 
-These came up but didn't ship — list here so future iterations can
-return to them:
+- **Inbox urgency scoring** — `urgencyScore()` in `inbox.ts` is now
+  the single source of truth. Combines fireAt distance, source weight,
+  and age. PR-review with stale comments outranks tomorrow night's
+  calendar event; past-due reminders within 24h stay urgent. Source
+  weights are exported so future surfaces re-rank consistently.
+- **Meeting detection + macOS 15 fix.** The `coreaudiod` log channel
+  is largely silent on Sequoia. Three changes: broader predicate +
+  keyword heuristic for the rare events that do fire; a status
+  surface (`MeetingDetectionStatus`) so the Now view shows
+  `auto-detect: live / quiet / fault`; a manual `🎙 Record now`
+  button on Now that bypasses detection entirely. Honest UX:
+  when auto-detect is unreliable, the user sees the pill is yellow
+  and reaches for the button.
 
-- **Inbox urgency scoring.** Currently the inbox shows items in
-  `fireAt` order. A real urgency layer would combine `fireAt`, source
-  type (PR vs. calendar vs. reminder), dismissal history, and project
-  scope into a rank. This benefits from user input on weighting.
+## Still open
+
 - **Skill-to-skill chaining + `parent_task_id`.** Scheduled for
   Phase 4 in the roadmap. Belongs in the entity graph but doesn't
-  have an emit site yet.
+  have an emit site yet — wait for the first chain.
 - **Activity → entity FKs.** Today `activity_events` stashes
   `taskId` / `routineId` in `detail_json` ad-hoc. A first-class FK
   column unlocks indexed queries (e.g. "show me everything that
   happened in project X"). Defer until a use case beyond JSON-scan
-  emerges.
+  emerges. The Module Settings history pane filters in renderer
+  today; if that gets slow at scale, that's the trigger.
+- **Native helper for mic/camera detection.** The honest fix for
+  the macOS 15 audio-log silence is a tiny Swift helper that
+  listens to `kAudioDevicePropertyDeviceIsRunningSomewhere` +
+  CMIO directly. Ships in the app bundle. Heavy enough to be its
+  own iteration; the pill + button is the bridge.
 - **Calendar-aware Now.** If the user is in a focus block per their
   calendar MCP, the imminent band could suppress non-critical
   reminders. Requires the calendar MCP to be reliably queried + a
   preference for "what counts as critical."
 - **Context across sessions.** When a task resumes (`sdkSessionId`),
-  the Now view could show "↪ continuing from yesterday." Today it
-  just shows the resumed task as a new row.
+  the Now view could show "↪ continuing from yesterday." The title
+  prefix already uses `↪ ` but the Now row doesn't flag it
+  semantically yet.
 
 ## Decisions that shaped the surface
 
