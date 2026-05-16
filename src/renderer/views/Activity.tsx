@@ -37,6 +37,28 @@ const FILTER_KEY = 'jarvis.activity.filter';
 export function Activity() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
+  // Active project from the Shell's scope picker. When set, the feed
+  // restricts to task-derived rows whose projectName matches and
+  // event rows whose detail.projectName matches. Event rows without
+  // a project field stay visible (they're global side-effects like
+  // "API key changed").
+  const [activeProject, setActiveProject] = useState<string | null>(() => {
+    try {
+      return window.localStorage.getItem('jarvis.activeProject') || null;
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    const onScopeChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { project?: string | null };
+      setActiveProject(detail?.project ?? null);
+    };
+    window.addEventListener('jarvis:active-project-changed', onScopeChange);
+    return () =>
+      window.removeEventListener('jarvis:active-project-changed', onScopeChange);
+  }, []);
+
   const [filter, setFilterRaw] = useState<CategoryFilter>(() => {
     try {
       const stored = window.localStorage.getItem(FILTER_KEY);
@@ -104,12 +126,37 @@ export function Activity() {
         return meta?.category === filter;
       });
     }
+    // Scope filter — task rows respect projectName exactly; event rows
+    // either carry a project in detail.projectName / detail.project,
+    // or are global (kept). The "always-show-global" rule mirrors the
+    // Now view so the user doesn't lose audit trail for non-scoped
+    // actions (auth changes, API key updates, etc.) while focused.
+    if (activeProject) {
+      merged = merged.filter((r) => {
+        if (r.kind === 'send') {
+          return !r.task.projectName || r.task.projectName === activeProject;
+        }
+        const detail = r.event.detail as
+          | { projectName?: unknown; project?: unknown }
+          | null
+          | undefined;
+        if (!detail || typeof detail !== 'object') return true;
+        const evtProject =
+          typeof detail.projectName === 'string'
+            ? detail.projectName
+            : typeof detail.project === 'string'
+            ? detail.project
+            : null;
+        return !evtProject || evtProject === activeProject;
+      });
+    }
     return merged.slice(0, 200);
-  }, [tasks, events, filter]);
+  }, [tasks, events, filter, activeProject]);
 
   // Counts per category — surfaces in the chip labels so the user
   // sees "Reminders 3" instead of just "Reminders." Helps decide what
-  // to filter to.
+  // to filter to. Respects scope so the chip counts reflect what's
+  // actually visible after the project filter.
   const counts = useMemo(() => {
     const out: Record<string, number> = {
       send: 0,
@@ -120,19 +167,49 @@ export function Activity() {
       reminder: 0,
       dedupe: 0,
     };
-    for (const t of tasks) if (t.skillId === 'send') out.send!++;
+    for (const t of tasks) {
+      if (t.skillId !== 'send') continue;
+      if (activeProject && t.projectName && t.projectName !== activeProject) continue;
+      out.send!++;
+    }
     for (const e of events) {
       const cat = EVENT_KIND_META[e.kind]?.category;
-      if (cat && cat !== 'other') out[cat] = (out[cat] ?? 0) + 1;
+      if (!cat || cat === 'other') continue;
+      if (activeProject) {
+        const detail = e.detail as
+          | { projectName?: unknown; project?: unknown }
+          | null
+          | undefined;
+        if (detail && typeof detail === 'object') {
+          const evtProject =
+            typeof detail.projectName === 'string'
+              ? detail.projectName
+              : typeof detail.project === 'string'
+              ? detail.project
+              : null;
+          if (evtProject && evtProject !== activeProject) continue;
+        }
+      }
+      out[cat] = (out[cat] ?? 0) + 1;
     }
     return out;
-  }, [tasks, events]);
+  }, [tasks, events, activeProject]);
 
   return (
     <section className="activity">
       <header className="activity__header">
         <div>
-          <h2>ACTIVITY</h2>
+          <h2>
+            ACTIVITY
+            {activeProject && (
+              <span
+                className="now__scope"
+                title={`Filtering to project: ${activeProject}. Clear scope in the top-right to see everything.`}
+              >
+                scope: {activeProject}
+              </span>
+            )}
+          </h2>
           <p>
             Things you've done through Jarvis — <code>/send</code> messages,
             meetings, notes, integration toggles, inbox cleanups. Click a

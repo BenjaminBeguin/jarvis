@@ -12489,6 +12489,18 @@ button:disabled:hover {
   margin-left: 14px;
   letter-spacing: 0.06em;
 }
+.now__scope {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid rgba(0, 212, 255, 0.32);
+  padding: 2px 8px;
+  margin-left: 10px;
+  border-radius: 2px;
+  letter-spacing: 0.08em;
+  cursor: help;
+}
 .now__total {
   font-family: var(--mono);
   font-size: 11px;

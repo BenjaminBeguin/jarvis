@@ -45,6 +45,17 @@ export function Now() {
   const [routines, setRoutines] = useState<RoutineDef[]>([]);
   const [detection, setDetection] = useState<MeetingDetectionStatus | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  // Active project mirrors Shell's scope picker — read once on mount
+  // from localStorage (same key Shell uses) + subscribe to the window
+  // event Shell dispatches on change. Avoids prop-drilling for a
+  // value that's already broadcast app-wide.
+  const [activeProject, setActiveProject] = useState<string | null>(() => {
+    try {
+      return window.localStorage.getItem('jarvis.activeProject') || null;
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     // Initial loads + live subscriptions.
@@ -69,6 +80,11 @@ export function Now() {
     const offReminders = window.jarvis.onRemindersChanged(setReminders);
     const offRoutines = window.jarvis.onRoutinesChanged(setRoutines);
     const offDetection = window.jarvis.onMeetingDetectionChanged(setDetection);
+    const onScopeChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { project?: string | null };
+      setActiveProject(detail?.project ?? null);
+    };
+    window.addEventListener('jarvis:active-project-changed', onScopeChange);
     // Re-tick every 20s so relative times stay fresh + items cross
     // the 30-min threshold organically.
     const tick = window.setInterval(() => setNow(Date.now()), 20_000);
@@ -79,9 +95,31 @@ export function Now() {
       offReminders();
       offRoutines();
       offDetection();
+      window.removeEventListener('jarvis:active-project-changed', onScopeChange);
       window.clearInterval(tick);
     };
   }, []);
+
+  // Project filtering rules when a scope is set:
+  //   - Tasks: strict match on `projectName`. Tasks have a snapshot
+  //     of the active project at launch, so the filter is exact.
+  //     Pre-migration tasks (null projectName) get included too so
+  //     they don't disappear retroactively when the user scopes.
+  //   - Inbox items: match `project` field, OR no-project at all
+  //     (those are personal/global signals that apply regardless
+  //     of scope, like reminders flowing through the inbox).
+  //   - Reminders: always shown — they're personal time signals,
+  //     not scoped to a project.
+  const taskMatchesScope = (t: TaskSummary): boolean => {
+    if (!activeProject) return true;
+    if (!t.projectName) return true; // legacy rows + global tasks
+    return t.projectName === activeProject;
+  };
+  const inboxMatchesScope = (it: InboxItem): boolean => {
+    if (!activeProject) return true;
+    if (!it.project) return true; // global signal
+    return it.project === activeProject;
+  };
 
   // ── Band 1: in progress ──────────────────────────────────────────
   // Awaiting input goes first — those are blocked on you.
@@ -91,9 +129,11 @@ export function Now() {
         (t) =>
           t.awaitingInput &&
           t.status === 'running' &&
-          t.origin !== 'external',
+          t.origin !== 'external' &&
+          taskMatchesScope(t),
       ),
-    [tasks],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tasks, activeProject],
   );
   const runningOther = useMemo(
     () =>
@@ -101,9 +141,11 @@ export function Now() {
         (t) =>
           !t.awaitingInput &&
           t.status === 'running' &&
-          t.origin !== 'external',
+          t.origin !== 'external' &&
+          taskMatchesScope(t),
       ),
-    [tasks],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tasks, activeProject],
   );
 
   // ── Band 2: imminent (next 30 min) ───────────────────────────────
@@ -137,6 +179,8 @@ export function Now() {
       // already showed them from the reminders list above. Dedup by
       // common "reminder-" id prefix to avoid double-rows.
       if (it.id.startsWith('reminder-')) continue;
+      // Scope filter — same rule as taskMatchesScope/inboxMatchesScope.
+      if (!inboxMatchesScope(it)) continue;
       items.push({
         id: it.id,
         kind: 'inbox',
@@ -146,7 +190,8 @@ export function Now() {
       });
     }
     return items.sort((a, b) => a.fireAt - b.fireAt);
-  }, [reminders, inbox, now]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reminders, inbox, now, activeProject]);
 
   // ── Band 3: top of mind — high-urgency items not already shown ──
   // Pull the top-N inbox items by urgency score, dropping anything
@@ -164,11 +209,13 @@ export function Now() {
         if (it.fireAt != null && it.fireAt - now > 4 * 60 * 60_000) return false;
         // Only items scoring above a usable threshold. 100 is roughly
         // "today, or a real source like reminders/PR/Linear."
-        return urgencyScore(it, now) >= 100;
+        if (urgencyScore(it, now) < 100) return false;
+        return inboxMatchesScope(it);
       })
       .sort((a, b) => byUrgency(a, b, now))
       .slice(0, 5);
-  }, [inbox, imminent, now]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inbox, imminent, now, activeProject]);
 
   // ── Band 4: broken today ─────────────────────────────────────────
   // Tasks errored today that came from a routine. Uses the new
@@ -184,20 +231,27 @@ export function Now() {
         (t) =>
           t.origin === 'routine' &&
           t.status === 'errored' &&
-          t.startedAt >= dayStart,
+          t.startedAt >= dayStart &&
+          taskMatchesScope(t),
       )
       .sort((a, b) => b.startedAt - a.startedAt);
-  }, [tasks, dayStart]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, dayStart, activeProject]);
 
   // ── Footer stats ─────────────────────────────────────────────────
+  // Stats respect the scope too — when scoped, the day's totals are
+  // for project tasks only. Without scope, all tasks count.
   const stats = useMemo(() => {
-    const today = tasks.filter((t) => t.startedAt >= dayStart);
+    const today = tasks.filter(
+      (t) => t.startedAt >= dayStart && taskMatchesScope(t),
+    );
     const completed = today.filter((t) => t.status === 'completed').length;
     const errored = today.filter((t) => t.status === 'errored').length;
     const running = today.filter((t) => t.status === 'running').length;
     const cost = today.reduce((sum, t) => sum + (t.costUsd ?? 0), 0);
     return { completed, errored, running, cost, total: today.length };
-  }, [tasks, dayStart]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, dayStart, activeProject]);
 
   const totalNeedsAttention =
     awaitingInput.length + imminent.length + topOfMind.length + brokenToday.length;
@@ -208,6 +262,14 @@ export function Now() {
         <div>
           <h2>NOW</h2>
           <span className="now__time">{formatClock(now)}</span>
+          {activeProject && (
+            <span
+              className="now__scope"
+              title={`Filtering to project: ${activeProject}. Clear scope in the top-right to see everything.`}
+            >
+              scope: {activeProject}
+            </span>
+          )}
         </div>
         <span className="now__total" title="Items wanting attention right now">
           {totalNeedsAttention === 0
@@ -222,7 +284,9 @@ export function Now() {
         title="In progress"
         emptyHint={
           runningOther.length === 0
-            ? 'Nothing running. Hit ⌘⇧J to start something.'
+            ? activeProject
+              ? `Nothing running in ${activeProject}. Hit ⌘⇧J to start something.`
+              : 'Nothing running. Hit ⌘⇧J to start something.'
             : undefined
         }
         count={awaitingInput.length + runningOther.length}
@@ -301,7 +365,9 @@ export function Now() {
         title="Broken today"
         emptyHint={
           brokenToday.length === 0
-            ? `${routines.filter((r) => r.enabled).length} routines enabled · all healthy.`
+            ? activeProject
+              ? `No errored ${activeProject} routines today.`
+              : `${routines.filter((r) => r.enabled).length} routines enabled · all healthy.`
             : undefined
         }
         count={brokenToday.length}
