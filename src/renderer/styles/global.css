@@ -3544,18 +3544,23 @@ button:disabled:hover {
   min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1px; /* the column separator is the border below */
-  background: var(--border);
+  gap: 36px;
 }
 @media (max-width: 1099px) {
   .capture-page__split {
     grid-template-columns: 1fr;
+    gap: 18px;
   }
 }
 .capture-page__col {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* Grid items default to min-width: auto which lets long content
+     push the track wider than its 1fr share. Pin to 0 so a single
+     long-word note or wide reminder row can't blow out the column
+     into the neighbor's space. */
+  min-width: 0;
   background: var(--bg);
   transition: box-shadow 200ms ease, border-color 200ms ease;
 }
