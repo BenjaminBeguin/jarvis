@@ -31,12 +31,12 @@ export const quickNoteModule: Module = {
     "Capture-for-later: free-form notes (markdown journal) + time-pressured reminders. /note appends to today's journal; /reminders opens the reminders tab on the same page.",
   settings: {
     description:
-      "Tune how the Notes & Reminders surface behaves — dedupe cadence wires up in a follow-up, but the field is here so future toggles have a home.",
+      'Tune how the Notes & Reminders surface behaves. Auto-dedupe cadence drives a managed routine that scans recent captures and writes merge proposals to the Inbox.',
     fields: [
       {
         key: 'dedupeCadence',
         label: 'Auto-dedupe cadence',
-        hint: 'How often Jarvis scans recent notes + pending reminders for duplicates / near-duplicates and proposes merges. Off until the dedupe skill ships.',
+        hint: 'How often Jarvis scans recent notes + pending reminders for duplicates / near-duplicates and proposes merges. Proposals show up in the Inbox under "Possible duplicates".',
         type: 'select',
         default: 'off',
         options: [
@@ -113,15 +113,19 @@ export const quickNoteModule: Module = {
         });
 
         // Smart-note: if the user wrote something with a time phrase
-        // ("remind me in 2h about X", "ping luca at 17:30 …"), also create
-        // a reminder/scheduled action. The note itself is always saved so
-        // the user keeps the original; the reminder gives them the wake-up.
+        // ("remind me in 2h about X", "ping luca at 17:30 …", "every
+        // Monday at 9am send the recap"), also create a reminder /
+        // scheduled action. The note itself is always saved so the user
+        // keeps the original; the reminder gives them the wake-up.
+        // Recurring patterns pass `cron` through so the reminder
+        // reschedules itself on each fire instead of being one-shot.
         const intent = ctx.parseFreeTextIntent(text);
         if (intent.kind === 'reminder') {
           const r = ctx.createReminder({
             body: intent.body,
             mode: intent.mode,
             fireAt: intent.fireAt,
+            cron: intent.cron,
           });
           const when = new Date(r.fireAt).toLocaleString(undefined, {
             hour: '2-digit',
@@ -129,11 +133,14 @@ export const quickNoteModule: Module = {
             day: 'numeric',
             month: 'short',
           });
+          const recurringSuffix = intent.cron ? ' · recurring' : '';
           ctx.notify(
-            intent.mode === 'scheduled' ? `Note · scheduled ${when}` : `Note · reminder ${when}`,
+            intent.mode === 'scheduled'
+              ? `Note · scheduled ${when}${recurringSuffix}`
+              : `Note · reminder ${when}${recurringSuffix}`,
             r.body,
           );
-          return `Saved + ${intent.mode === 'scheduled' ? 'scheduled' : 'reminder'} · ${when}`;
+          return `Saved + ${intent.mode === 'scheduled' ? 'scheduled' : 'reminder'}${recurringSuffix} · ${when}`;
         }
 
         ctx.notify(
