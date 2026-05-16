@@ -40,6 +40,33 @@ export function SessionSidebar() {
     return () => window.removeEventListener('jarvis:open-session', onOpen);
   }, []);
 
+  // ⌘\ — peek at the most recent running task from anywhere. The
+  // "open from anywhere" affordance the user asked for. Skipped when
+  // focus is in a text field so typing `\\` in markdown still works.
+  useEffect(() => {
+    const onKey = async (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== '\\') return;
+      const inField =
+        document.activeElement instanceof HTMLInputElement ||
+        document.activeElement instanceof HTMLTextAreaElement ||
+        (document.activeElement as HTMLElement | null)?.isContentEditable;
+      if (inField) return;
+      e.preventDefault();
+      // Pick: a running task first (the live thing the user probably
+      // wants), else the most recently started task overall. Skip
+      // 'external' which is the claude-code-watch mirror — the user
+      // already has Claude Code open for those.
+      const tasks = await window.jarvis.listTasks();
+      const ours = tasks.filter((t) => t.origin !== 'external');
+      const sorted = [...ours].sort((a, b) => b.startedAt - a.startedAt);
+      const running = sorted.find((t) => t.status === 'running');
+      const target = running ?? sorted[0];
+      if (target) setTaskId(target.id);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Esc closes — standard expectation.
   useEffect(() => {
     if (!taskId) return;
