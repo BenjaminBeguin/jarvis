@@ -35,6 +35,9 @@ interface PersistedConfig {
   costPrefs?: {
     perTaskUsd?: number;
     dailyUsd?: number;
+    /** When true, crossing the daily-budget threshold flips the global
+     *  pause flag automatically. The user can resume manually. */
+    autoPauseOnDaily?: boolean;
   };
 }
 
@@ -219,11 +222,14 @@ export interface CostPrefs {
   perTaskUsd: number;
   /** Warn when today's total spend crosses this USD threshold. 0 disables. */
   dailyUsd: number;
+  /** When true, the daily-budget cross also flips the global pause flag. */
+  autoPauseOnDaily: boolean;
 }
 
 export const DEFAULT_COST_PREFS: CostPrefs = {
   perTaskUsd: 0.5,
   dailyUsd: 5,
+  autoPauseOnDaily: false,
 };
 
 export function loadCostPrefs(): CostPrefs {
@@ -236,7 +242,11 @@ export function loadCostPrefs(): CostPrefs {
     typeof stored.dailyUsd === 'number' && Number.isFinite(stored.dailyUsd)
       ? stored.dailyUsd
       : DEFAULT_COST_PREFS.dailyUsd;
-  return { perTaskUsd, dailyUsd };
+  const autoPauseOnDaily =
+    typeof stored.autoPauseOnDaily === 'boolean'
+      ? stored.autoPauseOnDaily
+      : DEFAULT_COST_PREFS.autoPauseOnDaily;
+  return { perTaskUsd, dailyUsd, autoPauseOnDaily };
 }
 
 export function saveCostPrefs(prefs: CostPrefs): void {

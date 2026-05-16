@@ -81,7 +81,14 @@ export function registerTasksIpc({
   ipcMain.handle(IpcChannels.costPrefsRead, () => loadCostPrefs());
   ipcMain.handle(
     IpcChannels.costPrefsWrite,
-    (_e, prefs: { perTaskUsd: unknown; dailyUsd: unknown }) => {
+    (
+      _e,
+      prefs: {
+        perTaskUsd: unknown;
+        dailyUsd: unknown;
+        autoPauseOnDaily?: unknown;
+      },
+    ) => {
       const perTaskUsd =
         typeof prefs?.perTaskUsd === 'number' && prefs.perTaskUsd >= 0
           ? prefs.perTaskUsd
@@ -90,7 +97,11 @@ export function registerTasksIpc({
         typeof prefs?.dailyUsd === 'number' && prefs.dailyUsd >= 0
           ? prefs.dailyUsd
           : 0;
-      saveCostPrefs({ perTaskUsd, dailyUsd });
+      const autoPauseOnDaily =
+        typeof prefs?.autoPauseOnDaily === 'boolean'
+          ? prefs.autoPauseOnDaily
+          : false;
+      saveCostPrefs({ perTaskUsd, dailyUsd, autoPauseOnDaily });
     },
   );
 }

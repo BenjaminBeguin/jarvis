@@ -428,10 +428,27 @@ function wireRunnerEvents(): void {
         const dayKey = todayLocalKey();
         if (today > costPrefs.dailyUsd && dailyBudgetWarnedFor !== dayKey) {
           dailyBudgetWarnedFor = dayKey;
+          // Optional escalation: when autoPauseOnDaily is set, flip the
+          // global pause flag so routines + scheduled actions stop. The
+          // user keeps user-initiated palette/voice and can resume any
+          // time from the Shell header / tray / Telegram / MCP.
+          const willAutoPause =
+            costPrefs.autoPauseOnDaily && !loadPaused();
+          if (willAutoPause) {
+            savePaused(true);
+            broadcast(IpcChannels.pausedChanged, true);
+            activity.record({
+              kind: 'paused.toggled',
+              label: `Auto-paused: crossed $${costPrefs.dailyUsd.toFixed(2)} daily budget (spent $${today.toFixed(2)})`,
+              detail: { paused: true, source: 'auto-budget', today },
+            });
+          }
           notifier.post({
             source: 'cost-guardrail',
             title: `Jarvis · daily spend at $${today.toFixed(2)}`,
-            body: `Crossed the $${costPrefs.dailyUsd.toFixed(2)} budget. Open Settings → Spend to see where it went, or pause Jarvis until tomorrow.`,
+            body: willAutoPause
+              ? `Crossed the $${costPrefs.dailyUsd.toFixed(2)} budget — auto-paused. Resume manually when ready.`
+              : `Crossed the $${costPrefs.dailyUsd.toFixed(2)} budget. Open Settings → Spend to see where it went, or pause Jarvis until tomorrow.`,
             onClick: () => {
               const win = openObservatory();
               win.focus();

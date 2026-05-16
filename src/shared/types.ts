@@ -655,6 +655,9 @@ export interface CostPrefs {
   perTaskUsd: number;
   /** Warn when today's total spend crosses this USD threshold. 0 disables. */
   dailyUsd: number;
+  /** When true, crossing the daily threshold also flips the global pause
+   *  flag — routines + scheduled actions stop until the user resumes. */
+  autoPauseOnDaily: boolean;
 }
 
 export interface CostBreakdown {

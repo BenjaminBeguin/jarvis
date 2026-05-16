@@ -14078,6 +14078,25 @@ button:disabled:hover {
   border-color: var(--accent);
   box-shadow: var(--accent-glow-soft);
 }
+.spend-panel__guardrails-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  margin-top: 6px;
+}
+.spend-panel__guardrails-checkbox input[type='checkbox'] {
+  margin-top: 3px;
+}
+.spend-panel__guardrails-checkbox:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.spend-panel__guardrails-checkbox-hint {
+  color: var(--text-dim);
+}
 
 .spend-panel__pool {
   padding: 12px 14px;

@@ -310,6 +310,20 @@ function GuardrailsEditor() {
           </span>
         </label>
       </div>
+      <label className="spend-panel__guardrails-checkbox">
+        <input
+          type="checkbox"
+          checked={prefs.autoPauseOnDaily}
+          disabled={saving || prefs.dailyUsd <= 0}
+          onChange={(e) => void update({ autoPauseOnDaily: e.target.checked })}
+        />
+        <span>
+          Also <strong>auto-pause Jarvis</strong> when the daily budget is crossed
+          <span className="spend-panel__guardrails-checkbox-hint">
+            {' '}— routines + scheduled actions skip until you resume. User-initiated palette / voice still runs.
+          </span>
+        </span>
+      </label>
     </section>
   );
 }
