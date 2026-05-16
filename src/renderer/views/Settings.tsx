@@ -638,7 +638,8 @@ function ApiPanel() {
         </li>
         <li>
           <code>mcp__jarvis__create_reminder</code> — schedule a future
-          reminder or scheduled action ({'{ body, mode, fireAt }'})
+          reminder or scheduled action ({'{ body, mode, fireAt, cron? }'}). Pass
+          a 5-field cron expression to make it recurring.
         </li>
         <li>
           <code>mcp__jarvis__open_url</code> — open a URL in the default

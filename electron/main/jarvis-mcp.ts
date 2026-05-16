@@ -20,6 +20,8 @@ interface CallToolResult {
   isError?: boolean;
 }
 
+import { nextCronFire } from '@shared/cron';
+
 import type { ActivityStore } from './activity-store.js';
 import type { ProjectMemoryStore } from './project-memory.js';
 import type { ProjectStore } from './projects.js';
@@ -104,22 +106,32 @@ export function createJarvisMcp(
 
       tool(
         'create_reminder',
-        'Schedule a future reminder. Mode "reminder" fires a notification only (no agent run); mode "scheduled" launches a fresh task to carry out the body. `fireAt` is ms epoch — pass an absolute timestamp computed from the current time.',
+        'Schedule a future reminder. Mode "reminder" fires a notification only (no agent run); mode "scheduled" launches a fresh task to carry out the body. `fireAt` is ms epoch — pass an absolute timestamp computed from the current time. For recurring reminders, also pass `cron` (5-field POSIX cron, e.g. "0 9 * * 1" for every Monday 9am); the reminder reschedules itself on each fire instead of being one-shot.',
         {
           body: z.string().min(1),
           mode: z.enum(['reminder', 'scheduled']),
           fireAt: z.number().int().positive(),
+          cron: z.string().optional(),
         },
         async (args) => {
           if (args.fireAt < Date.now() - 60_000) {
             return err('fireAt is in the past');
           }
+          if (args.cron && nextCronFire(args.cron, Date.now()) == null) {
+            return err(
+              `invalid cron expression "${args.cron}" — needs 5 fields like "0 9 * * 1"`,
+            );
+          }
           const r = deps.reminders.create({
             body: args.body,
             mode: args.mode,
             fireAt: args.fireAt,
+            cron: args.cron,
           });
-          return ok(`reminder ${r.id} scheduled for ${new Date(r.fireAt).toISOString()}`);
+          const suffix = args.cron ? ` (recurring · ${args.cron})` : '';
+          return ok(
+            `reminder ${r.id} scheduled for ${new Date(r.fireAt).toISOString()}${suffix}`,
+          );
         },
       ),
 
