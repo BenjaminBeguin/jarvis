@@ -26,6 +26,8 @@ export function SessionSidebar() {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [task, setTask] = useState<TaskSummary | null>(null);
   const [events, setEvents] = useState<TaskEvent[]>([]);
+  const [reply, setReply] = useState('');
+  const [sending, setSending] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // Global event channel — anywhere in the app can dispatch this to
@@ -129,6 +131,26 @@ export function SessionSidebar() {
     void window.jarvis.openObservatory(taskId);
   };
 
+  // External tasks are observed-only mirrors (e.g. claude-code-watch) —
+  // we can't send messages to them. Same goes for tasks that died
+  // before producing an sdkSessionId.
+  const canReply =
+    !!task &&
+    task.origin !== 'external' &&
+    (task.status === 'running' || !!task.sdkSessionId);
+
+  const sendReply = async () => {
+    if (!taskId || !reply.trim() || sending) return;
+    const text = reply.trim();
+    setSending(true);
+    try {
+      const ok = await window.jarvis.sendTaskMessage(taskId, text);
+      if (ok) setReply('');
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <div className="session-sidebar-host" aria-hidden={!taskId}>
       {/* Click outside the panel closes it. Doesn't navigate. */}
@@ -212,25 +234,61 @@ export function SessionSidebar() {
         </div>
 
         <footer className="session-sidebar__footer">
-          <button
-            className="session-sidebar__action"
-            onClick={openInObservatory}
-            title="Switch to the Observatory tab and focus this task (you'll leave the current view)"
-          >
-            Open full view →
-          </button>
-          {task?.sdkSessionId && (
+          {canReply && (
+            <div className="session-sidebar__reply">
+              <textarea
+                className="session-sidebar__reply-input"
+                placeholder={
+                  task?.status === 'running'
+                    ? 'Reply to this turn…'
+                    : 'Continue this session…'
+                }
+                rows={2}
+                value={reply}
+                disabled={sending}
+                onChange={(e) => setReply(e.target.value)}
+                onKeyDown={(e) => {
+                  if (
+                    (e.metaKey || e.ctrlKey) &&
+                    e.key === 'Enter' &&
+                    reply.trim()
+                  ) {
+                    e.preventDefault();
+                    void sendReply();
+                  }
+                }}
+              />
+              <button
+                className="session-sidebar__reply-send"
+                onClick={() => void sendReply()}
+                disabled={sending || !reply.trim()}
+                title="⌘↵ to send"
+              >
+                {sending ? '…' : 'Send'}
+              </button>
+            </div>
+          )}
+          <div className="session-sidebar__actions">
             <button
               className="session-sidebar__action"
-              onClick={() => {
-                const cmd = `claude --resume ${task.sdkSessionId}`;
-                void navigator.clipboard.writeText(cmd);
-              }}
-              title={`Copy: claude --resume ${task.sdkSessionId}`}
+              onClick={openInObservatory}
+              title="Switch to the Observatory tab and focus this task (you'll leave the current view)"
             >
-              Copy resume cmd
+              Open full view →
             </button>
-          )}
+            {task?.sdkSessionId && (
+              <button
+                className="session-sidebar__action"
+                onClick={() => {
+                  const cmd = `claude --resume ${task.sdkSessionId}`;
+                  void navigator.clipboard.writeText(cmd);
+                }}
+                title={`Copy: claude --resume ${task.sdkSessionId}`}
+              >
+                Copy resume cmd
+              </button>
+            )}
+          </div>
         </footer>
       </aside>
     </div>
