@@ -3288,6 +3288,61 @@ button:disabled:hover {
   color: var(--text-dim);
 }
 
+/* ----- Keychain-backed `secret` field (e.g. Telegram bot token) ------ */
+
+.module-settings__secret {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.module-settings__secret input[type='password'] {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 8px;
+  border-radius: 2px;
+  min-width: 280px;
+}
+
+.module-settings__secret input[type='password']:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.module-settings__secret button {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 5px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.module-settings__secret button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.module-settings__secret button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.module-settings__secret-status {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  font-family: var(--mono);
+}
+
 /* ----- Capture page (Notes + Reminders merged) ----------------------- */
 
 .capture-page {
@@ -3930,6 +3985,20 @@ button:disabled:hover {
 .inbox__row-primary:disabled {
   opacity: 0.5;
   cursor: progress;
+}
+
+/* open-url variant — visually a link, not a primary agentic button.
+   When a skill emits `kind: 'open-url'`, the row's action button just
+   navigates; styling that like the agent-launching "primary" was
+   confusing (the accent glow promised heavier work than just opening
+   a tab). */
+.inbox__row-primary--link {
+  color: var(--text-dim);
+  border-color: var(--border-strong);
+}
+.inbox__row-primary--link:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* "Action already fired" badge that replaces the launch button across

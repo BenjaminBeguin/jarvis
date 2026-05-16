@@ -780,13 +780,22 @@ interface Group {
   items: InboxItem[];
 }
 
-/** Stable section order. Reminders first (time-sensitive), then PRs, then
- *  the rest. New sources fall through to the bottom alphabetically. */
+/** Stable section order. Reminders first (user-scheduled, time-
+ *  pressured), then broken routines (something the user wired up
+ *  is failing — actionable), then "blocked on you" surfaces (PR
+ *  comments before PR reviews because those are *your* code waiting),
+ *  then work-tracker / chat / ambient. Unknown sources fall through
+ *  to the bottom with their raw source name as label. */
 const SOURCE_ORDER: Record<string, { rank: number; label: string }> = {
   reminders: { rank: 0, label: 'Scheduled' },
-  'pr-review': { rank: 1, label: 'PRs awaiting your review' },
+  'failed-routines': { rank: 1, label: 'Needs attention' },
   'pr-comments': { rank: 2, label: 'Comments on your PRs' },
-  'failed-routines': { rank: 3, label: 'Needs attention' },
+  'pr-review': { rank: 3, label: 'PRs awaiting your review' },
+  linear: { rank: 4, label: 'Linear · needs you' },
+  slack: { rank: 5, label: 'Slack · waiting on you' },
+  calendar: { rank: 6, label: 'Calendar' },
+  'meeting-activity': { rank: 7, label: 'Mic active' },
+  dedupe: { rank: 8, label: 'Possible duplicates' },
 };
 
 function groupBySource(items: InboxItem[]): Group[] {
