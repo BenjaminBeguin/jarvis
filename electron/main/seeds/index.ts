@@ -11,6 +11,7 @@
 import brainstorm from './skills/brainstorm.js';
 import calendarToday from './skills/calendar-today.js';
 import commitHelper from './skills/commit-helper.js';
+import costRecap from './skills/cost-recap.js';
 import dailyBrief from './skills/daily-brief.js';
 import dailyRecap from './skills/daily-recap.js';
 import linearInbox from './skills/linear-inbox.js';
@@ -35,6 +36,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'brainstorm', body: brainstorm },
   { name: 'calendar-today', body: calendarToday },
   { name: 'commit-helper', body: commitHelper },
+  { name: 'cost-recap', body: costRecap },
   { name: 'daily-brief', body: dailyBrief },
   { name: 'daily-recap', body: dailyRecap },
   { name: 'linear-inbox', body: linearInbox },

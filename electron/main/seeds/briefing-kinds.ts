@@ -34,4 +34,12 @@ export const BUILTIN_BRIEFING_KINDS: DigestKind[] = [
     skillId: 'today-focus',
     schedule: '15 8 * * *',
   },
+  {
+    id: 'cost-recap',
+    label: 'Cost recap',
+    description:
+      'Last 7 days of Jarvis spend — top skills, routines pulling weight, pooling rate. Use to catch budget drift.',
+    skillId: 'cost-recap',
+    schedule: '0 10 * * 1',
+  },
 ];
