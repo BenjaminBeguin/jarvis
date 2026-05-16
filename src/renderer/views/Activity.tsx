@@ -21,9 +21,43 @@ type Row =
   | { kind: 'send'; ts: number; task: TaskSummary }
   | { kind: 'event'; ts: number; event: ActivityEvent };
 
+/** Filter chip selections — null means "show everything." */
+type CategoryFilter =
+  | null
+  | 'send'
+  | 'note'
+  | 'meeting'
+  | 'integration'
+  | 'inbox'
+  | 'reminder'
+  | 'dedupe';
+
+const FILTER_KEY = 'jarvis.activity.filter';
+
 export function Activity() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
+  const [filter, setFilterRaw] = useState<CategoryFilter>(() => {
+    try {
+      const stored = window.localStorage.getItem(FILTER_KEY);
+      if (stored === null) return null;
+      const valid: CategoryFilter[] = [
+        'send', 'note', 'meeting', 'integration', 'inbox', 'reminder', 'dedupe',
+      ];
+      return (valid as string[]).includes(stored) ? (stored as CategoryFilter) : null;
+    } catch {
+      return null;
+    }
+  });
+  const setFilter = (f: CategoryFilter) => {
+    setFilterRaw(f);
+    try {
+      if (f === null) window.localStorage.removeItem(FILTER_KEY);
+      else window.localStorage.setItem(FILTER_KEY, f);
+    } catch {
+      // private mode etc — non-fatal
+    }
+  };
 
   useEffect(() => {
     void window.jarvis.listTasks().then(setTasks);
@@ -62,9 +96,36 @@ export function Activity() {
       ts: e.ts,
       event: e,
     }));
-    return [...sendRows, ...eventRows]
-      .sort((a, b) => b.ts - a.ts)
-      .slice(0, 200);
+    let merged = [...sendRows, ...eventRows].sort((a, b) => b.ts - a.ts);
+    if (filter !== null) {
+      merged = merged.filter((r) => {
+        if (r.kind === 'send') return filter === 'send';
+        const meta = EVENT_KIND_META[r.event.kind];
+        return meta?.category === filter;
+      });
+    }
+    return merged.slice(0, 200);
+  }, [tasks, events, filter]);
+
+  // Counts per category — surfaces in the chip labels so the user
+  // sees "Reminders 3" instead of just "Reminders." Helps decide what
+  // to filter to.
+  const counts = useMemo(() => {
+    const out: Record<string, number> = {
+      send: 0,
+      note: 0,
+      meeting: 0,
+      integration: 0,
+      inbox: 0,
+      reminder: 0,
+      dedupe: 0,
+    };
+    for (const t of tasks) if (t.skillId === 'send') out.send!++;
+    for (const e of events) {
+      const cat = EVENT_KIND_META[e.kind]?.category;
+      if (cat && cat !== 'other') out[cat] = (out[cat] ?? 0) + 1;
+    }
+    return out;
   }, [tasks, events]);
 
   return (
@@ -82,6 +143,12 @@ export function Activity() {
           {rows.length} {rows.length === 1 ? 'row' : 'rows'}
         </div>
       </header>
+
+      <CategoryFilterStrip
+        active={filter}
+        counts={counts}
+        onChange={setFilter}
+      />
 
       {rows.length === 0 ? (
         <div className="activity__empty">
@@ -335,4 +402,60 @@ function formatRel(ms: number): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.round(h / 24);
   return `${d}d ago`;
+}
+
+/**
+ * Filter chips above the feed. Single-select: "All" or one category.
+ * Selection persists to localStorage so the filter survives a reload.
+ * Chip labels carry live counts so the user can decide what to scope
+ * to without skimming the rows.
+ */
+const FILTER_CHIPS: Array<{
+  value: Exclude<CategoryFilter, null>;
+  label: string;
+}> = [
+  { value: 'send', label: 'Sends' },
+  { value: 'reminder', label: 'Reminders' },
+  { value: 'note', label: 'Notes' },
+  { value: 'meeting', label: 'Meetings' },
+  { value: 'integration', label: 'Integrations' },
+  { value: 'inbox', label: 'Inbox' },
+  { value: 'dedupe', label: 'Dedupe' },
+];
+
+function CategoryFilterStrip({
+  active,
+  counts,
+  onChange,
+}: {
+  active: CategoryFilter;
+  counts: Record<string, number>;
+  onChange: (next: CategoryFilter) => void;
+}) {
+  return (
+    <div className="activity__filters" role="tablist">
+      <button
+        className={`activity__filter${active === null ? ' activity__filter--active' : ''}`}
+        onClick={() => onChange(null)}
+      >
+        All
+      </button>
+      {FILTER_CHIPS.map((c) => {
+        const n = counts[c.value] ?? 0;
+        if (n === 0) return null; // hide categories with no rows so the strip stays uncluttered
+        return (
+          <button
+            key={c.value}
+            className={`activity__filter activity__filter--${c.value}${
+              active === c.value ? ' activity__filter--active' : ''
+            }`}
+            onClick={() => onChange(active === c.value ? null : c.value)}
+          >
+            {c.label}
+            <span className="activity__filter-count">{n}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }

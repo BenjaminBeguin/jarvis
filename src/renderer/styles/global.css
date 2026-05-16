@@ -2647,6 +2647,58 @@ button:disabled:hover {
   border-radius: 2px;
 }
 
+/* Filter chip strip — sits between the header and the feed groups.
+   Single-select; selection persists to localStorage. */
+.activity__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: -4px;
+}
+
+.activity__filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.activity__filter:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.activity__filter--active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(0, 212, 255, 0.08);
+}
+
+.activity__filter-count {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 14px;
+  text-align: center;
+}
+
+.activity__filter--active .activity__filter-count {
+  color: var(--accent);
+  border-color: rgba(0, 212, 255, 0.4);
+}
+
 .activity__list {
   list-style: none;
   margin: 0;

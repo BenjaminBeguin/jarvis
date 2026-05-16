@@ -622,6 +622,14 @@ app.whenReady().then(async () => {
       console.error('Scheduled action fire failed:', e);
     }
     reminders.markFired(reminder.id, firedTaskId);
+    // Activity log: scheduled fires were missing this — only nudges
+    // recorded the event before. Logging both modes means the Activity
+    // feed shows every fire consistently.
+    activity.record({
+      kind: 'reminder.fired',
+      label: `Scheduled action fired · ${preview}`,
+      detail: { id: reminder.id, body: reminder.body, taskId: firedTaskId },
+    });
     try {
       const notif = new Notification({
         title: 'Jarvis is on it',
