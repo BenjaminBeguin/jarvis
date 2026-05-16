@@ -301,6 +301,12 @@ export interface LaunchTaskRequest extends SessionConfig {
    *  runner forks a fresh SDK session even if an active pooled one
    *  exists. Used for "fresh /<skill>" UI affordances. */
   forceFreshSession?: boolean;
+  /** Unattended dispatch — close cleanly after the agent's result
+   *  instead of holding the SDK session open for follow-ups, and
+   *  flag the task as `errored` if the final text looks like a
+   *  question to the user. Set by routine fires + scheduled-action
+   *  reminders (no human is watching). Defaults to false. */
+  unattended?: boolean;
 }
 
 // (TaskSummary.pooled is declared inline near the other entity links.)
@@ -494,6 +500,14 @@ export interface RoutineDef {
    * is true (visible); set false to hide routines that fire too often
    * to be useful in a calendar view (e.g. every-10-minute pollers). */
   showInCalendar?: boolean;
+  /** Whether this routine runs unattended (no one is watching). When
+   * true (the default), the runner closes the task cleanly after the
+   * agent's result instead of holding the session open for a reply.
+   * If the agent's final text ends in a question, the task is marked
+   * `errored` so the routine surfaces in the Inbox "Needs attention"
+   * source — that's a buggy skill prompt for an unattended context.
+   * Set false for the rare routine you want to allow to ask. */
+  unattended?: boolean;
 }
 
 /**

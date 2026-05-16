@@ -678,10 +678,14 @@ app.whenReady().then(async () => {
       // origin stays 'palette' so the notification policy treats this
       // as user-initiated (the user did initiate it, just earlier in
       // time). reminderId is the real link back to the origin entity.
+      // unattended: nobody is watching at the scheduled fire time — if
+      // the agent ends with a question, that's a buggy framing and
+      // the task should error rather than dangle.
       const t = runner.launch({
         prompt,
         origin: 'palette',
         reminderId: reminder.id,
+        unattended: true,
       });
       firedTaskId = t.id;
       pushTaskToHud(t.id);

@@ -99,6 +99,12 @@ interface TaskRecord {
    *  session id lands. Empty for routine / reminder fires + tasks
    *  the user explicitly launched fresh. */
   pooledBucketKey?: string;
+  /** True when nobody is watching — routine fires + scheduled-action
+   *  reminders. The runner closes the SDK session cleanly after the
+   *  result event instead of holding it in the awaiting state, and
+   *  flags the task `errored` if the final assistant text looks like
+   *  a question to the user. */
+  unattended?: boolean;
 }
 
 /**
@@ -130,6 +136,59 @@ function userMessage(text: string, sessionId: string): SDKUserMessage {
     parent_tool_use_id: null,
     session_id: sessionId,
   };
+}
+
+/**
+ * Pull the final assistant text from a task's event stream. Skips
+ * tool_use blocks, thinking blocks, and other non-text content.
+ * Returns null if the stream had no assistant text at all.
+ */
+function lastAssistantText(events: TaskEvent[]): string | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const msg = events[i]?.msg as
+      | { type?: string; message?: { content?: unknown } }
+      | undefined;
+    if (msg?.type !== 'assistant') continue;
+    const content = msg.message?.content;
+    if (!Array.isArray(content)) continue;
+    const text = (content as Array<Record<string, unknown>>)
+      .flatMap((b) =>
+        b['type'] === 'text' && typeof b['text'] === 'string'
+          ? [b['text'] as string]
+          : [],
+      )
+      .join('\n')
+      .trim();
+    if (text) return text;
+  }
+  return null;
+}
+
+/**
+ * Heuristic: does this look like the agent stopped to ask the user
+ * something? We check the tail of the message because a long report
+ * can legitimately contain question marks in mid-text ("did this
+ * resolve the issue? Yes, see the diff."). The signal we care about
+ * is "the last sentence is a question to the user."
+ *
+ * False positives are tolerable here — the consequence is a routine
+ * gets flagged for triage, the user reads the transcript and either
+ * tightens the skill prompt or sets unattended=false on the routine.
+ */
+function looksLikeQuestion(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return false;
+  // Last sentence ending — find the slice after the last sentence
+  // terminator in the prior body.
+  const tail = trimmed.slice(-240);
+  // Strip trailing whitespace, then check the final non-whitespace char.
+  const endsInQuestionMark = /\?\s*$/.test(tail);
+  if (endsInQuestionMark) return true;
+  // Phrase signals — common ways an agent asks for input without
+  // ending in a literal '?' (markdown bullets, etc.).
+  return /\b(let me know|please confirm|please clarify|need clarification|which (one|of these)|should i|do you want|would you like|can you (provide|share|confirm|clarify))\b/i.test(
+    tail,
+  );
 }
 
 export interface AuthContext {
@@ -519,6 +578,7 @@ export class TaskRunner extends EventEmitter {
       inputs,
       config,
       ...(pooledBucketKey ? { pooledBucketKey } : {}),
+      ...(req.unattended ? { unattended: true } : {}),
     };
     this.records.set(id, record);
     insertTask(summary);
@@ -647,14 +707,36 @@ export class TaskRunner extends EventEmitter {
       record.inputs?.close();
       const endedAt = Date.now();
 
+      // Unattended tasks (routine fires, scheduled-action reminders): no
+      // one is watching, so we never leave the session in the awaiting
+      // state. If the agent's final text looks like a question to the
+      // user, that's a buggy skill prompt — flag as errored so the
+      // failed-routines Inbox source surfaces it for triage.
+      if (record.unattended && finalStatus === 'completed') {
+        const finalText = lastAssistantText(record.events);
+        if (finalText && looksLikeQuestion(finalText)) {
+          finalStatus = 'errored';
+          this.recordEvent(record, {
+            type: 'jarvis_error',
+            error:
+              'Unattended fire ended in a question to the user. Tighten the skill prompt (give defaults / explicit instructions) or set unattended=false on this routine.',
+            aborted: false,
+          } as unknown as SDKMessage);
+        }
+      }
+
       // If the SDK stream ended cleanly AND we know the session id, keep
       // the task alive in an "awaiting" state — sendMessage() will spin up
       // a fresh query() with resume: sessionId on the next reply. Without
       // this, the SDK closing the stream after a single turn (which we've
       // seen in production despite multi-turn streaming working in
       // isolation) would lock the user out of further replies.
+      //
+      // Unattended tasks always close (no one is going to reply).
       const canResume =
-        finalStatus === 'completed' && !!record.sdkSessionId;
+        finalStatus === 'completed' &&
+        !!record.sdkSessionId &&
+        !record.unattended;
       const nextStatus: TaskStatus = canResume ? 'running' : finalStatus;
       const nextAwaiting = canResume;
       const nextEndedAt = canResume ? null : endedAt;

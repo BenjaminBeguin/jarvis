@@ -296,6 +296,19 @@ export function Routines() {
     }
   };
 
+  const toggleUnattended = async (r: RoutineDef) => {
+    try {
+      // Default true. Flip: undefined/true → false, false → true.
+      const nextUnattended = r.unattended === false ? true : false;
+      await window.jarvis.saveRoutine({
+        ...r,
+        unattended: nextUnattended,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return (
     <section className="briefings">
       <aside className="briefings__rail">
@@ -430,6 +443,7 @@ export function Routines() {
             onRunNow={() => runNow(active)}
             onToggle={() => void toggle(active)}
             onToggleShowInCalendar={() => void toggleShowInCalendar(active)}
+            onToggleUnattended={() => void toggleUnattended(active)}
           />
         )}
       </main>
@@ -460,6 +474,7 @@ function RoutineDetail({
   onRunNow,
   onToggle,
   onToggleShowInCalendar,
+  onToggleUnattended,
 }: {
   routine: RoutineDef;
   skill: SkillSummary | undefined;
@@ -469,10 +484,14 @@ function RoutineDetail({
   onRunNow: () => void;
   onToggle: () => void;
   onToggleShowInCalendar: () => void;
+  onToggleUnattended: () => void;
 }) {
   const purpose = derivePurpose(routine);
   // Default: visible. Only hidden if explicitly set to false.
   const showInCalendar = routine.showInCalendar !== false;
+  // Default: true. Unattended means "no one is watching" — the rare
+  // routine that should be allowed to ask sets this false.
+  const unattended = routine.unattended !== false;
 
   return (
     <>
@@ -606,6 +625,24 @@ function RoutineDetail({
               Show in Calendar{' '}
               <span className="routine-detail__hint" style={{ display: 'inline' }}>
                 · uncheck for high-frequency routines (every-Nmin pollers)
+              </span>
+            </span>
+          </label>
+        </div>
+        <div className="routine-detail__pref">
+          <label
+            className="toggle"
+            title="Routine fires unattended: if the agent's final reply ends in a question, the task is flagged and surfaces in the Inbox under Needs attention. Uncheck for the rare routine you want to allow to ask."
+          >
+            <input
+              type="checkbox"
+              checked={unattended}
+              onChange={onToggleUnattended}
+            />
+            <span>
+              Treat as unattended{' '}
+              <span className="routine-detail__hint" style={{ display: 'inline' }}>
+                · flag this routine if the agent ends with a question
               </span>
             </span>
           </label>

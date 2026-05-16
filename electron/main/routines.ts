@@ -23,6 +23,9 @@ interface PersistedRoutine {
   lastTaskId?: string;
   recentTaskIds?: string[];
   showInCalendar?: boolean;
+  /** Default true. Persisted only when explicitly set to false so most
+   *  routines.json entries stay compact. */
+  unattended?: boolean;
 }
 
 /** How many historical run task ids to keep per routine. Enough to render
@@ -93,6 +96,7 @@ export class RoutineStore extends EventEmitter {
       recentTaskIds: existing?.def.recentTaskIds ?? [],
       showInCalendar:
         input.showInCalendar ?? existing?.def.showInCalendar ?? true,
+      unattended: input.unattended ?? existing?.def.unattended ?? true,
     };
     this.applyRoutine(def);
     this.persist();
@@ -191,6 +195,11 @@ export class RoutineStore extends EventEmitter {
       prompt: def.input || 'Run.',
       origin: 'routine',
       routineId: def.id,
+      // Cron fires are unattended by default. If the agent ends with
+      // a question the task is flagged errored so the routine shows in
+      // the "Needs attention" inbox source. Set on the def to false to
+      // allow questions (rare).
+      unattended: def.unattended !== false,
     });
     // Prepend the new task id to the history, dedup just in case, cap at
     // RECENT_TASK_IDS_MAX so routines.json doesn't grow unbounded.
@@ -244,6 +253,7 @@ export class RoutineStore extends EventEmitter {
               ? [item.lastTaskId]
               : [],
           showInCalendar: item.showInCalendar ?? true,
+          unattended: item.unattended ?? true,
         };
         this.applyRoutine(def);
       }
@@ -269,6 +279,9 @@ export class RoutineStore extends EventEmitter {
       // Only persist the flag when it's the non-default (false) — keeps
       // routines.json small for the common case (visible).
       showInCalendar: r.def.showInCalendar === false ? false : undefined,
+      // Same pattern: unattended defaults true, persist only when the
+      // user opted into the rare attended-routine case.
+      unattended: r.def.unattended === false ? false : undefined,
     }));
     writeFileSync(this.path, JSON.stringify(list, null, 2), 'utf8');
   }
