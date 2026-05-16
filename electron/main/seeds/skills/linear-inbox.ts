@@ -66,14 +66,17 @@ Overwrite on every run. Empty array is valid — clears the section.
   "url": "<linear issue url>",
   "fireAt": <ms epoch — issue.dueDate if set, otherwise omit>,
   "createdAt": <ms epoch of last update>,
-  "project": "<project-name-if-mapped>",
-  "action": {
-    "label": "Open in Linear",
-    "skillId": "send",
-    "prompt": "Open the Linear issue at <url> and propose the next move"
-  }
+  "project": "<project-name-if-mapped>"
 }
 \`\`\`
+
+**Do not** include an \`action\` field. The \`url\` already gives the
+user a one-click "Open" button in the Inbox; spawning a Claude task
+to "open in Linear" wastes a turn and a few seconds of wall-clock.
+If you ever want an agentic affordance on a Linear row in the
+future (e.g. "Draft a status comment" / "Triage assignment"), that
+would warrant an \`action\` with \`kind: 'task'\` and a proper
+prompt — but the default for a Linear inbox row is just a link.
 
 - \`id\` must be stable across runs — use the Linear issue id (not the
   identifier like "ENG-123"; the underlying GraphQL id). Re-runs

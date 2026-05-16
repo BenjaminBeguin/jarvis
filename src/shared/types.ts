@@ -109,7 +109,19 @@ export const DEFAULT_INBOX_PREFS: InboxPrefs = {
  */
 export type ModuleSettingValue = boolean | number | string;
 
-export type ModuleSettingType = 'boolean' | 'number' | 'select' | 'text';
+/**
+ * `secret` fields don't store their value in moduleSettings — instead the
+ * value lives in the macOS Keychain via a module-specific IPC. The settings
+ * panel renders a "set token / clear" affordance and consults a `has-token`
+ * IPC to know whether one is present. Wiring per module id lives in the
+ * SettingsField renderer (renderer-side, keeps the schema declarative).
+ */
+export type ModuleSettingType =
+  | 'boolean'
+  | 'number'
+  | 'select'
+  | 'text'
+  | 'secret';
 
 export interface ModuleSettingField {
   /** Persisted key within the module's settings object. */
@@ -641,16 +653,37 @@ export interface InboxItem {
   /** When the item first appeared. Newest-first when no fireAt is set. */
   createdAt: number;
   /**
-   * One-click action — launches a task or routes through the palette.
-   * Sources that have nothing to dispatch leave this undefined; the row
-   * still shows as informational.
+   * One-click action button shown to the right of the row. Two flavors:
+   *
+   *   - **task** (default) — clicking launches a Claude agent via
+   *     `runner.launch({ skillId, prompt })`. Use this for genuine
+   *     agentic work: "Draft a reply," "Review this PR," "Address
+   *     comments." The button label should describe the work, not
+   *     the destination.
+   *
+   *   - **open-url** — clicking opens `action.url` (or, if absent,
+   *     the item's own `url`) directly in the browser. Use this when
+   *     you want a custom-labeled link button beyond the generic
+   *     "Open" the renderer adds from `item.url` alone — e.g. "View
+   *     on Linear" with custom wording but no agent spawn.
+   *
+   * If you only want a plain "Open" link, just set `item.url` and
+   * leave `action` undefined — the renderer adds the Open button
+   * automatically. Spawning a task for what's really just navigation
+   * (e.g. "Open the Linear issue and propose the next move") wastes
+   * a turn and a few seconds of the user's life.
    */
   action?: {
     label: string;
-    /** Skill id to launch — falls back to free-text routing if absent. */
+    /** Defaults to 'task'. */
+    kind?: 'task' | 'open-url';
+    /** task only — skill id to launch (free-text routing if absent). */
     skillId?: string;
-    /** Prompt text to send (or route through intent parser). */
-    prompt: string;
+    /** task only — prompt text to send. Required when kind is 'task' or
+     *  omitted. */
+    prompt?: string;
+    /** open-url only — URL to open. Falls back to item.url if absent. */
+    url?: string;
   };
 }
 

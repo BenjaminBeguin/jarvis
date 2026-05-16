@@ -528,10 +528,24 @@ function InboxRow({
 
   const act = async () => {
     if (!item.action) return;
+    // open-url actions are pure navigation — opening a link doesn't
+    // need a Claude turn. Skip the runner entirely so the button feels
+    // like a link, not a "loading…" affordance.
+    if (item.action.kind === 'open-url') {
+      const target = item.action.url ?? item.url;
+      if (target) void window.jarvis.openExternal(target);
+      return;
+    }
+    // task action (default) — actually spawn an agent.
+    const prompt = item.action.prompt ?? '';
+    if (!prompt.trim()) {
+      toast({ kind: 'error', message: 'Action has no prompt to launch.' });
+      return;
+    }
     setActing(true);
     try {
       const summary = await window.jarvis.launchTask({
-        prompt: item.action.prompt,
+        prompt,
         skillId: item.action.skillId,
         origin: 'palette',
       });
@@ -658,7 +672,11 @@ function InboxRow({
         )}
       </div>
       <div className="inbox__row-actions">
-        {item.url && (
+        {item.url && !(item.action?.kind === 'open-url') && (
+          // Skip the generic "Open" button when the action itself is
+          // already an open-url with a custom label (e.g. "Open in
+          // Linear") — two buttons that do the same thing reads as
+          // a UI bug.
           <button className="inbox__row-link" onClick={open} title={item.url}>
             Open
           </button>
@@ -690,12 +708,20 @@ function InboxRow({
         )}
         {item.action && !binding && (
           <button
-            className="inbox__row-primary"
+            className={`inbox__row-primary${item.action.kind === 'open-url' ? ' inbox__row-primary--link' : ''}`}
             onClick={() => void act()}
-            disabled={acting}
-            title={item.action.skillId ? `Launches ${item.action.skillId}` : item.action.prompt}
+            disabled={acting && item.action.kind !== 'open-url'}
+            title={
+              item.action.kind === 'open-url'
+                ? `Opens ${item.action.url ?? item.url ?? 'a link'}`
+                : item.action.skillId
+                ? `Launches ${item.action.skillId}`
+                : item.action.prompt ?? item.action.label
+            }
           >
-            {acting ? 'Launching…' : item.action.label}
+            {item.action.kind !== 'open-url' && acting
+              ? 'Launching…'
+              : item.action.label}
           </button>
         )}
         {binding && (
