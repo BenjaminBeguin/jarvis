@@ -75,19 +75,30 @@ interface RowProps {
 }
 
 function Row({ task, active, onClick }: RowProps) {
-  const originLabel =
-    task.origin === 'external'
-      ? 'agent'
-      : task.origin === 'routine'
-      ? 'routine'
-      : task.origin === 'voice'
-      ? 'voice'
-      : 'palette';
+  // The origin chip used to be the only provenance signal. Now that
+  // tasks carry routineId / reminderId / projectName, prefer the
+  // more specific link when present — "routine:daily-recap" tells
+  // the user more than "routine" on its own.
+  const originLabel = task.routineId
+    ? `⟳ ${task.routineId}`
+    : task.reminderId
+    ? `⏰ reminder`
+    : task.origin === 'external'
+    ? 'agent'
+    : task.origin === 'routine'
+    ? 'routine'
+    : task.origin === 'voice'
+    ? 'voice'
+    : 'palette';
+  const titleParts = [new Date(task.startedAt).toLocaleString()];
+  if (task.projectName) titleParts.push(`project: ${task.projectName}`);
+  if (task.routineId) titleParts.push(`routine: ${task.routineId}`);
+  if (task.reminderId) titleParts.push(`reminder: ${task.reminderId}`);
   return (
     <button
       className={`task-list-view__row${active ? ' task-list-view__row--active' : ''}${task.awaitingInput ? ' task-list-view__row--awaiting' : ''}`}
       onClick={onClick}
-      title={new Date(task.startedAt).toLocaleString()}
+      title={titleParts.join(' · ')}
     >
       <span className={`status-dot status-dot--${statusClass(task)}`} />
       <span className="task-list-view__title">{task.title}</span>
