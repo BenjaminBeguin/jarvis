@@ -1,4 +1,4 @@
-import { app, globalShortcut, ipcMain, Notification, shell } from 'electron';
+import { app, globalShortcut, ipcMain, shell } from 'electron';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
@@ -7,7 +7,16 @@ import { join } from 'node:path';
 import { IpcChannels } from '@shared/ipc';
 import type { AppStatus, TaskEvent, TaskSummary } from '@shared/types';
 
-import { detectClaudeBinary, loadAuthMode, loadNotificationPrefs } from './auth.js';
+import {
+  detectClaudeBinary,
+  loadAfkMode,
+  loadAuthMode,
+  loadNotificationPrefs,
+  saveAfkMode,
+} from './auth.js';
+import { awaitTurnResult } from './await-turn.js';
+import { notifier } from './notifier.js';
+import { routePrompt } from './route-prompt.js';
 import { BriefingsStore } from './briefings.js';
 import { closeDatabase, initDatabase, listRecentTasks } from './db.js';
 import { startHttpServer, type HttpServerHandle } from './http-server.js';
@@ -40,6 +49,7 @@ import { shellModule } from './modules/shell.js';
 import { shellNavModule } from './modules/shell-nav.js';
 import { skillSuggesterModule } from './modules/skill-suggester.js';
 import { statusModule } from './modules/status.js';
+import { telegramBotModule } from './modules/telegram-bot/index.js';
 import { parseIntent } from './intent-router.js';
 import { ProjectMemoryStore } from './project-memory.js';
 import { ProjectStore } from './projects.js';
@@ -53,6 +63,7 @@ import {
   rotateHttpApiToken,
 } from './secrets.js';
 import { ShellRunner } from './shell-runner.js';
+import { SkillSessionStore } from './skill-sessions.js';
 import { SkillStore } from './skill-store.js';
 import { SkillSuggestionStore } from './skill-suggestions.js';
 import { asTaskOrigin, TaskRunner } from './task-runner.js';
@@ -67,6 +78,7 @@ import {
 } from './user-context.js';
 import {
   initTray,
+  refreshTrayMenu,
   setAbortAllHandler,
   setAwaitingRepliesCount,
   setPendingRemindersCount,
@@ -90,6 +102,7 @@ const runner = new TaskRunner();
 const routines = new RoutineStore();
 const reminders = new ReminderStore();
 const skillSuggestions = new SkillSuggestionStore(join(homedir(), '.jarvis'));
+const skillSessions = new SkillSessionStore();
 const projectMemory = new ProjectMemoryStore();
 const modules = new ModuleRegistry();
 const shellRunner = new ShellRunner(runner);
@@ -109,15 +122,13 @@ const briefings = new BriefingsStore(BUILTIN_BRIEFING_KINDS);
 const inboxProximity = new InboxProximityWatcher(
   inbox,
   (item, minutesUntil) => {
-    try {
-      const minutesLabel =
-        minutesUntil <= 1 ? 'starting now' : `in ${minutesUntil} min`;
-      const notif = new Notification({
-        title: `Heads up · ${minutesLabel}`,
-        body: item.title,
-        silent: false,
-      });
-      notif.on('click', () => {
+    const minutesLabel =
+      minutesUntil <= 1 ? 'starting now' : `in ${minutesUntil} min`;
+    notifier.post({
+      source: 'meeting-heads-up',
+      title: `Heads up · ${minutesLabel}`,
+      body: item.title,
+      onClick: () => {
         if (item.url && /^https?:\/\//i.test(item.url)) {
           void shell.openExternal(item.url);
           return;
@@ -125,11 +136,8 @@ const inboxProximity = new InboxProximityWatcher(
         const win = openObservatory();
         win.focus();
         sendWhenReady(win, IpcChannels.shellNavigate, { tab: 'inbox' });
-      });
-      notif.show();
-    } catch {
-      // Notifications can fail pre-permission; not fatal.
-    }
+      },
+    });
   },
   // Imminent meeting prompt — bring the window forward and broadcast
   // a meeting-imminent event. The renderer mounts a toast with [Record]
@@ -207,6 +215,8 @@ runner.setMcpStore(mcp);
 runner.setProjectStore(projects);
 runner.setUserContextStore(userContext);
 runner.setPreferencesStore(preferences);
+runner.setSkillSessionStore(skillSessions);
+skillSessions.init();
 
 // In-process Jarvis MCP — always available to every task. Tools:
 // notify, log_activity, create_reminder, open_url, get_active_project,
@@ -214,13 +224,12 @@ runner.setPreferencesStore(preferences);
 runner.setJarvisMcp(
   createJarvisMcp({
     notify: (title, body) => {
-      try {
-        new Notification({ title, body, silent: false })
-          .on('click', () => openObservatory())
-          .show();
-      } catch {
-        // pre-permission, not fatal
-      }
+      notifier.post({
+        source: 'notify-tool',
+        title,
+        body,
+        onClick: () => openObservatory(),
+      });
     },
     activity,
     reminders,
@@ -351,21 +360,17 @@ function wireRunnerEvents(): void {
       !costWarned.has(summary.id)
     ) {
       costWarned.add(summary.id);
-      try {
-        const notif = new Notification({
-          title: `Jarvis · task at $${summary.costUsd.toFixed(2)}`,
-          body: `${summary.title.length > 60 ? summary.title.slice(0, 60) + '…' : summary.title}\nClick to open · abort if surprising.`,
-          silent: false,
-        });
-        notif.on('click', () => {
+      notifier.post({
+        source: 'cost-guardrail',
+        title: `Jarvis · task at $${summary.costUsd.toFixed(2)}`,
+        body: `${summary.title.length > 60 ? summary.title.slice(0, 60) + '…' : summary.title}\nClick to open · abort if surprising.`,
+        taskId: summary.id,
+        onClick: () => {
           const win = openObservatory();
           win.focus();
           sendWhenReady(win, IpcChannels.observatoryFocusTask, summary.id);
-        });
-        notif.show();
-      } catch {
-        // Notifications can fail pre-permission; the task continues.
-      }
+        },
+      });
     }
     if (
       summary.status === 'completed' ||
@@ -397,21 +402,31 @@ function wireRunnerEvents(): void {
           focusTaskInObservatory();
         }
         if (askLevel !== 'silent') {
-          try {
-            const preview =
-              summary.title.length > 80
-                ? `${summary.title.slice(0, 80)}…`
-                : summary.title;
-            const notif = new Notification({
-              title: 'Jarvis · ready for your reply',
-              body: preview,
-              silent: false,
-            });
-            notif.on('click', focusTaskInObservatory);
-            notif.show();
-          } catch {
-            // Notifications can fail pre-permission; not fatal.
-          }
+          const preview =
+            summary.title.length > 80
+              ? `${summary.title.slice(0, 80)}…`
+              : summary.title;
+          notifier.post({
+            source: 'task-awaiting',
+            title: 'Jarvis · ready for your reply',
+            body: preview,
+            taskId: summary.id,
+            onClick: focusTaskInObservatory,
+          });
+        } else {
+          // Subscribers (e.g. Telegram in AFK mode) still need to hear
+          // about awaiting-input even when the local OS toast is silenced.
+          const preview =
+            summary.title.length > 80
+              ? `${summary.title.slice(0, 80)}…`
+              : summary.title;
+          notifier.post({
+            source: 'task-awaiting',
+            title: 'Jarvis · ready for your reply',
+            body: preview,
+            taskId: summary.id,
+            skipOsNotification: true,
+          });
         }
       }
       awaitingFlipped.set(summary.id, now);
@@ -431,27 +446,25 @@ function wireRunnerEvents(): void {
     ) {
       launchAnnounced.add(summary.id);
       const launchLevel = loadNotificationPrefs().onLaunch;
-      if (launchLevel === 'toast') {
-        try {
-          const preview =
-            summary.title.length > 80
-              ? `${summary.title.slice(0, 80)}…`
-              : summary.title;
-          const notif = new Notification({
-            title: 'Jarvis · task started',
-            body: preview,
-            silent: true,
-          });
-          notif.on('click', () => {
-            const win = openObservatory();
-            win.focus();
-            sendWhenReady(win, IpcChannels.observatoryFocusTask, summary.id);
-          });
-          notif.show();
-        } catch {
-          // Notifications can fail pre-permission; not fatal.
-        }
-      }
+      const preview =
+        summary.title.length > 80
+          ? `${summary.title.slice(0, 80)}…`
+          : summary.title;
+      notifier.post({
+        source: 'task-launched',
+        title: 'Jarvis · task started',
+        body: preview,
+        taskId: summary.id,
+        silent: true,
+        // Honor the user's launch-toast preference for OS but always
+        // emit to subscribers so AFK Telegram users see the task fire.
+        skipOsNotification: launchLevel !== 'toast',
+        onClick: () => {
+          const win = openObservatory();
+          win.focus();
+          sendWhenReady(win, IpcChannels.observatoryFocusTask, summary.id);
+        },
+      });
     }
     if (summary.status === 'completed' || summary.status === 'errored' || summary.status === 'aborted') {
       launchAnnounced.delete(summary.id);
@@ -461,21 +474,17 @@ function wireRunnerEvents(): void {
       summary.origin !== 'external' &&
       (summary.status === 'completed' || summary.status === 'errored')
     ) {
-      try {
-        const titlePrefix =
-          summary.origin === 'routine' ? 'Jarvis · routine' : 'Jarvis · task';
-        const titleSuffix =
-          summary.status === 'completed' ? 'complete' : 'failed';
-        new Notification({
-          title: `${titlePrefix} ${titleSuffix}`,
-          body: summary.title,
-          silent: false,
-        })
-          .on('click', () => openObservatory())
-          .show();
-      } catch {
-        // Notifications can fail on first-launch permission denial; ignore.
-      }
+      const titlePrefix =
+        summary.origin === 'routine' ? 'Jarvis · routine' : 'Jarvis · task';
+      const titleSuffix =
+        summary.status === 'completed' ? 'complete' : 'failed';
+      notifier.post({
+        source: summary.status === 'completed' ? 'task-complete' : 'task-errored',
+        title: `${titlePrefix} ${titleSuffix}`,
+        body: summary.title,
+        taskId: summary.id,
+        onClick: () => openObservatory(),
+      });
     }
   });
 }
@@ -545,25 +554,17 @@ app.whenReady().then(async () => {
       console.log(
         `[reminder] firing nudge id=${reminder.id} body="${preview}"`,
       );
-      if (!Notification.isSupported()) {
-        console.warn('[reminder] Notification.isSupported() = false');
-      } else {
-        try {
-          const notif = new Notification({
-            title: 'Reminder',
-            body: preview,
-            silent: false,
-          });
-          notif.on('click', () => {
-            const win = openObservatory();
-            win.focus();
-            sendWhenReady(win, IpcChannels.shellNavigate, { tab: 'inbox' });
-          });
-          notif.show();
-        } catch (err) {
-          console.warn('[reminder] notification failed:', err);
-        }
-      }
+      notifier.post({
+        source: 'reminder',
+        title: 'Reminder',
+        body: preview,
+        reminderId: reminder.id,
+        onClick: () => {
+          const win = openObservatory();
+          win.focus();
+          sendWhenReady(win, IpcChannels.shellNavigate, { tab: 'inbox' });
+        },
+      });
       activity.record({
         kind: 'reminder.fired',
         label: `Reminder fired · ${preview}`,
@@ -599,13 +600,13 @@ app.whenReady().then(async () => {
       label: `Scheduled action fired · ${preview}`,
       detail: { id: reminder.id, body: reminder.body, taskId: firedTaskId },
     });
-    try {
-      const notif = new Notification({
-        title: 'Jarvis is on it',
-        body: preview,
-        silent: false,
-      });
-      notif.on('click', () => {
+    notifier.post({
+      source: 'scheduled-action',
+      title: 'Jarvis is on it',
+      body: preview,
+      reminderId: reminder.id,
+      ...(firedTaskId ? { taskId: firedTaskId } : {}),
+      onClick: () => {
         if (firedTaskId) {
           const win = openObservatory();
           win.focus();
@@ -613,11 +614,8 @@ app.whenReady().then(async () => {
         } else {
           openObservatory();
         }
-      });
-      notif.show();
-    } catch {
-      // Notifications can fail pre-permission; not fatal.
-    }
+      },
+    });
   });
   reminders.init();
   skillSuggestions.init();
@@ -629,13 +627,12 @@ app.whenReady().then(async () => {
   modules.setContext({
     jarvisRoot,
     notify: (title, body) => {
-      try {
-        new Notification({ title, body, silent: false })
-          .on('click', () => openObservatory())
-          .show();
-      } catch {
-        // Notifications can fail pre-permission; not fatal.
-      }
+      notifier.post({
+        source: 'other',
+        title,
+        body,
+        onClick: () => openObservatory(),
+      });
     },
     launchTask: (req) =>
       runner.launch({ ...req, origin: asTaskOrigin(req.origin) }),
@@ -672,6 +669,38 @@ app.whenReady().then(async () => {
     broadcast: (channel, payload) => broadcast(channel, payload),
     registerContextProvider: (provider) => userContext.register(provider),
     logActivity: (event) => activity.record(event),
+    routePrompt: (input, opts) =>
+      routePrompt(input, opts ?? {}, {
+        modules,
+        reminders,
+        runner,
+        authStatus: refreshAuth,
+      }),
+    awaitTurnResult: (taskId, opts) => awaitTurnResult(runner, taskId, opts),
+    sendMessageToTask: async (taskId, text) => {
+      const ok = runner.sendMessage(taskId, text);
+      if (!ok) {
+        throw new Error(
+          `Cannot send message to task ${taskId}: not active or external.`,
+        );
+      }
+    },
+    abortTask: async (taskId) => {
+      const ok = runner.abort(taskId);
+      if (!ok) {
+        throw new Error(`Cannot abort task ${taskId}: not running.`);
+      }
+    },
+    isAfk: () => loadAfkMode(),
+    setAfk: (value) => {
+      saveAfkMode(value);
+      broadcast(IpcChannels.afkChanged, value);
+      refreshTrayMenu();
+    },
+    listReminders: () => reminders.list(),
+    markReminderDone: (id) => reminders.markDone(id),
+    snoozeReminder: (id, msFromNow) => reminders.snooze(id, msFromNow),
+    listSkills: () => skills.list(),
   });
   await modules.register(quickNoteModule);
   await modules.register(claudeCodeWatchModule);
@@ -684,6 +713,7 @@ app.whenReady().then(async () => {
   await modules.register(remindersModule);
   await modules.register(shellNavModule);
   await modules.register(shellModule);
+  await modules.register(telegramBotModule);
 
   // Sync the auto-dedupe routine with the quick-note module's
   // dedupe cadence setting. Re-runs on every module-registry change so
@@ -777,16 +807,12 @@ app.whenReady().then(async () => {
     broadcast(IpcChannels.skillSuggestionsChanged, list),
   );
   skillSuggestions.on('batch', ({ added }: { added: number }) => {
-    try {
-      new Notification({
-        title: 'Skill ideas',
-        body: `Jarvis proposed ${added} new skill${added === 1 ? '' : 's'} based on your recent prompts`,
-      })
-        .on('click', () => openObservatory())
-        .show();
-    } catch {
-      // Suggestions are still in the store; user will see them in the dashboard.
-    }
+    notifier.post({
+      source: 'skill-suggestion',
+      title: 'Skill ideas',
+      body: `Jarvis proposed ${added} new skill${added === 1 ? '' : 's'} based on your recent prompts`,
+      onClick: () => openObservatory(),
+    });
   });
   modules.on('changed', (list) => broadcast(IpcChannels.modulesChanged, list));
   projects.on('changed', (list) => broadcast(IpcChannels.projectsChanged, list));
@@ -804,30 +830,28 @@ app.whenReady().then(async () => {
   // notifications. Click jumps to the Inbox tab.
   inbox.on('new-items', (fresh: import('@shared/types').InboxItem[]) => {
     if (fresh.length === 0) return;
-    try {
-      const bySrc = new Map<string, number>();
-      for (const it of fresh) bySrc.set(it.source, (bySrc.get(it.source) ?? 0) + 1);
-      const parts: string[] = [];
-      for (const [src, n] of bySrc) {
-        const label =
-          src === 'pr-review' ? 'PR review' :
-          src === 'pr-comments' ? 'PR comment' :
-          src === 'reminders' ? 'reminder' :
-          src === 'failed-routines' ? 'failed routine' :
-          src;
-        parts.push(`${n} ${label}${n === 1 ? '' : 's'}`);
-      }
-      const body = parts.join(' · ');
-      new Notification({ title: 'Jarvis · new in inbox', body, silent: false })
-        .on('click', () => {
-          const win = openObservatory();
-          win.focus();
-          sendWhenReady(win, IpcChannels.shellNavigate, { tab: 'inbox' });
-        })
-        .show();
-    } catch {
-      // Notifications can fail pre-permission; not fatal.
+    const bySrc = new Map<string, number>();
+    for (const it of fresh) bySrc.set(it.source, (bySrc.get(it.source) ?? 0) + 1);
+    const parts: string[] = [];
+    for (const [src, n] of bySrc) {
+      const label =
+        src === 'pr-review' ? 'PR review' :
+        src === 'pr-comments' ? 'PR comment' :
+        src === 'reminders' ? 'reminder' :
+        src === 'failed-routines' ? 'failed routine' :
+        src;
+      parts.push(`${n} ${label}${n === 1 ? '' : 's'}`);
     }
+    notifier.post({
+      source: 'inbox-new',
+      title: 'Jarvis · new in inbox',
+      body: parts.join(' · '),
+      onClick: () => {
+        const win = openObservatory();
+        win.focus();
+        sendWhenReady(win, IpcChannels.shellNavigate, { tab: 'inbox' });
+      },
+    });
   });
   // Refresh the inbox every 5 minutes in the background. First tick is
   // delayed 5s so the renderer's on-mount refresh wins the race.

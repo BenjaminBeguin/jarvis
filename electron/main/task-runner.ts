@@ -18,6 +18,7 @@ import type { McpConfigStore } from './mcp-config.js';
 import type { ProjectStore } from './projects.js';
 import type { PreferencesStore } from './preferences-store.js';
 import type { SkillRecord, SkillStore } from './skill-store.js';
+import type { SkillSessionStore } from './skill-sessions.js';
 import type { UserContextStore } from './user-context.js';
 
 /**
@@ -93,6 +94,11 @@ interface TaskRecord {
   /** Per-launch SDK option overrides (mode / model / cwd / etc.).
    * Kept on the record so resume turns inherit them. */
   config?: SessionConfig;
+  /** When this task was launched via skill-session pooling, the
+   *  bucket key the SkillSessionStore should update once the SDK
+   *  session id lands. Empty for routine / reminder fires + tasks
+   *  the user explicitly launched fresh. */
+  pooledBucketKey?: string;
 }
 
 /**
@@ -142,10 +148,15 @@ export class TaskRunner extends EventEmitter {
   private userContext: UserContextStore | null = null;
   private preferences: PreferencesStore | null = null;
   private jarvisMcp: unknown = null;
+  private skillSessions: SkillSessionStore | null = null;
   private auth: AuthContext = { mode: 'subscription' };
 
   setSkillStore(store: SkillStore): void {
     this.skills = store;
+  }
+
+  setSkillSessionStore(store: SkillSessionStore): void {
+    this.skillSessions = store;
   }
 
   setMcpStore(store: McpConfigStore): void {
@@ -447,11 +458,32 @@ export class TaskRunner extends EventEmitter {
     const now = Date.now();
     const skill = req.skillId ? this.skills?.get(req.skillId) ?? null : null;
     const skillId = skill?.id ?? null;
-    const titlePrefix = req.resumeSessionId ? '↪ ' : '';
-    // Strip the per-launch overrides off so they don't bleed into other
-    // launch-request fields. Each may be undefined; the runner falls back
-    // to its built-in defaults (bypassPermissions, active-project cwd,
-    // skill model).
+    const origin = req.origin ?? 'palette';
+    const projectName =
+      req.projectName ?? this.userContext?.getActiveProject() ?? null;
+
+    // Skill-session pooling — see SkillSessionStore for policy. When
+    // an explicit resumeSessionId is already on the request (e.g. the
+    // user clicked "↪ Resume" in TaskDetail), respect that; pooling
+    // is only the default fallback when nothing else was specified.
+    let resumeSessionId = req.resumeSessionId;
+    let pooledBucketKey: string | undefined;
+    if (!resumeSessionId && this.skillSessions && skillId) {
+      const decision = this.skillSessions.decide({
+        skillId,
+        origin,
+        projectName,
+        forceFresh: req.forceFreshSession === true,
+      });
+      if (decision) {
+        pooledBucketKey = decision.bucketKey;
+        if (decision.resumeSessionId) {
+          resumeSessionId = decision.resumeSessionId;
+        }
+      }
+    }
+    const titlePrefix = resumeSessionId ? '↪ ' : '';
+
     const config: SessionConfig = {
       permissionMode: req.permissionMode,
       model: req.model,
@@ -464,20 +496,15 @@ export class TaskRunner extends EventEmitter {
       skillId,
       title: `${titlePrefix}${deriveTitle(req.prompt, skill)}`,
       status: 'running',
-      origin: req.origin ?? 'palette',
+      origin,
       startedAt: now,
       endedAt: null,
       costUsd: 0,
       inputPreview: req.prompt.slice(0, 240),
       cwd: this.resolveCwd(config.cwd),
-      // Entity links — propagate from the request when the emit site
-      // knows them (routine fires set routineId; scheduled-reminder
-      // fires set reminderId; active project is captured at launch
-      // time from the UserContextStore). Fallback to active project
-      // when the caller didn't override.
       routineId: req.routineId ?? null,
       reminderId: req.reminderId ?? null,
-      projectName: req.projectName ?? this.userContext?.getActiveProject() ?? null,
+      projectName,
     };
     const inputs = new AsyncMessageQueue();
     inputs.push(userMessage(req.prompt, id));
@@ -488,13 +515,14 @@ export class TaskRunner extends EventEmitter {
       nextSeq: 0,
       inputs,
       config,
+      ...(pooledBucketKey ? { pooledBucketKey } : {}),
     };
     this.records.set(id, record);
     insertTask(summary);
     this.emit('status', summary);
 
     // Fire-and-forget; never block main loop.
-    void this.run(record, skill, req.resumeSessionId);
+    void this.run(record, skill, resumeSessionId);
     return summary;
   }
 
@@ -676,6 +704,15 @@ export class TaskRunner extends EventEmitter {
         this.emit('status', record.summary);
         const mirrorId = `cc-${m.session_id}`;
         if (this.records.has(mirrorId)) this.removeExternal(mirrorId);
+        // If this task was pooled (no explicit resume but a skill +
+        // user-initiated origin), record the turn so the next launch
+        // for the same bucket can resume it. The SDK can return a
+        // different session_id than the one we asked to resume (it
+        // forks under some conditions); the store handles that
+        // automatically — same key, new id, turn counter resets.
+        if (record.pooledBucketKey && this.skillSessions) {
+          this.skillSessions.recordTurn(record.pooledBucketKey, m.session_id);
+        }
       }
     }
   }

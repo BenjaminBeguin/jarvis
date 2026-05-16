@@ -294,6 +294,10 @@ export interface LaunchTaskRequest extends SessionConfig {
   routineId?: string | null;
   reminderId?: string | null;
   projectName?: string | null;
+  /** Opt out of skill-session pooling for this single dispatch. The
+   *  runner forks a fresh SDK session even if an active pooled one
+   *  exists. Used for "fresh /<skill>" UI affordances. */
+  forceFreshSession?: boolean;
 }
 
 export interface SkillSummary {
