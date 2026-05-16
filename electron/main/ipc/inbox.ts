@@ -72,12 +72,40 @@ export function registerInboxIpc({
   ipcMain.handle(
     IpcChannels.dismissInboxItem,
     (_e, payload: { id: string; snoozeMs: number }) => {
+      // Capture the row before it disappears so the activity log carries
+      // a useful label — the dismissed id alone wouldn't tell the user
+      // what they snoozed when reading the history later.
+      const before = inbox.list().find((it) => it.id === payload.id);
       inbox.dismiss(payload.id, payload.snoozeMs);
+      const durMin = Math.round(payload.snoozeMs / 60_000);
+      const durLabel =
+        durMin < 60
+          ? `${durMin}m`
+          : durMin < 60 * 24
+          ? `${Math.round(durMin / 60)}h`
+          : `${Math.round(durMin / (60 * 24))}d`;
+      activity.record({
+        kind: 'inbox.dismissed',
+        label: before
+          ? `Inbox dismissed (${durLabel}) · ${before.title}`
+          : `Inbox dismissed (${durLabel}) · ${payload.id}`,
+        detail: {
+          id: payload.id,
+          source: before?.source ?? null,
+          title: before?.title ?? null,
+          snoozeMs: payload.snoozeMs,
+        },
+      });
     },
   );
 
   ipcMain.handle(IpcChannels.restoreInboxItem, (_e, id: string) => {
     inbox.restore(id);
+    activity.record({
+      kind: 'inbox.restored',
+      label: `Inbox restored · ${id}`,
+      detail: { id },
+    });
   });
 
   const inboxDir = join(jarvisRoot, 'inbox');

@@ -265,6 +265,8 @@ const EVENT_KIND_META: Record<
   'mcp.updated': { category: 'integration', label: 'integration · update' },
   'mcp.file-replaced': { category: 'integration', label: 'integration · file replace' },
   'inbox.cleared': { category: 'inbox', label: 'inbox · clear' },
+  'inbox.dismissed': { category: 'inbox', label: 'inbox · dismiss' },
+  'inbox.restored': { category: 'inbox', label: 'inbox · restore' },
   'reminder.created': { category: 'reminder', label: 'reminder' },
   'reminder.scheduled': { category: 'reminder', label: 'reminder · scheduled' },
   'reminder.cancelled': { category: 'reminder', label: 'reminder · cancel' },
