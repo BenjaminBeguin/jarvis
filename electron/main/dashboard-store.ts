@@ -29,6 +29,8 @@ function isDashboardItem(v: unknown): v is DashboardItem {
   return true;
 }
 
+const VALID_MAX_HEIGHTS = new Set(['auto', 'compact', 'medium', 'tall']);
+
 function isDashboardSection(v: unknown): v is DashboardSection {
   if (!v || typeof v !== 'object') return false;
   const s = v as Record<string, unknown>;
@@ -38,6 +40,13 @@ function isDashboardSection(v: unknown): v is DashboardSection {
     s.width !== undefined &&
     s.width !== 'full' &&
     s.width !== 'half'
+  ) {
+    return false;
+  }
+  if (
+    s.maxHeight !== undefined &&
+    (typeof s.maxHeight !== 'string' ||
+      !VALID_MAX_HEIGHTS.has(s.maxHeight))
   ) {
     return false;
   }
@@ -108,6 +117,12 @@ export class DashboardStore extends EventEmitter {
           title: s.title.trim() || 'Untitled',
           items: s.items.filter(isDashboardItem),
           ...(s.width ? { width: s.width } : {}),
+          // maxHeight 'auto' is the default — drop the field entirely
+          // so the persisted JSON stays clean (only sections that opt
+          // in carry a value).
+          ...(s.maxHeight && s.maxHeight !== 'auto'
+            ? { maxHeight: s.maxHeight }
+            : {}),
         })),
     };
     this.cached = cleaned;
