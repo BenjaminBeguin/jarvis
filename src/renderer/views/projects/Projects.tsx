@@ -26,6 +26,9 @@ export function Projects() {
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [memory, setMemory] = useState<ProjectMemoryFile[]>([]);
   const [memoryCounts, setMemoryCounts] = useState<Record<string, number>>({});
+  // Per-project 30-day spend from the cost breakdown — small badge on
+  // each card so you see which projects are burning the budget.
+  const [projectCost, setProjectCost] = useState<Record<string, number>>({});
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [content, setContent] = useState<string>('');
   const [editing, setEditing] = useState(false);
@@ -59,6 +62,23 @@ export function Projects() {
       }
       if (!cancelled) setMemoryCounts(counts);
     })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projects]);
+
+  // Per-project 30d spend — one breakdown call is cheaper than N
+  // per-project queries, and the data is small.
+  useEffect(() => {
+    let cancelled = false;
+    void window.jarvis.costBreakdown(30).then((b) => {
+      if (cancelled) return;
+      const map: Record<string, number> = {};
+      for (const r of b.byProject) {
+        map[r.projectName] = r.totalUsd;
+      }
+      setProjectCost(map);
+    });
     return () => {
       cancelled = true;
     };
@@ -207,6 +227,11 @@ export function Projects() {
                     <span>{count} memory file{count === 1 ? '' : 's'}</span>
                     {p.aliases.length > 0 && (
                       <span>· {p.aliases.length} alias{p.aliases.length === 1 ? '' : 'es'}</span>
+                    )}
+                    {projectCost[p.name] != null && projectCost[p.name]! > 0 && (
+                      <span title="Last 30 days of agent spend scoped to this project">
+                        · ${projectCost[p.name]!.toFixed(2)}/30d
+                      </span>
                     )}
                   </div>
                 </button>
