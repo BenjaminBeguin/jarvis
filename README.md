@@ -233,6 +233,9 @@ before `dist:mac` when you're ready to ship.
 
 - [CLAUDE.md](CLAUDE.md) — instructions for AI agents working on this repo.
 - [ROADMAP.md](ROADMAP.md) — what's done, what's next.
+- [docs/attention.md](docs/attention.md) — the three time-axes framing
+  + the Now contract + what's still open. Read this first if you're
+  evolving the synthesis surfaces.
 - [docs/cli.md](docs/cli.md) — the `jarvis` CLI that reads the HTTP token
   from Keychain (no env vars needed).
 - [docs/scenarios.md](docs/scenarios.md) — patterns for inbox sources,
