@@ -12458,6 +12458,216 @@ button:disabled:hover {
   font-size: 12px;
 }
 
+/* ── Now (attention synthesis) ─────────────────────────────────────── */
+.now {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px 32px;
+  max-width: 920px;
+  margin: 0 auto;
+}
+.now__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.now__header h2 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 24px;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+  text-shadow: var(--accent-glow);
+  display: inline-block;
+}
+.now__time {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-left: 14px;
+  letter-spacing: 0.06em;
+}
+.now__total {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  color: var(--text-dim);
+}
+.now__band {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.now__band-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+.now__band-head h3 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.now__band-count {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+.now__band-empty {
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-style: italic;
+  border: 1px dashed var(--border);
+  border-radius: 2px;
+}
+.now__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.now__row {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(4, 7, 11, 0.5);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease;
+}
+.now__row:hover {
+  border-color: var(--accent);
+  background: rgba(0, 212, 255, 0.04);
+}
+.now__row-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  justify-self: center;
+}
+.now__row--awaiting {
+  border-color: rgba(255, 180, 84, 0.4);
+}
+.now__row--awaiting .now__row-dot {
+  background: var(--warn);
+  box-shadow: 0 0 6px rgba(255, 180, 84, 0.7);
+  animation: now-pulse 1.6s ease-in-out infinite;
+}
+.now__row--running .now__row-dot {
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(0, 212, 255, 0.6);
+}
+.now__row--imminent-reminder,
+.now__row--imminent-inbox {
+  border-color: rgba(0, 212, 255, 0.3);
+}
+.now__row--imminent-reminder .now__row-dot,
+.now__row--imminent-inbox .now__row-dot {
+  background: var(--accent-strong);
+  box-shadow: 0 0 4px rgba(91, 228, 255, 0.5);
+}
+.now__row--errored {
+  border-color: rgba(255, 85, 119, 0.42);
+}
+.now__row--errored .now__row-dot {
+  background: var(--bad);
+  box-shadow: 0 0 6px rgba(255, 85, 119, 0.6);
+}
+@keyframes now-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.now__row-body {
+  min-width: 0;
+}
+.now__row-primary {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.now__row-secondary {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-top: 2px;
+  font-family: var(--mono);
+}
+.now__row-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.now__row-link {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  background: rgba(0, 212, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 2px;
+  letter-spacing: 0.04em;
+}
+.now__row-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.now__stats {
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: rgba(0, 212, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.now__stats strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.now__stat-sep {
+  color: var(--text-faint);
+}
+.now__stat-good {
+  color: var(--good) !important;
+}
+.now__stat-bad {
+  color: var(--bad) !important;
+}
+
 /* ── Module settings modal ─────────────────────────────────────────── */
 .module-settings-modal-backdrop {
   position: fixed;

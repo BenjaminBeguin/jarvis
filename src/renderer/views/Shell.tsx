@@ -15,10 +15,12 @@ import { Settings } from './Settings';
 import { Skills } from './Skills';
 import { toast } from './Toaster';
 import { Toaster } from './Toaster';
+import { Now } from './Now';
 import { Observatory } from './Observatory';
 import { Routines } from './Routines';
 
 type Tab =
+  | 'now'
   | 'dashboard'
   | 'observatory'
   | 'inbox'
@@ -33,7 +35,9 @@ interface Props {
 }
 
 export function Shell({ status }: Props) {
-  const [tab, setTab] = useState<Tab>('dashboard');
+  // Default to the Now tab — the attention synthesis surface is the
+  // intended home now. Dashboard stays one click away (⌘2).
+  const [tab, setTab] = useState<Tab>('now');
   const [openModuleId, setOpenModuleId] = useState<string | null>(null);
   /** When set, the Skills view opens with this skill selected and scrolls
    * the list to it. Set by deep-link nav from Briefings / Routines. */
@@ -131,6 +135,7 @@ export function Shell({ status }: Props) {
   // dropdown. They're still reachable programmatically by setTab().
   useEffect(() => {
     const tabsOrder: Tab[] = [
+      'now',
       'dashboard',
       'observatory',
       'inbox',
@@ -172,7 +177,7 @@ export function Shell({ status }: Props) {
   // a new entry; back/forward move the cursor without pushing. A ref
   // skip-flag suppresses the push when we set state from history.
   const [history, setHistory] = useState<Array<{ tab: Tab; moduleId: string | null }>>(
-    () => [{ tab: 'dashboard', moduleId: null }],
+    () => [{ tab: 'now', moduleId: null }],
   );
   const [histIdx, setHistIdx] = useState(0);
   const skipHistoryPushRef = useRef(false);
@@ -351,12 +356,22 @@ export function Shell({ status }: Props) {
         </div>
         <div className="shell__tabs">
           <button
+            className={`shell__tab${tab === 'now' && !openModuleId ? ' shell__tab--active' : ''}`}
+            onClick={() => {
+              setTab('now');
+              setOpenModuleId(null);
+            }}
+            title="⌘1 · Attention synthesis — what needs you right now"
+          >
+            Now
+          </button>
+          <button
             className={`shell__tab${tab === 'dashboard' && !openModuleId ? ' shell__tab--active' : ''}`}
             onClick={() => {
               setTab('dashboard');
               setOpenModuleId(null);
             }}
-            title="⌘1 · Your curated home — Inbox, briefings, routines you pinned"
+            title="⌘2 · Your curated home — Inbox, briefings, routines you pinned"
           >
             Dashboard
           </button>
@@ -366,7 +381,7 @@ export function Shell({ status }: Props) {
               setTab('observatory');
               setOpenModuleId(null);
             }}
-            title="⌘2 · Live + recent agent runs (constellation + list)"
+            title="⌘3 · Live + recent agent runs (constellation + list)"
           >
             Observatory
           </button>
@@ -376,7 +391,7 @@ export function Shell({ status }: Props) {
               setTab('inbox');
               setOpenModuleId(null);
             }}
-            title="⌘3"
+            title="⌘4"
           >
             Inbox
           </button>
@@ -386,7 +401,7 @@ export function Shell({ status }: Props) {
               setTab('routines');
               setOpenModuleId(null);
             }}
-            title="⌘4"
+            title="⌘5"
           >
             Routines
           </button>
@@ -397,7 +412,7 @@ export function Shell({ status }: Props) {
               setOpenModuleId(null);
               setFocusedSkillId(null);
             }}
-            title="⌘5 · Skill prompts (SKILL.md)"
+            title="⌘6 · Skill prompts (SKILL.md)"
           >
             Skills
           </button>
@@ -506,6 +521,8 @@ export function Shell({ status }: Props) {
       <div className="shell__body">
         {openModuleId && PageComponent ? (
           <PageComponent />
+        ) : tab === 'now' ? (
+          <Now />
         ) : tab === 'dashboard' ? (
           <Dashboard />
         ) : tab === 'observatory' ? (
