@@ -3505,6 +3505,61 @@ button:disabled:hover {
   overflow-y: auto;
 }
 
+/* Side-by-side columns — Notes on the left, Reminders on the right.
+   Falls back to stacked when the window can't fit both at a usable
+   width. Each column scrolls independently. */
+.capture-page__split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px; /* the column separator is the border below */
+  background: var(--border);
+}
+@media (max-width: 1099px) {
+  .capture-page__split {
+    grid-template-columns: 1fr;
+  }
+}
+.capture-page__col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+  transition: box-shadow 200ms ease, border-color 200ms ease;
+}
+.capture-page__col--highlight {
+  box-shadow: inset 0 0 0 1px var(--accent), var(--accent-glow-soft);
+}
+.capture-page__col-head {
+  padding: 14px 22px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.capture-page__col-head h3 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.capture-page__col-count {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 1px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  text-transform: none;
+}
+.capture-page__col-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 /* When QuickNotePage / RemindersPage render inside CapturePage with
    the `compact` prop, we drop their padding so the page renders flush
    against the parent body. */

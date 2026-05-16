@@ -5,23 +5,27 @@ import { QuickNotePage } from './QuickNotePage';
 import { RemindersPage } from './RemindersPage';
 
 /**
- * Capture surface — one page, two tabs: Notes and Reminders.
+ * Capture surface — Notes and Reminders side-by-side. Both are
+ * "things I jot for myself," but the cognitive flow is different
+ * (free-form journal vs. time-pressured to-do), so seeing both at
+ * once helps you decide which one a thought belongs to without
+ * tab-flipping.
  *
- * Both surfaces are "things I jot for myself" — notes are free-form,
- * reminders are time-pressured. Merging them into one module page
- * cuts the "where did I put that" confusion and means the user has a
- * single hub for capture / to-do management.
+ * Layout:
+ *   - On wide screens (≥ 1100px): two columns, Notes left,
+ *     Reminders right.
+ *   - On narrower windows: stacks vertically so neither gets
+ *     crushed to unreadable.
  *
- * Tab state is local. Two ways to set the initial tab:
- *   - `initial` prop — used by MODULE_PAGES wiring (the /reminders
- *     palette intent passes 'reminders'; the /note + Pages sub-nav
- *     entry pass 'notes').
- *   - 'jarvis:capture-tab' window event — fired by Shell.applyNav when
- *     a verbal/IPC nav payload carries `captureTab`. Lets the user
- *     reach the right tab without re-navigating.
+ * History note: this used to be a tabbed view (Notes | Reminders
+ * pill row). The tabs forced an artificial choice between the two
+ * surfaces and added one click for the common "did I write that as
+ * a note or a reminder?" check. Side-by-side is the right default.
  *
- * Both inner pages render with `compact` so their h2/page-header is
- * suppressed — we provide a unified header + tab switcher here.
+ * The `initial` prop + 'jarvis:capture-tab' event still exist —
+ * they used to set the active tab. Now they highlight the column
+ * the caller wanted to draw attention to (subtle border accent for
+ * a few seconds) but don't hide the other column.
  */
 
 type CaptureTab = 'notes' | 'reminders';
@@ -30,9 +34,11 @@ interface Props {
   initial?: CaptureTab;
 }
 
+const HIGHLIGHT_DURATION_MS = 2400;
+
 export function CapturePage({ initial = 'notes' }: Props = {}) {
-  const [tab, setTab] = useState<CaptureTab>(initial);
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [highlight, setHighlight] = useState<CaptureTab | null>(initial);
 
   useEffect(() => {
     void window.jarvis.listReminders().then(setReminders);
@@ -43,15 +49,21 @@ export function CapturePage({ initial = 'notes' }: Props = {}) {
     const onFocusTab = (e: Event) => {
       const detail = (e as CustomEvent).detail as { tab?: CaptureTab };
       if (detail?.tab === 'notes' || detail?.tab === 'reminders') {
-        setTab(detail.tab);
+        setHighlight(detail.tab);
       }
     };
     window.addEventListener('jarvis:capture-tab', onFocusTab);
     return () => window.removeEventListener('jarvis:capture-tab', onFocusTab);
   }, []);
 
-  // Reminder count shown in the tab — fired + pending count is the
-  // "needs attention" number (mirrors the inbox source filter).
+  // Drop the highlight after a couple seconds — it's an attention
+  // nudge, not a sticky selection.
+  useEffect(() => {
+    if (!highlight) return;
+    const t = setTimeout(() => setHighlight(null), HIGHLIGHT_DURATION_MS);
+    return () => clearTimeout(t);
+  }, [highlight]);
+
   const pendingCount = reminders.filter(
     (r) => r.status === 'pending' || r.status === 'fired',
   ).length;
@@ -65,38 +77,39 @@ export function CapturePage({ initial = 'notes' }: Props = {}) {
           Use <code>/note &lt;text&gt;</code> to journal, "remind me in …" /
           "in 2h, …" to schedule.
         </p>
-        <div className="capture-page__tabs" role="tablist">
-          <button
-            role="tab"
-            aria-selected={tab === 'notes'}
-            className={`capture-page__tab${
-              tab === 'notes' ? ' capture-page__tab--active' : ''
-            }`}
-            onClick={() => setTab('notes')}
-          >
-            Notes
-          </button>
-          <button
-            role="tab"
-            aria-selected={tab === 'reminders'}
-            className={`capture-page__tab${
-              tab === 'reminders' ? ' capture-page__tab--active' : ''
-            }`}
-            onClick={() => setTab('reminders')}
-          >
-            Reminders
-            {pendingCount > 0 && (
-              <span className="capture-page__tab-count">{pendingCount}</span>
-            )}
-          </button>
-        </div>
       </header>
-      <div className="capture-page__body">
-        {tab === 'notes' ? (
-          <QuickNotePage compact />
-        ) : (
-          <RemindersPage compact />
-        )}
+      <div className="capture-page__split">
+        <section
+          className={`capture-page__col capture-page__col--notes${
+            highlight === 'notes' ? ' capture-page__col--highlight' : ''
+          }`}
+          aria-label="Notes"
+        >
+          <header className="capture-page__col-head">
+            <h3>Notes</h3>
+          </header>
+          <div className="capture-page__col-body">
+            <QuickNotePage compact />
+          </div>
+        </section>
+        <section
+          className={`capture-page__col capture-page__col--reminders${
+            highlight === 'reminders' ? ' capture-page__col--highlight' : ''
+          }`}
+          aria-label="Reminders"
+        >
+          <header className="capture-page__col-head">
+            <h3>
+              Reminders
+              {pendingCount > 0 && (
+                <span className="capture-page__col-count">{pendingCount}</span>
+              )}
+            </h3>
+          </header>
+          <div className="capture-page__col-body">
+            <RemindersPage compact />
+          </div>
+        </section>
       </div>
     </div>
   );

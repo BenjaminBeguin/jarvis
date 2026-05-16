@@ -412,9 +412,19 @@ function EventRow({ event }: { event: ActivityEvent }) {
       return;
     }
     if (event.kind.startsWith('reminder.')) {
-      // Reminders surface in the Inbox tab (time-pressured rows there).
+      // Reminders have their own page (Notes & Reminders module,
+      // Reminders tab). Routing here instead of /inbox was wrong —
+      // the inbox surfaces "things waiting on you," but the audit
+      // trail of a fired/done reminder belongs on its own canonical
+      // page where you can see history + cancel / re-fire.
       window.dispatchEvent(
-        new CustomEvent('jarvis:navigate', { detail: { tab: 'inbox' } }),
+        new CustomEvent('jarvis:navigate', {
+          detail: {
+            tab: 'settings',
+            moduleId: 'reminders',
+            captureTab: 'reminders',
+          },
+        }),
       );
       return;
     }
