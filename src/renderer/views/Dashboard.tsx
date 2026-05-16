@@ -459,6 +459,9 @@ function SpendWidget({ windowDays }: { windowDays: 1 | 7 | 30 }) {
   const [total, setTotal] = useState<number | null>(null);
   const [topSkill, setTopSkill] = useState<{ id: string; usd: number } | null>(null);
   const [poolRatio, setPoolRatio] = useState<number | null>(null);
+  // Daily budget — for the windowDays=1 case, render a budget bar so
+  // you can see at-a-glance how close today is to the warn threshold.
+  const [dailyBudget, setDailyBudget] = useState<number>(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -483,7 +486,16 @@ function SpendWidget({ windowDays }: { windowDays: 1 | 7 | 30 }) {
     };
   }, [windowDays]);
 
+  useEffect(() => {
+    if (windowDays !== 1) return;
+    void window.jarvis.costPrefsRead().then((p) => setDailyBudget(p.dailyUsd));
+  }, [windowDays]);
+
   const label = windowDays === 1 ? 'today' : `last ${windowDays} days`;
+  const budgetPct =
+    windowDays === 1 && dailyBudget > 0 && total !== null
+      ? Math.min(100, (total / dailyBudget) * 100)
+      : null;
 
   return (
     <div
@@ -513,6 +525,19 @@ function SpendWidget({ windowDays }: { windowDays: 1 | 7 | 30 }) {
         {total === null ? '…' : `$${total.toFixed(2)}`}
       </div>
       <div className="dash-spend__label">{label}</div>
+      {budgetPct !== null && (
+        <div
+          className="dash-spend__budget"
+          title={`Daily budget: $${dailyBudget.toFixed(2)}`}
+        >
+          <div
+            className={`dash-spend__budget-fill${
+              budgetPct >= 100 ? ' dash-spend__budget-fill--over' : ''
+            }${budgetPct >= 75 && budgetPct < 100 ? ' dash-spend__budget-fill--warn' : ''}`}
+            style={{ width: `${budgetPct}%` }}
+          />
+        </div>
+      )}
       {topSkill && (
         <div className="dash-spend__top">
           top: <strong>{topSkill.id}</strong> · ${topSkill.usd.toFixed(2)}

@@ -14163,6 +14163,24 @@ button:disabled:hover {
   font-size: 10.5px;
   color: var(--good);
 }
+.dash-spend__budget {
+  margin-top: 8px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.dash-spend__budget-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 200ms ease;
+}
+.dash-spend__budget-fill--warn {
+  background: var(--warn);
+}
+.dash-spend__budget-fill--over {
+  background: var(--bad);
+}
 
 .routines__rail-cost,
 .skills__rail-cost {
