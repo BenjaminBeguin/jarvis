@@ -342,6 +342,28 @@ export function Shell({ status }: Props) {
     void window.jarvis.setAfk(next);
   };
 
+  // Global pause flag — same value the tray menu and Telegram bot
+  // toggle. Routines + scheduled-action reminders skip while true;
+  // user-initiated palette/voice dispatches still run so the user
+  // can resume from inside the app.
+  const [paused, setPausedState] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void window.jarvis.getPaused().then((v) => {
+      if (!cancelled) setPausedState(v);
+    });
+    const off = window.jarvis.onPausedChanged((v) => setPausedState(v));
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
+  const togglePaused = (): void => {
+    const next = !paused;
+    setPausedState(next);
+    void window.jarvis.setPaused(next);
+  };
+
   // Whether AFK has anywhere to mirror events. Today the only subscriber
   // is the Telegram bot; AFK with no subscriber would be a confusing
   // no-op, so hide the toggle until the bot is configured.
@@ -490,6 +512,30 @@ export function Shell({ status }: Props) {
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
+            </svg>
+          </button>
+          <button
+            className={`shell__pause-btn${paused ? ' shell__pause-btn--on' : ''}`}
+            onClick={togglePaused}
+            title={
+              paused
+                ? 'Jarvis is paused — routines + scheduled actions skip firing. Click to resume.'
+                : 'Pause Jarvis — routines + scheduled actions stop firing until resumed. User-initiated palette/voice still works.'
+            }
+            aria-label={paused ? 'Resume Jarvis' : 'Pause Jarvis'}
+          >
+            <svg viewBox="0 0 16 16" aria-hidden width="14" height="14">
+              {paused ? (
+                <path
+                  d="M5 4 L12 8 L5 12 Z"
+                  fill="currentColor"
+                />
+              ) : (
+                <>
+                  <rect x="4.5" y="3.5" width="2.5" height="9" fill="currentColor" rx="0.4" />
+                  <rect x="9" y="3.5" width="2.5" height="9" fill="currentColor" rx="0.4" />
+                </>
+              )}
             </svg>
           </button>
           {telegramReady && (
