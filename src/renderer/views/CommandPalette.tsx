@@ -213,6 +213,7 @@ export function CommandPalette() {
   const [schedulePreview, setSchedulePreview] = useState<{
     mode: 'reminder' | 'scheduled';
     fireAt: number;
+    cron?: string;
   } | null>(null);
   /**
    * Command history index. -1 = current draft (whatever the user typed last),
@@ -355,7 +356,7 @@ export function CommandPalette() {
       void window.jarvis.previewIntent(text).then((r) => {
         if (cancelled) return;
         if (r.kind === 'reminder') {
-          setSchedulePreview({ mode: r.mode, fireAt: r.fireAt });
+          setSchedulePreview({ mode: r.mode, fireAt: r.fireAt, cron: r.cron });
         } else {
           setSchedulePreview(null);
         }
@@ -793,6 +794,7 @@ export function CommandPalette() {
           {schedulePreview ? (
             <span className="palette__schedule-hint" title="Press Enter to schedule">
               {schedulePreview.mode === 'scheduled' ? '⚡' : '⏰'}{' '}
+              {schedulePreview.cron && '🔁 '}
               {formatScheduleHint(schedulePreview.fireAt)}
             </span>
           ) : (

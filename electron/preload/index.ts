@@ -418,7 +418,13 @@ const api = {
     prompt: string,
   ): Promise<
     | { kind: 'task'; body: string }
-    | { kind: 'reminder'; mode: 'reminder' | 'scheduled'; body: string; fireAt: number }
+    | {
+        kind: 'reminder';
+        mode: 'reminder' | 'scheduled';
+        body: string;
+        fireAt: number;
+        cron?: string;
+      }
   > => ipcRenderer.invoke(IpcChannels.previewIntent, prompt),
 
   listSkillSuggestions: (): Promise<SkillSuggestion[]> =>
