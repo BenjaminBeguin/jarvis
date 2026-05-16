@@ -23,6 +23,7 @@ interface CallToolResult {
 import { nextCronFire } from '@shared/cron';
 
 import type { ActivityStore } from './activity-store.js';
+import type { getCostBreakdown as getCostBreakdownFn } from './db.js';
 import type { ProjectMemoryStore } from './project-memory.js';
 import type { ProjectStore } from './projects.js';
 import type { ReminderStore } from './reminders.js';
@@ -57,6 +58,9 @@ export interface JarvisMcpDeps {
    *  toggle. Routines + scheduled-action reminders skip while true. */
   setPaused: (value: boolean) => void;
   isPaused: () => boolean;
+  /** Read aggregated spend over the last `windowDays`. Same shape the
+   *  Settings → Spend tab renders. */
+  getCostBreakdown: typeof getCostBreakdownFn;
 }
 
 const ok = (text: string): CallToolResult => ({
@@ -286,6 +290,22 @@ export function createJarvisMcp(
         'Read the current global pause state. Useful before deciding whether to schedule a routine fire vs. tell the user it would be skipped.',
         {},
         async () => json({ paused: deps.isPaused() }),
+      ),
+
+      tool(
+        'get_cost_breakdown',
+        'Read Jarvis spend over a window. Use for building weekly cost digests, alerting on budget drift, or just answering "what are we spending money on lately?" Returns total + bySkill + byOrigin + byRoutine + byProject + byDay + pool stats — same shape the Settings → Spend tab renders. windowDays clamps to [1, 90]; default 7 if omitted.',
+        {
+          windowDays: z.number().int().min(1).max(90).optional(),
+        },
+        async (args) => {
+          try {
+            const n = args.windowDays ?? 7;
+            return json(deps.getCostBreakdown(n));
+          } catch (e) {
+            return err(e instanceof Error ? e.message : String(e));
+          }
+        },
       ),
     ],
   });

@@ -23,6 +23,7 @@ import { routePrompt } from './route-prompt.js';
 import { BriefingsStore } from './briefings.js';
 import {
   closeDatabase,
+  getCostBreakdown,
   getCostSummary,
   initDatabase,
   listRecentTasks,
@@ -256,6 +257,7 @@ runner.setJarvisMcp(
       });
     },
     isPaused: () => loadPaused(),
+    getCostBreakdown,
   }),
 );
 
