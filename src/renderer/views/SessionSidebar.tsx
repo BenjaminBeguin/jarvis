@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { TaskEvent, TaskSummary } from '../../shared/types';
 import { MarkdownText } from './MarkdownText';
+import { toast } from './Toaster';
 
 /**
  * In-window session viewer that slides over the current tab without
@@ -145,7 +146,17 @@ export function SessionSidebar() {
     setSending(true);
     try {
       const ok = await window.jarvis.sendTaskMessage(taskId, text);
-      if (ok) setReply('');
+      if (ok) {
+        setReply('');
+      } else {
+        // Race: task closed between canReply check and send. Don't
+        // silently swallow — the user just typed something they need
+        // to know didn't land.
+        toast({
+          kind: 'error',
+          message: 'Could not send — the session may have closed. Try Open full view.',
+        });
+      }
     } finally {
       setSending(false);
     }
