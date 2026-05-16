@@ -107,6 +107,7 @@ export class TelegramBot {
     this.bot.command('afk', (ctx) => this.handleAfkCmd(ctx));
     this.bot.command('pause', (ctx) => this.handlePauseCmd(ctx, true));
     this.bot.command('resume', (ctx) => this.handlePauseCmd(ctx, false));
+    this.bot.command('spend', (ctx) => this.handleSpendCmd(ctx));
 
     this.bot.on('text', (ctx) => this.handleText(ctx as TextContext));
     this.bot.on('voice', (ctx) => this.handleVoice(ctx as VoiceContext));
@@ -142,7 +143,7 @@ export class TelegramBot {
     // the user can't find out their chat id to add it.
     if (this.isAllowed(chatId)) {
       await ctx.reply(
-        `You're connected. Chat id: \`${chatId}\` (${chatType ?? 'unknown'}).\n\nSend a text or voice note to trigger a Jarvis task, or use /skills, /status, /afk.`,
+        `You're connected. Chat id: \`${chatId}\` (${chatType ?? 'unknown'}).\n\nSend a text or voice note to trigger a Jarvis task, or use /skills, /status, /spend, /afk, /pause.`,
         { parse_mode: 'Markdown' },
       );
       return;
@@ -226,6 +227,45 @@ export class TelegramBot {
         ? '⏸ Jarvis paused. Routines + scheduled actions will skip until /resume.'
         : '▶ Jarvis resumed. Routines + scheduled actions fire on their normal cadence.',
     );
+  }
+
+  /**
+   * /spend — current spend digest. Sent in-line (no agent fired) so
+   * it's fast and cheap, even if Jarvis is paused. Format prioritises
+   * info you actually want from the phone: today's $, the 7-day total,
+   * and the top 3 skills so you can immediately see what's burning.
+   */
+  private async handleSpendCmd(ctx: Context): Promise<void> {
+    const chatId = ctx.chat?.id;
+    if (typeof chatId !== 'number' || !this.isAllowed(chatId)) return;
+    try {
+      const today = this.ctx.getCostBreakdown(1);
+      const week = this.ctx.getCostBreakdown(7);
+      const lines: string[] = [];
+      lines.push(`*Today:* $${today.total.toFixed(2)} · ${today.bySkill.reduce((s, r) => s + r.taskCount, 0)} tasks`);
+      lines.push(`*Last 7 days:* $${week.total.toFixed(2)}`);
+      const top = week.bySkill.slice(0, 3);
+      if (top.length > 0) {
+        lines.push('');
+        lines.push('*Top skills (7d):*');
+        for (const r of top) {
+          const label = r.skillId ?? '(free-text)';
+          lines.push(`• ${label}: $${r.totalUsd.toFixed(2)} (${r.taskCount})`);
+        }
+      }
+      const pooledRatio = (() => {
+        const total = week.pool.pooledTaskCount + week.pool.freshTaskCount;
+        if (total === 0) return null;
+        return Math.round((week.pool.pooledTaskCount / total) * 100);
+      })();
+      if (pooledRatio !== null) {
+        lines.push('');
+        lines.push(`Pooled ${pooledRatio}% of palette/voice turns this week.`);
+      }
+      await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
+    } catch (err) {
+      await ctx.reply(`Could not read spend: ${(err as Error).message}`);
+    }
   }
 
   private async handleAfkCmd(ctx: Context): Promise<void> {

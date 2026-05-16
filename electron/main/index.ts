@@ -809,6 +809,7 @@ app.whenReady().then(async () => {
     markReminderDone: (id) => reminders.markDone(id),
     snoozeReminder: (id, msFromNow) => reminders.snooze(id, msFromNow),
     listSkills: () => skills.list(),
+    getCostBreakdown: (windowDays) => getCostBreakdown(windowDays),
   });
   await modules.register(quickNoteModule);
   await modules.register(claudeCodeWatchModule);

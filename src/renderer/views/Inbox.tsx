@@ -938,7 +938,8 @@ function MeetingStrip({
 
 /**
  * Awaiting-input strip — tasks blocked on the user's reply. Clicking
- * a row jumps to the Observatory and focuses that task.
+ * a row opens the in-window SessionSidebar with its inline reply
+ * box so the user can answer without leaving the Inbox tab.
  */
 function AwaitingStrip({ tasks }: { tasks: TaskSummary[] }) {
   // Peek into the session sidebar — keeps the user on the Inbox tab

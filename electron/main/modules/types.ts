@@ -1,5 +1,6 @@
 import type {
   ActivityEventInput,
+  CostBreakdown,
   LaunchTaskRequest,
   ModuleSettingsSpec,
   ProjectDef,
@@ -158,6 +159,10 @@ export interface ModuleContext {
   snoozeReminder(id: string, msFromNow: number): Reminder | null;
   /** Skills available to launch. Used by the Telegram bot for /skills. */
   listSkills(): SkillSummary[];
+  /** Snapshot of Jarvis spend over the last `windowDays` (1-90). Used
+   *  by modules that surface budget info externally — Telegram bot
+   *  /spend command, future module-level digests. */
+  getCostBreakdown(windowDays: number): CostBreakdown;
 }
 
 /**
