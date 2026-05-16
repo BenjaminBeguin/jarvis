@@ -525,23 +525,20 @@ export class TelegramBot {
     switch (e.source) {
       case 'task-awaiting': {
         if (!e.taskId) return;
-        // task-awaiting is special: bridged tasks always reply
-        // regardless of the topic filter (the user's mid-conversation
-        // and expects the next turn). For non-bridged tasks, fall
-        // through to the filter.
-        const bridged = this.bridge.get(e.taskId);
-        const allowed = bridged ? true : this.shouldForward('task-awaiting');
-        if (!allowed) return;
-        const chatId = bridged?.chatId ?? target;
-        if (!chatId) return;
-        if (!bridged && target) {
-          // Adopt the task into the bridge so the user's reply
-          // continues it via sendMessageToTask.
-          this.bridge.register(e.taskId, target);
-        }
+        // Bridged tasks (Telegram-originated, plus any task we already
+        // adopted) reply through completeTurnAndReply — that path
+        // already sends the agent's body with Approve/Edit/Cancel
+        // buttons. Forwarding task-awaiting too would double-fire the
+        // same ping. Skip.
+        if (this.bridge.has(e.taskId)) return;
+        if (!this.shouldForward('task-awaiting')) return;
+        if (!target) return;
+        // Adopt the task into the bridge so the user's reply continues
+        // it via sendMessageToTask instead of starting a fresh thread.
+        this.bridge.register(e.taskId, target);
         const taskId = e.taskId;
         const sent = await safeCall(() =>
-          this.bot.telegram.sendMessage(chatId, `${e.title}\n${e.body}`, {
+          this.bot.telegram.sendMessage(target, `${e.title}\n${e.body}`, {
             reply_markup: {
               inline_keyboard: [[
                 { text: 'Approve', callback_data: `approve:${taskId}` },
