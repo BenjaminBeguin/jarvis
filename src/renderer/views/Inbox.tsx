@@ -941,6 +941,14 @@ function MeetingStrip({
  * a row jumps to the Observatory and focuses that task.
  */
 function AwaitingStrip({ tasks }: { tasks: TaskSummary[] }) {
+  // Peek into the session sidebar — keeps the user on the Inbox tab
+  // instead of jumping to Observatory. The sidebar has the inline
+  // reply box wired so they can answer the prompt from here.
+  const peek = (id: string): void => {
+    window.dispatchEvent(
+      new CustomEvent('jarvis:open-session', { detail: { taskId: id } }),
+    );
+  };
   return (
     <div className="inbox__strip inbox__strip--awaiting">
       <span className="inbox__strip-dot" aria-hidden />
@@ -952,7 +960,7 @@ function AwaitingStrip({ tasks }: { tasks: TaskSummary[] }) {
           <li key={t.id}>
             <button
               className="inbox__strip-task"
-              onClick={() => void window.jarvis.openObservatory(t.id)}
+              onClick={() => peek(t.id)}
               title={t.title}
             >
               {t.title.length > 60 ? `${t.title.slice(0, 60)}…` : t.title}
