@@ -425,6 +425,14 @@ export class TaskRunner extends EventEmitter {
       costUsd: 0,
       inputPreview: req.prompt.slice(0, 240),
       cwd: this.resolveCwd(config.cwd),
+      // Entity links — propagate from the request when the emit site
+      // knows them (routine fires set routineId; scheduled-reminder
+      // fires set reminderId; active project is captured at launch
+      // time from the UserContextStore). Fallback to active project
+      // when the caller didn't override.
+      routineId: req.routineId ?? null,
+      reminderId: req.reminderId ?? null,
+      projectName: req.projectName ?? this.userContext?.getActiveProject() ?? null,
     };
     const inputs = new AsyncMessageQueue();
     inputs.push(userMessage(req.prompt, id));

@@ -43,6 +43,16 @@ const MIGRATIONS = [
     detail_json TEXT
   );`,
   `CREATE INDEX IF NOT EXISTS idx_activity_ts ON activity_events(ts DESC);`,
+  // Entity linking — without these, origin='routine' tells you *that*
+  // a routine fired the task but not *which* routine. Same for reminders
+  // and projects. Nullable columns + no backfill of historical rows
+  // (they stay null; new rows get the link). Three separate ALTER
+  // statements because SQLite doesn't support multi-column adds.
+  `ALTER TABLE tasks ADD COLUMN routine_id TEXT;`,
+  `ALTER TABLE tasks ADD COLUMN reminder_id TEXT;`,
+  `ALTER TABLE tasks ADD COLUMN project_name TEXT;`,
+  `CREATE INDEX IF NOT EXISTS idx_tasks_routine_id ON tasks(routine_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_tasks_project_name ON tasks(project_name);`,
 ];
 
 let db: DatabaseType | null = null;
@@ -85,12 +95,15 @@ export function closeDatabase(): void {
 export function insertTask(task: TaskSummary): void {
   getDb()
     .prepare(
-      `INSERT INTO tasks (id, skill_id, title, status, origin, started_at, ended_at, cost_usd, input_preview, sdk_session_id)
-       VALUES (@id, @skillId, @title, @status, @origin, @startedAt, @endedAt, @costUsd, @inputPreview, @sdkSessionId)`,
+      `INSERT INTO tasks (id, skill_id, title, status, origin, started_at, ended_at, cost_usd, input_preview, sdk_session_id, routine_id, reminder_id, project_name)
+       VALUES (@id, @skillId, @title, @status, @origin, @startedAt, @endedAt, @costUsd, @inputPreview, @sdkSessionId, @routineId, @reminderId, @projectName)`,
     )
     .run({
       ...task,
       sdkSessionId: task.sdkSessionId ?? null,
+      routineId: task.routineId ?? null,
+      reminderId: task.reminderId ?? null,
+      projectName: task.projectName ?? null,
     });
 }
 
@@ -127,6 +140,9 @@ interface TaskRow {
   cost_usd: number;
   input_preview: string;
   sdk_session_id: string | null;
+  routine_id: string | null;
+  reminder_id: string | null;
+  project_name: string | null;
 }
 
 function rowToTask(row: TaskRow): TaskSummary {
@@ -141,6 +157,9 @@ function rowToTask(row: TaskRow): TaskSummary {
     costUsd: row.cost_usd,
     inputPreview: row.input_preview,
     sdkSessionId: row.sdk_session_id,
+    routineId: row.routine_id,
+    reminderId: row.reminder_id,
+    projectName: row.project_name,
   };
 }
 

@@ -202,6 +202,26 @@ export interface TaskSummary {
    * are actually targeting.
    */
   cwd?: string;
+  /**
+   * The routine that fired this task, if any. Set on tasks launched
+   * by RoutineStore. Lets per-routine views ("recent runs of
+   * daily-recap") query directly instead of guessing by skillId +
+   * origin='routine'.
+   */
+  routineId?: string | null;
+  /**
+   * The reminder that fired this task, if any. Set on scheduled-action
+   * reminders that spawn a Claude turn. Lets the Reminders page
+   * cross-link "this reminder fired → this task ran."
+   */
+  reminderId?: string | null;
+  /**
+   * Active project name at launch time. Captures scope context so a
+   * project view can show its agent activity, and so a task months
+   * later still knows which project it belonged to even if the user
+   * since renamed or removed it.
+   */
+  projectName?: string | null;
 }
 
 export interface TaskEvent {
@@ -250,6 +270,12 @@ export interface LaunchTaskRequest extends SessionConfig {
    * disturbing the original terminal session.
    */
   resumeSessionId?: string;
+  /** Entity links — set by emit sites that know the upstream context.
+   *  All three flow through to TaskSummary + the tasks table so we can
+   *  query "all runs of routine X" / "all tasks in project Y" later. */
+  routineId?: string | null;
+  reminderId?: string | null;
+  projectName?: string | null;
 }
 
 export interface SkillSummary {

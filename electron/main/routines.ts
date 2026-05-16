@@ -174,6 +174,7 @@ export class RoutineStore extends EventEmitter {
       skillId: def.skillId,
       prompt: def.input || 'Run.',
       origin: 'routine',
+      routineId: def.id,
     });
     // Prepend the new task id to the history, dedup just in case, cap at
     // RECENT_TASK_IDS_MAX so routines.json doesn't grow unbounded.

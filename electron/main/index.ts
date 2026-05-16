@@ -567,7 +567,14 @@ app.whenReady().then(async () => {
     let firedTaskId: string | null = null;
     const prompt = `It's the scheduled time you set earlier for this. Carry it out now using whatever tools fit (gh, slack, fs, etc.). If a precondition isn't met (e.g. "if Luca hasn't reviewed"), check first and skip the action accordingly. Task:\n\n${reminder.body}`;
     try {
-      const t = runner.launch({ prompt, origin: 'palette' });
+      // origin stays 'palette' so the notification policy treats this
+      // as user-initiated (the user did initiate it, just earlier in
+      // time). reminderId is the real link back to the origin entity.
+      const t = runner.launch({
+        prompt,
+        origin: 'palette',
+        reminderId: reminder.id,
+      });
       firedTaskId = t.id;
       pushTaskToHud(t.id);
     } catch (e) {
