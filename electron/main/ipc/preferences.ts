@@ -20,7 +20,7 @@ import type { IpcDeps } from './types.js';
  * sit in the same Settings tab — one IPC file for "everything you tweak
  * in Preferences-flavoured panels."
  */
-export function registerPreferencesIpc({ preferences }: IpcDeps): void {
+export function registerPreferencesIpc({ preferences, activity }: IpcDeps): void {
   ipcMain.handle(IpcChannels.readPreferences, () => ({
     path: preferences.path,
     contents: preferences.read(),
@@ -33,6 +33,11 @@ export function registerPreferencesIpc({ preferences }: IpcDeps): void {
         throw new Error('preferences contents must be a string');
       }
       preferences.write(contents);
+      activity.record({
+        kind: 'preferences.edited',
+        label: `Preferences edited · ${contents.length} bytes`,
+        detail: { bytes: contents.length },
+      });
     },
   );
 
@@ -51,6 +56,11 @@ export function registerPreferencesIpc({ preferences }: IpcDeps): void {
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send(IpcChannels.notificationPrefsChanged, prefs);
       }
+      activity.record({
+        kind: 'notification-prefs.changed',
+        label: `Notification prefs · on-ask=${prefs.onAsk} · on-launch=${prefs.onLaunch}`,
+        detail: prefs,
+      });
     },
   );
 
@@ -62,6 +72,11 @@ export function registerPreferencesIpc({ preferences }: IpcDeps): void {
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send(IpcChannels.inboxPrefsChanged, prefs);
       }
+      activity.record({
+        kind: 'inbox-prefs.changed',
+        label: `Inbox prefs changed`,
+        detail: prefs,
+      });
     },
   );
 }
