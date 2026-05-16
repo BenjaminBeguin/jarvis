@@ -13,28 +13,30 @@ import { homedir } from 'node:os';
  * cutting the cold-start cost of re-loading system prompt + skill
  * body + tool inventory on every dispatch.
  *
- * Policy (intentionally narrow):
- *   - Only palette / voice origins pool. Routines fire on their own
- *     cadence and shouldn't share a session with user-initiated work —
- *     they have different intent, and pooling between them would mix
- *     the user's afternoon /note thread with a 6am cron run.
+ * Policy:
  *   - Per-skill, per-origin, per-project. Scoping to active project
  *     keeps cs-ai turns separate from personal turns even when both
  *     fire the same skill.
- *   - Time-bounded: sessions go stale after POOL_MAX_AGE_MS and the
- *     next dispatch forks fresh. Without this, you'd resume yesterday's
- *     conversation when you meant to start a new thread.
- *   - Turn-bounded: after POOL_MAX_TURNS, fork. The SDK auto-compacts
- *     when context fills, but very-long sessions cost more per turn
- *     (bigger compacted summary in context); rotating early caps that.
+ *   - Long-lasting by default. POOL_MAX_AGE_MS = 7 days — match
+ *     Claude.ai's "your conversation is still there next week"
+ *     feel. After 7 days of silence we fork fresh so a stale topic
+ *     doesn't accidentally graft onto today's thread.
+ *   - Origins that pool: palette, voice, api (Telegram bot, other
+ *     module launches). Routines + scheduled-action reminders still
+ *     fork their own fresh sessions — their fires are unattended
+ *     and shouldn't mix with user-initiated work.
+ *   - Turn-bounded at POOL_MAX_TURNS = 200. The SDK auto-compacts
+ *     when context fills, so the cap is a soft backstop on
+ *     per-session cost climb, not a hard limit. Use forceFresh to
+ *     bypass when the user explicitly wants a clean slate.
  *
- * Persisted to ~/.jarvis/skill-sessions.json. Survives restarts so the
- * "5 min ago I did a /note, let me reply to that thread" flow works
- * across app launches.
+ * Persisted to ~/.jarvis/skill-sessions.json. Survives restarts so
+ * "I was talking to Jarvis about X yesterday — let me continue"
+ * works after closing the laptop.
  */
 
-const POOL_MAX_AGE_MS = 60 * 60 * 1000; // 60 minutes
-const POOL_MAX_TURNS = 12;
+const POOL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const POOL_MAX_TURNS = 200;
 
 interface IndexEntry {
   /** SDK session id to resume. Captured from the SDK's init event
@@ -114,9 +116,17 @@ export class SkillSessionStore {
     forceFresh?: boolean;
   }): SkillPoolingDecision | null {
     if (!input.skillId) return null;
-    // Only pool user-initiated work. Routine / reminder / api fires
-    // get their own fresh sessions.
-    if (input.origin !== 'palette' && input.origin !== 'voice') return null;
+    // Pool user-initiated work AND api-origin dispatches (Telegram
+    // bot, other module-launched tasks). Routine + scheduled-action
+    // reminders still fork their own fresh sessions — those fires
+    // are unattended and shouldn't mix with conversational threads.
+    if (
+      input.origin !== 'palette' &&
+      input.origin !== 'voice' &&
+      input.origin !== 'api'
+    ) {
+      return null;
+    }
     const bucketKey = keyFor(input.skillId, input.origin, input.projectName);
     if (input.forceFresh) {
       this.index.delete(bucketKey);

@@ -45,18 +45,19 @@ const TELEGRAM_MESSAGE_LIMIT = 4096;
 const REPLY_TIMEOUT_MS = 180_000;
 /** How long the bridge keeps a chat's agent task after the last
  *  message in. The clock resets on every turn, so this is really
- *  "how long of total silence before we fork fresh." 24h means a
- *  conversation survives lunch, a meeting, a commute, even an
- *  overnight gap — same shape as a Claude.ai chat you come back to
- *  the next morning. The SDK auto-compacts long contexts, so token
- *  overflow handles itself; we don't need a tighter window. */
-const TELEGRAM_AGENT_TTL_MS = 24 * 60 * 60 * 1000;
+ *  "how long of total silence before we fork fresh." 7 days lets
+ *  a Telegram thread survive weekends + week-long travel — the
+ *  agent remembers your prior context whenever you come back. The
+ *  SDK auto-compacts long contexts as they grow, so token overflow
+ *  handles itself; we don't need a tighter window. Fork manually
+ *  with /new when you're starting a different topic. */
+const TELEGRAM_AGENT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Soft ceiling on turns per task. Set high so back-and-forth chats
  *  feel unbounded (Claude.ai parity). Auto-compacted summaries grow
  *  turn-over-turn, but the per-turn cost stays reasonable up to a
  *  few hundred turns. Use /new in the bot to fork early if a thread
  *  is getting expensive or you're switching topics. */
-const TELEGRAM_AGENT_TURN_CAP = 200;
+const TELEGRAM_AGENT_TURN_CAP = 500;
 
 /**
  * Long-polling Telegram bot wired to Jarvis. See plan.md / SKILL design
