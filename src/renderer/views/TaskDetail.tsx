@@ -307,6 +307,15 @@ export function TaskDetail({ task, onSelectTask }: Props) {
           <div className="meta" title={new Date(task.startedAt).toLocaleString()}>
             {task.status} · {task.origin} · started {formatRelative(task.startedAt)}
             {task.costUsd > 0 && ` · $${task.costUsd.toFixed(4)}`}
+            {task.pooled && (
+              <span
+                className="detail__pooled"
+                title="This task resumed a pooled SDK session — skipped the cold-start cost (system prompt + skill body + tool inventory). The session is shared with prior turns of the same skill within the 60-min pool window."
+              >
+                {' '}
+                · ↪ pooled
+              </span>
+            )}
           </div>
           {task.cwd && task.origin !== 'external' && (
             <div className="meta detail__cwd" title="Working directory">

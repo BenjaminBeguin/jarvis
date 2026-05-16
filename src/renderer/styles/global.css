@@ -13931,6 +13931,11 @@ button:disabled:hover {
   font-size: 10px;
   color: var(--text-faint);
 }
+.detail__pooled {
+  color: var(--good);
+  cursor: help;
+}
+
 .activity__pooled,
 .task-list-view__pooled {
   font-family: var(--mono);
