@@ -90,6 +90,50 @@ export const DEFAULT_INBOX_PREFS: InboxPrefs = {
 };
 
 /**
+ * Schema for a module's user-facing settings. Modules declare a
+ * `settings.fields` array (typed below); the Settings UI renders a
+ * panel automatically. Values are persisted in config.json under
+ * `moduleSettings.<moduleId>` and merged with the defaults at read
+ * time so a missing key falls back to the schema's default.
+ *
+ * Used for "module preferences" the user might tweak — auto-dedupe
+ * cadence, scan frequency, default channel for sends, etc. NOT for
+ * sensitive credentials (those still belong in MCP env + keychain)
+ * or for paths (those flow through dedicated config files).
+ */
+export type ModuleSettingValue = boolean | number | string;
+
+export type ModuleSettingType = 'boolean' | 'number' | 'select' | 'text';
+
+export interface ModuleSettingField {
+  /** Persisted key within the module's settings object. */
+  key: string;
+  /** Human label rendered above the input. */
+  label: string;
+  /** Optional one-line explanation under the label. */
+  hint?: string;
+  type: ModuleSettingType;
+  /** Value used when the user hasn't touched the field. */
+  default: ModuleSettingValue;
+  /** For `select` — labelled options the user picks from. */
+  options?: Array<{ value: ModuleSettingValue; label: string }>;
+  /** For `number` — input min / max / step + an optional unit suffix. */
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+}
+
+export interface ModuleSettingsSpec {
+  /** Fields rendered in the module's settings panel, in this order. */
+  fields: ModuleSettingField[];
+  /** Optional intro paragraph shown above the fields. */
+  description?: string;
+}
+
+export type ModuleSettingsValues = Record<string, ModuleSettingValue>;
+
+/**
  * One row in the Activity feed beyond /send (which is task-derived).
  * Persisted in SQLite via `ActivityStore`. Emit sites are scattered:
  * meeting-recorder when a session starts/ends, notes module when a
@@ -575,6 +619,12 @@ export interface ModuleSummary {
   intents: PaletteIntentSummary[];
   /** A renderer-side page is available for this module (Notes for quick-note, etc.). */
   hasPage: boolean;
+  /** Schema for this module's user-tweakable preferences, if any.
+   *  Renderer uses it to draw a settings panel in the Modules tab. */
+  settings?: ModuleSettingsSpec;
+  /** Current persisted values for the above, merged with defaults
+   *  for any keys the user hasn't set explicitly. */
+  settingsValues?: ModuleSettingsValues;
 }
 
 export interface DispatchIntentResult {

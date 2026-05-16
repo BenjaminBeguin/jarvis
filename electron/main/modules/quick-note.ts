@@ -29,6 +29,36 @@ export const quickNoteModule: Module = {
   name: 'Notes & Reminders',
   description:
     "Capture-for-later: free-form notes (markdown journal) + time-pressured reminders. /note appends to today's journal; /reminders opens the reminders tab on the same page.",
+  settings: {
+    description:
+      "Tune how the Notes & Reminders surface behaves — dedupe cadence wires up in a follow-up, but the field is here so future toggles have a home.",
+    fields: [
+      {
+        key: 'dedupeCadence',
+        label: 'Auto-dedupe cadence',
+        hint: 'How often Jarvis scans recent notes + pending reminders for duplicates / near-duplicates and proposes merges. Off until the dedupe skill ships.',
+        type: 'select',
+        default: 'off',
+        options: [
+          { value: 'off', label: 'Off' },
+          { value: 'daily', label: 'Daily' },
+          { value: 'weekly', label: 'Weekly' },
+        ],
+      },
+      {
+        key: 'dedupeSensitivity',
+        label: 'Dedupe sensitivity',
+        hint: 'How aggressive the similarity match is. Higher = more merge proposals, more false positives.',
+        type: 'select',
+        default: 'medium',
+        options: [
+          { value: 'low', label: 'Low — exact matches only' },
+          { value: 'medium', label: 'Medium — close paraphrases' },
+          { value: 'high', label: 'High — same intent, different words' },
+        ],
+      },
+    ],
+  },
   version: '1.0.0',
   intents: [
     {

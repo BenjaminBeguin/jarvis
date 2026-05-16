@@ -3119,6 +3119,111 @@ button:disabled:hover {
   border-color: var(--accent);
 }
 
+/* ----- Module settings panel (schema-driven, per module) ------------- */
+
+.modules-page__page-wrap,
+.modules-page__bg-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.module-settings {
+  margin-top: -1px; /* sit flush against tile / row border below */
+  padding: 12px 16px 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-top: 1px dashed rgba(0, 212, 255, 0.25);
+  border-radius: 0 0 2px 2px;
+  font-family: var(--mono);
+}
+
+.module-settings__head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.module-settings__label {
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.module-settings__desc {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.module-settings__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.module-settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.module-settings__field-label {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+
+.module-settings__field-hint {
+  font-size: 10px;
+  color: var(--text-faint);
+  line-height: 1.45;
+}
+
+.module-settings__field-input {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.module-settings__field-input input[type='text'],
+.module-settings__field-input input[type='number'],
+.module-settings__field-input select {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 8px;
+  border-radius: 2px;
+  min-width: 200px;
+}
+
+.module-settings__field-input input[type='number'] {
+  min-width: 90px;
+}
+
+.module-settings__field-input input:focus,
+.module-settings__field-input select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.module-settings__field-input input[type='checkbox'] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.module-settings__field-unit {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
 /* ----- Capture page (Notes + Reminders merged) ----------------------- */
 
 .capture-page {

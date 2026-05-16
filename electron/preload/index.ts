@@ -18,6 +18,7 @@ import type {
   McpProbeResult,
   McpServerInput,
   McpServerSummary,
+  ModuleSettingsValues,
   ModuleSummary,
   NotificationPrefs,
   ProjectDef,
@@ -183,6 +184,11 @@ const api = {
     ipcRenderer.invoke(IpcChannels.dispatchIntent, { moduleId, intentId, input }),
   setModuleEnabled: (moduleId: string, enabled: boolean): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.setModuleEnabled, { moduleId, enabled }),
+  writeModuleSettings: (
+    moduleId: string,
+    values: ModuleSettingsValues,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.writeModuleSettings, { moduleId, values }),
   onModulesChanged: (listener: Listener<ModuleSummary[]>): Unsubscribe =>
     subscribe(IpcChannels.modulesChanged, listener),
 

@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { ModuleSummary } from '../../shared/types';
+import type {
+  ModuleSettingField,
+  ModuleSettingValue,
+  ModuleSettingsValues,
+  ModuleSummary,
+} from '../../shared/types';
+import { toast } from './Toaster';
 
 interface Props {
   onOpenPage: (moduleId: string) => void;
@@ -61,13 +67,17 @@ export function ModulesPage({ onOpenPage }: Props) {
       {withPages.length > 0 && (
         <div className="modules-page__pages">
           {withPages.map((m) => (
-            <ModulePageTile
-              key={m.id}
-              module={m}
-              busy={busy === m.id}
-              onOpen={() => onOpenPage(m.id)}
-              onToggle={() => void toggle(m)}
-            />
+            <div key={m.id} className="modules-page__page-wrap">
+              <ModulePageTile
+                module={m}
+                busy={busy === m.id}
+                onOpen={() => onOpenPage(m.id)}
+                onToggle={() => void toggle(m)}
+              />
+              {m.settings && m.enabled && (
+                <ModuleSettingsPanel module={m} />
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -77,12 +87,16 @@ export function ModulesPage({ onOpenPage }: Props) {
           <h3 className="modules-page__section-title">Background watchers</h3>
           <div className="modules-page__bg-list">
             {background.map((m) => (
-              <ModuleBackgroundRow
-                key={m.id}
-                module={m}
-                busy={busy === m.id}
-                onToggle={() => void toggle(m)}
-              />
+              <div key={m.id} className="modules-page__bg-wrap">
+                <ModuleBackgroundRow
+                  module={m}
+                  busy={busy === m.id}
+                  onToggle={() => void toggle(m)}
+                />
+                {m.settings && m.enabled && (
+                  <ModuleSettingsPanel module={m} />
+                )}
+              </div>
             ))}
           </div>
         </>
@@ -219,4 +233,144 @@ const MODULE_GLYPHS: Record<string, string> = {
   'shell': '⌘',
   'shell-nav': '◈',
   'claude-code-watch': '◉',
+  reminders: '⏰',
 };
+
+/**
+ * Schema-driven settings panel rendered below a module tile/row when
+ * the module declares `settings.fields`. Each field gets an input
+ * matched to its type; writes go through writeModuleSettings IPC.
+ * Optimistic UI — the input value follows local state, and the IPC
+ * round-trip is fire-and-forget (errors surface as toasts).
+ *
+ * Keep this component generic — modules describe their schema, the
+ * renderer doesn't special-case any of them.
+ */
+function ModuleSettingsPanel({ module: m }: { module: ModuleSummary }) {
+  const [values, setValues] = useState<ModuleSettingsValues>(
+    m.settingsValues ?? {},
+  );
+  const [busy, setBusy] = useState(false);
+
+  // Reconcile when the parent re-fetches the module list (e.g. after
+  // someone else writes to the same module's settings). We only adopt
+  // the upstream values when not actively saving to avoid clobbering
+  // the user's in-flight edit.
+  useEffect(() => {
+    if (!busy && m.settingsValues) setValues(m.settingsValues);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [m.settingsValues]);
+
+  const update = async (key: string, value: ModuleSettingValue) => {
+    const next = { ...values, [key]: value };
+    setValues(next);
+    setBusy(true);
+    try {
+      const r = await window.jarvis.writeModuleSettings(m.id, next);
+      if (!r.ok) {
+        toast({ kind: 'error', message: r.message ?? 'Save failed' });
+      }
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!m.settings || m.settings.fields.length === 0) return null;
+
+  return (
+    <div className="module-settings">
+      <div className="module-settings__head">
+        <span className="module-settings__label">Settings</span>
+        {m.settings.description && (
+          <span className="module-settings__desc">
+            {m.settings.description}
+          </span>
+        )}
+      </div>
+      <div className="module-settings__fields">
+        {m.settings.fields.map((field) => (
+          <ModuleSettingsField
+            key={field.key}
+            field={field}
+            value={values[field.key] ?? field.default}
+            onChange={(v) => void update(field.key, v)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ModuleSettingsField({
+  field,
+  value,
+  onChange,
+}: {
+  field: ModuleSettingField;
+  value: ModuleSettingValue;
+  onChange: (next: ModuleSettingValue) => void;
+}) {
+  return (
+    <label className="module-settings__field">
+      <span className="module-settings__field-label">{field.label}</span>
+      {field.hint && (
+        <span className="module-settings__field-hint">{field.hint}</span>
+      )}
+      <div className="module-settings__field-input">
+        {field.type === 'boolean' && (
+          <input
+            type="checkbox"
+            checked={!!value}
+            onChange={(e) => onChange(e.target.checked)}
+          />
+        )}
+        {field.type === 'number' && (
+          <>
+            <input
+              type="number"
+              value={typeof value === 'number' ? value : Number(value) || 0}
+              min={field.min}
+              max={field.max}
+              step={field.step ?? 1}
+              onChange={(e) => {
+                const n = parseFloat(e.target.value);
+                if (Number.isFinite(n)) onChange(n);
+              }}
+            />
+            {field.unit && (
+              <span className="module-settings__field-unit">{field.unit}</span>
+            )}
+          </>
+        )}
+        {field.type === 'text' && (
+          <input
+            type="text"
+            value={String(value ?? '')}
+            onChange={(e) => onChange(e.target.value)}
+          />
+        )}
+        {field.type === 'select' && (
+          <select
+            value={String(value)}
+            onChange={(e) => {
+              const raw = e.target.value;
+              const opt = field.options?.find((o) => String(o.value) === raw);
+              onChange(opt ? opt.value : raw);
+            }}
+          >
+            {field.options?.map((opt) => (
+              <option key={String(opt.value)} value={String(opt.value)}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+    </label>
+  );
+}

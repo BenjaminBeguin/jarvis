@@ -1,6 +1,7 @@
 import type {
   ActivityEventInput,
   LaunchTaskRequest,
+  ModuleSettingsSpec,
   ProjectDef,
   Reminder,
   ReminderMode,
@@ -138,6 +139,10 @@ export interface Module {
   description: string;
   version: string;
   intents?: PaletteIntent[];
+  /** Schema for user-tweakable preferences this module exposes.
+   *  Renderer auto-draws a panel in Settings → Modules under the
+   *  module's row. Values are persisted in config.json. */
+  settings?: ModuleSettingsSpec;
   onLoad?(ctx: ModuleContext): void | Promise<void>;
   onUnload?(): void | Promise<void>;
 }

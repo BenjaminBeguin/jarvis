@@ -39,6 +39,7 @@ export const IpcChannels = {
   listModules: 'modules:list',
   dispatchIntent: 'modules:dispatchIntent',
   setModuleEnabled: 'modules:setEnabled',
+  writeModuleSettings: 'modules:writeSettings',
   modulesChanged: 'modules:changed',
 
   listJarvisDir: 'fs:listJarvisDir',

@@ -8,6 +8,7 @@ import {
   DEFAULT_NOTIFICATION_PREFS,
   type AuthMode,
   type InboxPrefs,
+  type ModuleSettingsValues,
   type NotificationPrefs,
 } from '@shared/types';
 
@@ -16,6 +17,10 @@ interface PersistedConfig {
   disabledModules?: string[];
   notificationPrefs?: Partial<NotificationPrefs>;
   inboxPrefs?: Partial<InboxPrefs>;
+  /** Per-module user settings — keyed by module id. The schema lives
+   *  in the module definition; this just stores whichever values the
+   *  user explicitly set. Unset keys fall back to the schema default. */
+  moduleSettings?: Record<string, ModuleSettingsValues>;
 }
 
 const CONFIG_PATH = join(homedir(), '.jarvis', 'config.json');
@@ -137,4 +142,34 @@ export function loadInboxPrefs(): InboxPrefs {
 
 export function saveInboxPrefs(prefs: InboxPrefs): void {
   writeConfig({ ...readConfig(), inboxPrefs: prefs });
+}
+
+/**
+ * Load only the values the user has explicitly set for a module. The
+ * caller merges with the schema defaults. Returns `{}` when the module
+ * has never had a value persisted.
+ */
+export function loadModuleSettings(moduleId: string): ModuleSettingsValues {
+  const cfg = readConfig();
+  const stored = cfg.moduleSettings?.[moduleId];
+  if (!stored || typeof stored !== 'object') return {};
+  // Filter out non-primitive values that might have snuck in via a
+  // hand-edit. Keeps the type contract clean.
+  const out: ModuleSettingsValues = {};
+  for (const [k, v] of Object.entries(stored)) {
+    if (typeof v === 'boolean' || typeof v === 'number' || typeof v === 'string') {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+export function saveModuleSettings(
+  moduleId: string,
+  values: ModuleSettingsValues,
+): void {
+  const cfg = readConfig();
+  const next = { ...(cfg.moduleSettings ?? {}) };
+  next[moduleId] = values;
+  writeConfig({ ...cfg, moduleSettings: next });
 }

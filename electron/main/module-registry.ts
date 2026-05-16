@@ -2,11 +2,17 @@ import { EventEmitter } from 'node:events';
 
 import type {
   DispatchIntentResult,
+  ModuleSettingsValues,
   ModuleSummary,
   PaletteIntentSummary,
 } from '@shared/types';
 
-import { loadDisabledModules, saveDisabledModules } from './auth.js';
+import {
+  loadDisabledModules,
+  loadModuleSettings,
+  saveDisabledModules,
+  saveModuleSettings,
+} from './auth.js';
 import type { Module, ModuleContext, PaletteIntent } from './modules/types.js';
 
 interface RegistryEntry {
@@ -110,7 +116,49 @@ export class ModuleRegistry extends EventEmitter {
       intents: enabled
         ? [...intentsById.values()].map((i) => toIntentSummary(module.id, i))
         : [],
+      settings: module.settings,
+      settingsValues: module.settings
+        ? mergeWithDefaults(module.settings, loadModuleSettings(module.id))
+        : undefined,
     }));
+  }
+
+  /**
+   * Read the currently-effective settings for a module (defaults merged
+   * with persisted overrides). Returns null when the module has no
+   * settings schema. Callers in main use this to drive their own
+   * behaviour (e.g. a routine handler reading its cadence). The
+   * renderer reads via the same merge in `list()` above so both stay
+   * in sync.
+   */
+  readSettings(moduleId: string): ModuleSettingsValues | null {
+    const entry = this.modules.get(moduleId);
+    if (!entry || !entry.module.settings) return null;
+    return mergeWithDefaults(
+      entry.module.settings,
+      loadModuleSettings(moduleId),
+    );
+  }
+
+  /**
+   * Persist a new value bag for a module. Renderer calls this from the
+   * settings panel; main callers (rarely needed) can use it to seed
+   * defaults at boot. Emits 'changed' so the renderer's listModules
+   * subscribers see fresh settingsValues.
+   */
+  writeSettings(moduleId: string, values: ModuleSettingsValues): boolean {
+    const entry = this.modules.get(moduleId);
+    if (!entry || !entry.module.settings) return false;
+    // Validate: drop keys not in the schema, coerce types where we can.
+    const clean: ModuleSettingsValues = {};
+    for (const field of entry.module.settings.fields) {
+      const v = values[field.key];
+      if (v === undefined) continue;
+      if (typeof v === typeof field.default) clean[field.key] = v;
+    }
+    saveModuleSettings(moduleId, clean);
+    this.emit('changed', this.list());
+    return true;
   }
 
   listIntents(): PaletteIntentSummary[] {
@@ -240,4 +288,15 @@ function toIntentSummary(
     description: intent.description,
     placeholder: intent.placeholder,
   };
+}
+
+function mergeWithDefaults(
+  spec: import('@shared/types').ModuleSettingsSpec,
+  stored: ModuleSettingsValues,
+): ModuleSettingsValues {
+  const out: ModuleSettingsValues = {};
+  for (const field of spec.fields) {
+    out[field.key] = stored[field.key] !== undefined ? stored[field.key]! : field.default;
+  }
+  return out;
 }

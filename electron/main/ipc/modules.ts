@@ -10,7 +10,11 @@ import { dirname } from 'node:path';
 import { join, normalize, relative, resolve } from 'node:path';
 
 import { IpcChannels } from '@shared/ipc';
-import type { DispatchIntentResult, JarvisFileEntry } from '@shared/types';
+import type {
+  DispatchIntentResult,
+  JarvisFileEntry,
+  ModuleSettingsValues,
+} from '@shared/types';
 
 import { hidePalette } from '../windows.js';
 import type { IpcDeps } from './types.js';
@@ -34,6 +38,22 @@ export function registerModulesIpc({ modules, jarvisRoot }: IpcDeps): void {
     IpcChannels.setModuleEnabled,
     async (_e, { moduleId, enabled }: { moduleId: string; enabled: boolean }) => {
       await modules.setEnabled(moduleId, enabled);
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.writeModuleSettings,
+    (
+      _e,
+      payload: { moduleId: string; values: ModuleSettingsValues },
+    ): { ok: boolean; message?: string } => {
+      if (!payload || typeof payload.moduleId !== 'string') {
+        return { ok: false, message: 'Invalid moduleId.' };
+      }
+      const ok = modules.writeSettings(payload.moduleId, payload.values ?? {});
+      return ok
+        ? { ok: true }
+        : { ok: false, message: 'Module has no settings schema.' };
     },
   );
 
