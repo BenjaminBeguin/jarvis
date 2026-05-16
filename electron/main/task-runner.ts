@@ -468,6 +468,7 @@ export class TaskRunner extends EventEmitter {
     // is only the default fallback when nothing else was specified.
     let resumeSessionId = req.resumeSessionId;
     let pooledBucketKey: string | undefined;
+    let pooledThisLaunch = false;
     if (!resumeSessionId && this.skillSessions && skillId) {
       const decision = this.skillSessions.decide({
         skillId,
@@ -479,6 +480,7 @@ export class TaskRunner extends EventEmitter {
         pooledBucketKey = decision.bucketKey;
         if (decision.resumeSessionId) {
           resumeSessionId = decision.resumeSessionId;
+          pooledThisLaunch = true;
         }
       }
     }
@@ -505,6 +507,7 @@ export class TaskRunner extends EventEmitter {
       routineId: req.routineId ?? null,
       reminderId: req.reminderId ?? null,
       projectName,
+      pooled: pooledThisLaunch,
     };
     const inputs = new AsyncMessageQueue();
     inputs.push(userMessage(req.prompt, id));

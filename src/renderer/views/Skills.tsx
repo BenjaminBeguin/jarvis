@@ -24,6 +24,34 @@ export function Skills({ focusedSkillId, onConsumeFocus }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [body, setBody] = useState<string>('');
   const [creating, setCreating] = useState(false);
+  /** Per-skill 30-day cost from getCostBreakdown — surfaces in the
+   *  rail so the user can see which skill is eating budget at a glance.
+   *  Updates every 30s so freshness is fine without thrashing the DB. */
+  const [skillCost, setSkillCost] = useState<
+    Map<string, { totalUsd: number; taskCount: number }>
+  >(() => new Map());
+  useEffect(() => {
+    const refresh = async () => {
+      try {
+        const b = await window.jarvis.costBreakdown(30);
+        setSkillCost(
+          new Map(
+            b.bySkill
+              .filter((r) => r.skillId)
+              .map((r) => [
+                r.skillId as string,
+                { totalUsd: r.totalUsd, taskCount: r.taskCount },
+              ]),
+          ),
+        );
+      } catch {
+        // Empty map → rows just hide the cost line. Not worth blocking.
+      }
+    };
+    void refresh();
+    const t = window.setInterval(() => void refresh(), 30_000);
+    return () => window.clearInterval(t);
+  }, []);
 
   useEffect(() => {
     void window.jarvis.listSkills().then(setSkills);
@@ -110,6 +138,22 @@ export function Skills({ focusedSkillId, onConsumeFocus }: Props) {
                 <em>built-in tools</em>
               )}
               {s.model && <> · {s.model}</>}
+              {(() => {
+                const c = skillCost.get(s.id);
+                if (!c || c.totalUsd <= 0) return null;
+                return (
+                  <span
+                    className="skills__rail-cost"
+                    title={`30-day spend · ${c.taskCount} runs`}
+                  >
+                    {' · $'}
+                    {c.totalUsd >= 0.01
+                      ? c.totalUsd.toFixed(2)
+                      : c.totalUsd.toFixed(4)}
+                    /30d
+                  </span>
+                );
+              })()}
             </div>
           </button>
         ))}

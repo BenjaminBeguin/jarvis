@@ -109,6 +109,35 @@ export function SpendPanel() {
             </div>
           </section>
 
+          {(data.pool.pooledTaskCount > 0 || data.pool.freshTaskCount > 0) && (
+            <section className="spend-panel__pool">
+              <h4 className="settings__subhead">POOLING</h4>
+              <div className="spend-panel__pool-row">
+                <span>
+                  <strong>{data.pool.pooledTaskCount}</strong> resumed ·{' '}
+                  <strong>{data.pool.freshTaskCount}</strong> fresh
+                </span>
+                <span className="spend-panel__pool-savings">
+                  {(() => {
+                    const total =
+                      data.pool.pooledTaskCount + data.pool.freshTaskCount;
+                    if (total === 0) return null;
+                    const ratio = (data.pool.pooledTaskCount / total) * 100;
+                    return `${ratio.toFixed(0)}% pooled`;
+                  })()}
+                </span>
+              </div>
+              <p className="settings__hint">
+                Pooled palette / voice tasks resumed an active SDK
+                session instead of paying the cold start (system
+                prompt + skill body + tool inventory). Each
+                resumption saves roughly $0.005-0.02 depending on
+                skill body size + MCP count. Routines and reminders
+                don't pool — those fires intentionally stay isolated.
+              </p>
+            </section>
+          )}
+
           <section className="spend-panel__chart">
             <h4 className="settings__subhead">DAILY</h4>
             <div

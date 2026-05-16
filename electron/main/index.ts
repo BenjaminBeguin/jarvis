@@ -20,7 +20,12 @@ import { awaitTurnResult } from './await-turn.js';
 import { notifier } from './notifier.js';
 import { routePrompt } from './route-prompt.js';
 import { BriefingsStore } from './briefings.js';
-import { closeDatabase, initDatabase, listRecentTasks } from './db.js';
+import {
+  closeDatabase,
+  getCostSummary,
+  initDatabase,
+  listRecentTasks,
+} from './db.js';
 import { startHttpServer, type HttpServerHandle } from './http-server.js';
 import { ActivityStore } from './activity-store.js';
 import { createJarvisMcp } from './jarvis-mcp.js';
@@ -85,6 +90,7 @@ import {
   setAwaitingRepliesCount,
   setPendingRemindersCount,
   setRunningTasksCount,
+  setTodaySpend,
 } from './tray.js';
 import {
   broadcast,
@@ -360,6 +366,13 @@ function wireRunnerEvents(): void {
     ).length;
     setRunningTasksCount(running);
     setAwaitingRepliesCount(awaiting);
+    // Tray tooltip "today's spend" — refresh on every status change.
+    // getCostSummary is a single SQL query, fast enough to call here.
+    try {
+      setTodaySpend(getCostSummary().today);
+    } catch {
+      // DB hiccup — tooltip stays at last value; not worth surfacing.
+    }
     broadcast(IpcChannels.taskStatus, summary);
 
     // Cost guardrail: fire ONCE when a task crosses the threshold.
@@ -977,6 +990,15 @@ app.whenReady().then(async () => {
 
   wireRunnerEvents();
   initTray();
+  // Seed the tray's "today" spend bit so it's accurate before the
+  // first task status change. Without this, the tooltip would say
+  // nothing about spend until a task fires — confusing in the morning
+  // before any work has happened.
+  try {
+    setTodaySpend(getCostSummary().today);
+  } catch {
+    // DB not ready or empty — leave at 0.
+  }
   setAbortAllHandler(() => runner.abortAll());
   registerGlobalShortcut();
 

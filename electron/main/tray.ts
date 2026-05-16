@@ -24,6 +24,11 @@ let tray: Tray | null = null;
 let runningTasks = 0;
 let pendingReminders = 0;
 let awaitingReplies = 0;
+/** Today's Jarvis spend in USD. Refreshed by setTodaySpend() from
+ *  index.ts on a short cadence so the tray reflects current cost
+ *  without forcing the renderer to do it. Hidden when 0 — no point
+ *  showing "$0.00 today" 23 hours of the day. */
+let todaySpendUsd = 0;
 
 function buildIcon(active: boolean): Electron.NativeImage {
   // Use template image so macOS handles dark/light. Falls back to a generated
@@ -124,6 +129,11 @@ function rebuildToolTip(): void {
   if (runningTasks > 0) bits.push(`${runningTasks} running`);
   if (awaitingReplies > 0) bits.push(`${awaitingReplies} awaiting`);
   if (pendingReminders > 0) bits.push(`${pendingReminders} scheduled`);
+  if (todaySpendUsd > 0) {
+    bits.push(
+      `$${todaySpendUsd >= 0.01 ? todaySpendUsd.toFixed(2) : todaySpendUsd.toFixed(4)} today`,
+    );
+  }
   tray.setToolTip(bits.length ? `Jarvis — ${bits.join(' · ')}` : 'Jarvis');
 }
 
@@ -148,6 +158,13 @@ export function setPendingRemindersCount(n: number): void {
   pendingReminders = Math.max(0, n);
   rebuildToolTip();
   rebuildMenu();
+}
+
+/** Update the today-spend bit shown in the tray tooltip. Called from
+ *  index.ts after each task status change. */
+export function setTodaySpend(usd: number): void {
+  todaySpendUsd = Math.max(0, usd);
+  rebuildToolTip();
 }
 
 export function setAwaitingRepliesCount(n: number): void {

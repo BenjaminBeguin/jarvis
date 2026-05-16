@@ -240,6 +240,9 @@ export interface TaskSummary {
    * since renamed or removed it.
    */
   projectName?: string | null;
+  /** True when this task resumed a pooled SDK session (skipped cold
+   *  start). Powers the Spend dashboard's "savings via pooling" stat. */
+  pooled?: boolean;
 }
 
 export interface TaskEvent {
@@ -299,6 +302,8 @@ export interface LaunchTaskRequest extends SessionConfig {
    *  exists. Used for "fresh /<skill>" UI affordances. */
   forceFreshSession?: boolean;
 }
+
+// (TaskSummary.pooled is declared inline near the other entity links.)
 
 export interface SkillSummary {
   id: string;
@@ -644,6 +649,13 @@ export interface CostBreakdown {
   byOrigin: Array<{ origin: string; totalUsd: number; taskCount: number }>;
   byRoutine: Array<{ routineId: string; totalUsd: number; taskCount: number }>;
   byDay: Array<{ date: string; totalUsd: number; taskCount: number }>;
+  /** Skill-session pooling stats — within the window, how many
+   *  palette/voice tasks reused a session vs. paid the cold start.
+   *  Lets the Spend dashboard surface an estimated savings. */
+  pool: {
+    pooledTaskCount: number;
+    freshTaskCount: number;
+  };
 }
 
 /**

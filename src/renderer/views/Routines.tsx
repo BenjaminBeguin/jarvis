@@ -122,6 +122,35 @@ export function Routines() {
   const [runningTaskIds, setRunningTaskIds] = useState<Set<string>>(
     () => new Set(),
   );
+  /** Per-routine 30-day cost. Computed from the cost breakdown so the
+   *  user can scan the rail and immediately spot the expensive ones. */
+  const [routineCost, setRoutineCost] = useState<
+    Map<string, { totalUsd: number; taskCount: number }>
+  >(() => new Map());
+  useEffect(() => {
+    const refresh = async () => {
+      try {
+        const b = await window.jarvis.costBreakdown(30);
+        setRoutineCost(
+          new Map(
+            b.byRoutine.map((r) => [
+              r.routineId,
+              { totalUsd: r.totalUsd, taskCount: r.taskCount },
+            ]),
+          ),
+        );
+      } catch {
+        // dashboard load failed — leave the map empty; rows just hide
+        // the cost line. Not worth blocking the page.
+      }
+    };
+    void refresh();
+    // Re-pull when a routine fires (task status change) so the rail
+    // updates without a tab switch. Throttle to avoid hammering the
+    // DB on every event — 30s is plenty for a "rough" rail figure.
+    const t = window.setInterval(() => void refresh(), 30_000);
+    return () => window.clearInterval(t);
+  }, []);
 
   useEffect(() => {
     const refresh = async () => {
@@ -359,6 +388,22 @@ export function Routines() {
                   <div className="briefings__kind-schedule">
                     {running ? 'running…' : humanCron(r.cron)}
                     {!r.enabled && !running && ' · disabled'}
+                    {(() => {
+                      const c = routineCost.get(r.id);
+                      if (!c || c.totalUsd <= 0) return null;
+                      return (
+                        <span
+                          className="routines__rail-cost"
+                          title={`30-day spend · ${c.taskCount} runs`}
+                        >
+                          {' · $'}
+                          {c.totalUsd >= 0.01
+                            ? c.totalUsd.toFixed(2)
+                            : c.totalUsd.toFixed(4)}
+                          /30d
+                        </span>
+                      );
+                    })()}
                   </div>
                 </button>
               );

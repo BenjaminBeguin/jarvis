@@ -53,6 +53,11 @@ const MIGRATIONS = [
   `ALTER TABLE tasks ADD COLUMN project_name TEXT;`,
   `CREATE INDEX IF NOT EXISTS idx_tasks_routine_id ON tasks(routine_id);`,
   `CREATE INDEX IF NOT EXISTS idx_tasks_project_name ON tasks(project_name);`,
+  // Track which launches were resumed from the skill-session pool vs.
+  // launched fresh. Lets the Spend dashboard estimate savings ("of 12
+  // /note turns today, 9 were pooled — skipped ~9 cold starts").
+  // 0 = fresh, 1 = pooled.
+  `ALTER TABLE tasks ADD COLUMN pooled INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 let db: DatabaseType | null = null;
@@ -95,13 +100,14 @@ export function closeDatabase(): void {
 export function insertTask(task: TaskSummary): void {
   getDb()
     .prepare(
-      `INSERT INTO tasks (id, skill_id, title, status, origin, started_at, ended_at, cost_usd, input_preview, sdk_session_id, routine_id, reminder_id, project_name)
-       VALUES (@id, @skillId, @title, @status, @origin, @startedAt, @endedAt, @costUsd, @inputPreview, @sdkSessionId, @routineId, @reminderId, @projectName)`,
+      `INSERT INTO tasks (id, skill_id, title, status, origin, started_at, ended_at, cost_usd, input_preview, sdk_session_id, routine_id, reminder_id, project_name, pooled)
+       VALUES (@id, @skillId, @title, @status, @origin, @startedAt, @endedAt, @costUsd, @inputPreview, @sdkSessionId, @routineId, @reminderId, @projectName, @pooled)`,
     )
     .run({
       ...task,
       sdkSessionId: task.sdkSessionId ?? null,
       routineId: task.routineId ?? null,
+      pooled: task.pooled ? 1 : 0,
       reminderId: task.reminderId ?? null,
       projectName: task.projectName ?? null,
     });
@@ -143,6 +149,7 @@ interface TaskRow {
   routine_id: string | null;
   reminder_id: string | null;
   project_name: string | null;
+  pooled: number;
 }
 
 function rowToTask(row: TaskRow): TaskSummary {
@@ -160,6 +167,7 @@ function rowToTask(row: TaskRow): TaskSummary {
     routineId: row.routine_id,
     reminderId: row.reminder_id,
     projectName: row.project_name,
+    pooled: row.pooled === 1,
   };
 }
 
@@ -219,6 +227,12 @@ export function getCostBreakdown(windowDays: number): {
   byOrigin: Array<{ origin: string; totalUsd: number; taskCount: number }>;
   byRoutine: Array<{ routineId: string; totalUsd: number; taskCount: number }>;
   byDay: Array<{ date: string; totalUsd: number; taskCount: number }>;
+  pool: {
+    /** Number of tasks in the window that resumed a pooled session (skipped cold start). */
+    pooledTaskCount: number;
+    /** Number of tasks that paid the cold start. */
+    freshTaskCount: number;
+  };
 } {
   const db = getDb();
   const now = new Date();
@@ -320,7 +334,26 @@ export function getCostBreakdown(windowDays: number): {
     );
   }
 
-  return { windowDays, total, bySkill, byOrigin, byRoutine, byDay };
+  const poolRow = db
+    .prepare<
+      [number],
+      { pooled_count: number; fresh_count: number }
+    >(
+      `SELECT
+         COALESCE(SUM(CASE WHEN pooled = 1 THEN 1 ELSE 0 END), 0) AS pooled_count,
+         COALESCE(SUM(CASE WHEN pooled = 0 THEN 1 ELSE 0 END), 0) AS fresh_count
+       FROM tasks
+       WHERE started_at >= ? AND origin != 'external'
+         AND skill_id IS NOT NULL
+         AND (origin = 'palette' OR origin = 'voice')`,
+    )
+    .get(since);
+  const pool = {
+    pooledTaskCount: poolRow?.pooled_count ?? 0,
+    freshTaskCount: poolRow?.fresh_count ?? 0,
+  };
+
+  return { windowDays, total, bySkill, byOrigin, byRoutine, byDay, pool };
 }
 
 function pad2(n: number): string {
