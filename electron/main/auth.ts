@@ -137,6 +137,15 @@ export function loadInboxPrefs(): InboxPrefs {
       ? stored.disabledSources.filter((x): x is string => typeof x === 'string')
       : DEFAULT_INBOX_PREFS.disabledSources,
     calendarWindowHours,
+    // typeof undefined → fall back to default. typeof boolean → carry.
+    showMeetingStrip:
+      typeof stored.showMeetingStrip === 'boolean'
+        ? stored.showMeetingStrip
+        : DEFAULT_INBOX_PREFS.showMeetingStrip,
+    showAwaitingStrip:
+      typeof stored.showAwaitingStrip === 'boolean'
+        ? stored.showAwaitingStrip
+        : DEFAULT_INBOX_PREFS.showAwaitingStrip,
   };
 }
 

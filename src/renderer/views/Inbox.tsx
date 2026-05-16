@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { InboxItem, InboxPrefs } from '../../shared/types';
+import type {
+  InboxItem,
+  InboxPrefs,
+  MeetingDetectionStatus,
+  TaskSummary,
+} from '../../shared/types';
 import { DEFAULT_INBOX_PREFS } from '../../shared/types';
 import { TaskBindingBadge } from './TaskBindingBadge';
 import { toast } from './Toaster';
@@ -43,6 +48,17 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
     readActiveProject() !== null,
   );
   const [inboxPrefs, setInboxPrefs] = useState<InboxPrefs>(DEFAULT_INBOX_PREFS);
+  // Live-strip state — populated only when the corresponding strip is
+  // shown. The data sources (tasks for awaiting; detection watcher
+  // for meeting) are global so the cost is the same whether the
+  // strips are visible or not, but skipping the IPC + subscription
+  // when hidden keeps the renderer cheap.
+  const [tasks, setTasks] = useState<TaskSummary[]>([]);
+  const [meetingStatus, setMeetingStatus] = useState<MeetingDetectionStatus | null>(
+    null,
+  );
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const bindings = useTaskBinding('inbox');
 
   // Drop bindings for items that are no longer in the inbox.
@@ -112,6 +128,54 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
       off();
     };
   }, []);
+
+  // Live strips — task list + meeting detection. Compact mode skips
+  // these (the dashboard widget version already has the dashboard
+  // context around it; redoing them inside would be noise).
+  useEffect(() => {
+    if (compact) return;
+    void window.jarvis.listTasks().then(setTasks);
+    void window.jarvis.meetingDetectionStatus().then(setMeetingStatus);
+    const offTaskStatus = window.jarvis.onTaskStatus((summary) => {
+      setTasks((prev) => {
+        const i = prev.findIndex((t) => t.id === summary.id);
+        if (i === -1) return [summary, ...prev];
+        const next = prev.slice();
+        next[i] = summary;
+        return next;
+      });
+    });
+    const offTaskRemoved = window.jarvis.onTaskRemoved((id) =>
+      setTasks((prev) => prev.filter((t) => t.id !== id)),
+    );
+    const offDetection = window.jarvis.onMeetingDetectionChanged(setMeetingStatus);
+    // Tick every 30s so the meeting strip's "auto-detect: live/quiet"
+    // label re-evaluates as silence stretches past the threshold.
+    const tick = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => {
+      offTaskStatus();
+      offTaskRemoved();
+      offDetection();
+      window.clearInterval(tick);
+    };
+  }, [compact]);
+
+  // Awaiting-input tasks — the band that was on Now.
+  const awaitingTasks = useMemo(
+    () =>
+      tasks.filter(
+        (t) =>
+          t.awaitingInput &&
+          t.status === 'running' &&
+          t.origin !== 'external' &&
+          // Honor the scope filter the rest of Inbox respects.
+          (!filterByScope ||
+            !activeProject ||
+            !t.projectName ||
+            t.projectName === activeProject),
+      ),
+    [tasks, filterByScope, activeProject],
+  );
 
   const doRefresh = async () => {
     setError(null);
@@ -240,8 +304,31 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
           >
             {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
+          {!compact && (
+            <button
+              className="inbox__settings"
+              onClick={() => setSettingsOpen((v) => !v)}
+              title="Inbox strip toggles + preferences"
+              aria-label="Inbox settings"
+            >
+              ⚙
+            </button>
+          )}
         </div>
       </header>
+
+      {!compact && settingsOpen && (
+        <InboxSettingsPopover
+          prefs={inboxPrefs}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+      {!compact && (inboxPrefs.showMeetingStrip ?? true) && (
+        <MeetingStrip status={meetingStatus} now={now} />
+      )}
+      {!compact && (inboxPrefs.showAwaitingStrip ?? true) && awaitingTasks.length > 0 && (
+        <AwaitingStrip tasks={awaitingTasks} />
+      )}
       {filterByScope && hiddenCount > 0 && (
         <div className="inbox__hint inbox__filter-hint">
           {hiddenCount} item{hiddenCount === 1 ? '' : 's'} hidden (not tagged
@@ -696,4 +783,188 @@ function formatRelative(ts: number): string {
     month: 'short',
     day: 'numeric',
   });
+}
+
+// ── Live strips (merged in from the retired Now tab) ────────────────
+
+/**
+ * Meeting strip — manual `Record now` button + an honest detection
+ * pill. macOS 15 (Sequoia) silences the coreaudiod log channel that
+ * the watcher parses, so the pill goes yellow ("quiet") when no
+ * events have arrived since startup. The record button works
+ * regardless of detection state.
+ */
+function MeetingStrip({
+  status,
+  now,
+}: {
+  status: MeetingDetectionStatus | null;
+  now: number;
+}) {
+  const [busy, setBusy] = useState(false);
+  const detectState: 'live' | 'quiet' | 'fault' | 'off' = (() => {
+    if (!status) return 'off';
+    if (status.fault) return 'fault';
+    if (!status.running) return 'off';
+    if (status.inputEventsSeen > 0) {
+      if (status.lastInputAt && now - status.lastInputAt < 5 * 60_000) {
+        return 'live';
+      }
+      return 'quiet';
+    }
+    return now - status.startedAt > 60_000 ? 'quiet' : 'live';
+  })();
+  const pillText =
+    detectState === 'live'
+      ? 'auto-detect: live'
+      : detectState === 'quiet'
+      ? 'auto-detect: quiet'
+      : detectState === 'fault'
+      ? 'auto-detect: fault'
+      : 'auto-detect: off';
+  const pillTitle =
+    detectState === 'fault'
+      ? status?.fault ?? 'Watcher errored.'
+      : detectState === 'quiet'
+      ? 'macOS 15 quiets the audio log channel — auto-detect is best-effort. Use the button for ad-hoc calls.'
+      : detectState === 'live'
+      ? `Saw ${status?.inputEventsSeen ?? 0} mic event(s) since start.`
+      : 'Watcher not started yet.';
+
+  const record = async () => {
+    setBusy(true);
+    try {
+      const result = await window.jarvis.dispatchIntent(
+        'meeting-recorder',
+        'start',
+        '',
+      );
+      if (result.ok) {
+        toast({ message: result.message ?? 'Recording started' });
+      } else {
+        toast({ kind: 'error', message: result.message ?? 'Failed to start' });
+      }
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="inbox__strip inbox__strip--meeting">
+      <button
+        className="inbox__strip-record"
+        onClick={record}
+        disabled={busy}
+        title="Start recording the current meeting (Whisper, local)"
+      >
+        🎙 {busy ? 'Starting…' : 'Record meeting'}
+      </button>
+      <span
+        className={`inbox__strip-detect inbox__strip-detect--${detectState}`}
+        title={pillTitle}
+      >
+        {pillText}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Awaiting-input strip — tasks blocked on the user's reply. Clicking
+ * a row jumps to the Observatory and focuses that task.
+ */
+function AwaitingStrip({ tasks }: { tasks: TaskSummary[] }) {
+  return (
+    <div className="inbox__strip inbox__strip--awaiting">
+      <span className="inbox__strip-dot" aria-hidden />
+      <span className="inbox__strip-label">
+        {tasks.length} awaiting your reply
+      </span>
+      <ul className="inbox__strip-tasks">
+        {tasks.slice(0, 4).map((t) => (
+          <li key={t.id}>
+            <button
+              className="inbox__strip-task"
+              onClick={() => void window.jarvis.openObservatory(t.id)}
+              title={t.title}
+            >
+              {t.title.length > 60 ? `${t.title.slice(0, 60)}…` : t.title}
+            </button>
+          </li>
+        ))}
+        {tasks.length > 4 && (
+          <li className="inbox__strip-task inbox__strip-task--more">
+            + {tasks.length - 4} more
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Settings popover for the strips. Two checkboxes today; room to
+ * grow without inventing a new surface. Writes the flip to the
+ * InboxPrefs IPC immediately so a toggle takes effect without an
+ * explicit save.
+ */
+function InboxSettingsPopover({
+  prefs,
+  onClose,
+}: {
+  prefs: InboxPrefs;
+  onClose: () => void;
+}) {
+  const update = async (patch: Partial<InboxPrefs>) => {
+    const next: InboxPrefs = { ...prefs, ...patch };
+    try {
+      await window.jarvis.writeInboxPrefs(next);
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+  return (
+    <div className="inbox__settings-popover" role="dialog" aria-label="Inbox settings">
+      <header>
+        <strong>Strips</strong>
+        <button onClick={onClose} aria-label="Close" title="Close (Esc)">
+          ✕
+        </button>
+      </header>
+      <label>
+        <input
+          type="checkbox"
+          checked={prefs.showMeetingStrip ?? true}
+          onChange={(e) => void update({ showMeetingStrip: e.target.checked })}
+        />
+        <div>
+          <strong>Meeting strip</strong>
+          <span>Manual record button + auto-detect status.</span>
+        </div>
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={prefs.showAwaitingStrip ?? true}
+          onChange={(e) => void update({ showAwaitingStrip: e.target.checked })}
+        />
+        <div>
+          <strong>Awaiting reply</strong>
+          <span>Tasks blocked on your input (hidden when empty).</span>
+        </div>
+      </label>
+      <p className="inbox__settings-hint">
+        Wider Inbox prefs (per-source toggles, calendar window) live in
+        Settings → Inbox.
+      </p>
+    </div>
+  );
 }

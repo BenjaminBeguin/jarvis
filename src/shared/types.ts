@@ -82,11 +82,17 @@ export interface InboxPrefs {
    *  Items past this window are dropped from the Inbox only (the
    *  Calendar tab + Dashboard Calendar timeline keep showing them). */
   calendarWindowHours: number;
+  /** Live strips at the top of the Inbox. Hide them if the noise
+   *  outweighs the signal for your workflow. */
+  showMeetingStrip?: boolean;
+  showAwaitingStrip?: boolean;
 }
 
 export const DEFAULT_INBOX_PREFS: InboxPrefs = {
   disabledSources: ['calendar'],
   calendarWindowHours: 24,
+  showMeetingStrip: true,
+  showAwaitingStrip: true,
 };
 
 /**

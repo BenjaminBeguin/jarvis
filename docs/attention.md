@@ -12,39 +12,54 @@ Every signal in Jarvis lives on one of three axes:
 | Axis | What it answers | Surfaces |
 |---|---|---|
 | **Past** | What happened? | Activity feed, Tasks list (history) |
-| **Present** | What needs me right now? | **Now** (new), Observatory (live runs) |
-| **Future** | What's coming? | Inbox, Reminders, Routines, Today Focus |
+| **Present** | What needs me right now? | **Inbox** (queue + live strips), Observatory (live runs) |
+| **Future** | What's coming? | Reminders, Routines, calendar items inside Inbox |
 
-The product gap that drove this iteration: **present** had no dedicated
-home. Observatory was close — it shows running tasks — but it didn't
-synthesize across reminders, time-pressured inbox items, and broken
-routines. The `Now` tab fills that gap.
+The product instinct that drove an earlier iteration: **present** had no
+dedicated home. The first answer was a `Now` tab that synthesized
+across reminders, time-pressured inbox items, and broken routines.
+After shipping it and looking honestly at the overlap, 4 of 5 bands
+were thin re-presentations of Inbox + Observatory data; only the
+**meeting strip** was genuinely new. The Now tab was retired and its
+two non-redundant bits (Meeting strip + Awaiting-reply strip)
+collapsed into the Inbox header.
 
-## The Now contract
+## The Inbox contract (post-collapse)
 
-`Now` is a synthesis surface, not a queue. It answers one question:
-"if I look at one screen right now, what should I see?"
+Inbox is now both the queue *and* the live-state surface. Layout:
 
-Three bands, ordered by demand on the user:
+  - **Header** — title + scope pill + filter chip + actions + ⚙
+    settings popover.
+  - **Live strips** (above the queue, toggleable via ⚙):
+    - **Meeting strip** — `🎙 Record meeting` button + honest
+      `auto-detect: live/quiet/fault` pill. The button works
+      regardless of detection state.
+    - **Awaiting reply strip** — tasks blocked on human input
+      (amber pulse, click → Observatory + focus). Hidden when
+      empty.
+  - **Source-grouped queue** — Reminders / PR review / PR comments /
+    Failed routines / Linear / Slack / etc. Sorted by urgency
+    score (see `@shared/inbox-urgency`).
 
-1. **In progress** — tasks awaiting your reply, then other running
-   tasks. The agent loop is blocked on you here, so it goes first.
-2. **Next 30 min** — reminders / inbox items with `fireAt` in the
-   imminent window. Naturally rotates as time passes.
-3. **Broken today** — routine-fired tasks that errored today.
-   Hoisted out of the failed-routines inbox source so silent
-   nightly failures don't sit unread for days.
+What the Inbox is **not**:
+- It is not a curated dashboard — sources / strips are global, not
+  per-user-pinned. The Dashboard tab still exists for curation.
+- It is not the full Activity feed — Inbox is "what's waiting,"
+  Activity is "what happened."
 
-What `Now` is **not**:
-- It is not a curated dashboard. The user doesn't pin things to it;
-  it pulls from existing stores.
-- It is not a feed. Items leave when they're handled or expire.
-- It is not the full inbox. It's a slice — the next 30 minutes.
+## Why the Now tab was retired
 
-The litmus test for whether something belongs on `Now`: would a user
-glancing at it for 3 seconds learn something they didn't already
-know? If yes, it belongs. If no (e.g. yesterday's completed tasks,
-next week's calendar), it goes somewhere else.
+Honest accounting of what each band added:
+  - Top of mind = Inbox top-N by urgency (Inbox already sorts that way)
+  - Next 30 min = Inbox fireAt-soonest items (urgency floats them)
+  - Broken today = the `failed-routines` Inbox source filtered to today
+  - In progress = Observatory's running filter (kept the dedicated tab)
+  - Meeting band = genuinely new — survived as the Inbox Meeting strip
+
+The synthesis-on-one-screen story was real but the implementation
+duplicated stores it could have surfaced via the Inbox + a tiny
+header band. Collapsed in a follow-up commit; preferences for the
+strips ride on the existing InboxPrefs IPC.
 
 ## Why entity links matter
 
@@ -97,11 +112,11 @@ Built so far:
 - **Meeting detection + macOS 15 fix.** The `coreaudiod` log channel
   is largely silent on Sequoia. Three changes: broader predicate +
   keyword heuristic for the rare events that do fire; a status
-  surface (`MeetingDetectionStatus`) so the Now view shows
-  `auto-detect: live / quiet / fault`; a manual `🎙 Record now`
-  button on Now that bypasses detection entirely. Honest UX:
-  when auto-detect is unreliable, the user sees the pill is yellow
-  and reaches for the button.
+  surface (`MeetingDetectionStatus`) shown as the Inbox meeting
+  strip pill (`auto-detect: live / quiet / fault`); a manual
+  `🎙 Record meeting` button that bypasses detection entirely.
+  Honest UX: when auto-detect is unreliable, the pill goes yellow
+  and the button is one click.
 
 ## Still open
 
