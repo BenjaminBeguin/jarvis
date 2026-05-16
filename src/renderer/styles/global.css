@@ -3006,6 +3006,119 @@ button:disabled:hover {
   background: rgba(95, 255, 166, 0.08);
 }
 
+/* "Dismissed" history section — collapsible, mirrors the Notes
+   Done/Archived pattern: header click expands; empty state shows a
+   one-liner hint; rows have a Restore button. */
+.inbox-dismissed {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.inbox-dismissed__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.inbox-dismissed__head:hover {
+  color: var(--accent);
+}
+
+.inbox-dismissed__caret {
+  color: var(--accent);
+  opacity: 0.7;
+  font-size: 9px;
+}
+
+.inbox-dismissed__count {
+  margin-left: 4px;
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+
+.inbox-dismissed__empty {
+  margin-top: 10px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px dashed var(--border);
+  border-radius: 2px;
+  line-height: 1.55;
+}
+
+.inbox-dismissed__list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inbox-dismissed__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  font-family: var(--sans);
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.inbox-dismissed__main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.inbox-dismissed__title {
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-dismissed__sub {
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.inbox-dismissed__restore {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.inbox-dismissed__restore:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 /* ----- Capture page (Notes + Reminders merged) ----------------------- */
 
 .capture-page {

@@ -57,6 +57,17 @@ export class InboxStore extends EventEmitter {
     return this.items.filter((it) => !this.dismissals.isDismissed(it.id));
   }
 
+  /**
+   * Dismissed items still in the current store snapshot — used by the
+   * Inbox's "Dismissed" history section. Items no longer emitted by
+   * their source (e.g. PRs that have been reviewed) age out of the
+   * store entirely and won't appear here; this is the live view, not
+   * an audit log.
+   */
+  listDismissed(): InboxItem[] {
+    return this.items.filter((it) => this.dismissals.isDismissed(it.id));
+  }
+
   /** Snooze an item. `snoozeMs` is duration from now; use
    * InboxDismissalStore.forever() to never re-show. */
   dismiss(id: string, snoozeMs: number): void {

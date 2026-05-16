@@ -278,6 +278,8 @@ const api = {
 
   listInbox: (): Promise<InboxItem[]> =>
     ipcRenderer.invoke(IpcChannels.listInbox),
+  listInboxDismissed: (): Promise<InboxItem[]> =>
+    ipcRenderer.invoke(IpcChannels.listInboxDismissed),
   listInboxSources: (skillIds: string[]): Promise<InboxSourceSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listInboxSources, skillIds),
   revealInboxFile: (
@@ -292,6 +294,8 @@ const api = {
     subscribe(IpcChannels.inboxRefreshing, listener),
   dismissInboxItem: (id: string, snoozeMs: number): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.dismissInboxItem, { id, snoozeMs }),
+  restoreInboxItem: (id: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.restoreInboxItem, id),
   countInboxSource: (
     name: string,
   ): Promise<{ count: number; mtimeMs: number | null }> =>

@@ -67,6 +67,7 @@ export function registerInboxIpc({
   activity,
 }: IpcDeps): void {
   ipcMain.handle(IpcChannels.listInbox, () => inbox.list());
+  ipcMain.handle(IpcChannels.listInboxDismissed, () => inbox.listDismissed());
   ipcMain.handle(IpcChannels.refreshInbox, () => inbox.refresh());
   ipcMain.handle(
     IpcChannels.dismissInboxItem,
@@ -74,6 +75,10 @@ export function registerInboxIpc({
       inbox.dismiss(payload.id, payload.snoozeMs);
     },
   );
+
+  ipcMain.handle(IpcChannels.restoreInboxItem, (_e, id: string) => {
+    inbox.restore(id);
+  });
 
   const inboxDir = join(jarvisRoot, 'inbox');
   const resolveInboxFile = (name: string): string | null => {

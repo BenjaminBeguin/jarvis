@@ -30,6 +30,8 @@ function readActiveProject(): string | null {
  */
 export function Inbox({ compact = false }: { compact?: boolean } = {}) {
   const [items, setItems] = useState<InboxItem[]>([]);
+  const [dismissed, setDismissed] = useState<InboxItem[]>([]);
+  const [showDismissed, setShowDismissed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,11 +57,15 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
   useEffect(() => {
     // 1. Fetch cached list immediately (instant render with stale data).
     void window.jarvis.listInbox().then(setItems);
+    void window.jarvis.listInboxDismissed().then(setDismissed);
     // 2. Then kick a fresh refresh in the background.
     void doRefresh();
     const offChanged = window.jarvis.onInboxChanged((next) => {
       setItems(next);
       setLastRefreshedAt(Date.now());
+      // Dismissed list piggybacks on the same trigger — anytime the
+      // active set changes (refresh, dismiss, restore) we re-pull it.
+      void window.jarvis.listInboxDismissed().then(setDismissed);
     });
     const offRefreshing = window.jarvis.onInboxRefreshing(setRefreshing);
     return () => {
@@ -298,7 +304,91 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
           </ul>
         </section>
       ))}
+
+      <DismissedSection
+        rows={dismissed}
+        open={showDismissed}
+        onToggle={() => setShowDismissed((v) => !v)}
+      />
     </section>
+  );
+}
+
+/**
+ * Collapsible "Dismissed" section — every inbox item the user has
+ * currently snoozed/dismissed. Same shape as Notes' Done/Archived:
+ * a header with caret + count, body lists each row with a Restore
+ * action that un-snoozes it.
+ *
+ * Only shows items still in the in-memory store. PRs that have aged
+ * out entirely (reviewed, branch merged) aren't tracked here — those
+ * just vanish on the next refresh.
+ */
+function DismissedSection({
+  rows,
+  open,
+  onToggle,
+}: {
+  rows: InboxItem[];
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <section className="inbox-dismissed">
+      <button
+        className="inbox-dismissed__head"
+        onClick={onToggle}
+        title={open ? 'Collapse dismissed' : 'Expand dismissed'}
+      >
+        <span className="inbox-dismissed__caret">{open ? '▾' : '▸'}</span>
+        <span className="inbox-dismissed__label">Dismissed</span>
+        <span className="inbox-dismissed__count">{rows.length}</span>
+      </button>
+      {open &&
+        (rows.length === 0 ? (
+          <div className="inbox-dismissed__empty">
+            Nothing dismissed right now. Click <code>×</code> on a row
+            and pick a snooze duration to send it here.
+          </div>
+        ) : (
+          <ul className="inbox-dismissed__list">
+            {rows.map((item) => (
+              <DismissedRow key={item.id} item={item} />
+            ))}
+          </ul>
+        ))}
+    </section>
+  );
+}
+
+function DismissedRow({ item }: { item: InboxItem }) {
+  const restore = async () => {
+    try {
+      await window.jarvis.restoreInboxItem(item.id);
+      toast({ message: 'Restored' });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+  return (
+    <li className="inbox-dismissed__row">
+      <div className="inbox-dismissed__main">
+        <div className="inbox-dismissed__title">{item.title}</div>
+        {item.subtitle && (
+          <div className="inbox-dismissed__sub">{item.subtitle}</div>
+        )}
+      </div>
+      <button
+        className="inbox-dismissed__restore"
+        onClick={() => void restore()}
+        title="Bring this back to the active inbox"
+      >
+        ↺ Restore
+      </button>
+    </li>
   );
 }
 
