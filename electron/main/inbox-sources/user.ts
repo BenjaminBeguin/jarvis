@@ -131,6 +131,28 @@ export const userInboxSource: InboxSource = {
         // (it's required by the type guard above, but cheap insurance).
         const last = out[out.length - 1]!;
         if (!last.createdAt) last.createdAt = mtimeMs;
+        // Normalize URL-navigation actions that were mistakenly emitted
+        // as `kind: 'task'` (the default). The pattern: a skill emits
+        // `action: { label: "Open in X", skillId: 'send', prompt: 'Open
+        // <URL>' }` to add a custom-labeled button, but `kind: 'task'`
+        // (the default) means the button spawns a Claude turn just to
+        // open a URL — wasteful + slow. Rewriting to `kind: 'open-url'`
+        // here means future regenerations of the same file get the
+        // right behavior even if the skill itself didn't get the memo.
+        const a = last.action;
+        if (
+          a &&
+          (a.kind === undefined || a.kind === 'task') &&
+          typeof a.label === 'string' &&
+          /^(open|view)\b/i.test(a.label) &&
+          last.url
+        ) {
+          last.action = {
+            label: a.label,
+            kind: 'open-url',
+            url: a.url ?? last.url,
+          };
+        }
       }
     }
     return out;

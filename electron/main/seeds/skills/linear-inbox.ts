@@ -58,6 +58,15 @@ Overwrite on every run. Empty array is valid — clears the section.
 
 ## Per-item shape
 
+⛔ **CRITICAL — never include an \`action\` field on Linear items.**
+The renderer already gives every item with a \`url\` a free one-click
+"Open" button. Adding \`action: { label: "Open in Linear", skillId:
+"send", prompt: "Open the Linear issue at <url> ..." }\` spawns a
+Claude turn (5-10s, real $) just to navigate to a URL. That is the
+exact bug we are not regenerating. Emit \`url\` only.
+
+Correct shape (no \`action\`):
+
 \`\`\`json
 {
   "id": "linear-<issue-id>",
@@ -70,13 +79,11 @@ Overwrite on every run. Empty array is valid — clears the section.
 }
 \`\`\`
 
-**Do not** include an \`action\` field. The \`url\` already gives the
-user a one-click "Open" button in the Inbox; spawning a Claude task
-to "open in Linear" wastes a turn and a few seconds of wall-clock.
-If you ever want an agentic affordance on a Linear row in the
-future (e.g. "Draft a status comment" / "Triage assignment"), that
-would warrant an \`action\` with \`kind: 'task'\` and a proper
-prompt — but the default for a Linear inbox row is just a link.
+If you ever want a genuinely agentic affordance on a Linear row
+(e.g. "Draft a status comment" / "Triage assignment"), that warrants
+an \`action\` with \`kind: 'task'\` and a prompt describing *real work*
+— not URL navigation. Until you have such a use case, omit \`action\`
+entirely.
 
 - \`id\` must be stable across runs — use the Linear issue id (not the
   identifier like "ENG-123"; the underlying GraphQL id). Re-runs
