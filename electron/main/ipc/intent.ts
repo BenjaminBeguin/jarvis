@@ -60,6 +60,7 @@ export function registerIntentIpc({
           body: intent.body,
           mode: intent.mode,
           fireAt: intent.fireAt,
+          cron: intent.cron,
         });
         try {
           const when = new Date(reminder.fireAt).toLocaleString(undefined, {
@@ -68,10 +69,11 @@ export function registerIntentIpc({
             day: 'numeric',
             month: 'short',
           });
+          const recurringSuffix = intent.cron ? ' · recurring' : '';
           const title =
             intent.mode === 'scheduled'
-              ? `Scheduled · ${when}`
-              : `Reminder set · ${when}`;
+              ? `Scheduled · ${when}${recurringSuffix}`
+              : `Reminder set · ${when}${recurringSuffix}`;
           new Notification({ title, body: reminder.body, silent: true })
             .on('click', () => openObservatory())
             .show();

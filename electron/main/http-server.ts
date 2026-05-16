@@ -123,6 +123,7 @@ async function handle(
         body: intent.body,
         mode: intent.mode,
         fireAt: intent.fireAt,
+        cron: intent.cron,
       });
       sendJson(res, 200, { kind: 'reminder', reminder });
       return;
