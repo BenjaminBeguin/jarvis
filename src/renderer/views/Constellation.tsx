@@ -555,7 +555,14 @@ export function Constellation({
             const ly = CENTER.y + Math.sin(p.angle) * (RING_RADIUS + labelOffset);
             const textAnchor =
               Math.cos(p.angle) > 0.2 ? 'start' : Math.cos(p.angle) < -0.2 ? 'end' : 'middle';
-            const awaiting = !!p.task.awaitingInput;
+            // Same defensive guard as TaskDetail / TaskList — a
+            // terminal task can't actually be waiting even if the
+            // flag is stale (mainly affects external sessions).
+            const awaiting =
+              !!p.task.awaitingInput &&
+              p.task.status !== 'completed' &&
+              p.task.status !== 'errored' &&
+              p.task.status !== 'aborted';
             const isFocus = p.task.id === focusId;
             return (
               <g

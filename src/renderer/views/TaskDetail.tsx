@@ -279,7 +279,14 @@ export function TaskDetail({ task, onSelectTask }: Props) {
   }, [events.length]);
 
   const items = useMemo(() => buildChatTimeline(events), [events]);
-  const isAwaiting = !!task.awaitingInput;
+  // Defensive: a task in a terminal state can't actually be waiting for
+  // input even if the awaitingInput flag is stale. Belt-and-suspenders
+  // alongside the main-side fix in updateExternalStatus.
+  const isAwaiting =
+    !!task.awaitingInput &&
+    task.status !== 'completed' &&
+    task.status !== 'errored' &&
+    task.status !== 'aborted';
   // Show diagnostic 'system' events (init, api_retry, …) behind a toggle.
   // Default off — they're never what the user wants to read first.
   const [showSystem, setShowSystem] = useState(false);

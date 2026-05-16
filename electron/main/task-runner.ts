@@ -368,11 +368,29 @@ export class TaskRunner extends EventEmitter {
   ): void {
     const rec = this.records.get(taskId);
     if (!rec || !rec.external) return;
+    // External-task awaitingInput comes from "last log event was an
+    // assistant message" — which is almost always true for a session
+    // that ran to completion. When the watcher decides the file is
+    // stale enough to call the task `completed`, the user is no
+    // longer waiting to reply; the conversation is over. Force
+    // awaitingInput off on any terminal transition so the UI doesn't
+    // keep showing the amber "AGENT IS WAITING" banner.
+    const isTerminal =
+      status === 'completed' ||
+      status === 'errored' ||
+      status === 'aborted';
+    const nextAwaiting = isTerminal ? false : rec.summary.awaitingInput;
     if (
       rec.summary.status === status &&
-      rec.summary.endedAt === endedAt
+      rec.summary.endedAt === endedAt &&
+      rec.summary.awaitingInput === nextAwaiting
     ) return;
-    rec.summary = { ...rec.summary, status, endedAt };
+    rec.summary = {
+      ...rec.summary,
+      status,
+      endedAt,
+      awaitingInput: nextAwaiting,
+    };
     this.emit('status', rec.summary);
   }
 

@@ -94,16 +94,23 @@ function Row({ task, active, onClick }: RowProps) {
   if (task.projectName) titleParts.push(`project: ${task.projectName}`);
   if (task.routineId) titleParts.push(`routine: ${task.routineId}`);
   if (task.reminderId) titleParts.push(`reminder: ${task.reminderId}`);
+  // Defensive: terminal tasks aren't actually waiting even if the
+  // flag is stale. Mirrors the guard in TaskDetail / AwaitingStrip.
+  const isAwaiting =
+    !!task.awaitingInput &&
+    task.status !== 'completed' &&
+    task.status !== 'errored' &&
+    task.status !== 'aborted';
   return (
     <button
-      className={`task-list-view__row${active ? ' task-list-view__row--active' : ''}${task.awaitingInput ? ' task-list-view__row--awaiting' : ''}`}
+      className={`task-list-view__row${active ? ' task-list-view__row--active' : ''}${isAwaiting ? ' task-list-view__row--awaiting' : ''}`}
       onClick={onClick}
       title={titleParts.join(' · ')}
     >
       <span className={`status-dot status-dot--${statusClass(task)}`} />
       <span className="task-list-view__title">{task.title}</span>
       <span className="task-list-view__origin">{originLabel}</span>
-      {task.awaitingInput && (
+      {isAwaiting && (
         <span className="task-list-view__awaiting">awaiting</span>
       )}
       <span className="task-list-view__time">{formatRelative(task.startedAt)}</span>
