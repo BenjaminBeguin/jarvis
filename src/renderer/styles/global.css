@@ -2813,6 +2813,11 @@ button:disabled:hover {
   border-color: rgba(255, 158, 199, 0.4);
 }
 
+.activity__cat--dedupe {
+  color: #b3a8ff;
+  border-color: rgba(179, 168, 255, 0.4);
+}
+
 /* ----- Reminders page (every reminder + scheduled action) ---------- */
 
 .reminders-page {

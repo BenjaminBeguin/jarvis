@@ -501,6 +501,20 @@ function InboxRow({
           ),
       };
     }
+    if (item.source === 'dedupe') {
+      // Dedupe suggestions — open the merged Notes & Reminders page
+      // so the user can review the duplicate side-by-side. No
+      // auto-merge; this is manual review by design.
+      return {
+        title: 'Click to review the duplicate captures',
+        run: () =>
+          window.dispatchEvent(
+            new CustomEvent('jarvis:navigate', {
+              detail: { tab: 'settings', moduleId: 'quick-note' },
+            }),
+          ),
+      };
+    }
     return null;
   })();
 

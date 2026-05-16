@@ -180,6 +180,7 @@ const EVENT_KIND_META: Record<
       | 'integration'
       | 'inbox'
       | 'reminder'
+      | 'dedupe'
       | 'other';
     label: string;
   }
@@ -199,6 +200,7 @@ const EVENT_KIND_META: Record<
   'reminder.cancelled': { category: 'reminder', label: 'reminder · cancel' },
   'reminder.fired': { category: 'reminder', label: 'reminder · fired' },
   'reminder.done': { category: 'reminder', label: 'reminder · done' },
+  'dedupe.scanned': { category: 'dedupe', label: 'dedupe · scan' },
 };
 
 function EventRow({ event }: { event: ActivityEvent }) {
@@ -238,6 +240,13 @@ function EventRow({ event }: { event: ActivityEvent }) {
     }
     if (event.kind.startsWith('reminder.')) {
       // Reminders surface in the Inbox tab (time-pressured rows there).
+      window.dispatchEvent(
+        new CustomEvent('jarvis:navigate', { detail: { tab: 'inbox' } }),
+      );
+      return;
+    }
+    if (event.kind.startsWith('dedupe.')) {
+      // Dedupe suggestions land in the Inbox.
       window.dispatchEvent(
         new CustomEvent('jarvis:navigate', { detail: { tab: 'inbox' } }),
       );
