@@ -11,6 +11,7 @@ import {
   openPalette,
   resizeAnswerHud,
   resizePalette,
+  sendWhenReady,
   setAnswerHudInteractive,
 } from '../windows.js';
 import type { IpcDeps } from './types.js';
@@ -21,20 +22,13 @@ export function registerWindowIpc(_deps: IpcDeps): void {
   ipcMain.handle(IpcChannels.openObservatory, (_e, taskId?: string) => {
     const win = openObservatory();
     win.focus();
-    const send = () => {
-      // Make sure the Shell is on the Observatory tab before firing the
-      // focus event — without this, calling from the HUD while the user
-      // is on Briefings/Routines/etc. brings the window forward but the
-      // Observatory component isn't mounted, so the task focus is lost.
-      win.webContents.send(IpcChannels.shellNavigate, { tab: 'observatory' });
-      if (typeof taskId === 'string' && taskId) {
-        win.webContents.send(IpcChannels.observatoryFocusTask, taskId);
-      }
-    };
-    if (win.webContents.isLoading()) {
-      win.webContents.once('did-finish-load', send);
-    } else {
-      send();
+    // Make sure the Shell is on the Observatory tab before firing the
+    // focus event — calling from the HUD while the user is on a
+    // different tab brings the window forward but the Observatory
+    // component isn't mounted, so the task focus would be lost.
+    sendWhenReady(win, IpcChannels.shellNavigate, { tab: 'observatory' });
+    if (typeof taskId === 'string' && taskId) {
+      sendWhenReady(win, IpcChannels.observatoryFocusTask, taskId);
     }
   });
 

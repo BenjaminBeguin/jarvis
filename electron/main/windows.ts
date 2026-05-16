@@ -108,6 +108,26 @@ export function broadcast(channel: string, payload: unknown): void {
   }
 }
 
+/**
+ * Send an IPC message to a window — deferred until the renderer has
+ * actually finished loading. Most "open window then talk to it"
+ * callers need this; firing immediately into a still-loading webContents
+ * silently drops the message.
+ */
+export function sendWhenReady(
+  win: BrowserWindow,
+  channel: string,
+  payload: unknown,
+): void {
+  if (win.isDestroyed()) return;
+  const send = () => win.webContents.send(channel, payload);
+  if (win.webContents.isLoading()) {
+    win.webContents.once('did-finish-load', send);
+  } else {
+    send();
+  }
+}
+
 export function hidePalette(): void {
   if (paletteWindow && !paletteWindow.isDestroyed()) paletteWindow.hide();
 }

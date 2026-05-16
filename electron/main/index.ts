@@ -75,6 +75,7 @@ import {
   getAnswerHudWindow,
   openObservatory,
   openPalette,
+  sendWhenReady,
   showAnswerHud,
 } from './windows.js';
 
@@ -121,13 +122,7 @@ const inboxProximity = new InboxProximityWatcher(
         }
         const win = openObservatory();
         win.focus();
-        const send = () =>
-          win.webContents.send(IpcChannels.shellNavigate, { tab: 'inbox' });
-        if (win.webContents.isLoading()) {
-          win.webContents.once('did-finish-load', send);
-        } else {
-          send();
-        }
+        sendWhenReady(win, IpcChannels.shellNavigate, { tab: 'inbox' });
       });
       notif.show();
     } catch {
@@ -142,13 +137,7 @@ const inboxProximity = new InboxProximityWatcher(
     try {
       const win = openObservatory();
       win.focus();
-      const send = () =>
-        win.webContents.send(IpcChannels.meetingImminent, { item, minutesUntil });
-      if (win.webContents.isLoading()) {
-        win.webContents.once('did-finish-load', send);
-      } else {
-        send();
-      }
+      sendWhenReady(win, IpcChannels.meetingImminent, { item, minutesUntil });
     } catch (err) {
       console.warn('Meeting prompt broadcast failed:', err);
     }
@@ -166,16 +155,7 @@ const meetingActivity = new MeetingActivityWatcher((item) => {
   try {
     const win = openObservatory();
     win.focus();
-    const send = () =>
-      win.webContents.send(IpcChannels.meetingImminent, {
-        item,
-        minutesUntil: 0,
-      });
-    if (win.webContents.isLoading()) {
-      win.webContents.once('did-finish-load', send);
-    } else {
-      send();
-    }
+    sendWhenReady(win, IpcChannels.meetingImminent, { item, minutesUntil: 0 });
   } catch (err) {
     console.warn('Meeting activity broadcast failed:', err);
   }
@@ -307,13 +287,7 @@ function pushTaskToHud(taskId: string): void {
     hud = getAnswerHudWindow();
     if (!hud) return;
   }
-  if (hud.webContents.isLoading()) {
-    hud.webContents.once('did-finish-load', () => {
-      hud.webContents.send(IpcChannels.answerHudTrack, taskId);
-    });
-  } else {
-    hud.webContents.send(IpcChannels.answerHudTrack, taskId);
-  }
+  sendWhenReady(hud, IpcChannels.answerHudTrack, taskId);
 }
 
 // ─── runner event → broadcast + completion notifications ─────────────────────
@@ -374,13 +348,7 @@ function wireRunnerEvents(): void {
         notif.on('click', () => {
           const win = openObservatory();
           win.focus();
-          const send = () =>
-            win.webContents.send(IpcChannels.observatoryFocusTask, summary.id);
-          if (win.webContents.isLoading()) {
-            win.webContents.once('did-finish-load', send);
-          } else {
-            send();
-          }
+          sendWhenReady(win, IpcChannels.observatoryFocusTask, summary.id);
         });
         notif.show();
       } catch {
@@ -406,13 +374,7 @@ function wireRunnerEvents(): void {
         const focusTaskInObservatory = () => {
           const win = openObservatory();
           win.focus();
-          const send = () =>
-            win.webContents.send(IpcChannels.observatoryFocusTask, summary.id);
-          if (win.webContents.isLoading()) {
-            win.webContents.once('did-finish-load', send);
-          } else {
-            send();
-          }
+          sendWhenReady(win, IpcChannels.observatoryFocusTask, summary.id);
         };
         const isUserInitiated =
           summary.origin === 'palette' || summary.origin === 'voice';
@@ -471,13 +433,7 @@ function wireRunnerEvents(): void {
           notif.on('click', () => {
             const win = openObservatory();
             win.focus();
-            const send = () =>
-              win.webContents.send(IpcChannels.observatoryFocusTask, summary.id);
-            if (win.webContents.isLoading()) {
-              win.webContents.once('did-finish-load', send);
-            } else {
-              send();
-            }
+            sendWhenReady(win, IpcChannels.observatoryFocusTask, summary.id);
           });
           notif.show();
         } catch {
@@ -589,13 +545,7 @@ app.whenReady().then(async () => {
           notif.on('click', () => {
             const win = openObservatory();
             win.focus();
-            if (win.webContents.isLoading()) {
-              win.webContents.once('did-finish-load', () =>
-                win.webContents.send(IpcChannels.shellNavigate, { tab: 'inbox' }),
-              );
-            } else {
-              win.webContents.send(IpcChannels.shellNavigate, { tab: 'inbox' });
-            }
+            sendWhenReady(win, IpcChannels.shellNavigate, { tab: 'inbox' });
           });
           notif.show();
         } catch (err) {
@@ -640,13 +590,7 @@ app.whenReady().then(async () => {
         if (firedTaskId) {
           const win = openObservatory();
           win.focus();
-          const send = () =>
-            win.webContents.send(IpcChannels.observatoryFocusTask, firedTaskId);
-          if (win.webContents.isLoading()) {
-            win.webContents.once('did-finish-load', send);
-          } else {
-            send();
-          }
+          sendWhenReady(win, IpcChannels.observatoryFocusTask, firedTaskId);
         } else {
           openObservatory();
         }
@@ -843,13 +787,7 @@ app.whenReady().then(async () => {
         .on('click', () => {
           const win = openObservatory();
           win.focus();
-          const send = () =>
-            win.webContents.send(IpcChannels.shellNavigate, { tab: 'inbox' });
-          if (win.webContents.isLoading()) {
-            win.webContents.once('did-finish-load', send);
-          } else {
-            send();
-          }
+          sendWhenReady(win, IpcChannels.shellNavigate, { tab: 'inbox' });
         })
         .show();
     } catch {
