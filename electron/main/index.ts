@@ -714,6 +714,41 @@ app.whenReady().then(async () => {
   await modules.register(shellNavModule);
   await modules.register(shellModule);
 
+  // Sync the auto-dedupe routine with the quick-note module's
+  // dedupe cadence setting. Re-runs on every module-registry change so
+  // the routine appears / disappears / shifts cron as the user tweaks
+  // the toggle. Routine id is fixed so we always overwrite the same
+  // record instead of accumulating duplicates.
+  const DEDUPE_ROUTINE_ID = 'auto-dedupe-captures';
+  const syncDedupeRoutine = () => {
+    const settings = modules.readSettings('quick-note');
+    if (!settings) return;
+    const cadence = String(settings.dedupeCadence ?? 'off');
+    const sensitivity = String(settings.dedupeSensitivity ?? 'medium');
+    const existing = routines
+      .list()
+      .find((r) => r.id === DEDUPE_ROUTINE_ID);
+    if (cadence === 'off') {
+      if (existing) routines.remove(DEDUPE_ROUTINE_ID);
+      return;
+    }
+    const cron = cadence === 'daily' ? '0 9 * * *' : '0 9 * * 1';
+    const input = `Scan recent captures (notes + pending reminders) for duplicates. Sensitivity: ${sensitivity}.`;
+    if (existing && existing.cron === cron && existing.input === input) {
+      return; // no-op
+    }
+    routines.save({
+      id: DEDUPE_ROUTINE_ID,
+      skillId: 'dedupe-captures',
+      cron,
+      input,
+      enabled: true,
+      showInCalendar: false,
+    });
+  };
+  modules.on('changed', () => syncDedupeRoutine());
+  syncDedupeRoutine(); // initial sync at boot
+
   // ─── change → broadcast event fan-out ──────────────────────────────────────
 
   skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
