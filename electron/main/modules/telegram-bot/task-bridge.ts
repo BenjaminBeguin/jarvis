@@ -31,6 +31,11 @@ export interface TaskBridgeEntry {
    *  the auto-compacted context summary starts costing more per turn
    *  than the cold start a fresh task would pay. */
   turnCount: number;
+  /** Project scope this thread is bound to. Lets a single chat keep
+   *  separate threads per project — "cs-ai: ..." opens a cs-ai
+   *  thread, "personal: ..." opens a personal thread, no prefix
+   *  continues the current scope. null = unscoped general thread. */
+  projectName: string | null;
 }
 
 export class TaskBridge {
@@ -42,11 +47,16 @@ export class TaskBridge {
    *  a reply-to context. */
   private lastTaskByChat = new Map<number, string>();
 
-  register(taskId: string, chatId: number): void {
+  register(
+    taskId: string,
+    chatId: number,
+    projectName: string | null = null,
+  ): void {
     this.byTask.set(taskId, {
       chatId,
       lastUsedAt: Date.now(),
       turnCount: 1,
+      projectName,
     });
     this.lastTaskByChat.set(chatId, taskId);
   }
@@ -82,22 +92,45 @@ export class TaskBridge {
     return this.lastTaskByChat.get(chatId) ?? null;
   }
 
-  /** Return the chat's last task only when it's still eligible to
-   *  continue — fresh enough + under the turn cap. Returns null when
-   *  the task is stale (caller forks a new task instead). Caller is
-   *  responsible for evicting stale entries when it forks. */
+  /** Return the chat's active task for the given project scope, only
+   *  when still eligible to continue — fresh enough + under the turn
+   *  cap. Project matching is exact (null === null counts as match).
+   *  Returns null when no thread matches (caller forks a new task).
+   *
+   *  If `projectName` is null, prefers the chat's most recent thread
+   *  regardless of scope — "no explicit project mentioned → continue
+   *  whatever we were just talking about." If `projectName` is set,
+   *  it must match exactly: "cs-ai: ..." won't graft onto a
+   *  personal-scoped thread. */
   getActiveTaskFor(
     chatId: number,
+    projectName: string | null,
     maxAgeMs: number,
     maxTurns: number,
   ): string | null {
-    const taskId = this.lastTaskByChat.get(chatId);
-    if (!taskId) return null;
-    const entry = this.byTask.get(taskId);
-    if (!entry) return null;
-    if (entry.turnCount >= maxTurns) return null;
-    if (Date.now() - entry.lastUsedAt > maxAgeMs) return null;
-    return taskId;
+    const isFresh = (entry: TaskBridgeEntry): boolean =>
+      entry.turnCount < maxTurns &&
+      Date.now() - entry.lastUsedAt <= maxAgeMs;
+
+    // Explicit project ask: only match an entry with that exact scope.
+    if (projectName !== null) {
+      for (const [taskId, entry] of this.byTask) {
+        if (entry.chatId !== chatId) continue;
+        if (entry.projectName !== projectName) continue;
+        if (!isFresh(entry)) continue;
+        return taskId;
+      }
+      return null;
+    }
+    // No explicit project: continue the chat's most recent thread if
+    // it's still fresh, whatever its scope. That gives "I'm in the
+    // middle of a cs-ai conversation, my next reply should keep going"
+    // even when I don't re-type the prefix.
+    const lastId = this.lastTaskByChat.get(chatId);
+    if (!lastId) return null;
+    const last = this.byTask.get(lastId);
+    if (!last || !isFresh(last)) return null;
+    return lastId;
   }
 
   /** Drop the entry. Used when a task completes / errors / aborts so

@@ -159,7 +159,7 @@ export class TelegramBot {
     // the user can't find out their chat id to add it.
     if (this.isAllowed(chatId)) {
       await ctx.reply(
-        `You're connected. Chat id: \`${chatId}\` (${chatType ?? 'unknown'}).\n\nText or voice notes continue the same agent thread (up to ~200 turns over 24h). Use /new to fork a fresh thread. Other commands: /skills, /status, /spend, /afk, /pause.`,
+        `You're connected. Chat id: \`${chatId}\` (${chatType ?? 'unknown'}).\n\nText or voice notes continue the same agent thread for up to 7 days. Prefix with \`<project>:\` (e.g. \`cs-ai: …\`) to switch to that project's thread — no prefix continues whatever we were just talking about. /new forks a fresh thread. Other commands: /skills, /status, /spend, /afk, /pause.`,
         { parse_mode: 'Markdown' },
       );
       return;
@@ -382,27 +382,56 @@ export class TelegramBot {
         return;
       }
     }
-    // 3. Persistent-agent path: the chat already has an active task
-    //    that's still fresh + under the turn cap. Continue it — same
-    //    spirit as the skill-session pool, but keyed on chat rather
-    //    than (skill, project). Falls through to a fresh dispatch when
-    //    the task is stale, errored, or the cap is hit.
+    // 3. Project-scope detection: "alias: rest" prefix routes to a
+    //    project-scoped thread. Lets one Telegram chat hold separate
+    //    threads per project ("cs-ai: ..." vs "personal: ..." vs no
+    //    prefix). The prefix is stripped from the prompt before
+    //    routing — the agent shouldn't have to parse it again.
+    const scope = this.extractProjectScope(text);
+    const promptText = scope?.stripped ?? text;
+    const explicitProject = scope?.projectName ?? null;
+    // 4. Persistent-agent path: continue the chat's existing thread
+    //    when the scope matches (or no explicit scope was given —
+    //    "continue whatever we were just talking about"). A new
+    //    explicit scope that doesn't match the current thread falls
+    //    through to a fresh dispatch tagged with that project.
     const activeTaskId = this.bridge.getActiveTaskFor(
       chatId,
+      explicitProject,
       TELEGRAM_AGENT_TTL_MS,
       TELEGRAM_AGENT_TURN_CAP,
     );
     if (activeTaskId) {
-      await this.continueTask(ctx, chatId, activeTaskId, text);
+      await this.continueTask(ctx, chatId, activeTaskId, promptText);
       return;
     }
-    // Evict the stale prior task (TTL hit / cap hit / errored) so the
-    // fresh dispatch's register call doesn't have to fight with stale
-    // entries in byTask.
-    const stale = this.bridge.lastTaskFor(chatId);
-    if (stale) this.bridge.forget(stale);
-    // 4. Default: new message — full palette-style routing.
-    await this.dispatchAsNewMessage(chatId, ctx, text);
+    // 5. Default: fork a new thread tagged with the explicit project
+    //    (or null when no prefix). The bridge holds onto the prior
+    //    thread for its own project — switching back later still
+    //    finds it.
+    await this.dispatchAsNewMessage(chatId, ctx, promptText, explicitProject);
+  }
+
+  /**
+   * Parse a leading "alias: rest" project prefix when `alias` resolves
+   * to a real project. Returns null when the message has no prefix or
+   * the prefix doesn't match any project (treated as normal text).
+   *
+   * Loose grammar: `<alias>:` at the very start, alias = lowercase
+   * letters / digits / dashes (matches the existing slug rules), then
+   * a colon, then the rest of the message. Whitespace tolerated.
+   */
+  private extractProjectScope(
+    text: string,
+  ): { projectName: string; stripped: string } | null {
+    const m = /^([a-z0-9-]+)\s*:\s*([\s\S]+)$/i.exec(text.trim());
+    if (!m) return null;
+    const alias = m[1]!;
+    const rest = m[2]!.trim();
+    if (!rest) return null;
+    const project = this.ctx.resolveProject(alias);
+    if (!project) return null;
+    return { projectName: project.name, stripped: rest };
   }
 
   // ─── new-message routing (palette parity) ────────────────────────────
@@ -411,11 +440,15 @@ export class TelegramBot {
     chatId: number,
     ctx: Context,
     text: string,
+    projectName: string | null = null,
   ): Promise<void> {
     let result;
     try {
       await ctx.sendChatAction('typing');
-      result = await this.ctx.routePrompt(text, { origin: 'api' });
+      result = await this.ctx.routePrompt(text, {
+        origin: 'api',
+        ...(projectName ? { projectName } : {}),
+      });
     } catch (err) {
       await ctx.reply(`Couldn't route that: ${(err as Error).message}`);
       return;
@@ -435,8 +468,10 @@ export class TelegramBot {
       await ctx.reply(`${verb} for ${when}: ${result.reminder.body}`);
       return;
     }
-    // task → wait for first-turn result, reply with buttons if needed.
-    this.bridge.register(result.task.id, chatId);
+    // task → register with the project scope so future messages can
+    // find this thread when the same scope is implied again, and wait
+    // for first-turn result.
+    this.bridge.register(result.task.id, chatId, projectName);
     await this.completeTurnAndReply(ctx, chatId, result.task.id);
   }
 
