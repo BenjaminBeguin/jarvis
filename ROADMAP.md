@@ -30,11 +30,22 @@ Action-driven (verbal triggers + the palette), project-driven (scope picker
 ## Current state (2026-05)
 
 Shipped: voice + text palette, intent routing (tasks / reminders /
-scheduled actions / module verbal triggers), Whisper-small local STT,
-Observatory + Constellation, project scope, project memory, MCP config +
-playground, routines, 10 built-in skills, modules (quick-note,
-meeting-recorder, send, pr-workflows, status, skill-suggester,
-shell-nav, shell, claude-code-watch).
+**recurring** reminders / scheduled actions / verbal triggers), Whisper-
+small local STT, Observatory + Constellation, project scope, project
+memory, MCP config + playground, **in-process Jarvis MCP** (notify,
+log_activity, create_reminder, open_url, get_active_project, list_recent_*),
+routines (with auto-managed `auto-dedupe-captures`), reminders (pending /
+fired-awaiting-done / done / cancelled lifecycle), 10+ built-in skills,
+modules (quick-note, meeting-recorder, send, pr-workflows, status,
+skill-suggester, shell-nav, shell, claude-code-watch, calendar,
+reminders) with **schema-driven settings panels**, integrations catalog
+(Slack, Gmail x2, Calendar x2, Linear, GitHub, Notion) + per-integration
+config files + stale-data hygiene on disable/remove, Inbox (sources +
+dismissal history + per-source visibility prefs), Activity event log
+(non-task side-effects), Dashboard (per-section width + per-widget
+horizon), boot animation + section reveal, back/forward navigation,
+notification preferences (silent/toast/open), notes & reminders merged
+into one Capture page with tabs.
 
 Architecture (after the May refactor):
 
