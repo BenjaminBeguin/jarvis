@@ -14020,6 +14020,46 @@ button:disabled:hover {
   color: var(--text-dim);
 }
 
+.dash-spend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.dash-spend:hover {
+  background: rgba(0, 212, 255, 0.04);
+}
+.dash-spend__total {
+  font-family: var(--mono);
+  font-size: 28px;
+  color: var(--accent);
+  text-shadow: var(--accent-glow);
+  line-height: 1;
+}
+.dash-spend__label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+}
+.dash-spend__top {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+.dash-spend__top strong {
+  color: var(--text);
+}
+.dash-spend__pool {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--good);
+}
+
 .routines__rail-cost,
 .skills__rail-cost {
   color: var(--text-faint);

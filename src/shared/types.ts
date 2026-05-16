@@ -407,6 +407,14 @@ export type DashboardItem =
       kind: 'calendar';
       /** How far ahead the widget looks. Default 'week'. */
       horizon?: CalendarHorizon;
+    }
+  | {
+      /** Today's / week's / month's spend at a glance. Click jumps to
+       *  Settings → Spend for the detail. Mirrors the at-a-glance
+       *  tray tooltip but in a pinnable card so a glance at the
+       *  Dashboard shows the budget posture. */
+      kind: 'spend';
+      windowDays?: 1 | 7 | 30;
     };
 
 /** Cap how tall a section can grow. `auto` (default) is unconstrained;

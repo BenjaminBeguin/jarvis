@@ -18,6 +18,7 @@ const VALID_ITEM_KINDS = new Set<DashboardItem['kind']>([
   'inbox',
   'routine',
   'calendar',
+  'spend',
 ]);
 
 function isDashboardItem(v: unknown): v is DashboardItem {

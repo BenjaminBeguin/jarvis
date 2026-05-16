@@ -442,6 +442,87 @@ function ItemView({
       {item.kind === 'calendar' && (
         <CalendarTimeline horizon={item.horizon ?? 'week'} />
       )}
+      {item.kind === 'spend' && (
+        <SpendWidget windowDays={item.windowDays ?? 7} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Dashboard widget showing the spend headline for the chosen window
+ * plus a 1-line "top skill / pool ratio" summary. Click jumps to
+ * Settings → Spend for the full breakdown. Refreshes every 30s while
+ * mounted — same cadence as the rails on Routines / Skills.
+ */
+function SpendWidget({ windowDays }: { windowDays: 1 | 7 | 30 }) {
+  const [total, setTotal] = useState<number | null>(null);
+  const [topSkill, setTopSkill] = useState<{ id: string; usd: number } | null>(null);
+  const [poolRatio, setPoolRatio] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const b = await window.jarvis.costBreakdown(windowDays);
+        if (cancelled) return;
+        setTotal(b.total);
+        const top = b.bySkill.find((r) => r.skillId);
+        setTopSkill(top && top.skillId ? { id: top.skillId, usd: top.totalUsd } : null);
+        const sum = b.pool.pooledTaskCount + b.pool.freshTaskCount;
+        setPoolRatio(sum > 0 ? b.pool.pooledTaskCount / sum : null);
+      } catch {
+        // ignore
+      }
+    };
+    void refresh();
+    const t = window.setInterval(() => void refresh(), 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, [windowDays]);
+
+  const label = windowDays === 1 ? 'today' : `last ${windowDays} days`;
+
+  return (
+    <div
+      className="dash-spend"
+      role="button"
+      tabIndex={0}
+      onClick={() =>
+        window.dispatchEvent(
+          new CustomEvent('jarvis:navigate', {
+            detail: { tab: 'settings', settingsSection: 'spend' },
+          }),
+        )
+      }
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          window.dispatchEvent(
+            new CustomEvent('jarvis:navigate', {
+              detail: { tab: 'settings', settingsSection: 'spend' },
+            }),
+          );
+        }
+      }}
+      title="Click to open Settings → Spend"
+    >
+      <div className="dash-spend__total">
+        {total === null ? '…' : `$${total.toFixed(2)}`}
+      </div>
+      <div className="dash-spend__label">{label}</div>
+      {topSkill && (
+        <div className="dash-spend__top">
+          top: <strong>{topSkill.id}</strong> · ${topSkill.usd.toFixed(2)}
+        </div>
+      )}
+      {poolRatio !== null && (
+        <div className="dash-spend__pool">
+          {Math.round(poolRatio * 100)}% pooled
+        </div>
+      )}
     </div>
   );
 }
@@ -971,6 +1052,7 @@ function ItemPicker({
 
   const hasInbox = existing.some((it) => it.kind === 'inbox');
   const hasCalendar = existing.some((it) => it.kind === 'calendar');
+  const hasSpend = existing.some((it) => it.kind === 'spend');
   const pinnedRoutineIds = new Set(
     existing
       .filter((it): it is Extract<DashboardItem, { kind: 'routine' }> => it.kind === 'routine')
@@ -997,6 +1079,17 @@ function ItemPicker({
           <div className="dash-picker__name">Calendar</div>
           <div className="dash-picker__hint">
             Events · reminders · routine fires, time-sorted
+          </div>
+        </button>
+      )}
+      {!hasSpend && (
+        <button
+          className="dash-picker__row"
+          onClick={() => onPick({ kind: 'spend', windowDays: 7 })}
+        >
+          <div className="dash-picker__name">Spend</div>
+          <div className="dash-picker__hint">
+            7-day total · top skill · pool ratio. Click jumps to Settings → Spend.
           </div>
         </button>
       )}
