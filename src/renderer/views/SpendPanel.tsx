@@ -211,6 +211,22 @@ export function SpendPanel() {
             </section>
           )}
 
+          {data.byProject.length > 0 && (
+            <section>
+              <h4 className="settings__subhead">BY PROJECT</h4>
+              <SpendTable
+                rows={data.byProject.map((r) => ({
+                  key: r.projectName,
+                  label: r.projectName,
+                  totalUsd: r.totalUsd,
+                  taskCount: r.taskCount,
+                }))}
+                total={data.total}
+                emptyHint="No project-scoped spend in this window."
+              />
+            </section>
+          )}
+
           <GuardrailsEditor />
         </>
       )}

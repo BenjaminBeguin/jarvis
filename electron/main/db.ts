@@ -226,6 +226,7 @@ export function getCostBreakdown(windowDays: number): {
   bySkill: Array<{ skillId: string | null; totalUsd: number; taskCount: number }>;
   byOrigin: Array<{ origin: string; totalUsd: number; taskCount: number }>;
   byRoutine: Array<{ routineId: string; totalUsd: number; taskCount: number }>;
+  byProject: Array<{ projectName: string; totalUsd: number; taskCount: number }>;
   byDay: Array<{ date: string; totalUsd: number; taskCount: number }>;
   pool: {
     /** Number of tasks in the window that resumed a pooled session (skipped cold start). */
@@ -296,6 +297,21 @@ export function getCostBreakdown(windowDays: number): {
       taskCount: r.task_count,
     }));
 
+  const byProject = db
+    .prepare<[number], { project_name: string; total: number; task_count: number }>(
+      `SELECT project_name, SUM(cost_usd) AS total, COUNT(*) AS task_count
+       FROM tasks
+       WHERE started_at >= ? AND origin != 'external' AND project_name IS NOT NULL
+       GROUP BY project_name
+       ORDER BY total DESC`,
+    )
+    .all(since)
+    .map((r) => ({
+      projectName: r.project_name,
+      totalUsd: r.total,
+      taskCount: r.task_count,
+    }));
+
   // Bucket by local day. SQLite's strftime works on epoch seconds, so we
   // pass started_at/1000 and tag with the user's local UTC offset to keep
   // the day boundary aligned with what the user sees on a clock.
@@ -353,7 +369,7 @@ export function getCostBreakdown(windowDays: number): {
     freshTaskCount: poolRow?.fresh_count ?? 0,
   };
 
-  return { windowDays, total, bySkill, byOrigin, byRoutine, byDay, pool };
+  return { windowDays, total, bySkill, byOrigin, byRoutine, byProject, byDay, pool };
 }
 
 function pad2(n: number): string {

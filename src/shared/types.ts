@@ -663,6 +663,7 @@ export interface CostBreakdown {
   bySkill: Array<{ skillId: string | null; totalUsd: number; taskCount: number }>;
   byOrigin: Array<{ origin: string; totalUsd: number; taskCount: number }>;
   byRoutine: Array<{ routineId: string; totalUsd: number; taskCount: number }>;
+  byProject: Array<{ projectName: string; totalUsd: number; taskCount: number }>;
   byDay: Array<{ date: string; totalUsd: number; taskCount: number }>;
   /** Skill-session pooling stats — within the window, how many
    *  palette/voice tasks reused a session vs. paid the cold start.
