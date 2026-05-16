@@ -76,6 +76,32 @@ export class ModuleRegistry extends EventEmitter {
     this.emit('changed', this.list());
   }
 
+  /**
+   * Unload + reload an enabled module. Useful when an out-of-band config
+   * change (e.g. a secret written to Keychain via a dedicated IPC) should
+   * re-trigger onLoad so the module picks up the new value. No-op if the
+   * module is disabled — re-enabling it is the user's choice.
+   */
+  async reload(moduleId: string): Promise<void> {
+    if (!this.ctx) throw new Error('ModuleRegistry: not initialized');
+    const entry = this.modules.get(moduleId);
+    if (!entry) throw new Error(`Unknown module: ${moduleId}`);
+    if (!entry.enabled) return;
+    try {
+      await entry.module.onUnload?.();
+    } catch (err) {
+      console.warn(`module ${moduleId} onUnload threw during reload:`, err);
+    }
+    try {
+      await entry.module.onLoad?.(this.ctx);
+    } catch (err) {
+      throw new Error(
+        `module ${moduleId} failed to reload: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    this.emit('changed', this.list());
+  }
+
   async setEnabled(moduleId: string, enabled: boolean): Promise<void> {
     if (!this.ctx) throw new Error('ModuleRegistry: not initialized');
     const entry = this.modules.get(moduleId);

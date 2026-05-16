@@ -73,6 +73,9 @@ Built-in modules live in `electron/main/modules/<id>/index.ts` (or a single file
 - Don't import from `electron/main/` directly except through `ModuleContext`. If you need a capability that's not on the context, add it to the context (one place to evolve).
 - Don't talk to the renderer. Modules emit notifications and disk side-effects; the renderer learns about them through normal stores.
 - A module that wants to launch agentic work calls `ctx.launchTask({ skillId, prompt, origin: 'api' })` and lets the existing Observatory display it.
+- For **multi-turn / awaiting-input shapes** (e.g. a remote control module mirroring cockpit prompts), use `ctx.routePrompt` to dispatch like the palette, `ctx.awaitTurnResult` to wait for the SDK's `result` event (NOT `completed`), `ctx.sendMessageToTask` to continue the same SDK session, and `ctx.abortTask` to cancel. Read [docs/telegram.md](docs/telegram.md) for the worked example.
+- For **secrets** (API tokens, etc.), do not put them in `moduleSettings` — those are plaintext in `config.json`. Add dedicated `get/set/clear` functions in `secrets.ts` (keytar account convention: `<module-id>-<purpose>`), expose them via dedicated IPC channels, and declare a `secret` field in the module's `settings.fields` so the auto-rendered Settings panel shows a "Set token / Clear" affordance. The wiring in `ModuleSettingsModal.tsx → secretHandlersFor` is hardcoded per module today — extend it when you add a new secret.
+- For **cross-cutting state that's not module-scoped** (e.g. AFK mode), add it to `~/.jarvis/config.json` directly via `auth.ts`'s `loadX` / `saveX` pair, expose via dedicated IPC + preload, and broadcast on change so every consumer (tray, header, modules) stays in sync.
 
 **Future: external/community modules.** Same `Module` shape, loaded from `~/.jarvis/modules/<id>/` at runtime. Will need a sandboxed runtime (worker thread + a typed capability bridge); not built yet.
 
@@ -83,17 +86,21 @@ If a new feature breaks either primitive, push back before implementing.
 **Main process owns all state. Renderer is a pure view.** Do not move state to the renderer "because it's simpler" — it isn't, and tasks must survive window close.
 
 - `electron/main/index.ts` — bootstrap, IPC handlers, completion notifications, lifecycle.
-- `electron/main/task-runner.ts` — invokes Agent SDK `query()`, streams `SDKMessage` events.
+- `electron/main/task-runner.ts` — invokes Agent SDK `query()`, streams `SDKMessage` events. Extends `EventEmitter` — modules subscribe via `runner.on('event'|'status'|'removed', …)` for lifecycle observation.
+- `electron/main/notifier.ts` — singleton fan-out for OS notifications. All `new Notification(…)` callsites route through `notifier.post({…, source: '<source>'})`. Modules call `notifier.subscribe(handler)` to mirror events to other surfaces (Telegram bot, future watch/web). Adding a notification class = adding a `NotificationSource` enum entry.
+- `electron/main/route-prompt.ts` — palette dispatch logic extracted into a shared function. The renderer's `palette:routePrompt` IPC handler AND `ctx.routePrompt` (any module) call this. Single source of truth.
+- `electron/main/await-turn.ts` — `awaitTurnResult(runner, taskId)` resolves on the first `result` SDK event. Multi-turn safe (does **NOT** wait for `status='completed'`; multi-turn tasks deliberately stay `running + awaitingInput=true`).
 - `electron/main/intent-router.ts` — pure-function parser for palette free-text → task / reminder / scheduled action.
-- `electron/main/reminders.ts` — persistent setTimeout-based fires; rehydrates on startup.
+- `electron/main/reminders.ts` — persistent setTimeout-based fires; rehydrates on startup. `snooze(id, msFromNow)` re-arms any reminder regardless of current status.
 - `electron/main/skill-store.ts` — loads + watches `~/.jarvis/skills/*/SKILL.md` (chokidar).
 - `electron/main/mcp-config.ts` — loads + watches `~/.jarvis/mcp.json`.
 - `electron/main/routines.ts` — `node-cron` scheduler + persistence (recurring; one-shot is in reminders).
 - `electron/main/db.ts` — `better-sqlite3` (WAL, foreign keys on).
-- `electron/main/secrets.ts` — keytar wrapper, macOS Keychain.
+- `electron/main/secrets.ts` — keytar wrapper, macOS Keychain. Add new credentials as `ACCOUNT_<NAME>` constants + paired `get/set/clear` functions.
 - `electron/main/seed.ts` — first-launch / missing-file seeds for skills + sample configs.
 - `electron/main/windows.ts` — observatory + palette + Answer HUD `BrowserWindow`s.
-- `electron/main/tray.ts` — template tray icon + live menu (running · awaiting · scheduled + abort-all).
+- `electron/main/tray.ts` — template tray icon + live menu (running · awaiting · scheduled · **AFK checkbox** + abort-all). `refreshTrayMenu()` is exported for out-of-band re-renders (when something else flips AFK).
+- `electron/main/module-registry.ts` — module lifecycle. `reload(moduleId)` unloads + re-loads an enabled module so external config changes (e.g. a Keychain write) re-trigger `onLoad` without an app restart.
 - `electron/preload/index.ts` — `contextBridge` → `window.jarvis` API.
 - `src/renderer/` — React. Hash-routed (`/observatory`, `/palette`, `/answer-hud`). Subscribes to IPC events, never holds source-of-truth state.
 - `src/shared/` — types + IPC channel names used by both sides. **Anything crossing IPC lives here.**
@@ -121,9 +128,14 @@ If a new feature breaks either primitive, push back before implementing.
   meetings/<ts>-<slug>.md         # meeting-recorder (global)
   meetings/<project>/<ts>-…       # meeting-recorder when scoped
   projects/<name>/memory/*.md     # per-project agent memory (growing scratchpad)
-  routines.json            # array of routine defs, schema in routines.ts
-  jarvis.sqlite            # tasks + task_events
+  routines.json                   # array of routine defs, schema in routines.ts
+  config.json                     # authMode, disabledModules, moduleSettings.<id>, afkMode
+  jarvis.sqlite                   # tasks + task_events
 ```
+
+**Secrets** live in macOS Keychain (service `app.jarvis`), not config.json.
+Today's accounts: `anthropic-api-key`, `claude-code-subscription-token`,
+`jarvis-http-api-token`, `telegram-bot-token`. See `electron/main/secrets.ts`.
 
 Migrations live in `electron/main/db.ts` as an ordered array. **Append, never edit.**
 
@@ -176,7 +188,8 @@ We follow `~/.claude/plans/hey-i-would-love-staged-dewdrop.md`:
 - Phase 2 ✅ MCP config, routines, daily-brief seed.
 - Phase 2.5 ✅ Module system + quick-note module.
 - Phase 3 ✅ meeting recorder + auto-debrief skill, Answer HUD, intent router (reminders / scheduled actions), Dashboard view, /status + /next, command history, inline schedule preview.
-- Phase 4 — next: skill-to-skill chaining, workflow DAG, calendar-aware briefings, whisper.cpp swap, external/community modules.
+- Phase 3.5 ✅ Telegram bot module (pilot from phone) + AFK mode + notifier singleton + `ctx.routePrompt` / `awaitTurnResult` / `sendMessageToTask` / `abortTask` capabilities + `secret` settings field type. See [docs/telegram.md](docs/telegram.md).
+- Phase 4 — next: skill-to-skill chaining, workflow DAG, calendar-aware briefings, whisper.cpp swap, external/community modules, mobile PWA dashboard over Tailscale (the natural extension to remote control beyond chat).
 
 ## What's _not_ in here
 

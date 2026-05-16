@@ -12,7 +12,9 @@ import {
   loadAfkMode,
   loadAuthMode,
   loadNotificationPrefs,
+  loadPaused,
   saveAfkMode,
+  savePaused,
 } from './auth.js';
 import { awaitTurnResult } from './await-turn.js';
 import { notifier } from './notifier.js';
@@ -237,10 +239,21 @@ runner.setJarvisMcp(
     projectMemory,
     userContext,
     jarvisRoot: join(homedir(), '.jarvis'),
+    setPaused: (value) => {
+      savePaused(value);
+      broadcast(IpcChannels.pausedChanged, value);
+      activity.record({
+        kind: 'paused.toggled',
+        label: `Jarvis ${value ? 'paused' : 'resumed'} (via agent tool)`,
+        detail: { paused: value, source: 'mcp' },
+      });
+    },
+    isPaused: () => loadPaused(),
   }),
 );
 
 routines.setRunner(runner);
+routines.setPausePredicate(() => loadPaused());
 
 let claudeBinaryPath: string | null = null;
 let httpServer: HttpServerHandle | null = null;
@@ -575,6 +588,19 @@ app.whenReady().then(async () => {
     }
 
     // 'scheduled' — agent does the thing.
+    // Global pause: notify the user that the scheduled time hit, but
+    // skip the actual Claude turn. The reminder is marked fired (so it
+    // doesn't re-trigger every minute), with firedTaskId=null. The
+    // user can manually re-fire from the Reminders page once resumed.
+    if (loadPaused()) {
+      activity.record({
+        kind: 'reminder.fired',
+        label: `Scheduled action skipped (Jarvis paused) · ${preview}`,
+        detail: { id: reminder.id, body: reminder.body, paused: true },
+      });
+      reminders.markFired(reminder.id, null);
+      return;
+    }
     let firedTaskId: string | null = null;
     const prompt = `It's the scheduled time you set earlier for this. Carry it out now using whatever tools fit (gh, slack, fs, etc.). If a precondition isn't met (e.g. "if Luca hasn't reviewed"), check first and skip the action accordingly. Task:\n\n${reminder.body}`;
     try {
@@ -696,6 +722,17 @@ app.whenReady().then(async () => {
       saveAfkMode(value);
       broadcast(IpcChannels.afkChanged, value);
       refreshTrayMenu();
+    },
+    isPaused: () => loadPaused(),
+    setPaused: (value) => {
+      savePaused(value);
+      broadcast(IpcChannels.pausedChanged, value);
+      refreshTrayMenu();
+      activity.record({
+        kind: 'paused.toggled',
+        label: `Jarvis ${value ? 'paused' : 'resumed'} (via module)`,
+        detail: { paused: value },
+      });
     },
     listReminders: () => reminders.list(),
     markReminderDone: (id) => reminders.markDone(id),

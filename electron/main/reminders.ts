@@ -184,6 +184,28 @@ export class ReminderStore extends EventEmitter {
   }
 
   /**
+   * Re-arm a reminder to fire `msFromNow` ms from now. Works on any reminder
+   * regardless of current status (pending/fired/done/cancelled) — moves it
+   * back to `pending` and reschedules. Useful for Telegram `[Snooze 1h]`
+   * buttons and any future per-row snooze affordance in the renderer.
+   * Returns the updated reminder, or null if id is unknown.
+   */
+  snooze(id: string, msFromNow: number): Reminder | null {
+    const r = this.reminders.get(id);
+    if (!r) return null;
+    this.clearTimer(id);
+    r.fireAt = Date.now() + Math.max(0, msFromNow);
+    r.status = 'pending';
+    r.firedAt = null;
+    r.firedTaskId = null;
+    r.doneAt = null;
+    this.persist();
+    this.schedule(r);
+    this.emit('changed', this.list());
+    return r;
+  }
+
+  /**
    * Mark a fired reminder as done — the user acted on it from the inbox.
    * Drops the row from the inbox source but keeps the reminder in
    * history (Reminders page shows it under "Done").

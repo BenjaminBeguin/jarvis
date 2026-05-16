@@ -6,6 +6,7 @@ const SERVICE = 'app.jarvis';
 const ACCOUNT_API_KEY = 'anthropic-api-key';
 const ACCOUNT_SUBSCRIPTION_TOKEN = 'claude-code-subscription-token';
 const ACCOUNT_HTTP_API_TOKEN = 'jarvis-http-api-token';
+const ACCOUNT_TELEGRAM_BOT_TOKEN = 'telegram-bot-token';
 
 export async function getAnthropicApiKey(): Promise<string | null> {
   return keytar.getPassword(SERVICE, ACCOUNT_API_KEY);
@@ -57,4 +58,22 @@ export async function rotateHttpApiToken(): Promise<string> {
   const fresh = randomBytes(32).toString('hex');
   await keytar.setPassword(SERVICE, ACCOUNT_HTTP_API_TOKEN, fresh);
   return fresh;
+}
+
+/**
+ * Telegram bot token from BotFather. Set via the Settings → Modules →
+ * Telegram bot panel (the renderer never reads the token itself; it only
+ * triggers writes through the dedicated IPC channel so the value never
+ * lives in any in-memory renderer store or config.json).
+ */
+export async function getTelegramBotToken(): Promise<string | null> {
+  return keytar.getPassword(SERVICE, ACCOUNT_TELEGRAM_BOT_TOKEN);
+}
+
+export async function setTelegramBotToken(value: string): Promise<void> {
+  await keytar.setPassword(SERVICE, ACCOUNT_TELEGRAM_BOT_TOKEN, value);
+}
+
+export async function clearTelegramBotToken(): Promise<void> {
+  await keytar.deletePassword(SERVICE, ACCOUNT_TELEGRAM_BOT_TOKEN);
 }

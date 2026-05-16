@@ -5,10 +5,15 @@ import type {
   ProjectDef,
   Reminder,
   ReminderMode,
+  RoutePromptResult,
+  SessionConfig,
+  SkillSummary,
+  TaskOrigin,
   TaskStatus,
   TaskSummary,
 } from '@shared/types';
 
+import type { TurnResult } from '../await-turn.js';
 import type { UserContextProvider } from '../user-context.js';
 
 export type ParsedFreeTextIntent =
@@ -104,6 +109,55 @@ export interface ModuleContext {
    * Renderer merges these with task-derived /send rows.
    */
   logActivity(event: ActivityEventInput): void;
+  /**
+   * Dispatch raw free-text through the same logic as the palette: verbal-
+   * intent match → module dispatch → reminder/scheduled parse → task
+   * launch. Used by remote-control modules (the Telegram bot) so messages
+   * from phone go through exactly the same routing the palette does.
+   */
+  routePrompt(
+    input: string,
+    opts?: {
+      origin?: TaskOrigin;
+      sessionConfig?: SessionConfig;
+      projectName?: string | null;
+    },
+  ): Promise<RoutePromptResult>;
+  /**
+   * Wait for the current SDK turn of a running task to produce a result
+   * event, then resolve with its final assistant text + awaitingInput
+   * flag. See await-turn.ts for the precise semantics — this is NOT the
+   * same as waiting for status='completed'; multi-turn tasks stay in
+   * 'running + awaitingInput=true' between turns.
+   */
+  awaitTurnResult(taskId: string, opts?: { timeoutMs?: number }): Promise<TurnResult>;
+  /**
+   * Continue a multi-turn task with a follow-up user message. Wraps
+   * runner.sendMessage; throws if the task is unknown / external / not
+   * accepting input (e.g. user replied after the task self-closed).
+   */
+  sendMessageToTask(taskId: string, text: string): Promise<void>;
+  /** Abort a running task. Throws if not running. */
+  abortTask(taskId: string): Promise<void>;
+  /** True when the user has flipped AFK mode on. Cross-cutting state. */
+  isAfk(): boolean;
+  /** Flip AFK mode. Broadcasts the new value so tray + Shell update. */
+  setAfk(value: boolean): void;
+  /** True when Jarvis is globally paused — routines + scheduled-action
+   *  reminders skip firing. Modules that auto-spawn work should consult
+   *  this before doing so. */
+  isPaused(): boolean;
+  /** Flip the global pause flag. Broadcasts; tray + UI react. */
+  setPaused(value: boolean): void;
+  /** Snapshot of all reminders, newest pending first (same ordering as
+   *  the Reminders page). Used by the Telegram bot for /reminders list
+   *  and for snooze button context. */
+  listReminders(): Reminder[];
+  markReminderDone(id: string): boolean;
+  /** Re-arm a reminder to fire `msFromNow` from now. Wraps reminders.snooze. */
+  snoozeReminder(id: string, msFromNow: number): Reminder | null;
+  /** Skills available to launch. Used by the Telegram bot for /skills. */
+  listSkills(): SkillSummary[];
 }
 
 /**

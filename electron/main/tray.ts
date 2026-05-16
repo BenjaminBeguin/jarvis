@@ -4,7 +4,13 @@ import { fileURLToPath } from 'node:url';
 
 import { IpcChannels } from '@shared/ipc';
 
-import { openObservatory, openPalette, sendWhenReady, showAnswerHud } from './windows.js';
+import {
+  loadAfkMode,
+  loadPaused,
+  saveAfkMode,
+  savePaused,
+} from './auth.js';
+import { broadcast, openObservatory, openPalette, sendWhenReady, showAnswerHud } from './windows.js';
 
 type AbortHandler = () => void;
 let abortAllHandler: AbortHandler | null = null;
@@ -68,6 +74,32 @@ function rebuildMenu(): void {
     { type: 'separator' },
     { label: 'Open Palette  ⌘⇧J', click: () => openPalette() },
     { label: 'Show Answer HUD', click: () => showAnswerHud() },
+    { type: 'separator' },
+    {
+      label: 'AFK mode (mirror to phone)',
+      type: 'checkbox',
+      checked: loadAfkMode(),
+      click: (menuItem) => {
+        const next = menuItem.checked;
+        saveAfkMode(next);
+        broadcast(IpcChannels.afkChanged, next);
+        rebuildMenu();
+      },
+    },
+    {
+      label: 'Pause Jarvis (skip routines + scheduled actions)',
+      type: 'checkbox',
+      checked: loadPaused(),
+      click: (menuItem) => {
+        const next = menuItem.checked;
+        savePaused(next);
+        broadcast(IpcChannels.pausedChanged, next);
+        rebuildMenu();
+        // Also refresh the tray icon — paused state could later
+        // gain visual treatment (dim icon, ⏸ tooltip badge).
+        rebuildToolTip();
+      },
+    },
   );
   if (runningTasks > 0 && abortAllHandler) {
     items.push(
@@ -79,9 +111,16 @@ function rebuildMenu(): void {
   tray.setContextMenu(Menu.buildFromTemplate(items));
 }
 
+/** Refresh the tray menu — exported so external AFK toggles (Settings UI,
+ *  Telegram /afk command) can re-render the checkbox. */
+export function refreshTrayMenu(): void {
+  rebuildMenu();
+}
+
 function rebuildToolTip(): void {
   if (!tray) return;
   const bits: string[] = [];
+  if (loadPaused()) bits.push('⏸ paused');
   if (runningTasks > 0) bits.push(`${runningTasks} running`);
   if (awaitingReplies > 0) bits.push(`${awaitingReplies} awaiting`);
   if (pendingReminders > 0) bits.push(`${pendingReminders} scheduled`);

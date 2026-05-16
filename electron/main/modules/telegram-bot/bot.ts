@@ -105,6 +105,8 @@ export class TelegramBot {
     this.bot.command('status', (ctx) => this.handleStatusCmd(ctx));
     this.bot.command('abort', (ctx) => this.handleAbort(ctx));
     this.bot.command('afk', (ctx) => this.handleAfkCmd(ctx));
+    this.bot.command('pause', (ctx) => this.handlePauseCmd(ctx, true));
+    this.bot.command('resume', (ctx) => this.handlePauseCmd(ctx, false));
 
     this.bot.on('text', (ctx) => this.handleText(ctx as TextContext));
     this.bot.on('voice', (ctx) => this.handleVoice(ctx as VoiceContext));
@@ -200,6 +202,30 @@ export class TelegramBot {
     } catch (err) {
       await ctx.reply(`Could not abort: ${(err as Error).message}`);
     }
+  }
+
+  /**
+   * /pause and /resume — global Jarvis pause toggle. From your phone
+   * you can stop every routine + scheduled-action reminder. Use
+   * /resume when you're back. /pause status prints the current state.
+   */
+  private async handlePauseCmd(ctx: Context, paused: boolean): Promise<void> {
+    const chatId = ctx.chat?.id;
+    if (typeof chatId !== 'number' || !this.isAllowed(chatId)) return;
+    if (this.ctx.isPaused() === paused) {
+      await ctx.reply(
+        paused
+          ? 'Jarvis is already paused.'
+          : 'Jarvis is already active.',
+      );
+      return;
+    }
+    this.ctx.setPaused(paused);
+    await ctx.reply(
+      paused
+        ? '⏸ Jarvis paused. Routines + scheduled actions will skip until /resume.'
+        : '▶ Jarvis resumed. Routines + scheduled actions fire on their normal cadence.',
+    );
   }
 
   private async handleAfkCmd(ctx: Context): Promise<void> {

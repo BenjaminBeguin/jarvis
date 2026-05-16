@@ -135,6 +135,7 @@ function SettingsPanel({ module: m }: { module: ModuleSummary }) {
         {m.settings.fields.map((field) => (
           <SettingsField
             key={field.key}
+            moduleId={m.id}
             field={field}
             value={values[field.key] ?? field.default}
             onChange={(v) => void update(field.key, v)}
@@ -146,10 +147,12 @@ function SettingsPanel({ module: m }: { module: ModuleSummary }) {
 }
 
 function SettingsField({
+  moduleId,
   field,
   value,
   onChange,
 }: {
+  moduleId: string;
   field: ModuleSettingField;
   value: ModuleSettingValue;
   onChange: (next: ModuleSettingValue) => void;
@@ -209,9 +212,197 @@ function SettingsField({
             ))}
           </select>
         )}
+        {field.type === 'secret' && (
+          <SecretField moduleId={moduleId} fieldKey={field.key} />
+        )}
       </div>
     </label>
   );
+}
+
+/**
+ * Render a Keychain-backed credential. Doesn't read the secret value
+ * (it's write-only from the renderer's POV); just toggles between
+ * "set / not set" + offers Replace / Clear. Wiring per module is
+ * hardcoded — extend the switch when more modules grow secret fields.
+ */
+function SecretField({
+  moduleId,
+  fieldKey,
+}: {
+  moduleId: string;
+  fieldKey: string;
+}) {
+  const handlers = secretHandlersFor(moduleId, fieldKey);
+  const [hasToken, setHasToken] = useState<boolean | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!handlers) return;
+    let cancelled = false;
+    void handlers.has().then((v) => {
+      if (!cancelled) setHasToken(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [handlers]);
+
+  if (!handlers) {
+    return (
+      <span className="module-settings__field-hint">
+        (No secret handler wired for {moduleId}.{fieldKey})
+      </span>
+    );
+  }
+
+  const save = async (): Promise<void> => {
+    if (!draft.trim()) {
+      toast({ kind: 'error', message: 'Token cannot be empty' });
+      return;
+    }
+    setBusy(true);
+    try {
+      await handlers.set(draft.trim());
+      toast({ kind: 'success', message: 'Saved to Keychain' });
+      setEditing(false);
+      setDraft('');
+      setHasToken(true);
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clear = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      await handlers.clear();
+      toast({ kind: 'success', message: 'Removed from Keychain' });
+      setHasToken(false);
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const helperUrl = helperUrlFor(moduleId, fieldKey);
+  const helperLabel = helperLabelFor(moduleId, fieldKey);
+
+  if (editing) {
+    return (
+      <div className="module-settings__secret">
+        <input
+          type="password"
+          value={draft}
+          autoFocus
+          placeholder="Paste your token"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void save();
+            if (e.key === 'Escape') {
+              setEditing(false);
+              setDraft('');
+            }
+          }}
+        />
+        <button onClick={() => void save()} disabled={busy}>
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          onClick={() => {
+            setEditing(false);
+            setDraft('');
+          }}
+          disabled={busy}
+        >
+          Cancel
+        </button>
+        {helperUrl && (
+          <button
+            className="module-settings__secret-helper"
+            onClick={() => void window.jarvis.openExternal(helperUrl)}
+            title={`Open ${helperLabel} to generate / manage tokens`}
+          >
+            ↗ {helperLabel}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="module-settings__secret">
+      <span className="module-settings__secret-status">
+        {hasToken === null
+          ? 'Checking…'
+          : hasToken
+            ? '✓ Token saved'
+            : 'Not set'}
+      </span>
+      <button onClick={() => setEditing(true)} disabled={busy}>
+        {hasToken ? 'Replace' : 'Set token'}
+      </button>
+      {hasToken && (
+        <button onClick={() => void clear()} disabled={busy}>
+          Clear
+        </button>
+      )}
+      {helperUrl && (
+        <button
+          className="module-settings__secret-helper"
+          onClick={() => void window.jarvis.openExternal(helperUrl)}
+          title={`Open ${helperLabel} to generate / manage tokens`}
+        >
+          ↗ {helperLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * URL to surface as a "↗ Open X" helper next to the secret field, for
+ * modules whose token source is a well-known web destination. V1 wires
+ * BotFather for the Telegram bot.
+ */
+function helperUrlFor(moduleId: string, fieldKey: string): string | null {
+  if (moduleId === 'telegram-bot' && fieldKey === 'botToken') {
+    return 'https://t.me/BotFather';
+  }
+  return null;
+}
+
+function helperLabelFor(moduleId: string, fieldKey: string): string {
+  if (moduleId === 'telegram-bot' && fieldKey === 'botToken') {
+    return '@BotFather';
+  }
+  return 'docs';
+}
+
+/** Map (moduleId, fieldKey) → Keychain IPC handlers. V1 wires telegram-bot. */
+function secretHandlersFor(
+  moduleId: string,
+  fieldKey: string,
+): { has: () => Promise<boolean>; set: (v: string) => Promise<void>; clear: () => Promise<void> } | null {
+  if (moduleId === 'telegram-bot' && fieldKey === 'botToken') {
+    return {
+      has: () => window.jarvis.hasTelegramBotToken(),
+      set: (v) => window.jarvis.setTelegramBotToken(v),
+      clear: () => window.jarvis.clearTelegramBotToken(),
+    };
+  }
+  return null;
 }
 
 /**

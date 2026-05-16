@@ -68,6 +68,12 @@ const api = {
   onAfkChanged: (listener: Listener<boolean>): Unsubscribe =>
     subscribe(IpcChannels.afkChanged, listener),
 
+  getPaused: (): Promise<boolean> => ipcRenderer.invoke(IpcChannels.getPaused),
+  setPaused: (value: boolean): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.setPaused, value),
+  onPausedChanged: (listener: Listener<boolean>): Unsubscribe =>
+    subscribe(IpcChannels.pausedChanged, listener),
+
   setTelegramBotToken: (value: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.setTelegramBotToken, value),
   clearTelegramBotToken: (): Promise<void> =>

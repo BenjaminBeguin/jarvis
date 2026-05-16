@@ -46,10 +46,17 @@ export class RoutineStore extends EventEmitter {
   private routines = new Map<string, ScheduledRoutine>();
   readonly path: string;
   private runner: TaskRunner | null = null;
+  /** Optional predicate: when present and returns true, fire() bails
+   *  silently. Set by index.ts to honor the global pause flag. */
+  private isPaused: (() => boolean) | null = null;
 
   constructor(path = join(homedir(), '.jarvis', 'routines.json')) {
     super();
     this.path = path;
+  }
+
+  setPausePredicate(fn: () => boolean): void {
+    this.isPaused = fn;
   }
 
   setRunner(runner: TaskRunner): void {
@@ -170,6 +177,15 @@ export class RoutineStore extends EventEmitter {
 
   private fire(def: RoutineDef): void {
     if (!this.runner) return;
+    // Global pause: skip cron-fired turns entirely. The cron tick
+    // resumes naturally when the user un-pauses; missed fires are
+    // not re-played (a daily routine that missed today doesn't run
+    // twice tomorrow). The store-level isPaused predicate is set
+    // by index.ts on the config 'paused' field.
+    if (this.isPaused?.()) {
+      console.log(`[routine ${def.id}] paused — skipping fire`);
+      return;
+    }
     const task = this.runner.launch({
       skillId: def.skillId,
       prompt: def.input || 'Run.',

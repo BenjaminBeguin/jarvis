@@ -12,6 +12,12 @@ export const IpcChannels = {
   setAfk: 'app:setAfk',
   afkChanged: 'app:afkChanged',
 
+  // Global pause: when true, routines + scheduled-action reminders
+  // skip firing. Read/write/event triple.
+  getPaused: 'app:getPaused',
+  setPaused: 'app:setPaused',
+  pausedChanged: 'app:pausedChanged',
+
   // Telegram module bot-token management (Keychain-backed; the renderer
   // sends a token in to be persisted, but never reads it back).
   setTelegramBotToken: 'app:setTelegramBotToken',

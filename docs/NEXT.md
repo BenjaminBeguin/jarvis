@@ -577,6 +577,134 @@ take the wheel now" alternative.
 
 ---
 
+## Remote-control follow-ups (Telegram is shipped — these extend it)
+
+The Telegram bot module is the V1 "pilot from phone" surface. See
+[telegram.md](telegram.md) for what shipped and why; the items below
+are the natural follow-ups, ordered by leverage.
+
+### Mobile dashboard PWA over Tailscale ⭐
+
+**Problem.** Telegram is great for "fast to act" — a button tap on a
+cockpit prompt, a quick voice note, a reminder ack. It's bad for
+**browse** — "show me everything in my inbox", "what reminders are
+pending today", "what's running right now". A chat scrollback is the
+wrong UI for a queue.
+
+**Proposal.** Embed a small HTTP server (Fastify/Hono, ~50 LOC) in
+the Electron main process exposing read-mostly endpoints (`GET
+/api/tasks`, `GET /api/reminders`, `GET /api/inbox`, `GET
+/api/top-of-mind`, SSE for live task events). Build a mobile-tuned
+React SPA against it. Surface via [Tailscale](https://tailscale.com) —
+no public URL, identity baked in via headers (`Tailscale-User-Login`).
+
+Limited write endpoints OK (`POST /api/skill/:name` for whitelisted
+skills, `POST /api/reminders/:id/done`). Heavy mutation (shell, MCP
+writes) stays gated to the desktop.
+
+**Effort:** ~3 days. The render layer can reuse `src/renderer/`
+components with mobile breakpoints; new entry at `src/web/main.tsx`.
+
+**Why now:** would slot in cleanly behind the existing `route-prompt`
++ `notifier` abstractions — both already designed for non-Electron
+callers.
+
+### Persistent multi-turn bridge across app restart
+
+**Problem.** The TaskBridge in
+[telegram-bot/task-bridge.ts](../electron/main/modules/telegram-bot/task-bridge.ts)
+is in-memory. A running task survives an Electron restart (the
+TaskRunner does), but the Telegram bot doesn't know which chat that
+task was tied to. So replies to bot messages from before the restart
+fall through to "new message" routing instead of continuing the
+task.
+
+**Proposal.** Persist the bridge to `~/.jarvis/telegram-bot/bridge.json`
+on every register / link / forget. Reload on module start. Cap by
+mtime — entries older than 24h get GC'd.
+
+**Effort:** ~half-day.
+
+### Streaming responses (edit-message-as-task-progresses)
+
+**Problem.** V1 sends the turn's final reply once. For long-running
+tasks (research, multi-tool runs) the user has no signal between
+"task started" and "task replied". The Answer HUD already streams
+assistant text; Telegram could do the same.
+
+**Proposal.** On task launch, send an initial "🤔 thinking…" message
+with `message_id` captured. Subscribe to `runner.on('event')` for
+assistant deltas; debounce and call `editMessageText` every ~1.5s.
+On `result`, the final edit lands the answer + the action buttons.
+
+**Effort:** ~1-2 days. Trickier than it sounds — Telegram has
+edit-rate limits and disallows editing certain message types.
+Reading their API docs first.
+
+### Browse commands inside Telegram (cheap precursor to PWA)
+
+**Problem.** Until the PWA ships, simple browse — "what reminders
+are pending?", "what tasks are running?" — would still help when
+away from the laptop.
+
+**Proposal.** Inline-button paginated lists triggered by `/tasks`,
+`/reminders`, `/inbox`, `/top`. Each row is a button that, when
+tapped, drills into a detail message (status, summary, action
+buttons). The data already flows through `ctx.listReminders()`,
+`ctx.listRecentTasks()` etc.
+
+**Effort:** ~1 day. Less leverage than the PWA but a few days
+sooner.
+
+### Per-chat permission tiers
+
+**Problem.** Today one chat = full access (trigger any skill, abort
+any task, snooze any reminder). For shared accounts or a future
+"viewer" role this is too coarse.
+
+**Proposal.** Settings field `chatTiers: 'full' | 'ack-only' | 'read-only'`
+keyed by chat ID. Bot checks the tier on every action before
+executing. `ack-only` can mark reminders done + approve confirmations
+but can't launch new tasks; `read-only` can only run `/tasks` /
+`/reminders` / `/status`.
+
+**Effort:** ~1 day. Mostly UI for the per-chat config.
+
+### Standalone Telegram channels for specific event classes
+
+**Problem.** Currently all outbound goes to the same primary chat.
+For a power user it would help to split: "reminders chat",
+"cockpit-prompts chat", "task-complete digest chat" — each with its
+own muting/notification settings on the phone.
+
+**Proposal.** Settings field maps `NotificationSource` → chat ID.
+Defaults route everything to primary; the user overrides per source.
+
+**Effort:** ~half-day.
+
+### Audio out: text-to-speech reply for hands-free use
+
+**Problem.** When walking / driving, even reading a Telegram reply
+is friction. Voice in, voice out closes the loop.
+
+**Proposal.** When the inbound message was a voice note, the bot's
+reply is *also* synthesized as a voice note (via macOS `say` or a
+local TTS model). User taps once to play.
+
+**Effort:** ~1-2 days. Local TTS quality is the variable; macOS
+`say` works out of the box but sounds robotic.
+
+### Telegram → WhatsApp later, if it ever matters
+
+Telegram works because the Bot API is uniquely permissive. WhatsApp
+requires Meta Business approval and costs per message; signal/matrix
+need self-hosted bridges. **Don't build this until a user actively
+asks.** If it ever happens, the `notifier.subscribe()` + `routePrompt`
+seams make the swap mechanical — the Telegram module is the
+template.
+
+---
+
 ## Stretch / less obvious
 
 ### Briefings: structured digests with citations ⭐

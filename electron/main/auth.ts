@@ -21,6 +21,15 @@ interface PersistedConfig {
    *  in the module definition; this just stores whichever values the
    *  user explicitly set. Unset keys fall back to the schema default. */
   moduleSettings?: Record<string, ModuleSettingsValues>;
+  /** AFK mode — when true, more notifications are mirrored to phone
+   *  (via the Telegram module) so the user can act on them from afar.
+   *  Cross-cutting state, not module-scoped. */
+  afkMode?: boolean;
+  /** Global pause. When true, routines + scheduled-action reminders
+   *  don't fire — anything that would auto-spawn a Claude turn skips
+   *  until the user resumes. User-initiated palette/voice/Telegram
+   *  dispatches still work; pause is about *unattended* spend. */
+  paused?: boolean;
 }
 
 const CONFIG_PATH = join(homedir(), '.jarvis', 'config.json');
@@ -181,4 +190,20 @@ export function saveModuleSettings(
   const next = { ...(cfg.moduleSettings ?? {}) };
   next[moduleId] = values;
   writeConfig({ ...cfg, moduleSettings: next });
+}
+
+export function loadAfkMode(): boolean {
+  return readConfig().afkMode === true;
+}
+
+export function saveAfkMode(value: boolean): void {
+  writeConfig({ ...readConfig(), afkMode: value });
+}
+
+export function loadPaused(): boolean {
+  return readConfig().paused === true;
+}
+
+export function savePaused(value: boolean): void {
+  writeConfig({ ...readConfig(), paused: value });
 }

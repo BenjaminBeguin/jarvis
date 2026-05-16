@@ -164,6 +164,25 @@ translation in main. Renderer rendering is
   jarvis.sqlite                   # tasks, task_events, activity_events
 ```
 
+## Pilot from your phone
+
+The **Telegram bot module** is a fast-response surface for things that
+demand attention — mid-task confirmations ("should I send this email?"),
+reminders firing, voice/text triggers for skills. Long-polling
+(no public URL, no tunnel), token in Keychain, allowlist per chat,
+inline `[Approve] [Edit] [Cancel]` buttons on cockpit prompts. Reply to
+a bot message to continue the same task in a multi-turn SDK session.
+
+Toggle **AFK mode** (phone-icon button in the header, the tray menu, or
+`/afk on` in Telegram) to widen what mirrors to phone — when on, every
+palette/routine task that hits `awaitingInput` is forwarded with action
+buttons so you can act on it from wherever you are.
+
+Setup: 5 minutes — create a bot with [@BotFather](https://t.me/BotFather),
+paste the token in Settings → Modules → Telegram bot, send `/start` to
+discover your chat ID, paste it into the allowlist. Full walkthrough in
+[docs/telegram.md](docs/telegram.md).
+
 ## Day-to-day workflow
 
 The big six the palette dispatches:
@@ -236,6 +255,8 @@ before `dist:mac` when you're ready to ship.
 - [docs/attention.md](docs/attention.md) — the three time-axes framing
   + the Now contract + what's still open. Read this first if you're
   evolving the synthesis surfaces.
+- [docs/telegram.md](docs/telegram.md) — Telegram bot setup + AFK mode +
+  follow-up roadmap.
 - [docs/cli.md](docs/cli.md) — the `jarvis` CLI that reads the HTTP token
   from Keychain (no env vars needed).
 - [docs/scenarios.md](docs/scenarios.md) — patterns for inbox sources,

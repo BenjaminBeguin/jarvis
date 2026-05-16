@@ -1,6 +1,11 @@
 appId: app.jarvis
 productName: Jarvis
 asar: true
+asarUnpack:
+  # ffmpeg-static ships a precompiled binary that needs to be executable
+  # at runtime. Files inside app.asar can't be exec'd, so unpack it.
+  # Used by the Telegram bot module to decode voice-note OGG/Opus.
+  - "**/node_modules/ffmpeg-static/**"
 directories:
   output: release
   buildResources: resources

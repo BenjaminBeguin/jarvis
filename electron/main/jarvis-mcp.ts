@@ -53,6 +53,10 @@ export interface JarvisMcpDeps {
   projectMemory: ProjectMemoryStore;
   userContext: UserContextStore;
   jarvisRoot: string;
+  /** Flip the global pause flag — same effect as the tray / Settings
+   *  toggle. Routines + scheduled-action reminders skip while true. */
+  setPaused: (value: boolean) => void;
+  isPaused: () => boolean;
 }
 
 const ok = (text: string): CallToolResult => ({
@@ -263,6 +267,25 @@ export function createJarvisMcp(
             return err(e instanceof Error ? e.message : String(e));
           }
         },
+      ),
+
+      tool(
+        'set_paused',
+        'Toggle Jarvis global pause. When paused, routines + scheduled-action reminders skip firing — anything that would auto-spawn a Claude turn waits until resumed. User-initiated palette/voice/Telegram dispatches still work. Use sparingly; this is the "off switch" the user reaches for when they want quiet (sleeping, in a meeting, traveling).',
+        {
+          paused: z.boolean(),
+        },
+        async (args) => {
+          deps.setPaused(args.paused);
+          return ok(args.paused ? 'jarvis paused' : 'jarvis resumed');
+        },
+      ),
+
+      tool(
+        'get_paused',
+        'Read the current global pause state. Useful before deciding whether to schedule a routine fire vs. tell the user it would be skipped.',
+        {},
+        async () => json({ paused: deps.isPaused() }),
       ),
     ],
   });

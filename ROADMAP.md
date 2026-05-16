@@ -35,10 +35,14 @@ small local STT, Observatory + Constellation, project scope, project
 memory, MCP config + playground, **in-process Jarvis MCP** (notify,
 log_activity, create_reminder, open_url, get_active_project, list_recent_*),
 routines (with auto-managed `auto-dedupe-captures`), reminders (pending /
-fired-awaiting-done / done / cancelled lifecycle), 10+ built-in skills,
-modules (quick-note, meeting-recorder, send, pr-workflows, status,
-skill-suggester, shell-nav, shell, claude-code-watch, calendar,
-reminders) with **schema-driven settings panels**, integrations catalog
+fired-awaiting-done / done / cancelled lifecycle, plus `snooze()`), 10+
+built-in skills, modules (quick-note, meeting-recorder, send,
+pr-workflows, status, skill-suggester, shell-nav, shell,
+claude-code-watch, calendar, reminders, **telegram-bot** with cockpit
+prompts + multi-turn replies + voice-note transcribe) with
+**schema-driven settings panels** (including Keychain-backed `secret`
+fields), **AFK mode** (cross-cutting toggle that widens what mirrors to
+phone), integrations catalog
 (Slack, Gmail x2, Calendar x2, Linear, GitHub, Notion) + per-integration
 config files + stale-data hygiene on disable/remove, Inbox (sources +
 dismissal history + per-source visibility prefs), Activity event log
