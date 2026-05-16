@@ -547,13 +547,26 @@ export class TaskRunner extends EventEmitter {
       if (cfg.model) options.model = cfg.model;
       else if (skill?.model) options.model = skill.model;
       if (cfg.fallbackModel) options.fallbackModel = cfg.fallbackModel;
-      // Compose MCP servers: skill-opt-in stdio servers from mcp.json
-      // PLUS the in-process "jarvis" server (always-on host capability).
+      // Compose MCP servers passed to the spawned CLI via --mcp-config:
+      //
+      //   - With a skill: only the servers the skill opts into via
+      //     `mcp-servers` frontmatter (or '*' to inherit everything).
+      //     A skill's narrow list is intentional — a /note skill
+      //     shouldn't be able to email people.
+      //   - Without a skill (free-text palette prompts): inherit ALL
+      //     configured non-disabled stdio servers. The user typing
+      //     "send a slack message to Luca" has no way to opt the
+      //     phantom-skill into a specific set, so giving the agent
+      //     access to everything matches the mental model ("I
+      //     configured Slack, of course the agent can use it").
+      //   - Always include the in-process "jarvis" server.
+      //
       // Skills with restrictive `allowed-tools` can scope `mcp__jarvis__*`
-      // there if they want to limit the host surface.
+      // if they want to limit the host surface.
       const mcpServers: Record<string, unknown> = {};
-      if (skill?.mcpServers.length && this.mcp) {
-        const resolved = this.mcp.resolve(skill.mcpServers);
+      if (this.mcp) {
+        const wanted = skill?.mcpServers.length ? skill.mcpServers : ['*'];
+        const resolved = this.mcp.resolve(wanted);
         for (const [k, v] of Object.entries(resolved)) mcpServers[k] = v;
       }
       if (this.jarvisMcp) {
