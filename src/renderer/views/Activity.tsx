@@ -272,6 +272,13 @@ const EVENT_KIND_META: Record<
   'module.disabled': { category: 'integration', label: 'module · off' },
   'module.settings-changed': { category: 'integration', label: 'module · settings' },
   'routine.auto-seeded': { category: 'integration', label: 'routine · auto-seeded' },
+  'routine.created': { category: 'integration', label: 'routine · created' },
+  'routine.updated': { category: 'integration', label: 'routine · updated' },
+  'routine.deleted': { category: 'integration', label: 'routine · deleted' },
+  'routine.ran-manually': { category: 'integration', label: 'routine · run now' },
+  'skill.created': { category: 'integration', label: 'skill · created' },
+  'skill.edited': { category: 'integration', label: 'skill · edited' },
+  'skill.deleted': { category: 'integration', label: 'skill · deleted' },
 };
 
 function EventRow({ event }: { event: ActivityEvent }) {

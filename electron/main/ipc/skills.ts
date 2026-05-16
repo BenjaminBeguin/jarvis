@@ -36,7 +36,7 @@ function isSafeSkillId(id: string): boolean {
   return slugify(id) === id;
 }
 
-export function registerSkillsIpc({ skills }: IpcDeps): void {
+export function registerSkillsIpc({ skills, activity }: IpcDeps): void {
   ipcMain.handle(IpcChannels.listSkills, () => skills.list());
   ipcMain.handle(IpcChannels.refreshSkills, () => {
     skills.reloadAll();
@@ -84,6 +84,11 @@ export function registerSkillsIpc({ skills }: IpcDeps): void {
       try {
         writeFileSync(path, raw, 'utf8');
         skills.reloadAll();
+        activity.record({
+          kind: 'skill.edited',
+          label: `Skill edited · ${skillId}`,
+          detail: { skillId },
+        });
         return { ok: true };
       } catch (err) {
         return {
@@ -146,6 +151,11 @@ export function registerSkillsIpc({ skills }: IpcDeps): void {
         mkdirSync(dir, { recursive: true });
         writeFileSync(path, body, 'utf8');
         skills.reloadAll();
+        activity.record({
+          kind: 'skill.created',
+          label: `Skill created · ${id}`,
+          detail: { skillId: id, name },
+        });
         return { ok: true, id };
       } catch (err) {
         return {
@@ -167,6 +177,11 @@ export function registerSkillsIpc({ skills }: IpcDeps): void {
     try {
       rmSync(dir, { recursive: true, force: true });
       skills.reloadAll();
+      activity.record({
+        kind: 'skill.deleted',
+        label: `Skill deleted · ${skillId}`,
+        detail: { skillId },
+      });
       return { ok: true };
     } catch (err) {
       return {
