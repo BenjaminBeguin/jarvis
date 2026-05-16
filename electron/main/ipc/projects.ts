@@ -36,7 +36,19 @@ export function registerProjectsIpc({
     (
       _e,
       payload: { currentName: string; patch: ProjectInput },
-    ) => projects.update(payload.currentName, payload.patch),
+    ) => {
+      const result = projects.update(payload.currentName, payload.patch);
+      activity.record({
+        kind: 'project.updated',
+        label: `Project updated · ${payload.currentName}${
+          payload.patch.name && payload.patch.name !== payload.currentName
+            ? ` → ${payload.patch.name}`
+            : ''
+        }`,
+        detail: { previousName: payload.currentName, patch: payload.patch },
+      });
+      return result;
+    },
   );
 
   ipcMain.handle(IpcChannels.deleteProject, (_e, name: string) => {
@@ -44,6 +56,11 @@ export function registerProjectsIpc({
       throw new Error('project name required');
     }
     projects.remove(name);
+    activity.record({
+      kind: 'project.deleted',
+      label: `Project deleted · ${name}`,
+      detail: { name },
+    });
   });
 
   ipcMain.handle(IpcChannels.createProject, (_e, input: ProjectInput) => {
@@ -59,11 +76,20 @@ export function registerProjectsIpc({
       if (existing) continue;
       projectMemory.write(def.name, seed.file, seed.content);
     }
+    activity.record({
+      kind: 'project.created',
+      label: `Project created · ${def.name}${
+        input.templateId ? ` (template: ${input.templateId})` : ''
+      }`,
+      detail: { name: def.name, templateId: input.templateId ?? null },
+    });
     return def;
   });
 
   // Cache the renderer's scope-picker selection in main, so the
   // UserContextStore can inject it into every task's system prompt.
+  // No activity row — this fires on every scope dropdown change and
+  // would flood the feed (the user often switches scope mid-flow).
   ipcMain.handle(IpcChannels.setActiveProject, (_e, name: string | null) => {
     userContext.setActiveProject(typeof name === 'string' ? name : null);
   });
@@ -76,6 +102,13 @@ export function registerProjectsIpc({
     (_e, payload: { name: string; enabled: boolean }) => {
       if (typeof payload?.name !== 'string') return;
       projects.setInboxScan(payload.name, payload.enabled === true);
+      activity.record({
+        kind: 'project.inbox-scan-toggled',
+        label: `Project inbox scan · ${payload.name} · ${
+          payload.enabled ? 'on' : 'off'
+        }`,
+        detail: { name: payload.name, enabled: payload.enabled === true },
+      });
     },
   );
 
