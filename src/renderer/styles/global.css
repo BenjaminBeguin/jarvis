@@ -3717,6 +3717,12 @@ button:disabled:hover {
   padding: 6px 14px;
   border-radius: 2px;
   cursor: pointer;
+  /* Pin the width so the label changing from "Refresh" (7ch) to
+     "Refreshing…" (12ch) doesn't reflow the action row — that's what
+     made the button feel like it was being yanked out of the page
+     mid-click. */
+  min-width: 124px;
+  text-align: center;
 }
 
 .inbox__refresh:hover:not(:disabled) {
@@ -3725,8 +3731,11 @@ button:disabled:hover {
 }
 
 .inbox__refresh:disabled {
-  opacity: 0.5;
+  /* Keep visible, just signal "working" — a barely-visible button
+     during a long hard refresh felt like it had disappeared. */
+  opacity: 0.78;
   cursor: progress;
+  background: rgba(0, 212, 255, 0.06);
 }
 
 .inbox__error {

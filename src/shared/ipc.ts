@@ -5,6 +5,18 @@ export const IpcChannels = {
   setSubscriptionToken: 'app:setSubscriptionToken',
   clearSubscriptionToken: 'app:clearSubscriptionToken',
   setAuthMode: 'app:setAuthMode',
+
+  // AFK mode: when on, more notifications are mirrored to the phone
+  // via the Telegram module. Read/write/event triple.
+  getAfk: 'app:getAfk',
+  setAfk: 'app:setAfk',
+  afkChanged: 'app:afkChanged',
+
+  // Telegram module bot-token management (Keychain-backed; the renderer
+  // sends a token in to be persisted, but never reads it back).
+  setTelegramBotToken: 'app:setTelegramBotToken',
+  clearTelegramBotToken: 'app:clearTelegramBotToken',
+  hasTelegramBotToken: 'app:hasTelegramBotToken',
   openObservatory: 'app:openObservatory',
   observatoryFocusTask: 'observatory:focusTask',
   shellNavigate: 'shell:navigate',
@@ -86,6 +98,10 @@ export const IpcChannels = {
   listInboxSources: 'inbox:listSources',
   revealInboxFile: 'inbox:revealFile',
   refreshInbox: 'inbox:refresh',
+  /** Manual "real" refresh: re-fires every `*-inbox` routine, waits for
+   *  its task to land, then re-reads disk. Distinct from refreshInbox
+   *  which just re-reads (used by the 5-min auto-refresh). */
+  hardRefreshInbox: 'inbox:hardRefresh',
   inboxChanged: 'inbox:changed',
   inboxRefreshing: 'inbox:refreshing',
   dismissInboxItem: 'inbox:dismiss',

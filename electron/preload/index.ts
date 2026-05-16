@@ -61,6 +61,19 @@ const api = {
   setAuthMode: (mode: AuthMode): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.setAuthMode, mode),
 
+  getAfk: (): Promise<boolean> => ipcRenderer.invoke(IpcChannels.getAfk),
+  setAfk: (value: boolean): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.setAfk, value),
+  onAfkChanged: (listener: Listener<boolean>): Unsubscribe =>
+    subscribe(IpcChannels.afkChanged, listener),
+
+  setTelegramBotToken: (value: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.setTelegramBotToken, value),
+  clearTelegramBotToken: (): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.clearTelegramBotToken),
+  hasTelegramBotToken: (): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.hasTelegramBotToken),
+
   openObservatory: (taskId?: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.openObservatory, taskId),
   onObservatoryFocusTask: (listener: Listener<string>): Unsubscribe =>
@@ -295,6 +308,8 @@ const api = {
     ipcRenderer.invoke(IpcChannels.revealInboxFile, name),
   refreshInbox: (): Promise<InboxItem[]> =>
     ipcRenderer.invoke(IpcChannels.refreshInbox),
+  hardRefreshInbox: (): Promise<InboxItem[]> =>
+    ipcRenderer.invoke(IpcChannels.hardRefreshInbox),
   onInboxChanged: (listener: Listener<InboxItem[]>): Unsubscribe =>
     subscribe(IpcChannels.inboxChanged, listener),
   onInboxRefreshing: (listener: Listener<boolean>): Unsubscribe =>

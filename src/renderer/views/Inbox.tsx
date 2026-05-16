@@ -177,10 +177,28 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
     [tasks, filterByScope, activeProject],
   );
 
+  // Soft refresh — re-reads every InboxSource. Cheap; used on mount
+  // and by the background 5-min auto-refresh. For user-authored
+  // sources backed by a JSON file, this only catches whatever's
+  // already on disk; the skill that produced it doesn't re-run.
   const doRefresh = async () => {
     setError(null);
     try {
       await window.jarvis.refreshInbox();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  // Hard refresh — what the button does when you actually click it.
+  // Re-fires every `*-inbox` routine, waits for the spawned tasks to
+  // land, then re-reads all sources. Slower (typically 5-30s), but
+  // genuinely rescrapes user-authored sources instead of pretending
+  // to refresh by re-reading stale JSON.
+  const doHardRefresh = async () => {
+    setError(null);
+    try {
+      await window.jarvis.hardRefreshInbox();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -298,9 +316,18 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
           )}
           <button
             className="inbox__refresh"
-            onClick={() => void doRefresh()}
+            onClick={() => void doHardRefresh()}
             disabled={refreshing}
-            title="Re-run every inbox source"
+            title="Re-fire every inbox source skill, then re-read · ⌥-click for a soft re-read"
+            onAuxClick={(e) => {
+              // Middle-click → soft refresh (re-read disk only). Hidden
+              // power-user escape hatch for when you don't want to
+              // re-run skills.
+              if (e.button === 1) {
+                e.preventDefault();
+                void doRefresh();
+              }
+            }}
           >
             {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>

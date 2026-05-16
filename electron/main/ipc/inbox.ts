@@ -65,10 +65,96 @@ export function registerInboxIpc({
   inbox,
   jarvisRoot,
   activity,
+  routines,
+  runner,
 }: IpcDeps): void {
   ipcMain.handle(IpcChannels.listInbox, () => inbox.list());
   ipcMain.handle(IpcChannels.listInboxDismissed, () => inbox.listDismissed());
   ipcMain.handle(IpcChannels.refreshInbox, () => inbox.refresh());
+
+  /**
+   * Hard refresh — re-fires the routines that feed user-authored
+   * inbox sources (any enabled routine whose skillId ends with
+   * "-inbox") and waits for them before re-reading disk.
+   *
+   * Why this exists: the regular refresh re-runs the InboxSource
+   * fetchers, but for user-authored sources that just means
+   * "re-read the JSON file." If the JSON is stale, the inbox is
+   * stale too. The "Refresh" button used to feel like a no-op for
+   * exactly that reason — you'd click it, the JSON would stay the
+   * same on disk, and nothing visible would change.
+   *
+   * Behavior:
+   *   - Fires every enabled `*-inbox` routine in parallel.
+   *   - Waits for those tasks to reach a terminal state, or 60s
+   *     timeout — whichever first. (Skipped sources keep their
+   *     current JSON; better degraded than blocking forever.)
+   *   - Calls inbox.refresh() to re-read every source.
+   */
+  ipcMain.handle(IpcChannels.hardRefreshInbox, async () => {
+    const inboxRoutines = routines
+      .list()
+      .filter(
+        (r) =>
+          r.enabled !== false &&
+          typeof r.skillId === 'string' &&
+          r.skillId.endsWith('-inbox'),
+      );
+    if (inboxRoutines.length === 0) {
+      // Nothing user-authored to re-fire; fall back to a soft refresh.
+      return inbox.refresh();
+    }
+
+    // Fire all of them; collect the task ids the runner spawned so we
+    // can wait on them specifically (not on every concurrent task).
+    const before = new Set(runner.list().map((t) => t.id));
+    for (const r of inboxRoutines) {
+      try {
+        routines.runNow(r.id);
+      } catch (err) {
+        console.warn(`hard-refresh: routines.runNow(${r.id}) threw:`, err);
+      }
+    }
+    // Identify the just-launched tasks by diff. runNow() launches
+    // synchronously and the task lands in the registry before this
+    // line runs.
+    const triggered = new Set(
+      runner.list().filter((t) => !before.has(t.id)).map((t) => t.id),
+    );
+    if (triggered.size === 0) {
+      // Nothing actually launched (runner missing or all routines
+      // refused). Soft refresh and bail.
+      return inbox.refresh();
+    }
+
+    // Wait for completion or timeout. Listen on the runner's status
+    // event for any of our triggered ids transitioning to terminal.
+    await new Promise<void>((resolve) => {
+      const pending = new Set(triggered);
+      const timeout = setTimeout(() => {
+        runner.off('status', onStatus);
+        resolve();
+      }, 60_000);
+      const onStatus = (summary: { id: string; status: string }) => {
+        if (!pending.has(summary.id)) return;
+        if (
+          summary.status === 'completed' ||
+          summary.status === 'errored' ||
+          summary.status === 'aborted'
+        ) {
+          pending.delete(summary.id);
+          if (pending.size === 0) {
+            clearTimeout(timeout);
+            runner.off('status', onStatus);
+            resolve();
+          }
+        }
+      };
+      runner.on('status', onStatus);
+    });
+
+    return inbox.refresh();
+  });
   ipcMain.handle(
     IpcChannels.dismissInboxItem,
     (_e, payload: { id: string; snoozeMs: number }) => {
