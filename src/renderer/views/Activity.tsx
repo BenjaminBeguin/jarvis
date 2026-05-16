@@ -268,6 +268,10 @@ const EVENT_KIND_META: Record<
   'reminder.fired': { category: 'reminder', label: 'reminder · fired' },
   'reminder.done': { category: 'reminder', label: 'reminder · done' },
   'dedupe.scanned': { category: 'dedupe', label: 'dedupe · scan' },
+  'module.enabled': { category: 'integration', label: 'module · on' },
+  'module.disabled': { category: 'integration', label: 'module · off' },
+  'module.settings-changed': { category: 'integration', label: 'module · settings' },
+  'routine.auto-seeded': { category: 'integration', label: 'routine · auto-seeded' },
 };
 
 function EventRow({ event }: { event: ActivityEvent }) {

@@ -1,5 +1,7 @@
 import { app, globalShortcut, ipcMain, Notification, shell } from 'electron';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
+import * as path from 'node:path';
 import { join } from 'node:path';
 
 import { IpcChannels } from '@shared/ipc';
@@ -701,6 +703,22 @@ app.whenReady().then(async () => {
   modules.on('changed', () => syncDedupeRoutine());
   syncDedupeRoutine(); // initial sync at boot
 
+  // One-shot: auto-seed inbox routines for `<name>-inbox` skills whose
+  // matching MCP is present. The Inbox sources file is the canonical
+  // location for "what's waiting on you" rows (slack-inbox.json,
+  // linear-inbox.json, …), but they only get populated if a routine
+  // runs the corresponding skill. Users wire the MCP, get the skill
+  // seeded, then forget to add the routine — leaving the Inbox empty
+  // of the very signals they configured for. Bridge that gap once,
+  // record we did, never repeat (so deleting a routine sticks).
+  syncAutoInboxRoutines(jarvisRoot, skills, mcp, routines, activity);
+  skills.on('changed', () =>
+    syncAutoInboxRoutines(jarvisRoot, skills, mcp, routines, activity),
+  );
+  mcp.on('changed', () =>
+    syncAutoInboxRoutines(jarvisRoot, skills, mcp, routines, activity),
+  );
+
   // ─── change → broadcast event fan-out ──────────────────────────────────────
 
   skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
@@ -911,3 +929,103 @@ app.on('before-quit', () => {
   void httpServer?.close();
   closeDatabase();
 });
+
+/**
+ * One-shot auto-seeder for inbox routines. For each `<name>-inbox`
+ * skill whose declared MCPs are all configured + enabled, check that:
+ *   - No routine already fires it
+ *   - We haven't auto-seeded for this skill before
+ * If both checks pass, add a routine that fires the skill every 15
+ * minutes and record the skill id in ~/.jarvis/auto-seeded-routines.json
+ * so we never re-add (deletion sticks).
+ *
+ * This runs at boot and re-runs on skill / MCP changes (the user
+ * could enable Linear MCP mid-session and the routine should appear).
+ */
+function syncAutoInboxRoutines(
+  jarvisRoot: string,
+  skills: SkillStore,
+  mcp: McpConfigStore,
+  routines: RoutineStore,
+  activity: ActivityStore,
+): void {
+  const markerPath = path.join(jarvisRoot, 'auto-seeded-routines.json');
+  let seeded: Set<string>;
+  try {
+    if (existsSync(markerPath)) {
+      const parsed = JSON.parse(readFileSync(markerPath, 'utf8')) as unknown;
+      const ids =
+        parsed && typeof parsed === 'object' && parsed !== null
+          ? (parsed as { seededSkillIds?: unknown }).seededSkillIds
+          : null;
+      seeded = new Set(
+        Array.isArray(ids) ? ids.filter((v): v is string => typeof v === 'string') : [],
+      );
+    } else {
+      seeded = new Set();
+    }
+  } catch {
+    seeded = new Set();
+  }
+
+  const inboxSkills = skills
+    .list()
+    .filter((s) => s.id.endsWith('-inbox') && s.mcpServers.length > 0);
+  if (inboxSkills.length === 0) return;
+  const mcpById = new Map(mcp.list().map((m) => [m.id, m]));
+  const existingSkillIds = new Set(
+    routines.list().map((r) => r.skillId).filter((id): id is string => !!id),
+  );
+
+  let changed = false;
+  for (const skill of inboxSkills) {
+    if (seeded.has(skill.id)) continue;
+    if (existingSkillIds.has(skill.id)) {
+      // User already wired a routine — record it as "seeded" so we
+      // don't reconsider later if they delete that routine.
+      seeded.add(skill.id);
+      changed = true;
+      continue;
+    }
+    // Wildcard mcp-servers ("*") means inherit-everything; treat as
+    // satisfied as long as at least one MCP is configured.
+    const wildcard = skill.mcpServers.includes('*');
+    const allMcpsReady = wildcard
+      ? mcpById.size > 0
+      : skill.mcpServers.every((id) => {
+          const entry = mcpById.get(id);
+          return entry && !entry.disabled;
+        });
+    if (!allMcpsReady) continue;
+
+    const routineId = `auto-inbox-${skill.id}`;
+    routines.save({
+      id: routineId,
+      skillId: skill.id,
+      cron: '*/15 * * * *',
+      input: `Refresh ${skill.id}.`,
+      enabled: true,
+      showInCalendar: false,
+    });
+    activity.record({
+      kind: 'routine.auto-seeded',
+      label: `Routine auto-seeded · ${skill.id} every 15 min`,
+      detail: { routineId, skillId: skill.id, cron: '*/15 * * * *' },
+    });
+    seeded.add(skill.id);
+    changed = true;
+  }
+
+  if (changed) {
+    try {
+      mkdirSync(path.dirname(markerPath), { recursive: true });
+      writeFileSync(
+        markerPath,
+        JSON.stringify({ seededSkillIds: [...seeded] }, null, 2) + '\n',
+        'utf8',
+      );
+    } catch (err) {
+      console.warn('auto-seed marker write failed:', err);
+    }
+  }
+}

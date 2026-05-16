@@ -18,15 +18,21 @@ Inbox auto-refreshes every 5 min and picks up the file.
 - **Issues assigned to me** in active states (Todo, In Progress, In
   Review) — not Done/Canceled.
 - **Issues that mention me** with an unread / unresponded comment
-  thread.
+  thread. **All mentions count** regardless of state — even Triage
+  or Backlog. An @mention is an explicit "look at this."
 - **Issues with state changes I should know about** — moved into
   "Blocked", "Needs review from me", a state name varies per workspace.
 - **Past-due** issues (dueDate < today) regardless of assignee, IF
   the user is on the team and the issue is in their cycle.
+- **Urgent or High-priority Triage** items even without an assignee.
+  These represent escalations that need someone to claim them; if the
+  user is on the team, surface them so they can route or take it.
 
 Skip:
 - Issues I'm just a follower on with no recent activity.
-- Issues in "Backlog" / "Triage" — those aren't actionable today.
+- Issues in "Backlog" with no priority signal and no @mention.
+- Routine Triage items (priority Medium/Low/None) — those aren't
+  time-critical for today.
 - Auto-generated issues from integrations (where the title looks like
   a JSON dump or has bot-style prefixes).
 
