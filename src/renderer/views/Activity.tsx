@@ -283,11 +283,13 @@ function groupByDay(rows: Row[]): Array<{ label: string; rows: Row[] }> {
 }
 
 function openObservatoryTask(id: string): void {
+  // Peek into the in-window SessionSidebar — keeps the user on the
+  // Activity tab so they can drill into the transcript and come back
+  // without losing their place in the feed. The sidebar has the
+  // inline reply box for running tasks; Observatory is still reachable
+  // via the "Open full view" button inside the sidebar footer.
   window.dispatchEvent(
-    new CustomEvent('jarvis:navigate', { detail: { tab: 'observatory' } }),
-  );
-  window.dispatchEvent(
-    new CustomEvent('jarvis:focus-task', { detail: { taskId: id } }),
+    new CustomEvent('jarvis:open-session', { detail: { taskId: id } }),
   );
 }
 
