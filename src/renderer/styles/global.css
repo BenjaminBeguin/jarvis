@@ -13931,6 +13931,69 @@ button:disabled:hover {
   font-size: 10px;
   color: var(--text-faint);
 }
+.activity__pooled,
+.task-list-view__pooled {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--good);
+  background: rgba(95, 255, 166, 0.06);
+  border: 1px solid rgba(95, 255, 166, 0.3);
+  padding: 1px 6px;
+  border-radius: 2px;
+  cursor: help;
+}
+.activity__cost {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  cursor: help;
+}
+
+.spend-panel__guardrails {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.spend-panel__guardrails-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.spend-panel__guardrails label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.spend-panel__guardrails-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  color: var(--text);
+}
+.spend-panel__guardrails-input input {
+  background: rgba(2, 4, 7, 0.7);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: 2px;
+  width: 80px;
+}
+.spend-panel__guardrails-input input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
 .spend-panel__pool {
   padding: 12px 14px;
   background: rgba(95, 255, 166, 0.04);

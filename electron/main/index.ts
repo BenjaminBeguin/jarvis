@@ -11,6 +11,7 @@ import {
   detectClaudeBinary,
   loadAfkMode,
   loadAuthMode,
+  loadCostPrefs,
   loadNotificationPrefs,
   loadPaused,
   saveAfkMode,
@@ -340,12 +341,21 @@ const awaitingFlipped = new Map<string, boolean>();
 const launchAnnounced = new Set<string>();
 
 /**
- * Cost guardrail: warn the user when a task crosses a spending threshold.
- * Single-fire per task to avoid notification spam. Hard-coded for now;
- * later this could read from preferences.md or per-skill frontmatter.
+ * Cost guardrails: warn the user when a single task or today's total
+ * crosses a threshold. Both single-fire to avoid notification spam.
+ * Defaults are in DEFAULT_COST_PREFS; the user can tune via Settings →
+ * Spend → "Guardrails" once that affordance ships, or by hand-editing
+ * config.json.costPrefs.{perTaskUsd,dailyUsd}.
  */
-const COST_GUARDRAIL_USD = 0.5;
 const costWarned = new Set<string>();
+/** Date-stamped "we already warned today" flag so we don't ping the
+ *  user 47 times after lunch. Reset implicitly when the date string
+ *  flips at local midnight. */
+let dailyBudgetWarnedFor: string | null = null;
+function todayLocalKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
 
 function wireRunnerEvents(): void {
   runner.on('event', (payload: { taskId: string; event: TaskEvent }) => {
@@ -380,9 +390,11 @@ function wireRunnerEvents(): void {
     // gives the user a chance to abort before the cost grows further.
     // Clears on completion / error so a future run of the same skill
     // starts fresh.
+    const costPrefs = loadCostPrefs();
     if (
+      costPrefs.perTaskUsd > 0 &&
       summary.origin !== 'external' &&
-      summary.costUsd > COST_GUARDRAIL_USD &&
+      summary.costUsd > costPrefs.perTaskUsd &&
       !costWarned.has(summary.id)
     ) {
       costWarned.add(summary.id);
@@ -404,6 +416,33 @@ function wireRunnerEvents(): void {
       summary.status === 'aborted'
     ) {
       costWarned.delete(summary.id);
+    }
+    // Daily-budget guardrail: warn once per local day when the total
+    // crosses the threshold. getCostSummary().today is the SAME number
+    // the tray tooltip shows.
+    if (costPrefs.dailyUsd > 0) {
+      try {
+        const today = getCostSummary().today;
+        const dayKey = todayLocalKey();
+        if (today > costPrefs.dailyUsd && dailyBudgetWarnedFor !== dayKey) {
+          dailyBudgetWarnedFor = dayKey;
+          notifier.post({
+            source: 'cost-guardrail',
+            title: `Jarvis · daily spend at $${today.toFixed(2)}`,
+            body: `Crossed the $${costPrefs.dailyUsd.toFixed(2)} budget. Open Settings → Spend to see where it went, or pause Jarvis until tomorrow.`,
+            onClick: () => {
+              const win = openObservatory();
+              win.focus();
+              sendWhenReady(win, IpcChannels.shellNavigate, {
+                tab: 'settings',
+                settingsSection: 'spend',
+              });
+            },
+          });
+        }
+      } catch {
+        // DB query failed — skip this tick.
+      }
     }
 
     if (summary.origin !== 'external') {

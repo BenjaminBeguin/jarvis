@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { CostBreakdown } from '../../shared/types';
+import type { CostBreakdown, CostPrefs } from '../../shared/types';
 
 /**
  * Spend dashboard. Aggregates `tasks.cost_usd` over a selectable
@@ -210,9 +210,91 @@ export function SpendPanel() {
               />
             </section>
           )}
+
+          <GuardrailsEditor />
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Inline editor for the two cost guardrails — per-task warning + daily
+ * total budget. Saving to the new costPrefsWrite IPC; the wireRunnerEvents
+ * loop in main re-reads on every status change so changes take effect
+ * without a restart. 0 in either field disables that guardrail.
+ */
+function GuardrailsEditor() {
+  const [prefs, setPrefs] = useState<CostPrefs | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    void window.jarvis.costPrefsRead().then(setPrefs);
+  }, []);
+
+  const update = async (patch: Partial<CostPrefs>) => {
+    if (!prefs) return;
+    const next: CostPrefs = { ...prefs, ...patch };
+    setPrefs(next);
+    setSaving(true);
+    try {
+      await window.jarvis.costPrefsWrite(next);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!prefs) return null;
+
+  return (
+    <section className="spend-panel__guardrails">
+      <h4 className="settings__subhead">GUARDRAILS</h4>
+      <p className="settings__hint">
+        macOS notifications when a task or your daily total crosses one
+        of these. 0 in either field disables that warning. Changes
+        apply on the next task status event — no restart needed.
+      </p>
+      <div className="spend-panel__guardrails-row">
+        <label>
+          <span>Per-task warn at</span>
+          <span className="spend-panel__guardrails-input">
+            $
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={prefs.perTaskUsd}
+              disabled={saving}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (Number.isFinite(v) && v >= 0) {
+                  void update({ perTaskUsd: v });
+                }
+              }}
+            />
+          </span>
+        </label>
+        <label>
+          <span>Daily budget warn at</span>
+          <span className="spend-panel__guardrails-input">
+            $
+            <input
+              type="number"
+              min={0}
+              step="0.5"
+              value={prefs.dailyUsd}
+              disabled={saving}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (Number.isFinite(v) && v >= 0) {
+                  void update({ dailyUsd: v });
+                }
+              }}
+            />
+          </span>
+        </label>
+      </div>
+    </section>
   );
 }
 

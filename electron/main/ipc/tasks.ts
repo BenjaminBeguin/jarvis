@@ -3,6 +3,7 @@ import { ipcMain } from 'electron';
 import { IpcChannels } from '@shared/ipc';
 import type { LaunchTaskRequest } from '@shared/types';
 
+import { loadCostPrefs, saveCostPrefs } from '../auth.js';
 import {
   getCostBreakdown,
   getCostSummary,
@@ -76,4 +77,20 @@ export function registerTasksIpc({
         : 7;
     return getCostBreakdown(n);
   });
+
+  ipcMain.handle(IpcChannels.costPrefsRead, () => loadCostPrefs());
+  ipcMain.handle(
+    IpcChannels.costPrefsWrite,
+    (_e, prefs: { perTaskUsd: unknown; dailyUsd: unknown }) => {
+      const perTaskUsd =
+        typeof prefs?.perTaskUsd === 'number' && prefs.perTaskUsd >= 0
+          ? prefs.perTaskUsd
+          : 0;
+      const dailyUsd =
+        typeof prefs?.dailyUsd === 'number' && prefs.dailyUsd >= 0
+          ? prefs.dailyUsd
+          : 0;
+      saveCostPrefs({ perTaskUsd, dailyUsd });
+    },
+  );
 }

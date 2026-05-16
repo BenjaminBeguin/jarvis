@@ -10,6 +10,7 @@ import type {
   DispatchIntentResult,
   JarvisFileEntry,
   CostBreakdown,
+  CostPrefs,
   CostSummary,
   HttpApiStatus,
   InboxItem,
@@ -114,6 +115,10 @@ const api = {
     ipcRenderer.invoke(IpcChannels.costSummary),
   costBreakdown: (windowDays: number): Promise<CostBreakdown> =>
     ipcRenderer.invoke(IpcChannels.costBreakdown, windowDays),
+  costPrefsRead: (): Promise<CostPrefs> =>
+    ipcRenderer.invoke(IpcChannels.costPrefsRead),
+  costPrefsWrite: (prefs: CostPrefs): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.costPrefsWrite, prefs),
 
   httpApiStatus: (): Promise<HttpApiStatus> =>
     ipcRenderer.invoke(IpcChannels.httpApiStatus),

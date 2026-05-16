@@ -95,6 +95,8 @@ export const IpcChannels = {
   openInClaudeDesktop: 'tasks:openInClaudeDesktop',
   costSummary: 'tasks:costSummary',
   costBreakdown: 'tasks:costBreakdown',
+  costPrefsRead: 'cost:prefsRead',
+  costPrefsWrite: 'cost:prefsWrite',
   pickDirectory: 'fs:pickDirectory',
 
   httpApiStatus: 'http:status',

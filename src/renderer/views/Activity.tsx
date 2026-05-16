@@ -305,6 +305,22 @@ function SendRow({ task }: { task: TaskSummary }) {
         <span className="activity__preview" title={task.inputPreview}>
           {task.inputPreview || '(empty prompt)'}
         </span>
+        {task.pooled && (
+          <span
+            className="activity__pooled"
+            title="This task resumed a pooled SDK session — skipped the cold start"
+          >
+            ↪
+          </span>
+        )}
+        {task.costUsd > 0 && (
+          <span
+            className="activity__cost"
+            title={`Cost: $${task.costUsd.toFixed(4)}`}
+          >
+            ${task.costUsd >= 0.01 ? task.costUsd.toFixed(2) : task.costUsd.toFixed(4)}
+          </span>
+        )}
         <span className="activity__time">{formatRel(task.startedAt)}</span>
       </button>
     </li>

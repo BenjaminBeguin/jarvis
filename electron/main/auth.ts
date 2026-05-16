@@ -30,6 +30,12 @@ interface PersistedConfig {
    *  until the user resumes. User-initiated palette/voice/Telegram
    *  dispatches still work; pause is about *unattended* spend. */
   paused?: boolean;
+  /** Cost guardrails — single-task and daily totals. When unset, the
+   *  defaults below apply. Set 0 or negative to disable a guardrail. */
+  costPrefs?: {
+    perTaskUsd?: number;
+    dailyUsd?: number;
+  };
 }
 
 const CONFIG_PATH = join(homedir(), '.jarvis', 'config.json');
@@ -206,4 +212,33 @@ export function loadPaused(): boolean {
 
 export function savePaused(value: boolean): void {
   writeConfig({ ...readConfig(), paused: value });
+}
+
+export interface CostPrefs {
+  /** Warn once when a single task crosses this USD threshold. 0 disables. */
+  perTaskUsd: number;
+  /** Warn when today's total spend crosses this USD threshold. 0 disables. */
+  dailyUsd: number;
+}
+
+export const DEFAULT_COST_PREFS: CostPrefs = {
+  perTaskUsd: 0.5,
+  dailyUsd: 5,
+};
+
+export function loadCostPrefs(): CostPrefs {
+  const stored = readConfig().costPrefs ?? {};
+  const perTaskUsd =
+    typeof stored.perTaskUsd === 'number' && Number.isFinite(stored.perTaskUsd)
+      ? stored.perTaskUsd
+      : DEFAULT_COST_PREFS.perTaskUsd;
+  const dailyUsd =
+    typeof stored.dailyUsd === 'number' && Number.isFinite(stored.dailyUsd)
+      ? stored.dailyUsd
+      : DEFAULT_COST_PREFS.dailyUsd;
+  return { perTaskUsd, dailyUsd };
+}
+
+export function saveCostPrefs(prefs: CostPrefs): void {
+  writeConfig({ ...readConfig(), costPrefs: prefs });
 }

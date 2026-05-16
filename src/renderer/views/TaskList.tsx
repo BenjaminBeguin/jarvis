@@ -113,6 +113,14 @@ function Row({ task, active, onClick }: RowProps) {
       {isAwaiting && (
         <span className="task-list-view__awaiting">awaiting</span>
       )}
+      {task.pooled && (
+        <span
+          className="task-list-view__pooled"
+          title="Resumed a pooled SDK session — skipped the cold start"
+        >
+          ↪ pool
+        </span>
+      )}
       <span className="task-list-view__time">{formatRelative(task.startedAt)}</span>
       {task.costUsd > 0 && (
         <span className="task-list-view__cost">${task.costUsd.toFixed(4)}</span>

@@ -642,6 +642,13 @@ export interface CostSummary {
  * the renderer can chart a time series. Zero-spend days are filled in
  * so the chart doesn't have gaps.
  */
+export interface CostPrefs {
+  /** Warn once when a single task crosses this USD threshold. 0 disables. */
+  perTaskUsd: number;
+  /** Warn when today's total spend crosses this USD threshold. 0 disables. */
+  dailyUsd: number;
+}
+
 export interface CostBreakdown {
   windowDays: number;
   total: number;
