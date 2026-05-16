@@ -689,6 +689,7 @@ export function Shell({ status }: Props) {
                 | 'modules'
                 | 'integrations'
                 | 'api'
+                | 'spend'
                 | 'builder'
                 | undefined) ?? undefined
             }
