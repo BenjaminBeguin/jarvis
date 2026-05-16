@@ -2936,6 +2936,13 @@ button:disabled:hover {
   border-color: rgba(0, 212, 255, 0.4);
 }
 
+.reminders-page__mode--recurring {
+  color: var(--good);
+  border-color: rgba(95, 255, 166, 0.4);
+  min-width: auto;
+  padding: 2px 8px;
+}
+
 .reminders-page__body {
   flex: 1 1 auto;
   min-width: 0;

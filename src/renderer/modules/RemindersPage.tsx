@@ -218,6 +218,14 @@ function ReminderGroup({
               >
                 {r.mode === 'reminder' ? 'nudge' : 'action'}
               </span>
+              {r.cron && (
+                <span
+                  className="reminders-page__mode reminders-page__mode--recurring"
+                  title={`Recurring · ${r.cron}`}
+                >
+                  🔁 {humanizeCron(r.cron)}
+                </span>
+              )}
               <div className="reminders-page__body">
                 <div className="reminders-page__body-text">{r.body}</div>
                 <div className="reminders-page__body-meta">
@@ -284,4 +292,32 @@ function formatRel(ms: number): string {
   if (h < 24) return past ? `${h}h ago` : `in ${h}h`;
   const d = Math.round(h / 24);
   return past ? `${d}d ago` : `in ${d}d`;
+}
+
+const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * Render a cron expression as a one-liner the user can scan. Covers
+ * the shapes the recurrence parser produces today; falls back to
+ * the raw expression for anything else so the user can still see
+ * what they typed even if it doesn't humanize cleanly.
+ */
+function humanizeCron(cron: string): string {
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return cron;
+  const [minute, hour, dom, mon, dow] = parts as [string, string, string, string, string];
+  if (dom !== '*' || mon !== '*') return cron;
+  const time = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+  if (dow === '*') return `daily at ${time}`;
+  if (dow === '1-5') return `weekdays at ${time}`;
+  if (dow === '0,6' || dow === '6,0') return `weekends at ${time}`;
+  // Single day (0..6) or comma list.
+  const days = dow
+    .split(',')
+    .map((d) => parseInt(d, 10))
+    .filter((d) => d >= 0 && d <= 6)
+    .map((d) => DOW_NAMES[d])
+    .join(', ');
+  if (!days) return cron;
+  return `${days} at ${time}`;
 }

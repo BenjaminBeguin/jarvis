@@ -307,10 +307,16 @@ export interface Reminder {
   createdAt: number;
   fireAt: number;
   status: ReminderStatus;
-  /** ms epoch when it actually fired; null while pending. */
+  /** ms epoch when it actually fired; null while pending. For recurring
+   *  reminders this is the LAST fire time — the reminder stays pending
+   *  with fireAt updated to the next occurrence. */
   firedAt: number | null;
   /** ms epoch when the user marked it done (from inbox); null otherwise. */
   doneAt?: number | null;
+  /** When set, this is a recurring reminder. After each fire the store
+   *  reschedules to the next cron occurrence and keeps status='pending'.
+   *  Marking done or cancelling stops the series entirely. */
+  cron?: string | null;
   /** Task ID we kicked off when firing — lets the constellation link them. */
   firedTaskId: string | null;
 }

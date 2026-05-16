@@ -13,7 +13,16 @@ import type { UserContextProvider } from '../user-context.js';
 
 export type ParsedFreeTextIntent =
   | { kind: 'task'; body: string }
-  | { kind: 'reminder'; mode: ReminderMode; body: string; fireAt: number };
+  | {
+      kind: 'reminder';
+      mode: ReminderMode;
+      body: string;
+      fireAt: number;
+      /** Set when the input was recurring ("every Monday at 9am …").
+       *  Handlers should pass this to ctx.createReminder so the store
+       *  reschedules on each fire. */
+      cron?: string;
+    };
 
 /**
  * What a module receives at load time. Stays stable across the module's
@@ -39,7 +48,14 @@ export interface ModuleContext {
   /** Run the palette intent parser on free text. Returns a 'reminder' kind when the text has a time phrase. */
   parseFreeTextIntent(input: string): ParsedFreeTextIntent;
   /** Schedule a reminder / scheduled action. Same store the palette uses. */
-  createReminder(input: { body: string; mode: ReminderMode; fireAt: number }): Reminder;
+  createReminder(input: {
+    body: string;
+    mode: ReminderMode;
+    fireAt: number;
+    /** Optional cron — when set, the reminder is recurring (rescheduled
+     *  on each fire). Omit for one-shot. */
+    cron?: string;
+  }): Reminder;
   /** Fuzzy-match a free-text query against ~/.jarvis/projects.json (name/aliases/description). */
   resolveProject(query: string): ProjectDef | null;
   /**

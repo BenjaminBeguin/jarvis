@@ -42,19 +42,21 @@ export const remindersModule: Module = {
       handler: (input, ctx) => {
         const body = input.trim();
         if (!body) {
-          return 'Need a time + a body. Try "/remind in 2h to check the deploy".';
+          return 'Need a time + a body. Try "/remind in 2h to check the deploy" or "/remind every Monday at 9am to send the recap".';
         }
         // Reuse the free-text intent router so the grammar is identical
-        // to "type it raw in the palette." Anything it would normally
-        // parse as a reminder/scheduled action lands here too.
+        // to "type it raw in the palette." Recurring patterns ("every
+        // Monday at 9am") come back with parsed.cron set; the store
+        // reschedules on each fire.
         const parsed = ctx.parseFreeTextIntent(body);
         if (parsed.kind !== 'reminder') {
-          return 'Couldn\'t find a time phrase. Try "in 2h", "tomorrow 9am", "at 17:30".';
+          return 'Couldn\'t find a time phrase. Try "in 2h", "tomorrow 9am", "at 17:30", or "every Monday at 9am".';
         }
         const r = ctx.createReminder({
           body: parsed.body,
           mode: parsed.mode,
           fireAt: parsed.fireAt,
+          cron: parsed.cron,
         });
         const when = new Date(r.fireAt).toLocaleString(undefined, {
           weekday: 'short',
@@ -63,13 +65,22 @@ export const remindersModule: Module = {
           day: 'numeric',
           month: 'short',
         });
+        const recurringSuffix = parsed.cron ? ' · recurring' : '';
         ctx.notify(
           parsed.mode === 'scheduled'
-            ? `Scheduled · ${when}`
-            : `Reminder · ${when}`,
+            ? `Scheduled · ${when}${recurringSuffix}`
+            : `Reminder · ${when}${recurringSuffix}`,
           r.body,
         );
-        return `${parsed.mode === 'scheduled' ? 'Scheduled' : 'Reminder set'} · ${when}`;
+        const label =
+          parsed.mode === 'scheduled'
+            ? parsed.cron
+              ? 'Recurring scheduled action'
+              : 'Scheduled'
+            : parsed.cron
+              ? 'Recurring reminder'
+              : 'Reminder set';
+        return `${label} · ${when}${recurringSuffix}`;
       },
     },
     {

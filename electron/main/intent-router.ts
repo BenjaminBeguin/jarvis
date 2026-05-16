@@ -8,11 +8,126 @@
  * get unwieldy. The signature here is stable so the upgrade is a drop-in.
  */
 
+import { nextCronFire } from '@shared/cron';
 import type { ReminderMode } from '@shared/types';
 
 export type ParsedIntent =
   | { kind: 'task'; body: string }
-  | { kind: 'reminder'; mode: ReminderMode; body: string; fireAt: number };
+  | {
+      kind: 'reminder';
+      mode: ReminderMode;
+      body: string;
+      fireAt: number;
+      /** When set, the reminder is recurring — fire at `fireAt` first,
+       *  then advance to the next cron occurrence on each fire. */
+      cron?: string;
+    };
+
+const DAY_NAMES: Record<string, number> = {
+  sun: 0, sunday: 0,
+  mon: 1, monday: 1,
+  tue: 2, tuesday: 2, tues: 2,
+  wed: 3, wednesday: 3,
+  thu: 4, thursday: 4, thurs: 4,
+  fri: 5, friday: 5,
+  sat: 6, saturday: 6,
+};
+
+interface RecurrencePhrase {
+  /** Cron expression matching the recurrence. */
+  cron: string;
+  /** Source range in the input so we can strip it from the body. */
+  start: number;
+  end: number;
+}
+
+/**
+ * Detect simple recurrence patterns and convert to a 5-field cron.
+ * Today: "every <day>", "every day", "every weekday", "every weekend",
+ * "daily", optionally with "at HH:MM" / "at Xpm". Defaults to 09:00
+ * when no time is specified.
+ *
+ * Returns null if no recurrence pattern matched. Caller then falls
+ * back to one-shot time parsing.
+ */
+function parseRecurrence(input: string): RecurrencePhrase | null {
+  // Optional "at HH(:MM)?(am|pm)?" suffix shared across patterns.
+  const TIME_TAIL = String.raw`(?:\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?)?`;
+  // Match families:
+  //   "every <day>"           "every monday at 9am"
+  //   "every weekday"         "every weekend at 10am"
+  //   "every day" / "daily"   "every day at 17:00"
+  const dayPattern = Object.keys(DAY_NAMES).join('|');
+  const candidates: Array<{
+    re: RegExp;
+    cronFn: (m: RegExpExecArray) => string;
+  }> = [
+    {
+      // every <day> [at H]
+      re: new RegExp(`\\bevery\\s+(${dayPattern})\\b${TIME_TAIL}`, 'i'),
+      cronFn: (m) => {
+        const dow = DAY_NAMES[m[1]!.toLowerCase()]!;
+        const { hour, minute } = extractTime(m, 2);
+        return `${minute} ${hour} * * ${dow}`;
+      },
+    },
+    {
+      // every weekday [at H]
+      re: new RegExp(`\\bevery\\s+weekday\\b${TIME_TAIL}`, 'i'),
+      cronFn: (m) => {
+        const { hour, minute } = extractTime(m, 1);
+        return `${minute} ${hour} * * 1-5`;
+      },
+    },
+    {
+      // every weekend [at H]
+      re: new RegExp(`\\bevery\\s+weekend\\b${TIME_TAIL}`, 'i'),
+      cronFn: (m) => {
+        const { hour, minute } = extractTime(m, 1);
+        return `${minute} ${hour} * * 0,6`;
+      },
+    },
+    {
+      // every day [at H] / daily [at H]
+      re: new RegExp(`\\b(?:every\\s+day|daily)\\b${TIME_TAIL}`, 'i'),
+      cronFn: (m) => {
+        const { hour, minute } = extractTime(m, 1);
+        return `${minute} ${hour} * * *`;
+      },
+    },
+  ];
+  for (const c of candidates) {
+    const m = c.re.exec(input);
+    if (m) {
+      return {
+        cron: c.cronFn(m),
+        start: m.index,
+        end: m.index + m[0].length,
+      };
+    }
+  }
+  return null;
+}
+
+/** Pull hours/minutes out of the time-tail capture groups. The tail
+ *  has 3 groups (hour, minute, am/pm); they start at `base`. Returns
+ *  defaults (9:00) when the optional tail wasn't matched. */
+function extractTime(
+  m: RegExpExecArray,
+  base: number,
+): { hour: number; minute: number } {
+  const rawHour = m[base];
+  if (!rawHour) return { hour: 9, minute: 0 };
+  let hour = parseInt(rawHour, 10);
+  const minute = m[base + 1] ? parseInt(m[base + 1]!, 10) : 0;
+  const ampm = m[base + 2]?.toLowerCase();
+  if (ampm === 'pm' && hour < 12) hour += 12;
+  else if (ampm === 'am' && hour === 12) hour = 0;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return { hour: 9, minute: 0 };
+  }
+  return { hour, minute };
+}
 
 const REMINDER_PREFIX = /^\s*(?:please\s+)?remind\s+me\s*(?:to\s+|that\s+|about\s+)?/i;
 
@@ -115,6 +230,26 @@ export function parseIntent(input: string, now: Date = new Date()): ParsedIntent
   const trimmed = input.trim();
   if (!trimmed) return { kind: 'task', body: trimmed };
   const isReminder = REMINDER_PREFIX.test(trimmed);
+
+  // Try recurrence first ("every Monday at 9am to ..."). If matched,
+  // compute the first fire time from the cron itself — we don't need
+  // a separate time phrase since the cron already encodes it.
+  const recurrence = parseRecurrence(trimmed);
+  if (recurrence) {
+    const firstFire = nextCronFire(recurrence.cron, now.getTime());
+    if (firstFire != null) {
+      const body = extractBody(trimmed, recurrence);
+      if (body) {
+        return {
+          kind: 'reminder',
+          mode: isReminder ? 'reminder' : 'scheduled',
+          body,
+          fireAt: firstFire,
+          cron: recurrence.cron,
+        };
+      }
+    }
+  }
 
   const phrase =
     parseTomorrowAt(trimmed, now) ?? parseAtClock(trimmed, now) ?? parseRelativeIn(trimmed);

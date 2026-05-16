@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { nanoid } from 'nanoid';
 
+import { nextCronFire } from '@shared/cron';
 import type { Reminder, ReminderMode, ReminderStatus } from '@shared/types';
 
 interface PersistedReminder {
@@ -15,6 +16,8 @@ interface PersistedReminder {
   status?: ReminderStatus;
   firedAt?: number | null;
   firedTaskId?: string | null;
+  doneAt?: number | null;
+  cron?: string | null;
 }
 
 function isPersisted(v: unknown): v is PersistedReminder {
@@ -80,7 +83,14 @@ export class ReminderStore extends EventEmitter {
     return n;
   }
 
-  create(input: { body: string; mode: ReminderMode; fireAt: number }): Reminder {
+  create(input: {
+    body: string;
+    mode: ReminderMode;
+    fireAt: number;
+    /** When provided, the reminder becomes recurring — after each fire
+     *  the store reschedules to the next cron occurrence. */
+    cron?: string;
+  }): Reminder {
     const reminder: Reminder = {
       id: nanoid(8),
       body: input.body,
@@ -90,6 +100,7 @@ export class ReminderStore extends EventEmitter {
       status: 'pending',
       firedAt: null,
       firedTaskId: null,
+      cron: input.cron ?? null,
     };
     this.reminders.set(reminder.id, reminder);
     this.persist();
@@ -134,10 +145,37 @@ export class ReminderStore extends EventEmitter {
   /**
    * Mark a reminder fired and record the task ID it spawned. Called by the
    * registered fire handler after it kicks off the Claude task.
+   *
+   * Recurring reminders (cron set) DON'T flip to 'fired' — the store
+   * reschedules them to the next cron occurrence and stamps firedAt
+   * so the UI can show "last fired N ago." Status stays 'pending'
+   * so they continue to show as a live commitment. Mark done /
+   * cancel to stop the series entirely.
    */
   markFired(id: string, taskId: string | null): void {
     const r = this.reminders.get(id);
     if (!r) return;
+    if (r.cron) {
+      // Recurring — reschedule for the next occurrence. +1s on the
+      // search window so we don't immediately re-pick the same minute.
+      const next = nextCronFire(r.cron, Date.now() + 1000);
+      if (next) {
+        r.fireAt = next;
+        r.firedAt = Date.now();
+        r.firedTaskId = taskId;
+        // status stays 'pending'
+        this.persist();
+        this.schedule(r);
+        this.emit('changed', this.list());
+        return;
+      }
+      // Cron parse failure — fall through to one-shot fired so the
+      // reminder stops looping. User can inspect/repair from the
+      // Reminders page.
+      console.warn(
+        `[reminders] cron ${r.cron} produced no next fire; treating as one-shot.`,
+      );
+    }
     r.status = 'fired';
     r.firedAt = Date.now();
     r.firedTaskId = taskId;
@@ -234,6 +272,8 @@ export class ReminderStore extends EventEmitter {
         status: item.status ?? 'pending',
         firedAt: item.firedAt ?? null,
         firedTaskId: item.firedTaskId ?? null,
+        doneAt: typeof item.doneAt === 'number' ? item.doneAt : null,
+        cron: typeof item.cron === 'string' ? item.cron : null,
       };
       this.reminders.set(r.id, r);
     }
@@ -249,6 +289,8 @@ export class ReminderStore extends EventEmitter {
       status: r.status,
       firedAt: r.firedAt,
       firedTaskId: r.firedTaskId,
+      doneAt: r.doneAt ?? null,
+      cron: r.cron ?? null,
     }));
     writeFileSync(this.path, JSON.stringify(serialized, null, 2));
   }
