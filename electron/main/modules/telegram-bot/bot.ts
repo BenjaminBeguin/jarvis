@@ -43,6 +43,16 @@ export interface TelegramBotConfig {
 
 const TELEGRAM_MESSAGE_LIMIT = 4096;
 const REPLY_TIMEOUT_MS = 180_000;
+/** How long after the last message in a chat the bridge keeps the
+ *  same agent task. Matches the skill-session pool — long enough for
+ *  "I'll be right back" follow-ups, short enough that resuming a
+ *  yesterday's thread doesn't surprise you. The SDK auto-compacts
+ *  long conversations, so we don't need to cap on tokens. */
+const TELEGRAM_AGENT_TTL_MS = 60 * 60 * 1000;
+/** After this many turns we fork a new task even within the TTL.
+ *  Auto-compacted summaries grow turn-over-turn; rotating early
+ *  caps the cost-per-turn climb. */
+const TELEGRAM_AGENT_TURN_CAP = 12;
 
 /**
  * Long-polling Telegram bot wired to Jarvis. See plan.md / SKILL design
@@ -348,7 +358,26 @@ export class TelegramBot {
         return;
       }
     }
-    // 3. Default: new message — full palette-style routing.
+    // 3. Persistent-agent path: the chat already has an active task
+    //    that's still fresh + under the turn cap. Continue it — same
+    //    spirit as the skill-session pool, but keyed on chat rather
+    //    than (skill, project). Falls through to a fresh dispatch when
+    //    the task is stale, errored, or the cap is hit.
+    const activeTaskId = this.bridge.getActiveTaskFor(
+      chatId,
+      TELEGRAM_AGENT_TTL_MS,
+      TELEGRAM_AGENT_TURN_CAP,
+    );
+    if (activeTaskId) {
+      await this.continueTask(ctx, chatId, activeTaskId, text);
+      return;
+    }
+    // Evict the stale prior task (TTL hit / cap hit / errored) so the
+    // fresh dispatch's register call doesn't have to fight with stale
+    // entries in byTask.
+    const stale = this.bridge.lastTaskFor(chatId);
+    if (stale) this.bridge.forget(stale);
+    // 4. Default: new message — full palette-style routing.
     await this.dispatchAsNewMessage(chatId, ctx, text);
   }
 
@@ -396,6 +425,9 @@ export class TelegramBot {
     try {
       await ctx.sendChatAction('typing');
       await this.ctx.sendMessageToTask(taskId, text);
+      // Bump TTL + turn count so the bridge knows this task is still
+      // the active agent for this chat. Counts against the turn cap.
+      this.bridge.recordTurn(taskId);
     } catch (err) {
       await ctx.reply(`Couldn't continue task: ${(err as Error).message}`);
       this.bridge.forget(taskId);
@@ -425,11 +457,12 @@ export class TelegramBot {
     }
     const lastMsg = await this.sendTurnResult(ctx, chatId, taskId, body, turn.awaitingInput);
     if (lastMsg) this.bridge.linkMessageToTask(lastMsg.message_id, taskId);
-    if (!turn.awaitingInput) {
-      // Turn ended cleanly with no more input expected. Drop the bridge
-      // so memory doesn't accumulate across long-running chats.
-      this.bridge.forget(taskId);
-    }
+    // Persistent-agent semantics: don't drop the bridge on
+    // !awaitingInput. The bridge's TTL + turn cap (see handleUserMessage
+    // path 3) decides when to fork. This lets a user's next message
+    // continue the same agent thread even after a turn closed cleanly.
+    // Memory accumulation is bounded by TTL eviction on the next
+    // message + the cap on simultaneous chat ids.
   }
 
   // ─── inline-button handlers ───────────────────────────────────────────

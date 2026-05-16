@@ -23,6 +23,14 @@ export interface TaskBridgeEntry {
   /** Telegram-side timestamp of the last user message we processed for
    *  this task. Lets us drop late retries / duplicates if needed. */
   lastUserMessageAt?: number;
+  /** ms epoch — when the bridge last sent a turn on this task. Drives
+   *  the staleness check for "should next user message continue this
+   *  task or fork a fresh one." */
+  lastUsedAt: number;
+  /** How many turns this bridged task has handled. Caps reuse before
+   *  the auto-compacted context summary starts costing more per turn
+   *  than the cold start a fresh task would pay. */
+  turnCount: number;
 }
 
 export class TaskBridge {
@@ -35,8 +43,21 @@ export class TaskBridge {
   private lastTaskByChat = new Map<number, string>();
 
   register(taskId: string, chatId: number): void {
-    this.byTask.set(taskId, { chatId });
+    this.byTask.set(taskId, {
+      chatId,
+      lastUsedAt: Date.now(),
+      turnCount: 1,
+    });
     this.lastTaskByChat.set(chatId, taskId);
+  }
+
+  /** Bump lastUsedAt + turn count after we forwarded another user
+   *  message into this task. Called from continueTask. */
+  recordTurn(taskId: string): void {
+    const entry = this.byTask.get(taskId);
+    if (!entry) return;
+    entry.lastUsedAt = Date.now();
+    entry.turnCount += 1;
   }
 
   linkMessageToTask(messageId: number, taskId: string): void {
@@ -59,6 +80,24 @@ export class TaskBridge {
 
   lastTaskFor(chatId: number): string | null {
     return this.lastTaskByChat.get(chatId) ?? null;
+  }
+
+  /** Return the chat's last task only when it's still eligible to
+   *  continue — fresh enough + under the turn cap. Returns null when
+   *  the task is stale (caller forks a new task instead). Caller is
+   *  responsible for evicting stale entries when it forks. */
+  getActiveTaskFor(
+    chatId: number,
+    maxAgeMs: number,
+    maxTurns: number,
+  ): string | null {
+    const taskId = this.lastTaskByChat.get(chatId);
+    if (!taskId) return null;
+    const entry = this.byTask.get(taskId);
+    if (!entry) return null;
+    if (entry.turnCount >= maxTurns) return null;
+    if (Date.now() - entry.lastUsedAt > maxAgeMs) return null;
+    return taskId;
   }
 
   /** Drop the entry. Used when a task completes / errors / aborts so
