@@ -5,6 +5,7 @@ import type {
   DashboardConfig,
   DashboardItem,
   DashboardSection,
+  DashboardSectionMaxHeight,
   InboxItem,
   Reminder,
   RoutineDef,
@@ -110,6 +111,50 @@ export function Dashboard() {
       ),
     });
 
+  const setMaxHeight = (
+    sectionId: string,
+    maxHeight: DashboardSectionMaxHeight,
+  ) =>
+    save({
+      sections: config.sections.map((s) =>
+        s.id === sectionId
+          ? { ...s, maxHeight: maxHeight === 'auto' ? undefined : maxHeight }
+          : s,
+      ),
+    });
+
+  /**
+   * Group consecutive sections into rows. A row is either:
+   *   - a single full-width section, or
+   *   - one or two adjacent half-width sections (paired by the flex flow).
+   *
+   * Grouping in JS rather than CSS means we can compute a shared
+   * max-height per row so a half-section's height constraint also
+   * applies to its row-mate (the user's "for half, it will affect
+   * the one next to him too" requirement).
+   */
+  const rows = useMemo(() => {
+    const out: DashboardSection[][] = [];
+    let bucket: DashboardSection[] = [];
+    for (const s of config.sections) {
+      if ((s.width ?? 'full') === 'half') {
+        bucket.push(s);
+        if (bucket.length === 2) {
+          out.push(bucket);
+          bucket = [];
+        }
+      } else {
+        if (bucket.length) {
+          out.push(bucket);
+          bucket = [];
+        }
+        out.push([s]);
+      }
+    }
+    if (bucket.length) out.push(bucket);
+    return out;
+  }, [config.sections]);
+
   return (
     <div className="dash">
       <header className="dash__header">
@@ -153,20 +198,44 @@ export function Dashboard() {
       )}
 
       <div className="dash__sections">
-        {config.sections.map((section, i) => (
-          <SectionView
-            key={section.id}
-            section={section}
-            editing={editing}
-            isFirst={i === 0}
-            isLast={i === config.sections.length - 1}
-            onRename={(t) => renameSection(section.id, t)}
-            onMove={(dir) => moveSection(section.id, dir)}
-            onDelete={() => deleteSection(section.id)}
-            onItemsChange={(items) => setItems(section.id, items)}
-            onSetWidth={(w) => setWidth(section.id, w)}
-          />
-        ))}
+        {rows.map((row, rIdx) => {
+          // The row's effective max height = max of all its sections'
+          // settings. `auto` (or unset) means no cap; any other value
+          // overrides `auto`. When two halves disagree (one compact,
+          // one tall), the taller wins — they have to match visually
+          // anyway, and growing is safer than truncating.
+          const effective = effectiveRowMaxHeight(row);
+          // Track each section's absolute index so move buttons still
+          // know first/last across the flat list.
+          const indexOf = (s: DashboardSection) =>
+            config.sections.findIndex((cs) => cs.id === s.id);
+          return (
+            <div
+              key={row.map((s) => s.id).join('-') || `row-${rIdx}`}
+              className={`dash__row${effective !== 'auto' ? ` dash__row--cap-${effective}` : ''}`}
+            >
+              {row.map((section) => {
+                const i = indexOf(section);
+                return (
+                  <SectionView
+                    key={section.id}
+                    section={section}
+                    editing={editing}
+                    isFirst={i === 0}
+                    isLast={i === config.sections.length - 1}
+                    rowMaxHeight={effective}
+                    onRename={(t) => renameSection(section.id, t)}
+                    onMove={(dir) => moveSection(section.id, dir)}
+                    onDelete={() => deleteSection(section.id)}
+                    onItemsChange={(items) => setItems(section.id, items)}
+                    onSetWidth={(w) => setWidth(section.id, w)}
+                    onSetMaxHeight={(h) => setMaxHeight(section.id, h)}
+                  />
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -177,21 +246,26 @@ function SectionView({
   editing,
   isFirst,
   isLast,
+  rowMaxHeight,
   onRename,
   onMove,
   onDelete,
   onItemsChange,
   onSetWidth,
+  onSetMaxHeight,
 }: {
   section: DashboardSection;
   editing: boolean;
   isFirst: boolean;
   isLast: boolean;
+  /** The row's effective height cap (max of all sections in the row). */
+  rowMaxHeight: DashboardSectionMaxHeight;
   onRename: (title: string) => void;
   onMove: (dir: -1 | 1) => void;
   onDelete: () => void;
   onItemsChange: (items: DashboardItem[]) => void;
   onSetWidth: (width: 'full' | 'half') => void;
+  onSetMaxHeight: (h: DashboardSectionMaxHeight) => void;
 }) {
   const [titleDraft, setTitleDraft] = useState(section.title);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -214,6 +288,11 @@ function SectionView({
     onItemsChange(section.items.map((it, i) => (i === idx ? next : it)));
 
   const width = section.width ?? 'full';
+  // rowMaxHeight is computed by the parent (max of the row's sections)
+  // and applied to the row wrapper via .dash__row--cap-*; no section
+  // class needed here. The variable is destructured purely so the
+  // parent can re-render this section when the row cap changes.
+  void rowMaxHeight;
 
   return (
     <section className={`dash-section dash-section--${width}`}>
@@ -253,6 +332,23 @@ function SectionView({
             >
               {width === 'full' ? '◧ half' : '▮ full'}
             </button>
+            <select
+              className="dash-section__height"
+              value={section.maxHeight ?? 'auto'}
+              onChange={(e) =>
+                onSetMaxHeight(e.target.value as DashboardSectionMaxHeight)
+              }
+              title={
+                width === 'half'
+                  ? 'Max height — applies to this row, so both halves share the same cap'
+                  : 'Max height — caps how tall this section can grow'
+              }
+            >
+              <option value="auto">↕ auto</option>
+              <option value="compact">↕ compact</option>
+              <option value="medium">↕ medium</option>
+              <option value="tall">↕ tall</option>
+            </select>
             <button
               onClick={() => onMove(-1)}
               disabled={isFirst}
@@ -941,4 +1037,29 @@ function formatRelative(ms: number): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.round(h / 24);
   return `${d}d ago`;
+}
+
+/**
+ * Compute the row's effective max-height = max of all section caps in
+ * the row. Order: auto < compact < medium < tall. So if either half
+ * of a paired row sets "tall", the whole row gets "tall" — they
+ * stay visually aligned regardless of which half the user
+ * configured. Returns `'auto'` (no cap) only when every section in
+ * the row is `'auto'` or unset.
+ */
+function effectiveRowMaxHeight(
+  row: DashboardSection[],
+): DashboardSectionMaxHeight {
+  const ORDER: DashboardSectionMaxHeight[] = [
+    'auto',
+    'compact',
+    'medium',
+    'tall',
+  ];
+  let max = 0;
+  for (const s of row) {
+    const idx = ORDER.indexOf(s.maxHeight ?? 'auto');
+    if (idx > max) max = idx;
+  }
+  return ORDER[max]!;
 }

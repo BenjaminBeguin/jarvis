@@ -4835,10 +4835,36 @@ button:disabled:hover {
 }
 
 .dash__sections {
+  /* Rows stacked vertically; each row is its own flex row of sections.
+     The row wrapper lets us cap heights at row level — both halves
+     in a paired row share the same constraint. */
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.dash__row {
   display: flex;
   flex-wrap: wrap;
   gap: 20px;
-  align-items: flex-start;
+  align-items: stretch;
+  min-width: 0;
+}
+
+/* Row-level max height. When set, the inner sections inherit the cap
+   via the matching .dash-section--cap-* class — but it's the row that
+   actually owns the height, so two halves stay visually equal. */
+.dash__row--cap-compact .dash-section__items {
+  max-height: 30vh;
+}
+.dash__row--cap-medium .dash-section__items {
+  max-height: 50vh;
+}
+.dash__row--cap-tall .dash-section__items {
+  max-height: 75vh;
+}
+.dash__row[class*='dash__row--cap-'] .dash-section__items {
+  overflow-y: auto;
 }
 
 .dash-section {
@@ -4852,6 +4878,21 @@ button:disabled:hover {
   border-top: 1px solid rgba(0, 212, 255, 0.28);
   border-radius: 2px;
   position: relative;
+}
+
+.dash-section__height {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.dash-section__height:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .dash-section::before {

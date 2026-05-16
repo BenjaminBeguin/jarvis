@@ -356,6 +356,14 @@ export type DashboardItem =
       horizon?: CalendarHorizon;
     };
 
+/** Cap how tall a section can grow. `auto` (default) is unconstrained;
+ *  the rest are viewport-height based so they adapt to the window. When
+ *  a half-section sets a max height, the value also applies to its
+ *  row-mate (both halves on the same row clamp to the larger of the two
+ *  settings) so they don't visually mismatch. Full-width sections only
+ *  affect their own row. */
+export type DashboardSectionMaxHeight = 'auto' | 'compact' | 'medium' | 'tall';
+
 export interface DashboardSection {
   id: string;
   title: string;
@@ -365,6 +373,9 @@ export interface DashboardSection {
    * Sections flow left-to-right, top-to-bottom — two halves followed
    * by a full just put the full on the next row. */
   width?: 'full' | 'half';
+  /** Optional vertical cap. When set, the section body becomes
+   *  scrollable past the limit. See DashboardSectionMaxHeight. */
+  maxHeight?: DashboardSectionMaxHeight;
 }
 
 export interface DashboardConfig {
