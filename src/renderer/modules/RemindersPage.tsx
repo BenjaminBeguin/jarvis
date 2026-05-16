@@ -129,20 +129,18 @@ export function RemindersPage({ compact = false }: { compact?: boolean } = {}) {
             {r.firedTaskId && (
               <button
                 onClick={() => {
+                  // Peek into the in-window sidebar — triage flow,
+                  // the user wants to glance at what the reminder
+                  // actually did, not leave the page.
                   window.dispatchEvent(
-                    new CustomEvent('jarvis:navigate', {
-                      detail: { tab: 'observatory' },
-                    }),
-                  );
-                  window.dispatchEvent(
-                    new CustomEvent('jarvis:focus-task', {
+                    new CustomEvent('jarvis:open-session', {
                       detail: { taskId: r.firedTaskId },
                     }),
                   );
                 }}
-                title="Open the task that ran when this fired"
+                title="Peek at the task that ran when this fired"
               >
-                ↗ Open task
+                ↗ Peek
               </button>
             )}
             <button
