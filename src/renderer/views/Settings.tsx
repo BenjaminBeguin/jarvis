@@ -32,6 +32,10 @@ interface Props {
   onOpenModulePage: (id: string) => void;
   /** Optional initial section — lets the auth badge deep-link to General. */
   initialSection?: Section;
+  /** Called once the initial section has been consumed, so the Shell can
+   *  clear its sticky deep-link state and the next visit starts on
+   *  'general' unless explicitly redirected again. */
+  onInitialSectionConsumed?: () => void;
 }
 
 /**
@@ -46,8 +50,18 @@ interface Props {
  *   - Integrations — MCP servers + catalog (reuses Integrations)
  *   - API       — localhost HTTP API URL + token + rotate
  */
-export function Settings({ status, onOpenModulePage, initialSection }: Props) {
+export function Settings({
+  status,
+  onOpenModulePage,
+  initialSection,
+  onInitialSectionConsumed,
+}: Props) {
   const [section, setSection] = useState<Section>(initialSection ?? 'general');
+  useEffect(() => {
+    if (initialSection) onInitialSectionConsumed?.();
+    // Only fire when the initial section was actually used on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <section className="settings">

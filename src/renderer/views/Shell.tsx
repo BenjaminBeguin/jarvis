@@ -38,6 +38,12 @@ export function Shell({ status }: Props) {
   /** When set, the Skills view opens with this skill selected and scrolls
    * the list to it. Set by deep-link nav from Briefings / Routines. */
   const [focusedSkillId, setFocusedSkillId] = useState<string | null>(null);
+  /** Deep-link target for Settings — set when something dispatches
+   *  jarvis:navigate with a settingsSection field. Consumed on the
+   *  next Settings render and cleared so it doesn't sticky. */
+  const [pendingSettingsSection, setPendingSettingsSection] = useState<
+    string | null
+  >(null);
   const [openModule, setOpenModule] = useState<ModuleSummary | null>(null);
   const [moduleList, setModuleList] = useState<ModuleSummary[]>([]);
   /**
@@ -223,6 +229,9 @@ export function Shell({ status }: Props) {
       /** When opening the merged Notes & Reminders page, which tab to
        *  land on. The CapturePage subscribes to 'jarvis:capture-tab'. */
       captureTab?: 'notes' | 'reminders';
+      /** When opening Settings, which section to land on (general,
+       *  preferences, modules, integrations, api, builder, …). */
+      settingsSection?: string;
     }) => {
       if (payload.tab) setTab(payload.tab);
       if (payload.tab) setOpenModuleId(payload.moduleId ?? null);
@@ -240,6 +249,9 @@ export function Shell({ status }: Props) {
             detail: { tab: payload.captureTab },
           }),
         );
+      }
+      if (payload.tab === 'settings' && payload.settingsSection) {
+        setPendingSettingsSection(payload.settingsSection);
       }
     };
     const offIpc = window.jarvis.onShellNavigate(applyNav);
@@ -515,6 +527,19 @@ export function Shell({ status }: Props) {
           <Settings
             status={status}
             onOpenModulePage={(id) => setOpenModuleId(id)}
+            initialSection={
+              (pendingSettingsSection as
+                | 'general'
+                | 'preferences'
+                | 'notifications'
+                | 'inbox'
+                | 'modules'
+                | 'integrations'
+                | 'api'
+                | 'builder'
+                | undefined) ?? undefined
+            }
+            onInitialSectionConsumed={() => setPendingSettingsSection(null)}
           />
         )}
       </div>

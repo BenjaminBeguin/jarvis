@@ -135,7 +135,20 @@ export function Dashboard() {
           <button onClick={addSection} className="dash__inline-add">
             Add one
           </button>
-          .
+          , or{' '}
+          <button
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent('jarvis:navigate', {
+                  detail: { tab: 'settings', settingsSection: 'builder' },
+                }),
+              )
+            }
+            className="dash__inline-add"
+          >
+            walk through the Builder
+          </button>{' '}
+          for a guided setup.
         </div>
       )}
 
