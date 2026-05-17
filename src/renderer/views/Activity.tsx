@@ -409,6 +409,8 @@ const EVENT_KIND_META: Record<
   'telegram.abort': { category: 'other', label: 'telegram · abort' },
   'telegram.fork': { category: 'other', label: 'telegram · new thread' },
   'telegram.voice': { category: 'other', label: 'telegram · voice' },
+  'skill-suggestion.accepted': { category: 'integration', label: 'skill suggestion · accepted' },
+  'skill-suggestion.dismissed': { category: 'integration', label: 'skill suggestion · dismissed' },
 };
 
 function EventRow({ event }: { event: ActivityEvent }) {
