@@ -262,22 +262,31 @@ export function useFlowStream(): FlowEvent[] {
   useEffect(() => {
     let cancelled = false;
 
-    // Backfill: recent tasks + reminders so the page isn't blank.
+    // Backfill: only events that are *actually live right now* —
+    // running tasks + reminders that fired in the last grace window.
+    // The river is a "what's happening" surface, not a history view;
+    // dragging in a 12:30pm aborted task at 4pm is just noise.
+    // Anything terminal that finished earlier than GRACE_MS ago is
+    // already past its on-screen lifetime; skip it.
     void window.jarvis.listTasks().then((tasks) => {
       if (cancelled) return;
       const recent = tasks
         .filter((t) => t.origin !== 'external')
+        .filter((t) => t.status === 'running')
         .slice(0, 20)
         .map(flowFromTask);
       if (recent.length) dispatch({ type: 'upsert', events: recent });
     });
     void window.jarvis.listReminders().then((rems) => {
       if (cancelled) return;
+      const since = Date.now() - GRACE_MS;
       for (const r of rems) {
-        if (r.status === 'fired' && r.firedAt) {
-          seenFiredRef.current.add(r.id);
-          dispatch({ type: 'upsert', events: [flowFromReminderFire(r)] });
-        }
+        if (r.status !== 'fired' || !r.firedAt) continue;
+        // Already seen, even if we're not going to render it — keeps
+        // the live-fire dedupe set consistent.
+        seenFiredRef.current.add(r.id);
+        if (r.firedAt < since) continue;
+        dispatch({ type: 'upsert', events: [flowFromReminderFire(r)] });
       }
     });
 
