@@ -43,6 +43,13 @@ export const sendModule: Module = {
           origin: 'palette',
         });
         ctx.showHud(t.id);
+        // Activity log: a send dispatch is a "did something that
+        // could leave the device" event — worth surfacing in the feed.
+        ctx.logActivity({
+          kind: 'send.dispatched',
+          label: `Send · ${body.slice(0, 80)}${body.length > 80 ? '…' : ''}`,
+          detail: { prompt: body, taskId: t.id },
+        });
         return `Drafting · #${t.id.slice(0, 6)}`;
       },
     },

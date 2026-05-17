@@ -216,6 +216,11 @@ export class TelegramBot {
     try {
       await this.ctx.abortTask(taskId);
       await ctx.reply(`Aborted task ${taskId}.`);
+      this.ctx.logActivity({
+        kind: 'telegram.abort',
+        label: `Aborted task ${taskId} from Telegram`,
+        detail: { taskId, chatId },
+      });
     } catch (err) {
       await ctx.reply(`Could not abort: ${(err as Error).message}`);
     }
@@ -256,6 +261,13 @@ export class TelegramBot {
     if (typeof chatId !== 'number' || !this.isAllowed(chatId)) return;
     const prior = this.bridge.lastTaskFor(chatId);
     if (prior) this.bridge.forget(prior);
+    this.ctx.logActivity({
+      kind: 'telegram.fork',
+      label: prior
+        ? `Telegram /new — forked agent thread (prior task ${prior})`
+        : 'Telegram /new — no prior thread to fork',
+      detail: { chatId, priorTaskId: prior },
+    });
     await ctx.reply(
       prior
         ? '🔄 Fresh thread. Your next message starts a new agent — the prior conversation is still in the Observatory if you need to look back.'
@@ -355,6 +367,11 @@ export class TelegramBot {
       await ctx.reply("Couldn't hear anything in that voice note.");
       return;
     }
+    this.ctx.logActivity({
+      kind: 'telegram.voice',
+      label: `Voice from Telegram · ${transcript.slice(0, 80)}${transcript.length > 80 ? '…' : ''}`,
+      detail: { chatId, transcript },
+    });
     await ctx.reply(`_${transcript}_`, { parse_mode: 'Markdown' });
     await this.handleUserMessage(ctx, chatId, transcript, ctx.message.reply_to_message);
   }

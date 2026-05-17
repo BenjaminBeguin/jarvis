@@ -368,6 +368,10 @@ const launchAnnounced = new Set<string>();
  * config.json.costPrefs.{perTaskUsd,dailyUsd}.
  */
 const costWarned = new Set<string>();
+/** Task ids we've already logged as "routine fired" / "scheduled
+ *  action fired" — status events arrive many times per task and we
+ *  only want one Activity row at first-launch. */
+const routineFiredLogged = new Set<string>();
 /** Date-stamped "we already warned today" flag so we don't ping the
  *  user 47 times after lunch. Reset implicitly when the date string
  *  flips at local midnight. */
@@ -422,6 +426,31 @@ function wireRunnerEvents(): void {
       // DB hiccup — tooltip stays at last value; not worth surfacing.
     }
     broadcast(IpcChannels.taskStatus, summary);
+
+    // Routine + scheduled-action fires: log to Activity once per task
+    // id so the user sees an entry in the feed when a cron tick
+    // actually fired. Reminder firing has its own dedicated path
+    // ('reminder.fired' below). origin='routine' covers cron-fired
+    // skill routines; reminderId on the task covers scheduled actions.
+    if (
+      summary.origin === 'routine' &&
+      summary.routineId &&
+      !routineFiredLogged.has(summary.id)
+    ) {
+      routineFiredLogged.add(summary.id);
+      const r = routines.list().find((x) => x.id === summary.routineId);
+      activity.record({
+        kind: 'routine.fired',
+        label: `Routine fired · ${r?.skillId ?? summary.routineId}${
+          summary.title ? ` — ${summary.title.slice(0, 60)}` : ''
+        }`,
+        detail: {
+          routineId: summary.routineId,
+          taskId: summary.id,
+          skillId: r?.skillId ?? null,
+        },
+      });
+    }
 
     // Cost guardrail: fire ONCE when a task crosses the threshold.
     // Useful for unattended routines that could otherwise run away —

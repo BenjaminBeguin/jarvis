@@ -33,6 +33,11 @@ export const statusModule: Module = {
           origin: 'palette',
         });
         ctx.showHud(t.id);
+        ctx.logActivity({
+          kind: 'status.requested',
+          label: 'Status digest · /status',
+          detail: { taskId: t.id, mode: 'digest' },
+        });
         return `Working on it · #${t.id.slice(0, 6)}`;
       },
     },
@@ -54,6 +59,11 @@ export const statusModule: Module = {
           origin: 'palette',
         });
         ctx.showHud(t.id);
+        ctx.logActivity({
+          kind: 'status.requested',
+          label: 'Next-move recommendation · /next',
+          detail: { taskId: t.id, mode: 'next' },
+        });
         return `Thinking · #${t.id.slice(0, 6)}`;
       },
     },

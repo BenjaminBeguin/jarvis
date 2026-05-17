@@ -68,6 +68,11 @@ export const skillSuggesterModule: Module = {
           origin: 'palette',
         });
         ctx.showHud(t.id);
+        ctx.logActivity({
+          kind: 'skill-suggester.analyzed',
+          label: `Analyzing ${prompts.length} prompt${prompts.length === 1 ? '' : 's'} for skill ideas`,
+          detail: { taskId: t.id, promptCount: prompts.length },
+        });
         // Belt-and-suspenders: pop a quick notification too in case the HUD
         // ends up hidden behind another app while the user looks for it.
         ctx.notify(

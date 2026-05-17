@@ -31,6 +31,13 @@ export const shellModule: Module = {
         }
         const t = ctx.runShell(cmd);
         ctx.showHud(t.id);
+        // Activity log: shell runs are the kind of thing you want to
+        // be able to look back at — "what did I run that morning?"
+        ctx.logActivity({
+          kind: 'shell.ran',
+          label: `Shell · ${cmd.slice(0, 80)}${cmd.length > 80 ? '…' : ''}`,
+          detail: { cmd, taskId: t.id },
+        });
         return `Running · ${cmd.slice(0, 60)}${cmd.length > 60 ? '…' : ''}`;
       },
     },

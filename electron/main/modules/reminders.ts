@@ -80,6 +80,16 @@ export const remindersModule: Module = {
             : parsed.cron
               ? 'Recurring reminder'
               : 'Reminder set';
+        ctx.logActivity({
+          kind: 'reminder.created',
+          label: `${label} · ${r.body.slice(0, 80)}${r.body.length > 80 ? '…' : ''}`,
+          detail: {
+            reminderId: r.id,
+            mode: parsed.mode,
+            fireAt: r.fireAt,
+            cron: parsed.cron ?? null,
+          },
+        });
         return `${label} · ${when}${recurringSuffix}`;
       },
     },

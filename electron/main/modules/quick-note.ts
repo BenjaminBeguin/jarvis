@@ -134,6 +134,19 @@ export const quickNoteModule: Module = {
             month: 'short',
           });
           const recurringSuffix = intent.cron ? ' · recurring' : '';
+          // Smart-note created BOTH a note and a reminder — log the
+          // reminder side too so the Activity feed shows the chain.
+          ctx.logActivity({
+            kind: 'reminder.created',
+            label: `${intent.mode === 'scheduled' ? 'Scheduled' : 'Reminder set'}${recurringSuffix} (via /note) · ${r.body.slice(0, 80)}${r.body.length > 80 ? '…' : ''}`,
+            detail: {
+              reminderId: r.id,
+              mode: intent.mode,
+              fireAt: r.fireAt,
+              cron: intent.cron ?? null,
+              fromNote: true,
+            },
+          });
           ctx.notify(
             intent.mode === 'scheduled'
               ? `Note · scheduled ${when}${recurringSuffix}`

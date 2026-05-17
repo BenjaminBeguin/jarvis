@@ -45,6 +45,11 @@ export const prWorkflowsModule: Module = {
           origin: 'palette',
         });
         ctx.showHud(t.id);
+        ctx.logActivity({
+          kind: 'pr.review-queue',
+          label: `Review queue walk · ${focus || 'defaults'}`,
+          detail: { taskId: t.id, focus: focus || null },
+        });
         return `Pulling your review queue · #${t.id.slice(0, 6)}`;
       },
     },
@@ -73,6 +78,11 @@ export const prWorkflowsModule: Module = {
           origin: 'palette',
         });
         ctx.showHud(t.id);
+        ctx.logActivity({
+          kind: 'pr.address-comments',
+          label: `Addressing PR comments · ${arg || 'will pick interactively'}`,
+          detail: { taskId: t.id, prTarget: arg || null },
+        });
         return `Working PR comments · #${t.id.slice(0, 6)}`;
       },
     },

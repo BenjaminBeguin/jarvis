@@ -245,12 +245,21 @@ export const telegramBotModule: Module = {
   async onLoad(ctx) {
     try {
       await startBot(ctx);
+      ctx.logActivity({
+        kind: 'telegram.connected',
+        label: 'Telegram bot connected',
+      });
     } catch (err) {
       // Don't block module registration on a transient Telegram outage —
       // log and stay enabled. The user can restart the app or toggle the
       // module off/on to retry. A bad token still throws synchronously
       // inside startBot via bot.telegram.getMe().
       console.warn(`[${MODULE_ID}] onLoad failed:`, err);
+      ctx.logActivity({
+        kind: 'telegram.connect-failed',
+        label: `Telegram bot failed to connect · ${err instanceof Error ? err.message : String(err)}`,
+        detail: { error: err instanceof Error ? err.message : String(err) },
+      });
     }
   },
 
