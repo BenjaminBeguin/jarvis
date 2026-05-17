@@ -14402,21 +14402,46 @@ button:disabled:hover {
   text-transform: uppercase;
 }
 
-/* Pillar of light — gentle pulse so the page never looks static. */
-.flow-gate__pillar {
-  animation: flow-pillar-pulse 4.2s ease-in-out infinite;
+/* Portal — three concentric vertical ellipses + a center slit. Each
+   ring breathes at a slightly different rate so the portal shimmers
+   continuously. Staggered per stage so the row reads as a wave of
+   pulses rather than synchronized strobes. */
+.flow-portal {
   transform-origin: center;
+  animation: flow-portal-breathe 4.5s ease-in-out infinite;
 }
-.flow-gate--intent .flow-gate__pillar  { animation-delay: 0.3s; }
-.flow-gate--route .flow-gate__pillar   { animation-delay: 0.6s; }
-.flow-gate--launch .flow-gate__pillar  { animation-delay: 0.9s; }
-.flow-gate--agent .flow-gate__pillar   { animation-delay: 1.2s; }
-.flow-gate--result .flow-gate__pillar  { animation-delay: 1.5s; }
-.flow-gate--notify .flow-gate__pillar  { animation-delay: 1.8s; }
+.flow-portal--mid {
+  animation-duration: 5.3s;
+  animation-delay: 0.4s;
+}
+.flow-portal--inner {
+  animation-duration: 3.8s;
+  animation-delay: 0.2s;
+}
 
-@keyframes flow-pillar-pulse {
-  0%, 100% { opacity: 0.5; }
-  50%      { opacity: 1;   }
+/* Each stage starts its own breathing cycle offset so the page reads
+   as a wave moving down the row. Applied to all three rings via the
+   parent gate selector. */
+.flow-gate--intent .flow-portal  { animation-delay: 0.25s; }
+.flow-gate--route .flow-portal   { animation-delay: 0.5s; }
+.flow-gate--launch .flow-portal  { animation-delay: 0.75s; }
+.flow-gate--agent .flow-portal   { animation-delay: 1s; }
+.flow-gate--result .flow-portal  { animation-delay: 1.25s; }
+.flow-gate--notify .flow-portal  { animation-delay: 1.5s; }
+
+@keyframes flow-portal-breathe {
+  0%, 100% { opacity: 0.55; transform: scaleY(1); }
+  50%      { opacity: 1;    transform: scaleY(1.04); }
+}
+
+/* The bright center slit — dash pattern scrolls vertically so the
+   portal looks like it has a flowing energy field inside, even when
+   no orb is passing through. */
+.flow-portal__slit {
+  animation: flow-portal-slit 1.6s linear infinite;
+}
+@keyframes flow-portal-slit {
+  to { stroke-dashoffset: -28; }
 }
 
 /* Wavy river — dashes drift right continuously. */

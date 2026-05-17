@@ -147,32 +147,60 @@ export function Pipeline() {
         const y = s.side ? NOTIFY_Y : RIVER_Y;
         return (
           <g key={s.id} className={`flow-gate flow-gate--${s.id}`}>
-            {/* Pillar of light — vertical beam through the stage. */}
-            <line
-              x1={s.x}
-              y1={y - 80}
-              x2={s.x}
-              y2={y + 80}
-              stroke="url(#flow-pillar-grad)"
-              strokeWidth={2}
-              filter="url(#flow-pillar-glow)"
-              className="flow-gate__pillar"
-            />
-            {/* Node on the river — the orb passes through this. */}
-            <circle
+            {/* Portal — three concentric vertical ellipses + a bright
+                center slit. Reads as an opening "waiting for something
+                to pass through" rather than a button/box. Each ring
+                pulses at a different rate so the portal shimmers
+                without ever standing still. */}
+            <ellipse
               cx={s.x}
               cy={y}
-              r={5}
-              fill="rgba(4, 7, 11, 0.92)"
-              stroke="rgba(0, 212, 255, 0.5)"
-              strokeWidth={1.25}
-              filter="url(#flow-gate-glow)"
-              className="flow-gate__node"
+              rx={12}
+              ry={56}
+              fill="none"
+              stroke="rgba(0, 212, 255, 0.18)"
+              strokeWidth={1}
+              filter="url(#flow-pillar-glow)"
+              className="flow-portal flow-portal--outer"
             />
-            {/* Label floats above the pillar. */}
+            <ellipse
+              cx={s.x}
+              cy={y}
+              rx={7}
+              ry={50}
+              fill="none"
+              stroke="rgba(0, 212, 255, 0.34)"
+              strokeWidth={1}
+              filter="url(#flow-pillar-glow)"
+              className="flow-portal flow-portal--mid"
+            />
+            <ellipse
+              cx={s.x}
+              cy={y}
+              rx={3.5}
+              ry={44}
+              fill="rgba(0, 212, 255, 0.05)"
+              stroke="rgba(0, 212, 255, 0.6)"
+              strokeWidth={1.25}
+              filter="url(#flow-pillar-glow)"
+              className="flow-portal flow-portal--inner"
+            />
+            {/* Bright vertical slit at the portal's core — energy
+                shimmer scrolling along its length via dashoffset. */}
+            <line
+              x1={s.x}
+              y1={y - 40}
+              x2={s.x}
+              y2={y + 40}
+              stroke="rgba(180, 240, 255, 0.7)"
+              strokeWidth={0.8}
+              strokeDasharray="2 5"
+              className="flow-portal__slit"
+            />
+            {/* Label floats above the portal. */}
             <text
               x={s.x}
-              y={y - 100}
+              y={y - 76}
               textAnchor="middle"
               className="flow-gate__label"
             >
