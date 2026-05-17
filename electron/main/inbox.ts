@@ -50,6 +50,39 @@ export class InboxStore extends EventEmitter {
     else this.sources.push(source);
   }
 
+  /**
+   * Item bucket fed by workflow `inbox-write` nodes. Each workflow
+   * run replaces its named bucket. Auto-registers a trivial
+   * InboxSource the first time a bucket appears so the existing
+   * `refresh()` aggregation flow stays uniform — no special-casing
+   * "workflow items" vs "source items" downstream.
+   *
+   * Triggers an immediate items-list refresh so the UI updates as
+   * soon as the workflow finishes, without waiting for the next
+   * auto-refresh tick.
+   */
+  private externalItems = new Map<string, InboxItem[]>();
+  setExternalItems(
+    sourceName: string,
+    label: string,
+    items: InboxItem[],
+  ): void {
+    this.externalItems.set(sourceName, items);
+    if (!this.sources.some((s) => s.name === sourceName)) {
+      this.register({
+        name: sourceName,
+        label,
+        // Trivial fetch: hand back the latest items the workflow wrote.
+        // The workflow's own cron drives when those items refresh.
+        fetch: async () => this.externalItems.get(sourceName) ?? [],
+      });
+    }
+    // Fire a refresh so the UI reflects new items immediately —
+    // refresh() pulls from every registered source including this
+    // one's trivial fetch, runs the dedup + sort, emits 'changed'.
+    void this.refresh();
+  }
+
   list(): InboxItem[] {
     // Filter snoozed/dismissed items out at read time. Storage stays
     // simple (no need to mutate `items`); time-based reappearance is

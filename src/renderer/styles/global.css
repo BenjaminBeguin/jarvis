@@ -14333,6 +14333,195 @@ button:disabled:hover {
   background: rgba(0, 212, 255, 0.28);
 }
 
+/* ----- Workflows tab ------------------------------------------------ */
+
+.workflows__errors {
+  margin: 8px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.workflows__error {
+  background: rgba(255, 85, 119, 0.06);
+  border: 1px solid rgba(255, 85, 119, 0.35);
+  padding: 6px 9px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--bad);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.workflows__error strong {
+  font-weight: 600;
+}
+
+.workflows__detail {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  padding: 0 22px 18px;
+}
+
+.workflows__editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+}
+
+.workflows__editor-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.workflows__editor-head h3 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+}
+
+.workflows__save {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 4px 10px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.workflows__save:hover {
+  background: rgba(0, 212, 255, 0.06);
+}
+
+.workflows__textarea {
+  flex: 1;
+  min-height: 0;
+  background: rgba(4, 7, 11, 0.55);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  padding: 12px 14px;
+  resize: none;
+  outline: none;
+}
+.workflows__textarea:focus {
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.workflows__run {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+}
+.workflows__run h3 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+}
+.workflows__run-empty {
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+}
+
+.workflows__run-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.workflows__run-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+.workflows__run-status {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 1px 7px;
+  border-radius: 2px;
+  border: 1px solid var(--border-strong);
+}
+.workflows__run-status--running { color: var(--accent); border-color: rgba(0, 212, 255, 0.4); }
+.workflows__run-status--completed { color: var(--good); border-color: rgba(95, 255, 166, 0.32); }
+.workflows__run-status--errored,
+.workflows__run-status--aborted { color: var(--bad); border-color: rgba(255, 85, 119, 0.42); }
+
+.workflows__steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.workflows__step {
+  display: grid;
+  grid-template-columns: 26px 1fr auto auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--border-strong);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.workflows__step--running { border-left-color: var(--accent); }
+.workflows__step--completed { border-left-color: var(--good); }
+.workflows__step--errored { border-left-color: var(--bad); }
+.workflows__step--skipped { opacity: 0.5; }
+.workflows__step-index {
+  color: var(--text-faint);
+}
+.workflows__step-type {
+  color: var(--text);
+}
+.workflows__step-status {
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.workflows__step-dur {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+.workflows__step-error {
+  grid-column: 1 / -1;
+  color: var(--bad);
+  font-size: 10.5px;
+  margin-top: 4px;
+}
+.workflows__run-error {
+  padding: 8px 12px;
+  background: rgba(255, 85, 119, 0.06);
+  border: 1px solid rgba(255, 85, 119, 0.35);
+  color: var(--bad);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
 /* ----- FlowStream (Observatory live river) -------------------------- */
 
 .flow-stream {

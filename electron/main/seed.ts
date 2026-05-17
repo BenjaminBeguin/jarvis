@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import matter from 'gray-matter';
 
 import { BUILTIN_SKILLS, SAMPLE_MCP_CONFIG, SAMPLE_PROJECTS } from './seeds/index.js';
+import { BUILTIN_WORKFLOWS } from './seeds/workflows/index.js';
 
 function writeIfMissing(path: string, content: string): void {
   if (!existsSync(path)) writeFileSync(path, content, 'utf8');
@@ -33,7 +34,9 @@ function writeSkill(skillsRoot: string, name: string, body: string): void {
 export function seedDefaultsIfEmpty(): void {
   const root = join(homedir(), '.jarvis');
   const skillsRoot = join(root, 'skills');
+  const workflowsRoot = join(root, 'workflows');
   mkdirSync(skillsRoot, { recursive: true });
+  mkdirSync(workflowsRoot, { recursive: true });
 
   writeIfMissing(join(root, 'mcp.json.example'), SAMPLE_MCP_CONFIG);
   writeIfMissing(join(root, 'projects.json.example'), SAMPLE_PROJECTS);
@@ -42,5 +45,15 @@ export function seedDefaultsIfEmpty(): void {
   // versions show up automatically; user-authored skills are never touched.
   for (const { name, body } of BUILTIN_SKILLS) {
     writeSkill(skillsRoot, name, body);
+  }
+
+  // Same model for workflows: seed if the file is missing; never
+  // overwrite a user edit. New built-in workflows show up in later
+  // releases automatically.
+  for (const wf of BUILTIN_WORKFLOWS) {
+    writeIfMissing(
+      join(workflowsRoot, `${wf.id}.json`),
+      JSON.stringify(wf, null, 2) + '\n',
+    );
   }
 }

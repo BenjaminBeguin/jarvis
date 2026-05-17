@@ -25,6 +25,8 @@ import type {
   ModuleSummary,
   NotificationPrefs,
   NotifierEmitPayload,
+  WorkflowDef,
+  WorkflowRun,
   ProjectDef,
   ProjectInput,
   ProjectMemoryFile,
@@ -522,6 +524,26 @@ const api = {
    *  by the FlowStream page for terminal-stage orbs. */
   onNotifierEmitted: (listener: Listener<NotifierEmitPayload>): Unsubscribe =>
     subscribe(IpcChannels.notifierEmitted, listener),
+
+  // ─── Workflows ──────────────────────────────────────────────────
+  listWorkflows: (): Promise<{ workflows: WorkflowDef[]; errors: Array<{ filename: string; message: string }> }> =>
+    ipcRenderer.invoke(IpcChannels.listWorkflows),
+  saveWorkflow: (def: WorkflowDef): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.saveWorkflow, def),
+  deleteWorkflow: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.deleteWorkflow, id),
+  runWorkflow: (id: string): Promise<{ ok: boolean; run?: WorkflowRun; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.runWorkflow, id),
+  stopWorkflowRun: (runId: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.stopWorkflowRun, runId),
+  readWorkflowRun: (runId: string): Promise<WorkflowRun | null> =>
+    ipcRenderer.invoke(IpcChannels.readWorkflowRun, runId),
+  listWorkflowRuns: (workflowId?: string): Promise<WorkflowRun[]> =>
+    ipcRenderer.invoke(IpcChannels.listWorkflowRuns, workflowId),
+  onWorkflowsChanged: (listener: Listener<WorkflowDef[]>): Unsubscribe =>
+    subscribe(IpcChannels.workflowsChanged, listener),
+  onWorkflowRunChanged: (listener: Listener<WorkflowRun>): Unsubscribe =>
+    subscribe(IpcChannels.workflowRunChanged, listener),
 };
 
 export type JarvisApi = typeof api;

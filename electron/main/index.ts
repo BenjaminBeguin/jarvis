@@ -39,7 +39,6 @@ import { BUILTIN_BRIEFING_KINDS } from './seeds/briefing-kinds.js';
 import {
   calendarInboxSource,
   failedRoutinesInboxSource,
-  linearInboxSource,
   prAddressCommentsInboxSource,
   prReviewQueueInboxSource,
   remindersInboxSource,
@@ -77,6 +76,9 @@ import {
 } from './secrets.js';
 import { ShellRunner } from './shell-runner.js';
 import { SkillSessionStore } from './skill-sessions.js';
+import { WorkflowRunner } from './workflow-runner.js';
+import { WorkflowScheduler } from './workflow-scheduler.js';
+import { WorkflowStore } from './workflow-store.js';
 import { SkillStore } from './skill-store.js';
 import { SkillSuggestionStore } from './skill-suggestions.js';
 import { asTaskOrigin, TaskRunner } from './task-runner.js';
@@ -134,6 +136,11 @@ const intentClassifier = new IntentClassifier(
 const inbox = new InboxStore();
 const activity = new ActivityStore();
 const briefings = new BriefingsStore(BUILTIN_BRIEFING_KINDS);
+const workflows = new WorkflowStore();
+const workflowRunner = new WorkflowRunner();
+const workflowScheduler = new WorkflowScheduler(workflows, workflowRunner, {
+  isPaused: () => loadPaused(),
+});
 // "Heads up" notifications when an inbox item with fireAt is within 5
 // min. Calendar events flow naturally through this; reminders are
 // skipped (ReminderStore handles those at fireAt time).
@@ -227,7 +234,9 @@ inbox.register(remindersInboxSource(reminders));
 inbox.register(failedRoutinesInboxSource());
 inbox.register(prReviewQueueInboxSource(projects));
 inbox.register(prAddressCommentsInboxSource(projects));
-inbox.register(linearInboxSource(mcp, projects));
+// Linear used to be a registered InboxSource here. It's now driven
+// by the linear-inbox-sync workflow (seeds/workflows/linear-inbox.ts)
+// which calls inbox.setExternalItems() at the end of its pipeline.
 inbox.register(slackInboxSource(mcp));
 inbox.register(calendarInboxSource());
 // User-authored scenarios — reads JSON files under ~/.jarvis/inbox/
@@ -673,6 +682,18 @@ app.whenReady().then(async () => {
   dashboard.init();
   briefings.init();
   routines.init();
+  // Workflow context must be set before init — running workflows
+  // need the shared services (mcp/inbox/notifier/runner). Then the
+  // scheduler wires cron jobs from whatever's already on disk.
+  workflowRunner.setNodeContext({
+    mcp,
+    inbox,
+    notifier,
+    runner,
+    jarvisRoot: join(homedir(), '.jarvis'),
+  });
+  workflows.init();
+  workflowScheduler.init();
 
   // Reminder fire handler must be set BEFORE init() so past-due reminders
   // that fire on this tick land in the runner.
@@ -1135,6 +1156,9 @@ app.whenReady().then(async () => {
     activity,
     briefings,
     dashboard,
+    workflows,
+    workflowRunner,
+    workflowScheduler,
     jarvisRoot,
     auth: {
       refresh: refreshAuth,

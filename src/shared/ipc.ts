@@ -185,6 +185,17 @@ export const IpcChannels = {
    *  notifications. Payload is a serializable subset of the notifier
    *  event (no onClick callback). */
   notifierEmitted: 'notifier:emitted',
+
+  // ─── Workflows ───────────────────────────────────────────────────
+  listWorkflows: 'workflows:list',
+  saveWorkflow: 'workflows:save',
+  deleteWorkflow: 'workflows:delete',
+  runWorkflow: 'workflows:run',
+  stopWorkflowRun: 'workflows:stop-run',
+  readWorkflowRun: 'workflows:read-run',
+  listWorkflowRuns: 'workflows:list-runs',
+  workflowsChanged: 'workflows:changed',
+  workflowRunChanged: 'workflows:run-changed',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];

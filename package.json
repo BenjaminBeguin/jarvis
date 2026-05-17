@@ -30,7 +30,8 @@
     "node-cron": "^3.0.3",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "telegraf": "^4.16.3"
+    "telegraf": "^4.16.3",
+    "xstate": "^5.31.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",

@@ -16,6 +16,9 @@ import type { SkillStore } from '../skill-store.js';
 import type { SkillSuggestionStore } from '../skill-suggestions.js';
 import type { TaskRunner } from '../task-runner.js';
 import type { UserContextStore } from '../user-context.js';
+import type { WorkflowRunner } from '../workflow-runner.js';
+import type { WorkflowScheduler } from '../workflow-scheduler.js';
+import type { WorkflowStore } from '../workflow-store.js';
 
 /**
  * Dependency bag passed into every per-domain IPC registrar. Each file
@@ -41,6 +44,9 @@ export interface IpcDeps {
   activity: ActivityStore;
   briefings: BriefingsStore;
   dashboard: DashboardStore;
+  workflows: WorkflowStore;
+  workflowRunner: WorkflowRunner;
+  workflowScheduler: WorkflowScheduler;
   jarvisRoot: string;
   auth: {
     /** Reconcile auth state from disk + keychain; returns the next status. */

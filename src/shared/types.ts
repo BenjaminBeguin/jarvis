@@ -859,3 +859,75 @@ export interface NotifierEmitPayload {
    *  on the right timeline. */
   ts: number;
 }
+
+// ─── Workflows ────────────────────────────────────────────────────────
+
+/**
+ * User-facing workflow definition. Saved as JSON at
+ * `~/.jarvis/workflows/<id>.json`. The engine compiles each one to an
+ * XState machine at load time; users edit the flat shape and never
+ * see machine concepts.
+ *
+ * A workflow is one trigger + an ordered pipeline of nodes. Each
+ * node's output becomes the next node's input. The first node sees
+ * `undefined` as input.
+ */
+export interface WorkflowDef {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  trigger: WorkflowTrigger;
+  pipeline: WorkflowNodeDef[];
+}
+
+export type WorkflowTrigger =
+  | { kind: 'cron'; every: string }
+  | { kind: 'manual'; palette?: string }
+  | { kind: 'event'; topic: string };
+
+/** Known node `type`s as of V1. Treated as opaque strings on the
+ *  wire so adding new node types later doesn't require a type bump.
+ *  The registry in main is the source of truth. */
+export type WorkflowNodeType =
+  | 'http-fetch'
+  | 'osascript'
+  | 'shell'
+  | 'transform'
+  | 'inbox-write'
+  | 'notify'
+  | 'run-skill';
+
+export interface WorkflowNodeDef {
+  type: string;
+  params?: Record<string, unknown>;
+  /** Skip this node when prev output is null/undefined. */
+  optional?: boolean;
+}
+
+export type WorkflowRunStatus =
+  | 'running'
+  | 'completed'
+  | 'errored'
+  | 'aborted';
+
+export interface WorkflowRunStep {
+  index: number;
+  nodeType: string;
+  startedAt: number;
+  endedAt: number | null;
+  status: 'running' | 'completed' | 'errored' | 'skipped';
+  error?: string;
+}
+
+/** One execution of a workflow. Lives in memory; older runs prune. */
+export interface WorkflowRun {
+  id: string;
+  workflowId: string;
+  trigger: 'cron' | 'manual' | 'event';
+  startedAt: number;
+  endedAt: number | null;
+  status: WorkflowRunStatus;
+  steps: WorkflowRunStep[];
+  error?: string;
+}

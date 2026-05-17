@@ -16,6 +16,7 @@ import { FlowStream } from './FlowStream';
 import { Settings } from './Settings';
 import { Sidebar, type SidebarSection } from './Sidebar';
 import { Skills } from './Skills';
+import { Workflows } from './Workflows';
 import { toast } from './Toaster';
 import { Toaster } from './Toaster';
 import { Observatory } from './Observatory';
@@ -30,6 +31,7 @@ type Tab =
   | 'projects'
   | 'routines'
   | 'skills'
+  | 'workflows'
   | 'settings';
 
 interface Props {
@@ -499,6 +501,17 @@ export function Shell({ status }: Props) {
           },
           title: 'SKILL.md prompts (the things Jarvis runs)',
         },
+        {
+          id: 'workflows',
+          label: 'Workflows',
+          icon: 'W',
+          isActive: tab === 'workflows' && !openModuleId,
+          onClick: () => {
+            setTab('workflows');
+            setOpenModuleId(null);
+          },
+          title: 'Trigger + pipeline of nodes — every cron-fetch workflow lives here',
+        },
       ],
     },
   ];
@@ -702,6 +715,8 @@ export function Shell({ status }: Props) {
             focusedSkillId={focusedSkillId}
             onConsumeFocus={() => setFocusedSkillId(null)}
           />
+        ) : tab === 'workflows' ? (
+          <Workflows />
         ) : (
           <Settings
             status={status}
