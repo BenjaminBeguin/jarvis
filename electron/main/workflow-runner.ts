@@ -78,12 +78,9 @@ export class WorkflowRunner extends EventEmitter {
         nodeType: node.type,
         startedAt: 0,
         endedAt: null,
-        status: 'running',
+        status: 'pending',
       })),
     };
-    // Steps start as `running` only when the machine enters their
-    // state — flip back to a pending sentinel until then.
-    run.steps = run.steps.map((s) => ({ ...s, status: 'running' as const, startedAt: 0 }));
 
     const actor = createActor(compile.machine);
     const handle: RunHandle = { actor, run };
@@ -109,13 +106,15 @@ export class WorkflowRunner extends EventEmitter {
             : s.endedAt;
         return {
           ...s,
-          status: (next === 'pending' ? 'running' : next) as WorkflowRunStep['status'],
+          status: next as WorkflowRunStep['status'],
           startedAt: startedAt || s.startedAt,
           endedAt,
         };
       });
 
-      // Terminal mapping.
+      // Terminal mapping. When the machine reaches a terminal state,
+      // any steps still marked `pending` never got reached — flip them
+      // to `skipped` so the UI doesn't show them as eternally pending.
       if (snapshot.value === 'completed') {
         run.status = 'completed';
         run.endedAt = Date.now();
@@ -123,6 +122,9 @@ export class WorkflowRunner extends EventEmitter {
         run.status = 'errored';
         run.endedAt = Date.now();
         run.error = ctx.error ?? undefined;
+        run.steps = run.steps.map((s) =>
+          s.status === 'pending' ? { ...s, status: 'skipped' } : s,
+        );
       }
       this.emit('run-changed', { ...run });
     });

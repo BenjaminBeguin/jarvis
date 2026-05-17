@@ -34,7 +34,13 @@ import type {
  * connectors between completed and running nodes glow live.
  */
 
-type StageState = 'idle' | 'running' | 'completed' | 'errored' | 'skipped';
+type StageState =
+  | 'idle'
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'errored'
+  | 'skipped';
 
 interface PipelineNodeData extends Record<string, unknown> {
   node: WorkflowNodeDef;
@@ -76,9 +82,7 @@ function iconFor(type: string): NodeIconSpec {
 function stateOf(run: WorkflowRun | null, index: number): StageState {
   if (!run) return 'idle';
   const step: WorkflowRunStep | undefined = run.steps[index];
-  if (!step) {
-    return run.status === 'running' ? 'idle' : 'skipped';
-  }
+  if (!step) return 'idle';
   return step.status;
 }
 
@@ -140,7 +144,7 @@ function PipelineNode({ data }: NodeProps<Node<PipelineNodeData>>) {
           {summary && <span className="wf-node__summary">{summary}</span>}
         </div>
       </div>
-      {state !== 'idle' && (
+      {state !== 'idle' && state !== 'pending' && (
         <span className={`wf-node__status wf-node__status--${state}`}>
           {state}
         </span>
@@ -160,7 +164,8 @@ function edgeStyleFor(
   prev: StageState,
   next: StageState,
 ): { stroke: string; animated: boolean } {
-  if (prev === 'errored') return { stroke: '#FF8585', animated: false };
+  if (prev === 'errored' || next === 'skipped')
+    return { stroke: 'rgba(255, 133, 133, 0.45)', animated: false };
   if (prev === 'completed' && next === 'running')
     return { stroke: '#4DA3FF', animated: true };
   if (prev === 'completed' && next === 'completed')

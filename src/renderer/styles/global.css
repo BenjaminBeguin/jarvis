@@ -14487,6 +14487,7 @@ button:disabled:hover {
   font-family: var(--mono);
   font-size: 11px;
 }
+.workflows__step--pending { border-left-color: var(--text-faint); opacity: 0.6; }
 .workflows__step--running { border-left-color: var(--accent); }
 .workflows__step--completed { border-left-color: var(--good); }
 .workflows__step--errored { border-left-color: var(--bad); }
@@ -15165,6 +15166,10 @@ button:disabled:hover {
 
 .wf-node--skipped {
   opacity: 0.5;
+}
+
+.wf-node--pending {
+  opacity: 0.7;
 }
 
 @keyframes wf-node-pulse {

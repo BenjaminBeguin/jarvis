@@ -916,7 +916,7 @@ export interface WorkflowRunStep {
   nodeType: string;
   startedAt: number;
   endedAt: number | null;
-  status: 'running' | 'completed' | 'errored' | 'skipped';
+  status: 'pending' | 'running' | 'completed' | 'errored' | 'skipped';
   error?: string;
 }
 
