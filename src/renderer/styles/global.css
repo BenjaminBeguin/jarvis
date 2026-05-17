@@ -13844,6 +13844,7 @@ button:disabled:hover {
   letter-spacing: 0.08em;
 }
 .session-sidebar__status--running { color: var(--accent); border-color: rgba(0, 212, 255, 0.4); }
+.session-sidebar__status--awaiting { color: var(--warn); border-color: rgba(255, 153, 0, 0.4); }
 .session-sidebar__status--completed { color: var(--good); border-color: rgba(95, 255, 166, 0.32); }
 .session-sidebar__status--errored,
 .session-sidebar__status--aborted { color: var(--bad); border-color: rgba(255, 85, 119, 0.42); }

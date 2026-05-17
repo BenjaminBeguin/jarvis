@@ -180,10 +180,23 @@ export function SessionSidebar() {
             <h3 title={task?.title ?? taskId}>
               {task?.title ?? 'Loading session…'}
             </h3>
-            {task && (
+            {task && (() => {
+              // Distinguish "actively running a turn" from "session
+              // alive but turn complete, waiting for your reply." With
+              // maxTurns=200 the SDK keeps the stream open between
+              // turns, so `status='running' + awaitingInput=true` is
+              // the normal post-answer state. Showing "RUNNING" there
+              // is misleading — the agent isn't doing anything.
+              const displayedStatus =
+                task.status === 'running' && task.awaitingInput
+                  ? 'awaiting'
+                  : task.status;
+              return (
               <div className="session-sidebar__meta">
-                <span className={`session-sidebar__status session-sidebar__status--${task.status}`}>
-                  {task.status}
+                <span
+                  className={`session-sidebar__status session-sidebar__status--${displayedStatus}`}
+                >
+                  {displayedStatus}
                 </span>
                 {task.origin && (
                   <span className="session-sidebar__chip">{task.origin}</span>
@@ -197,7 +210,8 @@ export function SessionSidebar() {
                   </span>
                 )}
               </div>
-            )}
+              );
+            })()}
           </div>
           <button
             className="session-sidebar__close"

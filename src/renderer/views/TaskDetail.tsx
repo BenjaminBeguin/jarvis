@@ -305,7 +305,10 @@ export function TaskDetail({ task, onSelectTask }: Props) {
         <div className="detail__title">
           <h2>{task.title}</h2>
           <div className="meta" title={new Date(task.startedAt).toLocaleString()}>
-            {task.status} · {task.origin} · started {formatRelative(task.startedAt)}
+            {task.status === 'running' && task.awaitingInput
+              ? 'awaiting'
+              : task.status}{' '}
+            · {task.origin} · started {formatRelative(task.startedAt)}
             {task.costUsd > 0 && ` · $${task.costUsd.toFixed(4)}`}
             {task.pooled && (
               <span
