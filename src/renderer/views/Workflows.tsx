@@ -3,20 +3,28 @@ import { useEffect, useMemo, useState } from 'react';
 import type { WorkflowDef, WorkflowRun } from '../../shared/types';
 import { toast } from './Toaster';
 import { WorkflowPipeline } from './workflows/WorkflowPipeline';
+import { WorkflowSelector } from './workflows/WorkflowSelector';
 
 /**
- * Workflows tab — list every workflow loaded from
- * `~/.jarvis/workflows/*.json`, plus a detail view for the selected
- * one (JSON editor + most-recent run).
+ * Workflows page — graph-first layout.
  *
- * No visual node editor in V1. The JSON shape is small and a power
- * user can read it; we save back via the IPC `saveWorkflow` channel
- * which writes the file + re-broadcasts.
+ *   ┌─ Toolbar ────────────────────────────────────────────┐
+ *   │ [▾ Workflow] [Disable] [Run] [Delete]      [open ▽] │
+ *   ├──────────────────────────────────────────────────────┤
+ *   │                                                       │
+ *   │   React Flow canvas (the centerpiece)                │
+ *   │                                                       │
+ *   ├──────────────────────────────────────────────────────┤
+ *   │ JSON / Latest run (collapsible bottom dock)          │
+ *   └──────────────────────────────────────────────────────┘
  *
- * Each workflow is one trigger + a linear pipeline of nodes. The
- * scheduler reads the file on every save and re-registers cron jobs
- * if `trigger.kind === 'cron'`.
+ * The left rail of workflows is gone — a small floating selector
+ * replaces it. The graph takes whatever vertical space is left after
+ * the toolbar and the (optional) bottom dock.
  */
+
+type DockTab = 'json' | 'run';
+
 export function Workflows() {
   const [workflows, setWorkflows] = useState<WorkflowDef[]>([]);
   const [errors, setErrors] = useState<
@@ -25,6 +33,8 @@ export function Workflows() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<string>('');
   const [recentRun, setRecentRun] = useState<WorkflowRun | null>(null);
+  const [dockOpen, setDockOpen] = useState<boolean>(true);
+  const [dockTab, setDockTab] = useState<DockTab>('json');
 
   useEffect(() => {
     let cancelled = false;
@@ -38,8 +48,6 @@ export function Workflows() {
     void refresh();
     const off = window.jarvis.onWorkflowsChanged((list) => {
       setWorkflows(list);
-      // The errors broadcast piggy-backs the changed event in V1 —
-      // re-fetch to pick up the latest.
       void window.jarvis.listWorkflows().then((r) => setErrors(r.errors));
     });
     return () => {
@@ -53,7 +61,6 @@ export function Workflows() {
     [workflows, selectedId],
   );
 
-  // Reset the JSON editor whenever the selected workflow changes.
   useEffect(() => {
     if (!selected) {
       setDraft('');
@@ -62,7 +69,6 @@ export function Workflows() {
     setDraft(JSON.stringify(selected, null, 2));
   }, [selected]);
 
-  // Live-track the most recent run for this workflow.
   useEffect(() => {
     if (!selectedId) {
       setRecentRun(null);
@@ -138,103 +144,107 @@ export function Workflows() {
   };
 
   return (
-    <section className="briefings">
-      <aside className="briefings__rail">
-        <h2 className="briefings__rail-head">WORKFLOWS</h2>
-        <p className="briefings__rail-hint">
-          Triggers + pipelines of nodes. Each workflow lives as JSON
-          under <code>~/.jarvis/workflows/</code>. Edit on the right
-          panel; the file watcher picks up external edits too.
-        </p>
-        {errors.length > 0 && (
-          <div className="workflows__errors">
-            {errors.map((e) => (
-              <div key={e.filename} className="workflows__error">
-                <strong>{e.filename}</strong>
-                <span>{e.message}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        <ul className="briefings__list">
-          {workflows.length === 0 && (
-            <li className="briefings__empty">No workflows yet.</li>
-          )}
-          {workflows.map((w) => {
-            const isActive = w.id === selectedId;
-            return (
-              <li key={w.id}>
-                <button
-                  className={`briefings__kind${isActive ? ' briefings__kind--active' : ''}${w.enabled ? '' : ' routines__rail-card--off'}`}
-                  onClick={() => setSelectedId(w.id)}
-                  title={w.description ?? w.id}
-                >
-                  <div className="briefings__kind-label">
-                    <span
-                      className="briefings__kind-on-dot"
-                      style={{
-                        background: w.enabled ? 'var(--good)' : 'var(--text-faint)',
-                      }}
-                      aria-hidden
-                    />
-                    {w.name}
-                  </div>
-                  {w.description && (
-                    <div className="briefings__kind-desc">{w.description}</div>
-                  )}
-                  <div className="briefings__kind-schedule">
-                    {triggerLabel(w.trigger)} · {w.pipeline.length} node
-                    {w.pipeline.length === 1 ? '' : 's'}
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </aside>
-
-      <main className="briefings__main">
-        {!selected && (
-          <div className="briefings__placeholder">
-            Pick a workflow on the left. Built-ins live in
-            <code>~/.jarvis/workflows/</code>; drop a new JSON file
-            there and it shows up here.
-          </div>
-        )}
+    <section className="wf-page">
+      <header className="wf-toolbar">
+        <WorkflowSelector
+          workflows={workflows}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+        />
         {selected && (
-          <>
-            <header className="briefings__main-head">
-              <h2>{selected.name}</h2>
-              <div className="routine-detail__actions">
-                <button onClick={() => void toggleEnabled()}>
-                  {selected.enabled ? 'Disable' : 'Enable'}
-                </button>
-                <button onClick={() => void runNow()}>Run now</button>
-                <button onClick={() => void remove()} className="routine-detail__delete">
-                  Delete
-                </button>
-              </div>
-            </header>
+          <div className="wf-toolbar__actions">
+            <span className="wf-toolbar__trigger">
+              {triggerLabel(selected.trigger)}
+            </span>
+            <button onClick={() => void toggleEnabled()}>
+              {selected.enabled ? 'Disable' : 'Enable'}
+            </button>
+            <button onClick={() => void runNow()} className="wf-toolbar__run">
+              Run now
+            </button>
+            <button
+              onClick={() => void remove()}
+              className="wf-toolbar__delete"
+            >
+              Delete
+            </button>
+          </div>
+        )}
+        <div className="wf-toolbar__spacer" />
+        <button
+          type="button"
+          className="wf-toolbar__dock-toggle"
+          onClick={() => setDockOpen((v) => !v)}
+          aria-pressed={dockOpen}
+          title={dockOpen ? 'Hide details' : 'Show details'}
+        >
+          {dockOpen ? 'Hide details ▾' : 'Show details ▴'}
+        </button>
+      </header>
 
-            <WorkflowPipeline
-              workflow={selected}
-              run={recentRun}
-              trigger={selected.trigger}
-            />
+      {errors.length > 0 && (
+        <div className="wf-banner">
+          {errors.map((e) => (
+            <div key={e.filename} className="wf-banner__item">
+              <strong>{e.filename}</strong>
+              <span>{e.message}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
-            <div className="workflows__detail">
-              <section className="workflows__editor">
-                <div className="workflows__editor-head">
-                  <h3>JSON</h3>
-                  <button
-                    className="workflows__save"
-                    onClick={() => void save()}
+      <div className={`wf-body${dockOpen ? '' : ' wf-body--dock-closed'}`}>
+        <div className="wf-graph">
+          {!selected ? (
+            <div className="wf-graph__empty">
+              Pick a workflow above. Built-ins live in{' '}
+              <code>~/.jarvis/workflows/</code>; drop a new JSON file there and
+              it shows up here.
+            </div>
+          ) : (
+            <WorkflowPipeline workflow={selected} run={recentRun} />
+          )}
+        </div>
+
+        {selected && dockOpen && (
+          <div className="wf-dock">
+            <div className="wf-dock__tabs">
+              <button
+                type="button"
+                className={`wf-dock__tab${dockTab === 'json' ? ' wf-dock__tab--active' : ''}`}
+                onClick={() => setDockTab('json')}
+              >
+                JSON
+              </button>
+              <button
+                type="button"
+                className={`wf-dock__tab${dockTab === 'run' ? ' wf-dock__tab--active' : ''}`}
+                onClick={() => setDockTab('run')}
+              >
+                Latest run{' '}
+                {recentRun && (
+                  <span
+                    className={`wf-dock__tab-status wf-dock__tab-status--${recentRun.status}`}
                   >
-                    Save (⌘S)
-                  </button>
-                </div>
+                    · {recentRun.status}
+                  </span>
+                )}
+              </button>
+              <div className="wf-dock__spacer" />
+              {dockTab === 'json' && (
+                <button
+                  type="button"
+                  className="wf-dock__save"
+                  onClick={() => void save()}
+                >
+                  Save (⌘S)
+                </button>
+              )}
+            </div>
+            <div className="wf-dock__body">
+              {dockTab === 'json' && (
                 <textarea
-                  className="workflows__textarea"
+                  className="wf-dock__textarea"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => {
@@ -245,23 +255,19 @@ export function Workflows() {
                   }}
                   spellCheck={false}
                 />
-              </section>
-
-              <section className="workflows__run">
-                <h3>Latest run</h3>
-                {!recentRun ? (
-                  <div className="workflows__run-empty">
-                    No runs yet. Hit Run now or wait for the trigger
-                    to fire.
+              )}
+              {dockTab === 'run' &&
+                (!recentRun ? (
+                  <div className="wf-dock__empty">
+                    No runs yet. Hit Run now or wait for the trigger to fire.
                   </div>
                 ) : (
                   <RunDetail run={recentRun} />
-                )}
-              </section>
+                ))}
             </div>
-          </>
+          </div>
         )}
-      </main>
+      </div>
     </section>
   );
 }
@@ -278,7 +284,9 @@ function RunDetail({ run }: { run: WorkflowRun }) {
   return (
     <div className="workflows__run-detail">
       <div className="workflows__run-meta">
-        <span className={`workflows__run-status workflows__run-status--${run.status}`}>
+        <span
+          className={`workflows__run-status workflows__run-status--${run.status}`}
+        >
           {run.status}
         </span>
         <span>{new Date(run.startedAt).toLocaleString()}</span>
@@ -301,10 +309,10 @@ function RunDetail({ run }: { run: WorkflowRun }) {
               <span className="workflows__step-index">{s.index + 1}</span>
               <span className="workflows__step-type">{s.nodeType}</span>
               <span className="workflows__step-status">{s.status}</span>
-              {stepDur && (
-                <span className="workflows__step-dur">{stepDur}</span>
+              {stepDur && <span className="workflows__step-dur">{stepDur}</span>}
+              {s.error && (
+                <span className="workflows__step-error">{s.error}</span>
               )}
-              {s.error && <span className="workflows__step-error">{s.error}</span>}
             </li>
           );
         })}

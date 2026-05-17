@@ -21,6 +21,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.10",
     "@huggingface/transformers": "^4.2.0",
+    "@xyflow/react": "^12.10.2",
     "better-sqlite3": "^11.7.0",
     "chokidar": "^4.0.3",
     "ffmpeg-static": "^5.2.0",

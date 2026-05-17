@@ -1,32 +1,56 @@
-import type { WorkflowDef, WorkflowRun, WorkflowRunStep } from '../../../shared/types';
+import { useMemo } from 'react';
+import {
+  Background,
+  BackgroundVariant,
+  Controls,
+  Handle,
+  MarkerType,
+  MiniMap,
+  Position,
+  ReactFlow,
+  type Edge,
+  type Node,
+  type NodeProps,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+
+import type {
+  WorkflowDef,
+  WorkflowNodeDef,
+  WorkflowRun,
+  WorkflowRunStep,
+} from '../../../shared/types';
 
 /**
- * Visual rendering of a workflow's pipeline — one node per stage,
- * connector lines between them, status driven by the most recent run.
+ * Graph-first view of a workflow's pipeline. Built on @xyflow/react
+ * because the future story is a click-to-edit n8n-style editor —
+ * pan/zoom, custom node components, minimap, and connection drawing
+ * all come for free. For V1 the graph is read-only and laid out
+ * automatically (linear), but the same component will grow drag /
+ * connect handlers without redoing the substrate.
  *
- * No animation library; CSS keyframes power the running pulse and
- * connector flow. SVG so it stays crisp at any width.
- *
- * Layout: coordinate space scales with the node count so 2-node
- * workflows don't look stretched and 6-node ones don't get cramped.
+ * Live status comes from the most recent run: idle / running /
+ * completed / errored / skipped per node. Running nodes pulse;
+ * connectors between completed and running nodes glow live.
  */
+
+type StageState = 'idle' | 'running' | 'completed' | 'errored' | 'skipped';
+
+interface PipelineNodeData extends Record<string, unknown> {
+  node: WorkflowNodeDef;
+  index: number;
+  state: StageState;
+}
 
 interface Props {
   workflow: WorkflowDef;
   run: WorkflowRun | null;
-  trigger: WorkflowDef['trigger'];
-  /** Click handler — receives the node index. Used to scroll the JSON
-   *  editor to that node (optional). */
   onNodeClick?: (index: number) => void;
 }
 
-type StageState = 'idle' | 'running' | 'completed' | 'errored' | 'skipped';
-
-const STAGE_W = 160;
-const STAGE_GAP = 32;
-const NODE_R = 28;
-const ROW_Y = 70;
-const HEIGHT = 150;
+const NODE_X_SPACING = 240;
+const NODE_X_OFFSET = 60;
+const NODE_Y = 80;
 
 interface NodeIconSpec {
   glyph: string;
@@ -53,189 +77,174 @@ function stateOf(run: WorkflowRun | null, index: number): StageState {
   if (!run) return 'idle';
   const step: WorkflowRunStep | undefined = run.steps[index];
   if (!step) {
-    // The run started but hasn't reached this node yet.
     return run.status === 'running' ? 'idle' : 'skipped';
   }
   return step.status;
 }
 
-function connectorState(
-  prev: StageState,
-  next: StageState,
-): 'idle' | 'live' | 'done' | 'broken' {
-  if (prev === 'errored') return 'broken';
-  if (prev === 'completed' && next === 'running') return 'live';
-  if (prev === 'completed' && (next === 'completed' || next === 'skipped'))
-    return 'done';
-  return 'idle';
+/**
+ * Short, human label pulled out of a node's params. Helps tell two
+ * `http-fetch` nodes apart at a glance ("api.linear.app" vs
+ * "slack.com/api/search.messages"). Falls back to the type name.
+ */
+function summaryFor(node: WorkflowNodeDef): string {
+  const p = node.params ?? {};
+  if (node.type === 'http-fetch' && typeof p.url === 'string') {
+    try {
+      const u = new URL(p.url);
+      const path = u.pathname.length > 1 ? u.pathname : '';
+      return `${u.host}${path}`.slice(0, 36);
+    } catch {
+      return String(p.url).slice(0, 36);
+    }
+  }
+  if (node.type === 'inbox-write' && typeof p.source === 'string') {
+    return `→ ${p.source}`;
+  }
+  if (node.type === 'osascript' && typeof p.script === 'string') {
+    return `${p.script.trim().slice(0, 32)}…`;
+  }
+  if (node.type === 'shell' && typeof p.cmd === 'string') {
+    return String(p.cmd).slice(0, 36);
+  }
+  if (node.type === 'run-skill' && typeof p.skillId === 'string') {
+    return String(p.skillId);
+  }
+  if (node.type === 'notify' && typeof p.title === 'string') {
+    return String(p.title).slice(0, 36);
+  }
+  return '';
 }
 
-function triggerLabel(t: WorkflowDef['trigger']): string {
-  if (t.kind === 'cron') return `every ${t.every}`;
-  if (t.kind === 'manual') return `manual${t.palette ? ' · /' + t.palette : ''}`;
-  return `event · ${t.topic}`;
-}
-
-export function WorkflowPipeline({ workflow, run, trigger, onNodeClick }: Props) {
-  const count = Math.max(1, workflow.pipeline.length);
-  const totalW = count * STAGE_W + (count - 1) * STAGE_GAP + 80;
-
+function PipelineNode({ data }: NodeProps<Node<PipelineNodeData>>) {
+  const { node, index, state } = data;
+  const icon = iconFor(node.type);
+  const summary = summaryFor(node);
   return (
-    <div className="wf-pipeline">
-      <header className="wf-pipeline__head">
-        <span className="wf-pipeline__trigger">
-          <span className="wf-pipeline__trigger-dot" aria-hidden />
-          {triggerLabel(trigger)}
-        </span>
-        {run && (
-          <span className={`wf-pipeline__run-badge wf-pipeline__run-badge--${run.status}`}>
-            last run · {run.status}
-          </span>
-        )}
-      </header>
-      <div className="wf-pipeline__scroll">
-        <svg
-          className="wf-pipeline__svg"
-          viewBox={`0 0 ${totalW} ${HEIGHT}`}
-          preserveAspectRatio="xMinYMid meet"
-          width={totalW}
-          height={HEIGHT}
-        >
-          <defs>
-            <filter
-              id="wf-node-glow"
-              x="-50%"
-              y="-50%"
-              width="200%"
-              height="200%"
-            >
-              <feGaussianBlur stdDeviation={3} />
-              <feMerge>
-                <feMergeNode />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-
-          {workflow.pipeline.map((node, i) => {
-            const x = 40 + i * (STAGE_W + STAGE_GAP) + STAGE_W / 2;
-            const state = stateOf(run, i);
-            const icon = iconFor(node.type);
-            const nextNode = workflow.pipeline[i + 1];
-            const nextX = nextNode
-              ? 40 + (i + 1) * (STAGE_W + STAGE_GAP) + STAGE_W / 2
-              : null;
-            const nextState = nextNode ? stateOf(run, i + 1) : null;
-            const conn = nextState
-              ? connectorState(state, nextState)
-              : 'idle';
-            return (
-              <g key={i} className={`wf-stage wf-stage--${state}`}>
-                {/* Connector to the next node. Drawn from THIS stage so
-                    its state controls the line color. */}
-                {nextX !== null && (
-                  <g className={`wf-conn wf-conn--${conn}`}>
-                    <line
-                      x1={x + NODE_R + 4}
-                      y1={ROW_Y}
-                      x2={nextX - NODE_R - 4}
-                      y2={ROW_Y}
-                      strokeDasharray="4 6"
-                      className="wf-conn__line"
-                    />
-                    {conn === 'live' && (
-                      <circle
-                        r={3}
-                        fill="currentColor"
-                        className="wf-conn__bead"
-                      >
-                        <animateMotion
-                          dur="1.4s"
-                          repeatCount="indefinite"
-                          path={`M${x + NODE_R + 4},${ROW_Y} L${nextX - NODE_R - 4},${ROW_Y}`}
-                        />
-                      </circle>
-                    )}
-                  </g>
-                )}
-
-                {/* Outer halo ring. */}
-                <circle
-                  cx={x}
-                  cy={ROW_Y}
-                  r={NODE_R + 4}
-                  fill="none"
-                  stroke={icon.hue}
-                  strokeOpacity={0.25}
-                  strokeWidth={1}
-                  filter="url(#wf-node-glow)"
-                  className="wf-stage__halo"
-                />
-                {/* Main node disk. */}
-                <circle
-                  cx={x}
-                  cy={ROW_Y}
-                  r={NODE_R}
-                  fill={state === 'idle' ? 'rgba(255,255,255,0.04)' : `${icon.hue}22`}
-                  stroke={icon.hue}
-                  strokeOpacity={state === 'idle' ? 0.4 : 0.85}
-                  strokeWidth={1.5}
-                  className="wf-stage__disk"
-                  onClick={onNodeClick ? () => onNodeClick(i) : undefined}
-                  style={{ cursor: onNodeClick ? 'pointer' : undefined }}
-                />
-                {/* Glyph icon. */}
-                <text
-                  x={x}
-                  y={ROW_Y + 8}
-                  textAnchor="middle"
-                  className="wf-stage__glyph"
-                  fill={icon.hue}
-                  pointerEvents="none"
-                >
-                  {icon.glyph}
-                </text>
-                {/* Node type label below. */}
-                <text
-                  x={x}
-                  y={ROW_Y + NODE_R + 22}
-                  textAnchor="middle"
-                  className="wf-stage__label"
-                  pointerEvents="none"
-                >
-                  {node.type}
-                </text>
-                {/* Index badge above. */}
-                <text
-                  x={x}
-                  y={ROW_Y - NODE_R - 10}
-                  textAnchor="middle"
-                  className="wf-stage__index"
-                  pointerEvents="none"
-                >
-                  {i + 1}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
+    <div
+      className={`wf-node wf-node--${state}`}
+      style={{
+        ['--node-hue' as string]: icon.hue,
+      }}
+    >
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="wf-node__handle"
+      />
+      <div className="wf-node__row">
+        <span className="wf-node__index">{index + 1}</span>
+        <span className="wf-node__glyph">{icon.glyph}</span>
+        <div className="wf-node__meta">
+          <span className="wf-node__type">{node.type}</span>
+          {summary && <span className="wf-node__summary">{summary}</span>}
+        </div>
       </div>
-      <footer className="wf-pipeline__legend">
-        <Swatch state="idle" label="idle" />
-        <Swatch state="running" label="running" />
-        <Swatch state="completed" label="done" />
-        <Swatch state="errored" label="error" />
-        <Swatch state="skipped" label="skipped" />
-      </footer>
+      {state !== 'idle' && (
+        <span className={`wf-node__status wf-node__status--${state}`}>
+          {state}
+        </span>
+      )}
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="wf-node__handle"
+      />
     </div>
   );
 }
 
-function Swatch({ state, label }: { state: StageState; label: string }) {
+const NODE_TYPES = { pipeline: PipelineNode };
+
+function edgeStyleFor(
+  prev: StageState,
+  next: StageState,
+): { stroke: string; animated: boolean } {
+  if (prev === 'errored') return { stroke: '#FF8585', animated: false };
+  if (prev === 'completed' && next === 'running')
+    return { stroke: '#4DA3FF', animated: true };
+  if (prev === 'completed' && next === 'completed')
+    return { stroke: '#7AE2A0', animated: false };
+  return { stroke: 'rgba(255,255,255,0.25)', animated: false };
+}
+
+export function WorkflowPipeline({ workflow, run, onNodeClick }: Props) {
+  const { nodes, edges } = useMemo(() => {
+    const nodes: Node<PipelineNodeData>[] = workflow.pipeline.map(
+      (node, i) => ({
+        id: `n${i}`,
+        type: 'pipeline',
+        position: { x: NODE_X_OFFSET + i * NODE_X_SPACING, y: NODE_Y },
+        data: { node, index: i, state: stateOf(run, i) },
+        draggable: false,
+        connectable: false,
+        selectable: !!onNodeClick,
+      }),
+    );
+    const edges: Edge[] = [];
+    for (let i = 0; i < workflow.pipeline.length - 1; i++) {
+      const prevState = stateOf(run, i);
+      const nextState = stateOf(run, i + 1);
+      const style = edgeStyleFor(prevState, nextState);
+      edges.push({
+        id: `e${i}`,
+        source: `n${i}`,
+        target: `n${i + 1}`,
+        animated: style.animated,
+        style: { stroke: style.stroke, strokeWidth: 1.5 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: style.stroke },
+      });
+    }
+    return { nodes, edges };
+  }, [workflow, run, onNodeClick]);
+
+  const showMinimap = workflow.pipeline.length > 4;
+
   return (
-    <span className={`wf-swatch wf-swatch--${state}`}>
-      <span className="wf-swatch__dot" aria-hidden />
-      {label}
-    </span>
+    <div className="wf-canvas">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={NODE_TYPES}
+        fitView
+        fitViewOptions={{ padding: 0.2, maxZoom: 1.2 }}
+        proOptions={{ hideAttribution: true }}
+        onNodeClick={
+          onNodeClick
+            ? (_, n) => {
+                const d = n.data as PipelineNodeData;
+                onNodeClick(d.index);
+              }
+            : undefined
+        }
+        panOnDrag
+        zoomOnScroll
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={!!onNodeClick}
+      >
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={20}
+          size={1}
+          color="rgba(255,255,255,0.06)"
+        />
+        <Controls
+          showInteractive={false}
+          className="wf-canvas__controls"
+        />
+        {showMinimap && (
+          <MiniMap
+            className="wf-canvas__minimap"
+            nodeColor={(n) =>
+              iconFor((n.data as PipelineNodeData).node.type).hue
+            }
+            maskColor="rgba(8, 14, 20, 0.7)"
+            pannable
+            zoomable
+          />
+        )}
+      </ReactFlow>
+    </div>
   );
 }
