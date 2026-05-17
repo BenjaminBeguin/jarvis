@@ -48,7 +48,7 @@ interface Props {
   onNodeClick?: (index: number) => void;
 }
 
-const NODE_X_SPACING = 240;
+const NODE_X_SPACING = 340;
 const NODE_X_OFFSET = 60;
 const NODE_Y = 80;
 
