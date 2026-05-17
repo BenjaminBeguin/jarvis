@@ -14723,3 +14723,246 @@ button:disabled:hover {
 .flow-stream__count {
   color: var(--text-dim);
 }
+
+/* Workflow pipeline visualization (Workflows page) */
+
+.wf-pipeline {
+  margin: 14px 0 20px;
+  padding: 14px 16px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  background:
+    radial-gradient(
+      ellipse at top left,
+      rgba(0, 212, 255, 0.05),
+      transparent 60%
+    ),
+    rgba(255, 255, 255, 0.015);
+}
+
+.wf-pipeline__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.wf-pipeline__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.wf-pipeline__trigger-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(0, 212, 255, 0.6);
+  box-shadow: 0 0 6px rgba(0, 212, 255, 0.6);
+}
+
+.wf-pipeline__run-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid currentColor;
+  opacity: 0.85;
+}
+
+.wf-pipeline__run-badge--running {
+  color: #4DA3FF;
+}
+
+.wf-pipeline__run-badge--completed {
+  color: #7AE2A0;
+}
+
+.wf-pipeline__run-badge--errored {
+  color: #FF8585;
+}
+
+.wf-pipeline__run-badge--aborted {
+  color: #FFB870;
+}
+
+.wf-pipeline__scroll {
+  overflow-x: auto;
+  margin: 0 -16px;
+  padding: 0 16px;
+}
+
+.wf-pipeline__svg {
+  display: block;
+  font-family: var(--font-mono), monospace;
+}
+
+.wf-pipeline__legend {
+  display: flex;
+  gap: 14px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.wf-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wf-swatch__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+}
+
+.wf-swatch--idle {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.wf-swatch--running {
+  color: #4DA3FF;
+}
+
+.wf-swatch--running .wf-swatch__dot {
+  background: #4DA3FF;
+  box-shadow: 0 0 4px #4DA3FF;
+}
+
+.wf-swatch--completed {
+  color: #7AE2A0;
+}
+
+.wf-swatch--completed .wf-swatch__dot {
+  background: #7AE2A0;
+}
+
+.wf-swatch--errored {
+  color: #FF8585;
+}
+
+.wf-swatch--errored .wf-swatch__dot {
+  background: #FF8585;
+}
+
+.wf-swatch--skipped {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.wf-stage__glyph {
+  font-size: 22px;
+  font-weight: 500;
+  text-anchor: middle;
+}
+
+.wf-stage__label {
+  font-size: 11px;
+  fill: var(--text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.wf-stage__index {
+  font-size: 9px;
+  fill: rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.1em;
+}
+
+.wf-stage--running .wf-stage__disk {
+  animation: wf-pulse 1.4s ease-in-out infinite;
+}
+
+.wf-stage--running .wf-stage__halo {
+  animation: wf-halo-pulse 1.8s ease-in-out infinite;
+}
+
+.wf-stage--errored .wf-stage__disk {
+  stroke: #FF8585 !important;
+  fill: rgba(255, 133, 133, 0.12) !important;
+}
+
+.wf-stage--errored .wf-stage__glyph {
+  fill: #FF8585 !important;
+}
+
+.wf-stage--completed .wf-stage__disk {
+  stroke: #7AE2A0 !important;
+  fill: rgba(122, 226, 160, 0.1) !important;
+}
+
+.wf-stage--skipped .wf-stage__disk,
+.wf-stage--skipped .wf-stage__glyph,
+.wf-stage--skipped .wf-stage__halo {
+  opacity: 0.35;
+}
+
+.wf-stage--idle .wf-stage__halo {
+  opacity: 0.6;
+}
+
+@keyframes wf-pulse {
+  0%, 100% {
+    stroke-width: 1.5;
+    filter: drop-shadow(0 0 4px currentColor);
+  }
+  50% {
+    stroke-width: 2.2;
+    filter: drop-shadow(0 0 10px currentColor);
+  }
+}
+
+@keyframes wf-halo-pulse {
+  0%, 100% {
+    stroke-opacity: 0.25;
+  }
+  50% {
+    stroke-opacity: 0.65;
+  }
+}
+
+.wf-conn__line {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1.2;
+}
+
+.wf-conn--live .wf-conn__line {
+  stroke: #4DA3FF;
+  stroke-opacity: 0.7;
+  animation: wf-conn-flow 1s linear infinite;
+}
+
+.wf-conn--live {
+  color: #4DA3FF;
+}
+
+.wf-conn--done .wf-conn__line {
+  stroke: #7AE2A0;
+  stroke-opacity: 0.45;
+  stroke-dasharray: 0;
+}
+
+.wf-conn--broken .wf-conn__line {
+  stroke: #FF8585;
+  stroke-opacity: 0.5;
+  stroke-dasharray: 2 4;
+}
+
+@keyframes wf-conn-flow {
+  from {
+    stroke-dashoffset: 10;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}

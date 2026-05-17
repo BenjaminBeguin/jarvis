@@ -51,19 +51,19 @@ const BUILTIN_SOURCE_META: Record<
   linear: {
     label: 'Linear · needs you',
     description:
-      'Direct Linear GraphQL fetch — issues assigned to you and not yet done. Token read from the linear MCP entry in ~/.jarvis/mcp.json.',
+      'Driven by the linear-inbox-sync workflow — issues assigned to you and not yet done. Edit the workflow JSON to tune cadence or filters.',
     configureHint: 'integrations',
   },
   slack: {
     label: 'Slack · waiting on you',
     description:
-      'Direct Slack Web API — DMs + @mentions waiting on you. Token read from the slack MCP entry; xoxp- gives the full inbox, xoxb- is degraded (channel mentions only).',
+      'Driven by the slack-inbox-sync workflow — DMs + @mentions waiting on you. Requires a user token (xoxp-*); bot tokens cannot call search.messages.',
     configureHint: 'integrations',
   },
   calendar: {
     label: 'Calendar today',
     description:
-      'macOS Calendar via osascript — events in the next 12h, meeting URLs auto-extracted. No token; requires Calendar automation permission on first run.',
+      'Driven by the calendar-today-sync workflow — events in the next 12h via osascript, meeting URLs auto-extracted. Requires Calendar automation permission on first run.',
     configureHint: null,
   },
 };

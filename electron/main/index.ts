@@ -37,12 +37,10 @@ import { InboxProximityWatcher } from './inbox-proximity.js';
 import { MeetingActivityWatcher } from './meeting-activity-watcher.js';
 import { BUILTIN_BRIEFING_KINDS } from './seeds/briefing-kinds.js';
 import {
-  calendarInboxSource,
   failedRoutinesInboxSource,
   prAddressCommentsInboxSource,
   prReviewQueueInboxSource,
   remindersInboxSource,
-  slackInboxSource,
   userInboxSource,
 } from './inbox-sources/index.js';
 import { registerAllIpc } from './ipc/index.js';
@@ -234,11 +232,11 @@ inbox.register(remindersInboxSource(reminders));
 inbox.register(failedRoutinesInboxSource());
 inbox.register(prReviewQueueInboxSource(projects));
 inbox.register(prAddressCommentsInboxSource(projects));
-// Linear used to be a registered InboxSource here. It's now driven
-// by the linear-inbox-sync workflow (seeds/workflows/linear-inbox.ts)
-// which calls inbox.setExternalItems() at the end of its pipeline.
-inbox.register(slackInboxSource(mcp));
-inbox.register(calendarInboxSource());
+// Linear / Slack / Calendar used to be registered InboxSources here.
+// They're now driven by workflows (seeds/workflows/{linear,slack,
+// calendar}-*.ts) whose inbox-write nodes call
+// inbox.setExternalItems() at the end of each pipeline.
+//
 // User-authored scenarios — reads JSON files under ~/.jarvis/inbox/
 // that any skill / routine can write to. Reserved names (linear, slack,
 // calendar) are filtered out so they can't shadow the built-ins above.

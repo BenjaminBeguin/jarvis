@@ -11,12 +11,18 @@ import type { NodeHandlerInput } from './types.js';
  *     url: string
  *     method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'  // default GET
  *     headers?: Record<string, string>
- *     auth?: { mcp: 'linear' | 'slack' | ...; var: 'LINEAR_API_TOKEN' | ... }
+ *     auth?: {
+ *       mcp: 'linear' | 'slack' | ...;
+ *       var: 'LINEAR_API_TOKEN' | ...;
+ *       scheme?: 'raw' | 'bearer'  // default 'raw' (Linear-style)
+ *     }
  *       Reads a token from ~/.jarvis/mcp.json env on the named server.
- *       Sent as `Authorization: <token>` (Linear style — no `Bearer`
- *       prefix). For `Bearer <token>` use `headers` directly instead.
+ *       'raw' → `Authorization: <token>` (Linear style).
+ *       'bearer' → `Authorization: Bearer <token>` (Slack, most others).
  *     body?: string | object
- *       Object → JSON.stringify + Content-Type: application/json.
+ *       Encoded according to `bodyEncoding`.
+ *     bodyEncoding?: 'json' | 'form'  // default 'json'
+ *       'form' → URLSearchParams + Content-Type: application/x-www-form-urlencoded.
  *     responseType?: 'json' | 'text'  // default 'json'
  *   }
  *
@@ -27,8 +33,9 @@ interface HttpFetchParams {
   url: string;
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   headers?: Record<string, string>;
-  auth?: { mcp: string; var: string };
+  auth?: { mcp: string; var: string; scheme?: 'raw' | 'bearer' };
   body?: unknown;
+  bodyEncoding?: 'json' | 'form';
   responseType?: 'json' | 'text';
 }
 
@@ -57,12 +64,26 @@ export const httpFetchNode = fromPromise<
         `http-fetch: token '${params.auth.var}' not set on MCP '${params.auth.mcp}'`,
       );
     }
-    headers['Authorization'] = token;
+    headers['Authorization'] =
+      params.auth.scheme === 'bearer' ? `Bearer ${token}` : token;
   }
 
   let body: BodyInit | undefined;
   if (params.body !== undefined && params.body !== null) {
-    if (typeof params.body === 'string') {
+    const encoding = params.bodyEncoding ?? 'json';
+    if (encoding === 'form') {
+      if (typeof params.body !== 'object') {
+        throw new Error('http-fetch: form encoding requires a body object');
+      }
+      const form = new URLSearchParams();
+      for (const [k, v] of Object.entries(params.body as Record<string, unknown>)) {
+        form.set(k, typeof v === 'string' ? v : JSON.stringify(v));
+      }
+      body = form;
+      if (!headers['Content-Type']) {
+        headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      }
+    } else if (typeof params.body === 'string') {
       body = params.body;
     } else {
       body = JSON.stringify(params.body);

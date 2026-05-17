@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { WorkflowDef, WorkflowRun } from '../../shared/types';
 import { toast } from './Toaster';
+import { WorkflowPipeline } from './workflows/WorkflowPipeline';
 
 /**
  * Workflows tab — list every workflow loaded from
@@ -214,6 +215,12 @@ export function Workflows() {
                 </button>
               </div>
             </header>
+
+            <WorkflowPipeline
+              workflow={selected}
+              run={recentRun}
+              trigger={selected.trigger}
+            />
 
             <div className="workflows__detail">
               <section className="workflows__editor">
