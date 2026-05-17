@@ -12,8 +12,8 @@ import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
 import { Activity } from './Activity';
 import { Dashboard } from './Dashboard';
-import { NavTabs, type NavTabItem } from './NavTabs';
 import { Settings } from './Settings';
+import { Sidebar, type SidebarSection } from './Sidebar';
 import { Skills } from './Skills';
 import { toast } from './Toaster';
 import { Toaster } from './Toaster';
@@ -389,86 +389,102 @@ export function Shell({ status }: Props) {
   const PageComponent = openModuleId ? getModulePage(openModuleId) : null;
 
   /**
-   * Top-nav items, in order. NavTabs handles the rendering + overflow
-   * collapse. Module pages (Notes & Reminders, Meetings, Calendar) get
-   * inlined here so the user reaches them in one click — the prior
-   * second-row "Pages" sub-nav is gone. Skills + Routines fold into a
-   * single "Build" dropdown since they're conceptually the same surface
-   * (things you author to teach Jarvis what to do).
+   * Sidebar sections. Three groups so the vertical rail reads at a
+   * glance — main pages on top, capture-style module pages in the
+   * middle, automation authoring at the bottom. Module pages get
+   * shorter labels here than their module.name (e.g. "Notes" instead
+   * of "Notes & Reminders") so they fit cleanly in the rail.
    */
-  const tabItems: NavTabItem[] = [
+  const MODULE_SHORT_LABEL: Record<string, string> = {
+    'quick-note': 'Notes',
+    'meeting-recorder': 'Meetings',
+    calendar: 'Calendar',
+  };
+  const MODULE_ICON: Record<string, string> = {
+    'quick-note': 'N',
+    'meeting-recorder': 'M',
+    calendar: 'C',
+  };
+
+  const sidebarSections: SidebarSection[] = [
     {
-      kind: 'tab',
-      id: 'dashboard',
-      label: 'Dashboard',
-      isActive: tab === 'dashboard' && !openModuleId,
-      onClick: () => {
-        setTab('dashboard');
-        setOpenModuleId(null);
-      },
-      title: '⌘1 · Your curated home — Inbox, briefings, routines you pinned',
+      id: 'main',
+      items: [
+        {
+          id: 'dashboard',
+          label: 'Dashboard',
+          icon: 'D',
+          isActive: tab === 'dashboard' && !openModuleId,
+          onClick: () => {
+            setTab('dashboard');
+            setOpenModuleId(null);
+          },
+          title: '⌘1 · Curated home — pinned briefings + inbox + routines',
+        },
+        {
+          id: 'inbox',
+          label: 'Inbox',
+          icon: 'I',
+          isActive: tab === 'inbox' && !openModuleId,
+          onClick: () => {
+            setTab('inbox');
+            setOpenModuleId(null);
+          },
+          title: '⌘3 · Triage feed (PRs / reminders / Linear / failed routines)',
+        },
+        {
+          id: 'observatory',
+          label: 'Observatory',
+          icon: 'O',
+          isActive: tab === 'observatory' && !openModuleId,
+          onClick: () => {
+            setTab('observatory');
+            setOpenModuleId(null);
+          },
+          title: '⌘2 · Live + recent agent runs',
+        },
+      ],
     },
     {
-      kind: 'tab',
-      id: 'inbox',
-      label: 'Inbox',
-      isActive: tab === 'inbox' && !openModuleId,
-      onClick: () => {
-        setTab('inbox');
-        setOpenModuleId(null);
-      },
-      title:
-        '⌘3 · Triage: PRs / reminders / Linear / failed routines + live strips (meeting, awaiting reply)',
+      id: 'capture',
+      label: 'Capture',
+      items: moduleList
+        .filter((m) => m.hasPage && m.enabled)
+        .map((m) => ({
+          id: `module:${m.id}`,
+          label: MODULE_SHORT_LABEL[m.id] ?? m.name,
+          icon: MODULE_ICON[m.id] ?? m.name.charAt(0).toUpperCase(),
+          isActive: openModuleId === m.id,
+          onClick: () => setOpenModuleId(m.id),
+          title: m.description,
+        })),
     },
     {
-      kind: 'tab',
-      id: 'observatory',
-      label: 'Observatory',
-      isActive: tab === 'observatory' && !openModuleId,
-      onClick: () => {
-        setTab('observatory');
-        setOpenModuleId(null);
-      },
-      title: '⌘2 · Live + recent agent runs (constellation + list)',
-    },
-    ...moduleList
-      .filter((m) => m.hasPage && m.enabled)
-      .map<NavTabItem>((m) => ({
-        kind: 'tab',
-        id: `module:${m.id}`,
-        label: m.name,
-        isActive: openModuleId === m.id,
-        onClick: () => setOpenModuleId(m.id),
-        title: m.description,
-      })),
-    {
-      kind: 'dropdown',
       id: 'build',
       label: 'Build',
-      isActive:
-        (tab === 'routines' || tab === 'skills') && !openModuleId,
-      title: 'Skills + Routines — what you authored to teach Jarvis',
-      options: [
+      items: [
         {
           id: 'routines',
           label: 'Routines',
+          icon: 'R',
           isActive: tab === 'routines' && !openModuleId,
-          hint: 'Skills on a schedule',
           onClick: () => {
             setTab('routines');
             setOpenModuleId(null);
           },
+          title: 'Skills on a schedule',
         },
         {
           id: 'skills',
           label: 'Skills',
+          icon: 'S',
           isActive: tab === 'skills' && !openModuleId,
-          hint: 'SKILL.md prompts',
           onClick: () => {
             setTab('skills');
             setOpenModuleId(null);
             setFocusedSkillId(null);
           },
+          title: 'SKILL.md prompts (the things Jarvis runs)',
         },
       ],
     },
@@ -501,7 +517,6 @@ export function Shell({ status }: Props) {
             →
           </button>
         </div>
-        <NavTabs items={tabItems} />
         <div className="shell__right">
           <ScopePicker
             projects={projectList}
@@ -643,7 +658,9 @@ export function Shell({ status }: Props) {
         </div>
       </nav>
 
-      <div className="shell__body">
+      <div className="shell__main">
+        <Sidebar sections={sidebarSections} />
+        <div className="shell__body">
         {openModuleId && PageComponent ? (
           <PageComponent />
         ) : tab === 'dashboard' ? (
@@ -683,6 +700,7 @@ export function Shell({ status }: Props) {
             onInitialSectionConsumed={() => setPendingSettingsSection(null)}
           />
         )}
+        </div>
       </div>
       <MeetingOverlay />
       <MeetingPrompt />

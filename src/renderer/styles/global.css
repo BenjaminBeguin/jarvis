@@ -1476,148 +1476,6 @@ button:disabled:hover {
   color: var(--accent);
 }
 
-.shell__tabs {
-  display: flex;
-  gap: 4px;
-  -webkit-app-region: no-drag;
-  align-items: center;
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-}
-
-/* Off-screen mirror used to measure natural widths of every tab so
-   NavTabs can decide which ones fit and which collapse into the
-   More dropdown. Same tab class for accurate sizing; absolute +
-   hidden so it doesn't paint. */
-.shell__tabs-measure {
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: flex;
-  gap: 4px;
-  visibility: hidden;
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-.shell__tab {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-dim);
-  font-family: var(--mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  padding: 6px 12px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.shell__tab:hover {
-  background: rgba(0, 212, 255, 0.04);
-  color: var(--text);
-}
-
-.shell__tab--active {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: rgba(0, 212, 255, 0.06);
-  text-shadow: var(--accent-glow);
-}
-
-.shell__tab--has-menu {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.shell__tab-caret {
-  font-size: 9px;
-  color: var(--text-faint);
-}
-.shell__tab--active .shell__tab-caret {
-  color: var(--accent);
-}
-
-/* Dropdown wrapper so the menu can anchor to its tab. */
-.shell__tab-wrap {
-  position: relative;
-}
-
-.shell__tab-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  min-width: 200px;
-  background: var(--bg-elev-2, #0b1118);
-  border: 1px solid var(--border-strong);
-  border-radius: 2px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
-  padding: 4px;
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.shell__tab-menu-item {
-  background: transparent;
-  border: 0;
-  color: var(--text-dim);
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  padding: 8px 10px;
-  text-align: left;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.shell__tab-menu-item:hover {
-  background: rgba(0, 212, 255, 0.06);
-  color: var(--text);
-}
-.shell__tab-menu-item--active {
-  color: var(--accent);
-  background: rgba(0, 212, 255, 0.08);
-}
-.shell__tab-menu-hint {
-  font-size: 9.5px;
-  color: var(--text-faint);
-  letter-spacing: 0.02em;
-  text-transform: none;
-}
-
-.shell__tab-menu-group {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid var(--border);
-}
-.shell__tab-menu-group:first-child {
-  border-top: 0;
-  margin-top: 0;
-  padding-top: 0;
-}
-.shell__tab-menu-group-label {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.18em;
-  color: var(--text-faint);
-  padding: 4px 10px;
-  text-transform: uppercase;
-}
-
-/* More overflow trigger uses the same tab styling — only difference
-   is the menu anchors right-aligned so it doesn't run off the edge. */
-.shell__nav-more .shell__tab-menu {
-  left: auto;
-  right: 0;
-}
 
 .shell__right {
   margin-left: auto;
@@ -2630,11 +2488,6 @@ button:disabled:hover {
   font-size: 10px;
 }
 
-/* Settings tab pill: slightly distinct so the gear icon reads as "config". */
-.shell__tab--settings {
-  margin-left: auto;
-}
-
 /* Preferences modal — reuses the project-dialog base styles. */
 .preferences-dialog {
   width: min(720px, calc(100% - 60px));
@@ -2691,10 +2544,150 @@ button:disabled:hover {
   box-shadow: var(--accent-glow-soft);
 }
 
-.shell__body {
+.shell__main {
   flex: 1;
   min-height: 0;
   display: flex;
+  min-width: 0;
+}
+
+.shell__body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+}
+
+/* ----- Sidebar nav rail --------------------------------------------- */
+
+.shell__sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 184px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, rgba(0, 212, 255, 0.03), transparent 60%);
+  border-right: 1px solid var(--border);
+  transition: width 160ms ease;
+  overflow: hidden;
+}
+
+.shell__sidebar--collapsed {
+  width: 52px;
+}
+
+.shell__sidebar-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 6px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.shell__sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shell__sidebar-section-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 10px 10px 4px;
+}
+
+.shell__sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 2px;
+  text-align: left;
+  width: 100%;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.shell__sidebar-item:hover {
+  color: var(--text);
+  background: rgba(0, 212, 255, 0.05);
+}
+
+.shell__sidebar-item--active {
+  color: var(--accent);
+  border-color: rgba(0, 212, 255, 0.42);
+  background: rgba(0, 212, 255, 0.07);
+  text-shadow: var(--accent-glow);
+}
+
+.shell__sidebar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: inherit;
+}
+
+.shell__sidebar-item--active .shell__sidebar-icon {
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.shell__sidebar-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Collapsed: drop labels, center the icon. The icon pill is now the
+   whole row's hit target. */
+.shell__sidebar--collapsed .shell__sidebar-item {
+  justify-content: center;
+  gap: 0;
+  padding: 6px 4px;
+}
+.shell__sidebar--collapsed .shell__sidebar-section + .shell__sidebar-section {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.shell__sidebar-toggle {
+  flex-shrink: 0;
+  height: 28px;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.shell__sidebar-toggle:hover {
+  color: var(--accent);
+  background: rgba(0, 212, 255, 0.04);
 }
 
 /* ----- Inbox: daily-driver triage list ----------------------------------- */
