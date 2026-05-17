@@ -15,6 +15,7 @@ import type {
 } from '@shared/types';
 
 import type { TurnResult } from '../await-turn.js';
+import type { ClassifyResult } from '../intent-classifier.js';
 import type { UserContextProvider } from '../user-context.js';
 
 export type ParsedFreeTextIntent =
@@ -163,6 +164,11 @@ export interface ModuleContext {
    *  by modules that surface budget info externally — Telegram bot
    *  /spend command, future module-level digests. */
   getCostBreakdown(windowDays: number): CostBreakdown;
+  /** Decide whether `message` (the last assistant text in a chat) is
+   *  asking the user for a reply. Resolves to null if the classifier
+   *  is unavailable (offline, auth error, timeout); callers should
+   *  fall back to their existing heuristic in that case. */
+  classifyIntent(message: string): Promise<ClassifyResult | null>;
 }
 
 /**

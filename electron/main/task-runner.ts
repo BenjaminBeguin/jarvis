@@ -14,6 +14,7 @@ import type {
 } from '@shared/types';
 import { AsyncMessageQueue } from './async-message-queue.js';
 import { appendTaskEvent, insertTask, updateTaskStatus } from './db.js';
+import type { IntentClassifier } from './intent-classifier.js';
 import type { McpConfigStore } from './mcp-config.js';
 import type { ProjectStore } from './projects.js';
 import type { PreferencesStore } from './preferences-store.js';
@@ -209,6 +210,7 @@ export class TaskRunner extends EventEmitter {
   private jarvisMcp: unknown = null;
   private skillSessions: SkillSessionStore | null = null;
   private auth: AuthContext = { mode: 'subscription' };
+  private classifier: IntentClassifier | null = null;
 
   setSkillStore(store: SkillStore): void {
     this.skills = store;
@@ -243,6 +245,14 @@ export class TaskRunner extends EventEmitter {
 
   setAuth(ctx: AuthContext): void {
     this.auth = ctx;
+  }
+
+  /** Optional intent classifier. When set, the runner uses it to refine
+   *  the multi-turn `awaitingInput: true` flag on `result` events —
+   *  agent messages that aren't actually asking the user for a reply
+   *  (sign-offs, completion summaries) stay `awaitingInput: false`. */
+  setClassifier(classifier: IntentClassifier | null): void {
+    this.classifier = classifier;
   }
 
   /**
@@ -708,7 +718,26 @@ export class TaskRunner extends EventEmitter {
           if (record.unattended) {
             record.summary = { ...record.summary, costUsd: cost };
           } else {
-            record.summary = { ...record.summary, awaitingInput: true, costUsd: cost };
+            // Default to true (existing behavior); refine with the
+            // classifier if available. The await blocks the emit so the
+            // awaitingFlipped watcher in main and awaitTurnResult both
+            // see the final value, not a transient one.
+            let nextAwaiting = true;
+            const finalText = lastAssistantText(record.events);
+            if (this.classifier && finalText) {
+              const verdict = await this.classifier.classify(finalText);
+              if (verdict) nextAwaiting = verdict.awaiting;
+            } else if (finalText && !looksLikeQuestion(finalText)) {
+              // No classifier available — fall back to the same
+              // heuristic used for unattended-fire triage so offline /
+              // auth-broken paths still benefit.
+              nextAwaiting = false;
+            }
+            record.summary = {
+              ...record.summary,
+              awaitingInput: nextAwaiting,
+              costUsd: cost,
+            };
           }
           this.emit('status', record.summary);
         } else if (m.type === 'assistant' || m.type === 'user') {

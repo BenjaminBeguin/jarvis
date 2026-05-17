@@ -41,6 +41,17 @@ import type { InboxSource } from '../inbox.js';
 
 const INBOX_DIR = join(homedir(), '.jarvis', 'inbox');
 
+/**
+ * Source names owned by direct-JS built-ins (linear/slack/calendar
+ * inbox-sources). If a JSON file shows up here with one of these
+ * names — either a stale file from before the migration or a user
+ * who manually re-ran the retired skill — we skip it. The built-in
+ * source is the canonical owner; letting the JSON shadow it would
+ * produce ghost rows under the wrong section.
+ */
+const RESERVED_SOURCES = new Set(['linear', 'slack', 'calendar']);
+let loggedReserved = false;
+
 interface InboxFileWrapper {
   source?: string;
   label?: string;
@@ -87,6 +98,17 @@ export const userInboxSource: InboxSource = {
       if (entry.name.startsWith('.')) continue;
       const path = join(INBOX_DIR, entry.name);
       const sourceFromName = entry.name.replace(/\.json$/, '');
+      // Defense-in-depth: even if the migration's delete step failed,
+      // never let a JSON file shadow a built-in JS source.
+      if (RESERVED_SOURCES.has(sourceFromName)) {
+        if (!loggedReserved) {
+          console.warn(
+            `[inbox/user] ignoring ${entry.name} — '${sourceFromName}' is now a built-in JS source. Delete the file to silence this.`,
+          );
+          loggedReserved = true;
+        }
+        continue;
+      }
 
       let raw: string;
       let mtimeMs = Date.now();

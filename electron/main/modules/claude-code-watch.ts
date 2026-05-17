@@ -93,6 +93,23 @@ interface SessionContext {
   title: string;
   backfill: unknown[];
   lastKind: LastEventKind;
+  lastAssistantText: string;
+}
+
+function extractAssistantText(event: unknown): string {
+  if (!event || typeof event !== 'object') return '';
+  const e = event as { type?: string; message?: { content?: unknown } };
+  if (e.type !== 'assistant') return '';
+  const content = e.message?.content;
+  if (!Array.isArray(content)) return '';
+  return (content as Array<Record<string, unknown>>)
+    .flatMap((b) =>
+      b['type'] === 'text' && typeof b['text'] === 'string'
+        ? [b['text'] as string]
+        : [],
+    )
+    .join('\n')
+    .trim();
 }
 
 function extractSessionContext(filePath: string): SessionContext {
@@ -100,6 +117,7 @@ function extractSessionContext(filePath: string): SessionContext {
     title: 'Claude Code session',
     backfill: [],
     lastKind: null,
+    lastAssistantText: '',
   };
   let raw: string;
   try {
@@ -155,7 +173,12 @@ function extractSessionContext(filePath: string): SessionContext {
     }
     const event = transformEvent(parsed);
     if (!event) continue;
-    if (ctx.lastKind === null) ctx.lastKind = eventKind(event);
+    if (ctx.lastKind === null) {
+      ctx.lastKind = eventKind(event);
+      if (ctx.lastKind === 'assistant') {
+        ctx.lastAssistantText = extractAssistantText(event);
+      }
+    }
     collected.push(event);
   }
   ctx.backfill = collected.reverse();
@@ -239,7 +262,12 @@ export class ClaudeCodeWatchModule implements Module {
     const taskId = deriveTaskId(filePath);
     if (ctx.hasExternalTask(taskId)) return;
 
-    const { title: rawTitle, backfill, lastKind } = extractSessionContext(filePath);
+    const {
+      title: rawTitle,
+      backfill,
+      lastKind,
+      lastAssistantText,
+    } = extractSessionContext(filePath);
     const title = `${prettyProject(projectSlug)} · ${rawTitle}`;
     const isActive = Date.now() - mtimeMs < ACTIVE_THRESHOLD_MS;
     const summary: TaskSummary = {
@@ -273,6 +301,31 @@ export class ClaudeCodeWatchModule implements Module {
       startedAt: summary.startedAt,
       lastEventKind: lastKind,
     });
+
+    // Refine awaitingInput with intent classification. Initial value (above)
+    // is the cheap heuristic so the count is correct offline / before
+    // classification completes; classifier may flip it to false if the
+    // assistant signed off instead of asking for a reply.
+    if (lastKind === 'assistant' && lastAssistantText) {
+      void this.refineAwaiting(taskId, lastAssistantText);
+    }
+  }
+
+  private async refineAwaiting(taskId: string, message: string): Promise<void> {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    try {
+      const result = await ctx.classifyIntent(message);
+      if (!result) return;
+      // Only patch if the task is still tracked — it may have been
+      // removed (e.g. promoted to an owned session) in the meantime.
+      if (!ctx.hasExternalTask(taskId)) return;
+      ctx.updateExternalTaskMeta(taskId, { awaitingInput: result.awaiting });
+    } catch {
+      // Classifier shouldn't throw, but if something slips through the
+      // null-return contract, drop it silently — the heuristic value
+      // stays in place.
+    }
   }
 
   /**
@@ -377,6 +430,7 @@ export class ClaudeCodeWatchModule implements Module {
       const complete = buffer.slice(0, lastNewline);
       state.position += Buffer.byteLength(complete, 'utf8') + 1;
       let latestKind: LastEventKind = null;
+      let latestAssistantText = '';
       for (const line of complete.split('\n')) {
         if (!line.trim()) continue;
         let parsed: unknown;
@@ -389,13 +443,22 @@ export class ClaudeCodeWatchModule implements Module {
         if (!event) continue;
         ctx.recordExternalEvent(state.taskId, event);
         const k = eventKind(event);
-        if (k) latestKind = k;
+        if (k) {
+          latestKind = k;
+          if (k === 'assistant') {
+            const text = extractAssistantText(event);
+            if (text) latestAssistantText = text;
+          }
+        }
       }
       if (latestKind) {
         state.lastEventKind = latestKind;
         ctx.updateExternalTaskMeta(state.taskId, {
           awaitingInput: latestKind === 'assistant',
         });
+        if (latestKind === 'assistant' && latestAssistantText) {
+          void this.refineAwaiting(state.taskId, latestAssistantText);
+        }
       }
     });
     stream.on('error', () => {

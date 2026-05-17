@@ -1,5 +1,5 @@
 import { app, globalShortcut, ipcMain, shell } from 'electron';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { join } from 'node:path';
@@ -30,16 +30,20 @@ import {
 } from './db.js';
 import { startHttpServer, type HttpServerHandle } from './http-server.js';
 import { ActivityStore } from './activity-store.js';
+import { IntentClassifier } from './intent-classifier.js';
 import { createJarvisMcp } from './jarvis-mcp.js';
 import { InboxStore } from './inbox.js';
 import { InboxProximityWatcher } from './inbox-proximity.js';
 import { MeetingActivityWatcher } from './meeting-activity-watcher.js';
 import { BUILTIN_BRIEFING_KINDS } from './seeds/briefing-kinds.js';
 import {
+  calendarInboxSource,
   failedRoutinesInboxSource,
+  linearInboxSource,
   prAddressCommentsInboxSource,
   prReviewQueueInboxSource,
   remindersInboxSource,
+  slackInboxSource,
   userInboxSource,
 } from './inbox-sources/index.js';
 import { registerAllIpc } from './ipc/index.js';
@@ -123,6 +127,10 @@ const dashboard = new DashboardStore(
   join(homedir(), '.jarvis', 'dashboard.json'),
 );
 const userContext = new UserContextStore();
+const intentClassifier = new IntentClassifier(
+  join(homedir(), '.jarvis', 'intent-cache.json'),
+  { mode: 'subscription' },
+);
 const inbox = new InboxStore();
 const activity = new ActivityStore();
 const briefings = new BriefingsStore(BUILTIN_BRIEFING_KINDS);
@@ -208,16 +216,23 @@ userContext.register(activeProjectProfileProvider(userContext, projects));
 userContext.register(projectsProvider(projects));
 userContext.register(recentTaskProvider(runner));
 
-// Built-in inbox sources: time-pressured reminders, errored routines, and
-// the two gh-CLI driven PR queues. Modules can add more via the module
-// context (e.g. Slack DM count, Linear assignments) once registered.
+// Built-in inbox sources — all direct JS, no agent fires.
+//   - reminders / failed-routines: local stores
+//   - PR queues: gh CLI via execFile (pattern from inbox-sources/gh.ts)
+//   - linear / slack / calendar: replaced the cron-fired *-inbox skills
+//     with direct API/AppleScript calls. Tokens come from ~/.jarvis/mcp.json
+//     (the same ones the MCP servers already use). No-op gracefully when
+//     tokens are missing or the platform doesn't support them.
 inbox.register(remindersInboxSource(reminders));
 inbox.register(failedRoutinesInboxSource());
 inbox.register(prReviewQueueInboxSource(projects));
 inbox.register(prAddressCommentsInboxSource(projects));
+inbox.register(linearInboxSource(mcp, projects));
+inbox.register(slackInboxSource(mcp));
+inbox.register(calendarInboxSource());
 // User-authored scenarios — reads JSON files under ~/.jarvis/inbox/
-// that any skill / routine can write to. The Slack inbox skill is the
-// canonical first example.
+// that any skill / routine can write to. Reserved names (linear, slack,
+// calendar) are filtered out so they can't shadow the built-ins above.
 inbox.register(userInboxSource);
 
 runner.setSkillStore(skills);
@@ -226,6 +241,7 @@ runner.setProjectStore(projects);
 runner.setUserContextStore(userContext);
 runner.setPreferencesStore(preferences);
 runner.setSkillSessionStore(skillSessions);
+runner.setClassifier(intentClassifier);
 skillSessions.init();
 
 // In-process Jarvis MCP — always available to every task. Tools:
@@ -288,12 +304,14 @@ async function refreshAuth(): Promise<AppStatus> {
   if (mode === 'subscription') delete process.env['ANTHROPIC_API_KEY'];
   else if (mode === 'api-key' && apiKey) process.env['ANTHROPIC_API_KEY'] = apiKey;
 
-  runner.setAuth({
+  const authCtx = {
     mode: mode ?? 'subscription',
     apiKey: apiKey ?? null,
     claudeBinaryPath,
     claudeOauthToken: mode === 'subscription' ? subscriptionToken : null,
-  });
+  };
+  runner.setAuth(authCtx);
+  intentClassifier.setAuth(authCtx);
 
   return {
     authMode: mode,
@@ -832,6 +850,7 @@ app.whenReady().then(async () => {
     snoozeReminder: (id, msFromNow) => reminders.snooze(id, msFromNow),
     listSkills: () => skills.list(),
     getCostBreakdown: (windowDays) => getCostBreakdown(windowDays),
+    classifyIntent: (message) => intentClassifier.classify(message),
   });
   await modules.register(quickNoteModule);
   await modules.register(claudeCodeWatchModule);
@@ -1123,6 +1142,19 @@ app.on('before-quit', () => {
  * This runs at boot and re-runs on skill / MCP changes (the user
  * could enable Linear MCP mid-session and the routine should appear).
  */
+/**
+ * Skills replaced by direct-JS inbox sources — must never get
+ * auto-seeded routines, and any existing auto-seeded routines for
+ * them should be disabled on startup (one-shot migration). Same goes
+ * for any stale `~/.jarvis/inbox/{name}.json` files those routines
+ * used to produce. */
+const RETIRED_INBOX_SKILLS = new Set([
+  'slack-inbox',
+  'linear-inbox',
+  'calendar-today',
+]);
+const RETIRED_INBOX_JSON_FILES = ['slack.json', 'linear.json', 'calendar.json'];
+
 function syncAutoInboxRoutines(
   jarvisRoot: string,
   skills: SkillStore,
@@ -1130,6 +1162,12 @@ function syncAutoInboxRoutines(
   routines: RoutineStore,
   activity: ActivityStore,
 ): void {
+  // One-shot migration: disable any auto-seeded routines for skills
+  // that have been replaced by direct-JS sources, and delete stale
+  // JSON files those routines wrote. Idempotent — running twice is a
+  // no-op because the second pass sees `enabled: false`.
+  migrateRetiredInboxSkills(jarvisRoot, routines, activity);
+
   const markerPath = path.join(jarvisRoot, 'auto-seeded-routines.json');
   let seeded: Set<string>;
   try {
@@ -1151,7 +1189,12 @@ function syncAutoInboxRoutines(
 
   const inboxSkills = skills
     .list()
-    .filter((s) => s.id.endsWith('-inbox') && s.mcpServers.length > 0);
+    .filter(
+      (s) =>
+        s.id.endsWith('-inbox') &&
+        s.mcpServers.length > 0 &&
+        !RETIRED_INBOX_SKILLS.has(s.id),
+    );
   if (inboxSkills.length === 0) return;
   const mcpById = new Map(mcp.list().map((m) => [m.id, m]));
   const existingSkillIds = new Set(
@@ -1207,6 +1250,50 @@ function syncAutoInboxRoutines(
       );
     } catch (err) {
       console.warn('auto-seed marker write failed:', err);
+    }
+  }
+}
+
+/**
+ * One-shot migration: skills like slack-inbox / linear-inbox /
+ * calendar-today used to run on cron and write JSON files. They've
+ * been replaced by direct-JS inbox sources. Disable any auto-seeded
+ * routines that still target the retired skills (don't delete — the
+ * user may have customized them and we want their edits to come back
+ * if they re-enable). Then sweep stale JSON files those routines wrote.
+ *
+ * Idempotent: second run sees `enabled: false` on the routines and
+ * the JSON files already gone, so it does nothing.
+ */
+function migrateRetiredInboxSkills(
+  jarvisRoot: string,
+  routines: RoutineStore,
+  activity: ActivityStore,
+): void {
+  for (const r of routines.list()) {
+    if (!r.skillId) continue;
+    if (!RETIRED_INBOX_SKILLS.has(r.skillId)) continue;
+    if (r.enabled === false) continue;
+    routines.save({ ...r, enabled: false });
+    activity.record({
+      kind: 'routine.auto-disabled',
+      label: `Routine disabled · ${r.skillId} replaced by direct-JS inbox source`,
+      detail: { routineId: r.id, skillId: r.skillId },
+    });
+  }
+  const inboxDir = path.join(jarvisRoot, 'inbox');
+  for (const filename of RETIRED_INBOX_JSON_FILES) {
+    const filePath = path.join(inboxDir, filename);
+    if (!existsSync(filePath)) continue;
+    try {
+      unlinkSync(filePath);
+      activity.record({
+        kind: 'inbox.json-migrated',
+        label: `Stale inbox JSON removed · ${filename}`,
+        detail: { filename, path: filePath },
+      });
+    } catch (err) {
+      console.warn(`[migrate-inbox] failed to remove ${filePath}:`, err);
     }
   }
 }
