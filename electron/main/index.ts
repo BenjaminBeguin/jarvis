@@ -1329,12 +1329,29 @@ function migrateRetiredInboxSkills(
   for (const r of routines.list()) {
     if (!r.skillId) continue;
     if (!RETIRED_INBOX_SKILLS.has(r.skillId)) continue;
+    // Auto-seeded routines (id prefix `auto-inbox-`) are entirely
+    // owned by Jarvis — delete them outright so the Routines page
+    // stops showing dead rows. Direct-JS inbox sources have replaced
+    // them; there's nothing left to manage.
+    //
+    // User-authored routines that happen to target a retired skill
+    // stay around as disabled — the user wrote them by hand and
+    // might want them back if they ever invoke /<skill> manually.
+    if (r.id.startsWith('auto-inbox-')) {
+      routines.remove(r.id);
+      activity.record({
+        kind: 'routine.auto-disabled',
+        label: `Auto-seeded routine removed · ${r.skillId} replaced by direct-JS inbox source`,
+        detail: { routineId: r.id, skillId: r.skillId, removed: true },
+      });
+      continue;
+    }
     if (r.enabled === false) continue;
     routines.save({ ...r, enabled: false });
     activity.record({
       kind: 'routine.auto-disabled',
       label: `Routine disabled · ${r.skillId} replaced by direct-JS inbox source`,
-      detail: { routineId: r.id, skillId: r.skillId },
+      detail: { routineId: r.id, skillId: r.skillId, removed: false },
     });
   }
   const inboxDir = path.join(jarvisRoot, 'inbox');
