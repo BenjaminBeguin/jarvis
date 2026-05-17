@@ -12,6 +12,7 @@ import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
 import { Activity } from './Activity';
 import { Dashboard } from './Dashboard';
+import { NavTabs, type NavTabItem } from './NavTabs';
 import { Settings } from './Settings';
 import { Skills } from './Skills';
 import { toast } from './Toaster';
@@ -48,7 +49,6 @@ export function Shell({ status }: Props) {
   const [pendingSettingsSection, setPendingSettingsSection] = useState<
     string | null
   >(null);
-  const [openModule, setOpenModule] = useState<ModuleSummary | null>(null);
   const [moduleList, setModuleList] = useState<ModuleSummary[]>([]);
   /**
    * Active project scope. When set, free-text palette dispatches auto-
@@ -295,13 +295,11 @@ export function Shell({ status }: Props) {
     });
   }, []);
 
-  // Keep openModule in sync with the registry — handles "module disabled
-  // while its page is open" by closing the page automatically.
+  // Close the open module page if it gets disabled or unregistered
+  // (modulesChanged broadcast). Without this, the user could be
+  // stranded on a page whose backing module is gone.
   useEffect(() => {
-    if (!openModuleId) {
-      setOpenModule(null);
-      return;
-    }
+    if (!openModuleId) return;
     let cancelled = false;
     const sync = async () => {
       const all = await window.jarvis.listModules();
@@ -309,9 +307,6 @@ export function Shell({ status }: Props) {
       const m = all.find((x) => x.id === openModuleId);
       if (!m || !m.enabled || !m.hasPage) {
         setOpenModuleId(null);
-        setOpenModule(null);
-      } else {
-        setOpenModule(m);
       }
     };
     void sync();
@@ -393,6 +388,92 @@ export function Shell({ status }: Props) {
 
   const PageComponent = openModuleId ? getModulePage(openModuleId) : null;
 
+  /**
+   * Top-nav items, in order. NavTabs handles the rendering + overflow
+   * collapse. Module pages (Notes & Reminders, Meetings, Calendar) get
+   * inlined here so the user reaches them in one click — the prior
+   * second-row "Pages" sub-nav is gone. Skills + Routines fold into a
+   * single "Build" dropdown since they're conceptually the same surface
+   * (things you author to teach Jarvis what to do).
+   */
+  const tabItems: NavTabItem[] = [
+    {
+      kind: 'tab',
+      id: 'dashboard',
+      label: 'Dashboard',
+      isActive: tab === 'dashboard' && !openModuleId,
+      onClick: () => {
+        setTab('dashboard');
+        setOpenModuleId(null);
+      },
+      title: '⌘1 · Your curated home — Inbox, briefings, routines you pinned',
+    },
+    {
+      kind: 'tab',
+      id: 'inbox',
+      label: 'Inbox',
+      isActive: tab === 'inbox' && !openModuleId,
+      onClick: () => {
+        setTab('inbox');
+        setOpenModuleId(null);
+      },
+      title:
+        '⌘3 · Triage: PRs / reminders / Linear / failed routines + live strips (meeting, awaiting reply)',
+    },
+    {
+      kind: 'tab',
+      id: 'observatory',
+      label: 'Observatory',
+      isActive: tab === 'observatory' && !openModuleId,
+      onClick: () => {
+        setTab('observatory');
+        setOpenModuleId(null);
+      },
+      title: '⌘2 · Live + recent agent runs (constellation + list)',
+    },
+    ...moduleList
+      .filter((m) => m.hasPage && m.enabled)
+      .map<NavTabItem>((m) => ({
+        kind: 'tab',
+        id: `module:${m.id}`,
+        label: m.name,
+        isActive: openModuleId === m.id,
+        onClick: () => setOpenModuleId(m.id),
+        title: m.description,
+      })),
+    {
+      kind: 'dropdown',
+      id: 'build',
+      label: 'Build',
+      isActive:
+        (tab === 'routines' || tab === 'skills') && !openModuleId,
+      title: 'Skills + Routines — what you authored to teach Jarvis',
+      options: [
+        {
+          id: 'routines',
+          label: 'Routines',
+          isActive: tab === 'routines' && !openModuleId,
+          hint: 'Skills on a schedule',
+          onClick: () => {
+            setTab('routines');
+            setOpenModuleId(null);
+          },
+        },
+        {
+          id: 'skills',
+          label: 'Skills',
+          isActive: tab === 'skills' && !openModuleId,
+          hint: 'SKILL.md prompts',
+          onClick: () => {
+            setTab('skills');
+            setOpenModuleId(null);
+            setFocusedSkillId(null);
+          },
+        },
+      ],
+    },
+  ];
+
   return (
     <div className="shell">
       <nav className="shell__nav">
@@ -420,59 +501,7 @@ export function Shell({ status }: Props) {
             →
           </button>
         </div>
-        <div className="shell__tabs">
-          <button
-            className={`shell__tab${tab === 'dashboard' && !openModuleId ? ' shell__tab--active' : ''}`}
-            onClick={() => {
-              setTab('dashboard');
-              setOpenModuleId(null);
-            }}
-            title="⌘1 · Your curated home — Inbox, briefings, routines you pinned"
-          >
-            Dashboard
-          </button>
-          <button
-            className={`shell__tab${tab === 'observatory' && !openModuleId ? ' shell__tab--active' : ''}`}
-            onClick={() => {
-              setTab('observatory');
-              setOpenModuleId(null);
-            }}
-            title="⌘2 · Live + recent agent runs (constellation + list)"
-          >
-            Observatory
-          </button>
-          <button
-            className={`shell__tab${tab === 'inbox' && !openModuleId ? ' shell__tab--active' : ''}`}
-            onClick={() => {
-              setTab('inbox');
-              setOpenModuleId(null);
-            }}
-            title="⌘3 · Triage: PRs / reminders / Linear / failed routines + live strips (meeting, awaiting reply)"
-          >
-            Inbox
-          </button>
-          <button
-            className={`shell__tab${tab === 'routines' && !openModuleId ? ' shell__tab--active' : ''}`}
-            onClick={() => {
-              setTab('routines');
-              setOpenModuleId(null);
-            }}
-            title="⌘4"
-          >
-            Routines
-          </button>
-          <button
-            className={`shell__tab${tab === 'skills' && !openModuleId ? ' shell__tab--active' : ''}`}
-            onClick={() => {
-              setTab('skills');
-              setOpenModuleId(null);
-              setFocusedSkillId(null);
-            }}
-            title="⌘5 · Skill prompts (SKILL.md)"
-          >
-            Skills
-          </button>
-        </div>
+        <NavTabs items={tabItems} />
         <div className="shell__right">
           <ScopePicker
             projects={projectList}
@@ -613,48 +642,6 @@ export function Shell({ status }: Props) {
           </button>
         </div>
       </nav>
-
-      {moduleList.some((m) => m.hasPage && m.enabled) && (
-        <div className="shell__subnav">
-          <span className="shell__subnav-label">Pages</span>
-          <div className="shell__subnav-tabs">
-            {moduleList
-              .filter((m) => m.hasPage && m.enabled)
-              .map((m) => (
-                <button
-                  key={m.id}
-                  className={`shell__subnav-tab${
-                    m.id === openModuleId ? ' shell__subnav-tab--active' : ''
-                  }`}
-                  onClick={() => {
-                    if (m.id === openModuleId) {
-                      // Already open — toggle back to the modules grid (in Settings).
-                      setOpenModuleId(null);
-                      setTab('settings');
-                    } else {
-                      setOpenModuleId(m.id);
-                    }
-                  }}
-                  title={m.description}
-                >
-                  {m.name}
-                </button>
-              ))}
-          </div>
-          {openModuleId && (
-            <button
-              onClick={() => {
-                setOpenModuleId(null);
-                setTab('settings');
-              }}
-              className="shell__subnav-back"
-              title="Back to all modules"
-            >
-              ← All
-            </button>
-          )}
-        </div>
-      )}
 
       <div className="shell__body">
         {openModuleId && PageComponent ? (
