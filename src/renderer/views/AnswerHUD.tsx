@@ -17,7 +17,13 @@ function statusLabel(status: string, lastTool: string | null): string {
     case 'streaming':
       return lastTool ? `using ${lastTool}` : 'replying';
     case 'awaiting':
-      return 'awaiting · reply to continue';
+      // Mid-turn confirmation prompts (think: "approve / cancel?")
+      // are different from the post-answer "agent done, you can keep
+      // chatting" state. The UI can't tell them apart with what we
+      // have today — both are status='running' + awaitingInput=true.
+      // Lean toward the post-answer phrasing since it's the common
+      // case after maxTurns=200 keeps sessions open between turns.
+      return 'done · reply to continue';
     case 'done':
       return 'done';
     case 'errored':
@@ -316,6 +322,10 @@ function AnswerCard({ card, onAck }: AnswerCardProps) {
   };
 
   const open = () => {
+    // Routes to AI Agent (the renamed-old-Observatory) since that's
+    // the view that actually shows a task's transcript + tools.
+    // FlowStream — the new Observatory — is the live river, doesn't
+    // surface a specific task.
     void window.jarvis.openObservatory(card.taskId);
   };
 

@@ -22,11 +22,12 @@ export function registerWindowIpc(_deps: IpcDeps): void {
   ipcMain.handle(IpcChannels.openObservatory, (_e, taskId?: string) => {
     const win = openObservatory();
     win.focus();
-    // Make sure the Shell is on the Observatory tab before firing the
-    // focus event — calling from the HUD while the user is on a
-    // different tab brings the window forward but the Observatory
-    // component isn't mounted, so the task focus would be lost.
-    sendWhenReady(win, IpcChannels.shellNavigate, { tab: 'observatory' });
+    // The historical Observatory (task list + constellation + detail
+    // pane) now lives under the `ai-agent` tab — the `observatory`
+    // tab is the live FlowStream river, which doesn't surface a
+    // specific task's transcript. Anything calling openObservatory
+    // wants to *see* a task, so route to ai-agent.
+    sendWhenReady(win, IpcChannels.shellNavigate, { tab: 'ai-agent' });
     if (typeof taskId === 'string' && taskId) {
       sendWhenReady(win, IpcChannels.observatoryFocusTask, taskId);
     }
