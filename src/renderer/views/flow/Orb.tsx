@@ -1,7 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import type { FlowEvent, FlowSource } from './types';
+import type { FlowEvent, FlowSource, Stage } from './types';
 import { JITTER_RANGE, xForStage, yForStage } from './Pipeline';
+
+/** Stage order for the "displayed stage" walk — same as STAGES but
+ *  treated as a linear progression. Notify is its own outlet, never
+ *  walked through. */
+const WALK_STAGES: Stage[] = [
+  'trigger',
+  'intent',
+  'route',
+  'launch',
+  'agent',
+  'result',
+];
+
+/** ms between auto-advance steps when the orb is catching up to its
+ *  target stage. Spread the visual journey over ~1-1.5s total so the
+ *  user sees the orb traverse the gates even when the underlying task
+ *  was already past `launch` by the time the IPC reached us. */
+const WALK_INTERVAL_MS = 220;
 
 /**
  * Color for an orb based on its source. Tuned for the dark UI — each
@@ -26,8 +44,37 @@ interface Props {
 
 export function Orb({ event, onClick }: Props) {
   const [hover, setHover] = useState(false);
-  const x = xForStage(event.stage);
-  const baseY = yForStage(event.stage);
+  // The orb's *displayed* stage is what the SVG renders right now.
+  // The event's `stage` is the target (where the server says it is).
+  // New orbs always start at 'trigger' and walk forward through the
+  // gates so the user actually sees the journey — even when the
+  // underlying task already raced past 'launch' before we saw it.
+  // Notification orbs are terminal; they spawn straight at 'notify'.
+  const [displayedStage, setDisplayedStage] = useState<Stage>(
+    event.kind === 'notification' ? 'notify' : 'trigger',
+  );
+
+  useEffect(() => {
+    // Notify-only events never walk.
+    if (event.kind === 'notification') return;
+    // If the target stage is `notify` we've already settled to its own
+    // outlet — let the position transition handle it.
+    if (event.stage === 'notify') {
+      setDisplayedStage('notify');
+      return;
+    }
+    const targetIdx = WALK_STAGES.indexOf(event.stage);
+    const currentIdx = WALK_STAGES.indexOf(displayedStage);
+    if (targetIdx <= currentIdx || targetIdx === -1) return;
+    const h = window.setTimeout(() => {
+      const nextStage = WALK_STAGES[currentIdx + 1];
+      if (nextStage) setDisplayedStage(nextStage);
+    }, WALK_INTERVAL_MS);
+    return () => window.clearTimeout(h);
+  }, [event.stage, event.kind, displayedStage]);
+
+  const x = xForStage(displayedStage);
+  const baseY = yForStage(displayedStage);
   const y = baseY - JITTER_RANGE + event.jitter * JITTER_RANGE * 2;
   const color = SOURCE_COLOR[event.source];
   const radius = event.kind === 'notification' ? 4 : 7;
@@ -79,7 +126,10 @@ export function Orb({ event, onClick }: Props) {
             {clip(event.label, 38)}
           </text>
           <text x={24} y={4} className="flow-orb__tooltip-meta">
-            {event.source} · {event.kind} · {event.stage}
+            {event.source} · {event.kind} ·{' '}
+            {displayedStage === event.stage
+              ? event.stage
+              : `${displayedStage} → ${event.stage}`}
           </text>
           <text x={24} y={18} className="flow-orb__tooltip-meta">
             {event.status} · {ageLabel(event.enteredAt)}

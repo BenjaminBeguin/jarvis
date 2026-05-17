@@ -14392,13 +14392,63 @@ button:disabled:hover {
   display: block;
 }
 
-/* Stage gate labels — small mono caps floating above each gate. */
+/* Stage labels — small mono caps floating above each pillar. */
 .flow-gate__label {
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.22em;
   fill: rgba(0, 212, 255, 0.55);
   text-transform: uppercase;
+}
+
+/* Pillar of light — gentle pulse so the page never looks static. */
+.flow-gate__pillar {
+  animation: flow-pillar-pulse 4.2s ease-in-out infinite;
+  transform-origin: center;
+}
+.flow-gate--intent .flow-gate__pillar  { animation-delay: 0.3s; }
+.flow-gate--route .flow-gate__pillar   { animation-delay: 0.6s; }
+.flow-gate--launch .flow-gate__pillar  { animation-delay: 0.9s; }
+.flow-gate--agent .flow-gate__pillar   { animation-delay: 1.2s; }
+.flow-gate--result .flow-gate__pillar  { animation-delay: 1.5s; }
+.flow-gate--notify .flow-gate__pillar  { animation-delay: 1.8s; }
+
+@keyframes flow-pillar-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1;   }
+}
+
+/* Wavy river — dashes drift right continuously. */
+.flow-river {
+  animation: flow-river-drift 14s linear infinite;
+}
+.flow-river--branch {
+  animation-duration: 18s;
+}
+
+@keyframes flow-river-drift {
+  to {
+    stroke-dashoffset: -120;
+  }
+}
+
+/* Ambient sparkles — small dots that travel the river end-to-end on
+   a loop, each with its own delay so they don't line up. */
+.flow-sparkle {
+  /* Start off-screen left at (cx=40, cy=RIVER_Y), get translated.
+     The animation drives translateX across the river width.   */
+  transform: translateX(40px) translateY(280px);
+  animation-name: flow-sparkle-drift;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  opacity: 0;
+}
+
+@keyframes flow-sparkle-drift {
+  0%   { transform: translateX(40px) translateY(calc(280px + var(--sparkle-y, 0px))); opacity: 0; }
+  10%  { opacity: 0.7; }
+  85%  { opacity: 0.7; }
+  100% { transform: translateX(960px) translateY(calc(280px + var(--sparkle-y, 0px))); opacity: 0; }
 }
 
 /* Orb transitions — when stage changes, the parent <g>'s transform

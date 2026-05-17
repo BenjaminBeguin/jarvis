@@ -1,21 +1,28 @@
 import type { Stage } from './types';
 
 /**
- * The static layer of the river — six luminous stage gates spanning
- * the page width, with section labels above each. Renders only once
- * (no state). Orbs sit on top in a sibling SVG layer.
+ * The static (well — *ambient*) layer of the river. Replaces the v1
+ * rectangular gates with something less boxy:
+ *
+ *   - A wavy `<path>` baseline traces the river, animated as a flowing
+ *     current via `stroke-dashoffset` so dashes drift continuously
+ *     right. Feels alive even when no events are in flight.
+ *   - Each stage is a pillar of light — a thin vertical line with a
+ *     soft halo + a small node circle on the river — not a bordered
+ *     rectangle. Reads more "energy beam" than "form field."
+ *   - A few ambient sparkles (small dim dots) drift along the river
+ *     constantly. The page never looks dead.
  *
  * Coordinate space: 0–1000 horizontal, 0–600 vertical. The container
- * scales the SVG via preserveAspectRatio so the layout reads on a
- * tablet-narrow window AND on a 4k monitor.
+ * scales the SVG via preserveAspectRatio so it works on tablet-narrow
+ * AND 4k.
  */
 
 interface StageDef {
   id: Stage;
   label: string;
   x: number;
-  /** When true, this is a "side outlet" rather than part of the main
-   *  linear flow. Renders below the river. */
+  /** Side outlet (notify) sits below the river. */
   side?: boolean;
 }
 
@@ -29,84 +36,44 @@ export const STAGE_DEFS: StageDef[] = [
   { id: 'notify', label: 'NOTIFY', x: 920, side: true },
 ];
 
-/** Y center for orbs traveling the main river. */
 export const RIVER_Y = 280;
-/** Y center for the notify outlet (slightly below the river). */
 export const NOTIFY_Y = 430;
-/** ±range applied to the orb's Y via jitter for an organic feel. */
 export const JITTER_RANGE = 60;
 
-/**
- * X position for a given stage id, used by orbs to position themselves.
- */
 export function xForStage(stage: Stage): number {
   return STAGE_DEFS.find((s) => s.id === stage)?.x ?? STAGE_DEFS[0]!.x;
 }
 
-/**
- * Y center for a given stage. Notify sits on its own lane so its dots
- * don't crowd the river.
- */
 export function yForStage(stage: Stage): number {
   return stage === 'notify' ? NOTIFY_Y : RIVER_Y;
 }
 
+/**
+ * A wavy SVG path. Sine-style undulation across the full width, with
+ * three control points so it has multiple soft crests. The shape is
+ * static — motion comes from the dashes drifting along it.
+ */
+const RIVER_PATH = (() => {
+  const startX = 60;
+  const endX = 860; // stops just before the notify branch
+  const amplitude = 8;
+  // Three crests across the width.
+  const c1 = `${startX + 200},${RIVER_Y - amplitude * 2}`;
+  const c2 = `${startX + 400},${RIVER_Y + amplitude * 2}`;
+  const mid = `${startX + 400},${RIVER_Y}`;
+  const c3 = `${startX + 500},${RIVER_Y - amplitude * 2}`;
+  const c4 = `${startX + 750},${RIVER_Y + amplitude * 2}`;
+  return `M${startX},${RIVER_Y} C${c1} ${c2} ${mid} S${c4} ${endX},${RIVER_Y}` +
+    ` C${c3} ${c4} ${endX},${RIVER_Y}`;
+})();
+
+/** The branch from RESULT down to NOTIFY — gentle curve. */
+const NOTIFY_BRANCH = `M800,${RIVER_Y} C840,${RIVER_Y} 880,${NOTIFY_Y} 920,${NOTIFY_Y}`;
+
 export function Pipeline() {
   return (
     <g className="flow-pipeline">
-      {/* Faint baseline that traces the river. */}
-      <line
-        x1={60}
-        y1={RIVER_Y}
-        x2={STAGE_DEFS[STAGE_DEFS.length - 1]!.x + 40}
-        y2={RIVER_Y}
-        stroke="rgba(0, 212, 255, 0.18)"
-        strokeWidth={1}
-        strokeDasharray="2 6"
-      />
-      {/* Branch line from result → notify. */}
-      <line
-        x1={800}
-        y1={RIVER_Y}
-        x2={920}
-        y2={NOTIFY_Y}
-        stroke="rgba(255, 255, 255, 0.08)"
-        strokeWidth={1}
-        strokeDasharray="2 6"
-      />
-
-      {STAGE_DEFS.map((s) => {
-        const y = s.side ? NOTIFY_Y : RIVER_Y;
-        return (
-          <g
-            key={s.id}
-            className={`flow-gate flow-gate--${s.id}`}
-            data-stage={s.id}
-          >
-            <rect
-              x={s.x - 14}
-              y={y - 90}
-              width={28}
-              height={180}
-              rx={2}
-              fill="rgba(0, 212, 255, 0.05)"
-              stroke="rgba(0, 212, 255, 0.4)"
-              strokeWidth={1}
-              filter="url(#flow-gate-glow)"
-            />
-            <text
-              x={s.x}
-              y={y - 110}
-              textAnchor="middle"
-              className="flow-gate__label"
-            >
-              {s.label}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* Glow filter shared by gates + orbs. */}
+      {/* Glow filter defs — used by gates AND orbs. */}
       <defs>
         <filter
           id="flow-gate-glow"
@@ -134,7 +101,117 @@ export function Pipeline() {
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
+        <filter
+          id="flow-pillar-glow"
+          x="-200%"
+          y="-50%"
+          width="500%"
+          height="200%"
+        >
+          <feGaussianBlur stdDeviation={5} />
+          <feMerge>
+            <feMergeNode />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <linearGradient id="flow-pillar-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="rgba(0, 212, 255, 0)" />
+          <stop offset="50%" stopColor="rgba(0, 212, 255, 0.7)" />
+          <stop offset="100%" stopColor="rgba(0, 212, 255, 0)" />
+        </linearGradient>
       </defs>
+
+      {/* Wavy river baseline — dashes drift right continuously via
+          CSS keyframes on stroke-dashoffset. */}
+      <path
+        d={RIVER_PATH}
+        fill="none"
+        stroke="rgba(0, 212, 255, 0.22)"
+        strokeWidth={1.25}
+        strokeDasharray="3 9"
+        className="flow-river"
+      />
+
+      {/* Notify branch — gentler dash so it reads as a secondary
+          channel. */}
+      <path
+        d={NOTIFY_BRANCH}
+        fill="none"
+        stroke="rgba(255, 255, 255, 0.12)"
+        strokeWidth={1}
+        strokeDasharray="2 8"
+        className="flow-river flow-river--branch"
+      />
+
+      {STAGE_DEFS.map((s) => {
+        const y = s.side ? NOTIFY_Y : RIVER_Y;
+        return (
+          <g key={s.id} className={`flow-gate flow-gate--${s.id}`}>
+            {/* Pillar of light — vertical beam through the stage. */}
+            <line
+              x1={s.x}
+              y1={y - 80}
+              x2={s.x}
+              y2={y + 80}
+              stroke="url(#flow-pillar-grad)"
+              strokeWidth={2}
+              filter="url(#flow-pillar-glow)"
+              className="flow-gate__pillar"
+            />
+            {/* Node on the river — the orb passes through this. */}
+            <circle
+              cx={s.x}
+              cy={y}
+              r={5}
+              fill="rgba(4, 7, 11, 0.92)"
+              stroke="rgba(0, 212, 255, 0.5)"
+              strokeWidth={1.25}
+              filter="url(#flow-gate-glow)"
+              className="flow-gate__node"
+            />
+            {/* Label floats above the pillar. */}
+            <text
+              x={s.x}
+              y={y - 100}
+              textAnchor="middle"
+              className="flow-gate__label"
+            >
+              {s.label}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Ambient sparkles — a few tiny dim dots drifting along the
+          river in a loop. Pure decoration; gives the page motion even
+          when no real events are in flight. Different delays/durations
+          so they don't all line up. */}
+      <g className="flow-sparkles" aria-hidden="true">
+        {SPARKLE_DEFS.map((s, i) => (
+          <circle
+            key={i}
+            r={1.6}
+            fill="rgba(0, 212, 255, 0.55)"
+            className="flow-sparkle"
+            style={{
+              animationDelay: `${s.delay}s`,
+              animationDuration: `${s.duration}s`,
+              // CSS custom prop drives the y-offset for each sparkle
+              ['--sparkle-y' as string]: `${s.y}px`,
+            }}
+          />
+        ))}
+      </g>
     </g>
   );
 }
+
+/** Ambient sparkle config — staggered for organic feel. */
+const SPARKLE_DEFS = [
+  { delay: 0, duration: 9, y: -16 },
+  { delay: 1.4, duration: 11, y: 6 },
+  { delay: 2.8, duration: 8, y: -8 },
+  { delay: 4.2, duration: 10, y: 18 },
+  { delay: 5.6, duration: 9.5, y: -22 },
+  { delay: 7.1, duration: 12, y: 12 },
+];
