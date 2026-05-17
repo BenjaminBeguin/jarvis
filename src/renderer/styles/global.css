@@ -15172,6 +15172,20 @@ button:disabled:hover {
   opacity: 0.7;
 }
 
+.wf-node--has-output {
+  cursor: pointer;
+}
+
+.wf-node--has-output:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+.wf-node--selected {
+  outline: 2px solid rgba(0, 212, 255, 0.6);
+  outline-offset: 4px;
+}
+
 @keyframes wf-node-pulse {
   0%, 100% {
     opacity: 0.85;
@@ -15297,4 +15311,125 @@ button:disabled:hover {
   padding: 24px;
   font-size: 12px;
   color: var(--text-faint);
+}
+
+/* Step inspector — output of one node */
+
+.wf-step-inspector {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.wf-step-inspector__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 11px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.wf-step-inspector__index {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.wf-step-inspector__type {
+  color: var(--text);
+  font-family: var(--font-mono), monospace;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.wf-step-inspector__status {
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 10px;
+}
+
+.wf-step-inspector__status--pending {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.wf-step-inspector__status--running {
+  color: #4DA3FF;
+}
+
+.wf-step-inspector__status--completed {
+  color: #7AE2A0;
+}
+
+.wf-step-inspector__status--errored {
+  color: #FF8585;
+}
+
+.wf-step-inspector__status--skipped {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.wf-step-inspector__dur {
+  color: var(--text-faint);
+  font-family: var(--font-mono), monospace;
+  text-transform: none;
+}
+
+.wf-step-inspector__warn {
+  margin-left: auto;
+  color: #FFB870;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.wf-step-inspector__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.wf-step-inspector__pre {
+  margin: 0;
+  padding: 12px 14px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.wf-step-inspector__pre--error {
+  color: #FF8585;
+}
+
+/* Step row in Latest-run tab — show as clickable when output exists */
+
+.workflows__step--clickable {
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.workflows__step--clickable:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.workflows__step--selected {
+  background: rgba(0, 212, 255, 0.06);
+}
+
+.workflows__step-peek {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.03em;
+}
+
+.workflows__step--clickable:hover .workflows__step-peek {
+  color: var(--accent);
 }

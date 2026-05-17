@@ -24,6 +24,39 @@ import type { WorkflowNodeContext } from './workflow-nodes/index.js';
 
 const MAX_RECENT_RUNS = 60;
 
+/** Cap on serialized output we keep per step. Workflows can produce
+ *  large payloads (full Slack search responses, etc.) — we want enough
+ *  to be useful for debugging without bloating run history. */
+const MAX_OUTPUT_BYTES = 100_000;
+
+function captureOutput(value: unknown): {
+  value: unknown;
+  truncated: boolean;
+} {
+  if (value === undefined) return { value: undefined, truncated: false };
+  // Strings are returned verbatim if under the cap.
+  if (typeof value === 'string') {
+    if (value.length <= MAX_OUTPUT_BYTES) return { value, truncated: false };
+    return {
+      value: value.slice(0, MAX_OUTPUT_BYTES) + '\n…[truncated]',
+      truncated: true,
+    };
+  }
+  // Anything else — serialize once to measure, then either keep as-is
+  // or substitute a stringified-and-clipped form.
+  let json: string;
+  try {
+    json = JSON.stringify(value);
+  } catch {
+    return { value: '[unserializable output]', truncated: true };
+  }
+  if (json.length <= MAX_OUTPUT_BYTES) return { value, truncated: false };
+  return {
+    value: json.slice(0, MAX_OUTPUT_BYTES) + '\n…[truncated]',
+    truncated: true,
+  };
+}
+
 interface RunHandle {
   actor: Actor<ReturnType<typeof compileWorkflow>['machine']>;
   run: WorkflowRun;
@@ -104,11 +137,24 @@ export class WorkflowRunner extends EventEmitter {
           s.endedAt == null
             ? Date.now()
             : s.endedAt;
+        // Capture the step's output the first time we see it as
+        // completed — ctx.outputs[i] is what the actor returned, kept
+        // around for downstream steps. The output is the same on every
+        // subsequent transition, so we only assign once.
+        let output = s.output;
+        let outputTruncated = s.outputTruncated;
+        if (next === 'completed' && s.status !== 'completed') {
+          const captured = captureOutput(ctx.outputs[i]);
+          output = captured.value;
+          outputTruncated = captured.truncated;
+        }
         return {
           ...s,
           status: next as WorkflowRunStep['status'],
           startedAt: startedAt || s.startedAt,
           endedAt,
+          ...(output !== undefined ? { output } : {}),
+          ...(outputTruncated ? { outputTruncated: true } : {}),
         };
       });
 

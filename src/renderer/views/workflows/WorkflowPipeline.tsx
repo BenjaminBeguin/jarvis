@@ -46,11 +46,14 @@ interface PipelineNodeData extends Record<string, unknown> {
   node: WorkflowNodeDef;
   index: number;
   state: StageState;
+  selected: boolean;
+  hasOutput: boolean;
 }
 
 interface Props {
   workflow: WorkflowDef;
   run: WorkflowRun | null;
+  selectedIndex?: number | null;
   onNodeClick?: (index: number) => void;
 }
 
@@ -121,12 +124,12 @@ function summaryFor(node: WorkflowNodeDef): string {
 }
 
 function PipelineNode({ data }: NodeProps<Node<PipelineNodeData>>) {
-  const { node, index, state } = data;
+  const { node, index, state, selected, hasOutput } = data;
   const icon = iconFor(node.type);
   const summary = summaryFor(node);
   return (
     <div
-      className={`wf-node wf-node--${state}`}
+      className={`wf-node wf-node--${state}${selected ? ' wf-node--selected' : ''}${hasOutput ? ' wf-node--has-output' : ''}`}
       style={{
         ['--node-hue' as string]: icon.hue,
       }}
@@ -173,18 +176,32 @@ function edgeStyleFor(
   return { stroke: 'rgba(255,255,255,0.25)', animated: false };
 }
 
-export function WorkflowPipeline({ workflow, run, onNodeClick }: Props) {
+export function WorkflowPipeline({
+  workflow,
+  run,
+  selectedIndex,
+  onNodeClick,
+}: Props) {
   const { nodes, edges } = useMemo(() => {
     const nodes: Node<PipelineNodeData>[] = workflow.pipeline.map(
-      (node, i) => ({
-        id: `n${i}`,
-        type: 'pipeline',
-        position: { x: NODE_X_OFFSET + i * NODE_X_SPACING, y: NODE_Y },
-        data: { node, index: i, state: stateOf(run, i) },
-        draggable: false,
-        connectable: false,
-        selectable: !!onNodeClick,
-      }),
+      (node, i) => {
+        const step = run?.steps[i];
+        return {
+          id: `n${i}`,
+          type: 'pipeline',
+          position: { x: NODE_X_OFFSET + i * NODE_X_SPACING, y: NODE_Y },
+          data: {
+            node,
+            index: i,
+            state: stateOf(run, i),
+            selected: selectedIndex === i,
+            hasOutput: step?.output !== undefined,
+          },
+          draggable: false,
+          connectable: false,
+          selectable: !!onNodeClick,
+        };
+      },
     );
     const edges: Edge[] = [];
     for (let i = 0; i < workflow.pipeline.length - 1; i++) {
@@ -201,7 +218,7 @@ export function WorkflowPipeline({ workflow, run, onNodeClick }: Props) {
       });
     }
     return { nodes, edges };
-  }, [workflow, run, onNodeClick]);
+  }, [workflow, run, selectedIndex, onNodeClick]);
 
   const showMinimap = workflow.pipeline.length > 4;
 

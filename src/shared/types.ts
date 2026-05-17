@@ -918,6 +918,14 @@ export interface WorkflowRunStep {
   endedAt: number | null;
   status: 'pending' | 'running' | 'completed' | 'errored' | 'skipped';
   error?: string;
+  /** The value this step emitted on completion. Captured so the UI can
+   *  show "what did this node actually produce" without re-running.
+   *  Truncated if the serialized form exceeds 100KB. */
+  output?: unknown;
+  /** Set when `output` was truncated for size; the original was bigger
+   *  than what's in `output`. UI surfaces this so users don't think
+   *  they're seeing the full payload. */
+  outputTruncated?: boolean;
 }
 
 /** One execution of a workflow. Lives in memory; older runs prune. */

@@ -23,7 +23,7 @@ import { WorkflowSelector } from './workflows/WorkflowSelector';
  * the toolbar and the (optional) bottom dock.
  */
 
-type DockTab = 'json' | 'run';
+type DockTab = 'json' | 'run' | 'step';
 
 export function Workflows() {
   const [workflows, setWorkflows] = useState<WorkflowDef[]>([]);
@@ -35,6 +35,7 @@ export function Workflows() {
   const [recentRun, setRecentRun] = useState<WorkflowRun | null>(null);
   const [dockOpen, setDockOpen] = useState<boolean>(true);
   const [dockTab, setDockTab] = useState<DockTab>('json');
+  const [selectedStepIdx, setSelectedStepIdx] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,9 +65,11 @@ export function Workflows() {
   useEffect(() => {
     if (!selected) {
       setDraft('');
+      setSelectedStepIdx(null);
       return;
     }
     setDraft(JSON.stringify(selected, null, 2));
+    setSelectedStepIdx(null);
   }, [selected]);
 
   useEffect(() => {
@@ -202,7 +205,16 @@ export function Workflows() {
               it shows up here.
             </div>
           ) : (
-            <WorkflowPipeline workflow={selected} run={recentRun} />
+            <WorkflowPipeline
+              workflow={selected}
+              run={recentRun}
+              selectedIndex={selectedStepIdx}
+              onNodeClick={(i) => {
+                setSelectedStepIdx(i);
+                setDockOpen(true);
+                setDockTab('step');
+              }}
+            />
           )}
         </div>
 
@@ -230,6 +242,22 @@ export function Workflows() {
                   </span>
                 )}
               </button>
+              {selectedStepIdx !== null && (
+                <button
+                  type="button"
+                  className={`wf-dock__tab${dockTab === 'step' ? ' wf-dock__tab--active' : ''}`}
+                  onClick={() => setDockTab('step')}
+                >
+                  Step {selectedStepIdx + 1}
+                  {recentRun?.steps[selectedStepIdx] && (
+                    <span
+                      className={`wf-dock__tab-status wf-dock__tab-status--${recentRun.steps[selectedStepIdx]!.status}`}
+                    >
+                      · {recentRun.steps[selectedStepIdx]!.status}
+                    </span>
+                  )}
+                </button>
+              )}
               <div className="wf-dock__spacer" />
               {dockTab === 'json' && (
                 <button
@@ -262,8 +290,22 @@ export function Workflows() {
                     No runs yet. Hit Run now or wait for the trigger to fire.
                   </div>
                 ) : (
-                  <RunDetail run={recentRun} />
+                  <RunDetail
+                    run={recentRun}
+                    selectedIndex={selectedStepIdx}
+                    onSelectStep={(i) => {
+                      setSelectedStepIdx(i);
+                      setDockTab('step');
+                    }}
+                  />
                 ))}
+              {dockTab === 'step' && selectedStepIdx !== null && selected && (
+                <StepInspector
+                  workflow={selected}
+                  run={recentRun}
+                  index={selectedStepIdx}
+                />
+              )}
             </div>
           </div>
         )}
@@ -278,7 +320,15 @@ function triggerLabel(t: WorkflowDef['trigger']): string {
   return `event · ${t.topic}`;
 }
 
-function RunDetail({ run }: { run: WorkflowRun }) {
+function RunDetail({
+  run,
+  selectedIndex,
+  onSelectStep,
+}: {
+  run: WorkflowRun;
+  selectedIndex: number | null;
+  onSelectStep: (i: number) => void;
+}) {
   const dur =
     run.endedAt != null ? `${run.endedAt - run.startedAt}ms` : 'running…';
   return (
@@ -301,15 +351,24 @@ function RunDetail({ run }: { run: WorkflowRun }) {
               : s.status === 'running'
                 ? '…'
                 : '';
+          const hasOutput = s.output !== undefined;
+          const isSelected = selectedIndex === s.index;
           return (
             <li
               key={s.index}
-              className={`workflows__step workflows__step--${s.status}`}
+              className={`workflows__step workflows__step--${s.status}${isSelected ? ' workflows__step--selected' : ''}${hasOutput ? ' workflows__step--clickable' : ''}`}
+              onClick={hasOutput ? () => onSelectStep(s.index) : undefined}
+              role={hasOutput ? 'button' : undefined}
+              tabIndex={hasOutput ? 0 : undefined}
+              title={hasOutput ? 'Click to inspect output' : undefined}
             >
               <span className="workflows__step-index">{s.index + 1}</span>
               <span className="workflows__step-type">{s.nodeType}</span>
               <span className="workflows__step-status">{s.status}</span>
               {stepDur && <span className="workflows__step-dur">{stepDur}</span>}
+              {hasOutput && (
+                <span className="workflows__step-peek">view output →</span>
+              )}
               {s.error && (
                 <span className="workflows__step-error">{s.error}</span>
               )}
@@ -320,4 +379,81 @@ function RunDetail({ run }: { run: WorkflowRun }) {
       {run.error && <div className="workflows__run-error">{run.error}</div>}
     </div>
   );
+}
+
+/**
+ * Renders the output of a single step. Hits the `step` tab in the
+ * dock; opened by clicking a node in the graph or a step row in the
+ * Latest-run tab.
+ */
+function StepInspector({
+  workflow,
+  run,
+  index,
+}: {
+  workflow: WorkflowDef;
+  run: WorkflowRun | null;
+  index: number;
+}) {
+  const node = workflow.pipeline[index];
+  const step = run?.steps[index];
+  const dur =
+    step && step.endedAt != null && step.startedAt > 0
+      ? `${step.endedAt - step.startedAt}ms`
+      : null;
+
+  return (
+    <div className="wf-step-inspector">
+      <header className="wf-step-inspector__head">
+        <span className="wf-step-inspector__index">step {index + 1}</span>
+        <span className="wf-step-inspector__type">{node?.type ?? '?'}</span>
+        {step && (
+          <span
+            className={`wf-step-inspector__status wf-step-inspector__status--${step.status}`}
+          >
+            {step.status}
+          </span>
+        )}
+        {dur && <span className="wf-step-inspector__dur">{dur}</span>}
+        {step?.outputTruncated && (
+          <span className="wf-step-inspector__warn">
+            output truncated (over 100KB)
+          </span>
+        )}
+      </header>
+      <div className="wf-step-inspector__body">
+        {!step ? (
+          <div className="wf-dock__empty">
+            No run data yet. Run the workflow to capture this step's
+            output.
+          </div>
+        ) : step.error ? (
+          <pre className="wf-step-inspector__pre wf-step-inspector__pre--error">
+            {step.error}
+          </pre>
+        ) : step.output === undefined ? (
+          <div className="wf-dock__empty">
+            {step.status === 'pending' || step.status === 'running'
+              ? 'Step hasn’t produced output yet.'
+              : step.status === 'skipped'
+                ? 'Step was skipped — no output captured.'
+                : 'No output recorded for this step.'}
+          </div>
+        ) : (
+          <pre className="wf-step-inspector__pre">
+            {formatOutput(step.output)}
+          </pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatOutput(value: unknown): string {
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }
