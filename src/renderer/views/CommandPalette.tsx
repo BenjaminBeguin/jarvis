@@ -893,10 +893,33 @@ function SessionConfigBar({
   config: SessionConfig;
   onChange: (patch: Partial<SessionConfig>) => void;
 }) {
-  const [modeOpen, setModeOpen] = useState(false);
-  const [modelOpen, setModelOpen] = useState(false);
-  const [dirsOpen, setDirsOpen] = useState(false);
+  // Single open-menu state — opening one chip auto-closes the others
+  // without each chip needing to know about all of them. Null means
+  // no dropdown is open.
+  const [openMenu, setOpenMenu] = useState<'mode' | 'model' | 'dirs' | null>(
+    null,
+  );
   const [recentDirs, setRecentDirs] = useState<string[]>(() => loadRecentDirs());
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Outside-click + Escape close the open menu. Previously menus
+  // stayed open until you toggled them or picked an option, which
+  // also let two menus appear stacked when state got out of sync.
+  useEffect(() => {
+    if (!openMenu) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpenMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenMenu(null);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [openMenu]);
 
   const currentMode = config.permissionMode ?? 'bypassPermissions';
   const currentModeOpt =
@@ -951,22 +974,19 @@ function SessionConfigBar({
   };
 
   return (
-    <div className="session-config">
+    <div className="session-config" ref={wrapRef}>
       <div className="session-config__chip-group">
         <button
           className={`session-config__chip${
             currentMode !== 'bypassPermissions' ? ' session-config__chip--set' : ''
           }`}
-          onClick={() => {
-            setModeOpen((v) => !v);
-            setModelOpen(false);
-          }}
+          onClick={() => setOpenMenu((v) => (v === 'mode' ? null : 'mode'))}
           title={`Permission mode · ${currentModeOpt.hint}`}
         >
           <span className="session-config__chip-label">mode</span>
           <span className="session-config__chip-value">{currentModeOpt.label}</span>
         </button>
-        {modeOpen && (
+        {openMenu === 'mode' && (
           <div className="session-config__menu">
             {PERMISSION_MODE_OPTIONS.map((opt) => (
               <button
@@ -976,7 +996,7 @@ function SessionConfigBar({
                 }`}
                 onClick={() => {
                   onChange({ permissionMode: opt.value });
-                  setModeOpen(false);
+                  setOpenMenu(null);
                 }}
               >
                 <div className="session-config__menu-label">{opt.label}</div>
@@ -992,16 +1012,13 @@ function SessionConfigBar({
           className={`session-config__chip${
             currentModel ? ' session-config__chip--set' : ''
           }`}
-          onClick={() => {
-            setModelOpen((v) => !v);
-            setModeOpen(false);
-          }}
+          onClick={() => setOpenMenu((v) => (v === 'model' ? null : 'model'))}
           title={`Model · ${currentModelOpt.hint}`}
         >
           <span className="session-config__chip-label">model</span>
           <span className="session-config__chip-value">{currentModelOpt.label}</span>
         </button>
-        {modelOpen && (
+        {openMenu === 'model' && (
           <div className="session-config__menu">
             {MODEL_OPTIONS.map((opt) => (
               <button
@@ -1011,7 +1028,7 @@ function SessionConfigBar({
                 }`}
                 onClick={() => {
                   onChange({ model: opt.value || undefined });
-                  setModelOpen(false);
+                  setOpenMenu(null);
                 }}
               >
                 <div className="session-config__menu-label">{opt.label}</div>
@@ -1027,11 +1044,7 @@ function SessionConfigBar({
           className={`session-config__chip${
             dirCount > 0 ? ' session-config__chip--set' : ''
           }`}
-          onClick={() => {
-            setDirsOpen((v) => !v);
-            setModeOpen(false);
-            setModelOpen(false);
-          }}
+          onClick={() => setOpenMenu((v) => (v === 'dirs' ? null : 'dirs'))}
           title={
             dirCount > 0
               ? `${dirCount} extra dir${dirCount === 1 ? '' : 's'}: ${activeDirs.join(', ')}`
@@ -1043,7 +1056,7 @@ function SessionConfigBar({
             {dirCount > 0 ? dirCount : '—'}
           </span>
         </button>
-        {dirsOpen && (
+        {openMenu === 'dirs' && (
           <div className="session-config__menu session-config__menu--dirs">
             {recentDirs.length === 0 ? (
               <div className="session-config__menu-empty">
@@ -1084,7 +1097,7 @@ function SessionConfigBar({
             <button
               className="session-config__menu-row session-config__menu-row--add"
               onClick={() => {
-                setDirsOpen(false);
+                setOpenMenu(null);
                 void pickNewDir();
               }}
             >
@@ -1098,7 +1111,7 @@ function SessionConfigBar({
                 className="session-config__menu-row session-config__menu-row--clear"
                 onClick={() => {
                   clearDirs();
-                  setDirsOpen(false);
+                  setOpenMenu(null);
                 }}
               >
                 <div className="session-config__menu-label">Clear selection</div>
