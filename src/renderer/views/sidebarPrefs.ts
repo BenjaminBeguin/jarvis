@@ -38,7 +38,7 @@ export function loadSidebarPrefs(): SidebarPrefs {
     const parsed = JSON.parse(raw) as Partial<SidebarPrefs>;
     if (!parsed || typeof parsed !== 'object') return DEFAULT_PREFS;
     if (parsed.version !== 1) return DEFAULT_PREFS;
-    return {
+    const loaded: SidebarPrefs = {
       version: 1,
       hidden: Array.isArray(parsed.hidden)
         ? parsed.hidden.filter((s): s is string => typeof s === 'string')
@@ -54,9 +54,36 @@ export function loadSidebarPrefs(): SidebarPrefs {
             )
           : {},
     };
+    return migrateObservatorySplit(loaded);
   } catch {
     return DEFAULT_PREFS;
   }
+}
+
+/**
+ * Observatory split migration: the original sidebar had one item
+ * `observatory` pointing at the task list + constellation. After the
+ * FlowStream landed, that view was renamed to `ai-agent` and a NEW
+ * `observatory` item was added for the live river. Users with a saved
+ * order containing `observatory` should keep their layout: rename
+ * their existing entry to `ai-agent` so it stays in the same slot.
+ * The new `observatory` item appends fresh via Sidebar's "unknown
+ * items go to end" logic.
+ *
+ * This migration is idempotent — second run is a no-op because the
+ * order no longer has the orphan id.
+ */
+function migrateObservatorySplit(prefs: SidebarPrefs): SidebarPrefs {
+  const mainOrder = prefs.orderBySection['main'];
+  if (!mainOrder || !mainOrder.includes('observatory')) return prefs;
+  if (mainOrder.includes('ai-agent')) return prefs;
+  const migrated = mainOrder.map((id) =>
+    id === 'observatory' ? 'ai-agent' : id,
+  );
+  return {
+    ...prefs,
+    orderBySection: { ...prefs.orderBySection, main: migrated },
+  };
 }
 
 export function saveSidebarPrefs(prefs: SidebarPrefs): void {

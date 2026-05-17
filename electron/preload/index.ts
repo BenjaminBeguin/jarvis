@@ -24,6 +24,7 @@ import type {
   ModuleSettingsValues,
   ModuleSummary,
   NotificationPrefs,
+  NotifierEmitPayload,
   ProjectDef,
   ProjectInput,
   ProjectMemoryFile,
@@ -516,6 +517,11 @@ const api = {
     ipcRenderer.invoke(IpcChannels.listActivity, limit),
   onActivityChanged: (listener: Listener<ActivityEvent>): Unsubscribe =>
     subscribe(IpcChannels.activityChanged, listener),
+
+  /** Live notifier broadcasts — every notifier.post() emits one. Used
+   *  by the FlowStream page for terminal-stage orbs. */
+  onNotifierEmitted: (listener: Listener<NotifierEmitPayload>): Unsubscribe =>
+    subscribe(IpcChannels.notifierEmitted, listener),
 };
 
 export type JarvisApi = typeof api;

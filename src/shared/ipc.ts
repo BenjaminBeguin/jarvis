@@ -179,6 +179,12 @@ export const IpcChannels = {
 
   listActivity: 'activity:list',
   activityChanged: 'activity:changed',
+
+  /** Live notifier broadcast — fires every time notifier.post() runs.
+   *  Used by the FlowStream page to render terminal-stage orbs for
+   *  notifications. Payload is a serializable subset of the notifier
+   *  event (no onClick callback). */
+  notifierEmitted: 'notifier:emitted',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];

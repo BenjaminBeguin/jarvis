@@ -819,3 +819,36 @@ export interface AppStatus {
   claudeBinaryPath: string | null;
   version: string;
 }
+
+/**
+ * Wire shape for notifier broadcasts crossing IPC. Mirrors the main-
+ * side NotificationEvent minus the onClick callback (functions can't
+ * cross the bridge). The FlowStream page consumes this to render
+ * terminal-stage notification orbs.
+ */
+export type NotificationSourceWire =
+  | 'notify-tool'
+  | 'reminder'
+  | 'reminder-created'
+  | 'scheduled-action'
+  | 'task-launched'
+  | 'task-awaiting'
+  | 'task-complete'
+  | 'task-errored'
+  | 'meeting-heads-up'
+  | 'cost-guardrail'
+  | 'inbox-new'
+  | 'skill-suggestion'
+  | 'other';
+
+export interface NotifierEmitPayload {
+  source: NotificationSourceWire;
+  title: string;
+  body: string;
+  taskId?: string;
+  reminderId?: string;
+  /** Wall-clock ms — when the notifier fired this. Stamped at the
+   *  broadcast site so the renderer's FlowStream can place the orb
+   *  on the right timeline. */
+  ts: number;
+}

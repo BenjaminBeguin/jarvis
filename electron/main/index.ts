@@ -359,6 +359,24 @@ function todayLocalKey(): string {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
+/**
+ * Subscribe the renderer broadcast to notifier.post() fires so the
+ * FlowStream page can render a terminal-stage orb for every
+ * notification. Strips onClick (functions can't cross IPC) and
+ * stamps a timestamp at the broadcast site.
+ */
+notifier.subscribe((e) => {
+  const payload = {
+    source: e.source,
+    title: e.title,
+    body: e.body,
+    ...(e.taskId ? { taskId: e.taskId } : {}),
+    ...(e.reminderId ? { reminderId: e.reminderId } : {}),
+    ts: Date.now(),
+  };
+  broadcast(IpcChannels.notifierEmitted, payload);
+});
+
 function wireRunnerEvents(): void {
   runner.on('event', (payload: { taskId: string; event: TaskEvent }) => {
     broadcast(IpcChannels.taskEvent, payload);

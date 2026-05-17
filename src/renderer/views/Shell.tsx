@@ -12,6 +12,7 @@ import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
 import { Activity } from './Activity';
 import { Dashboard } from './Dashboard';
+import { FlowStream } from './FlowStream';
 import { Settings } from './Settings';
 import { Sidebar, type SidebarSection } from './Sidebar';
 import { Skills } from './Skills';
@@ -23,6 +24,7 @@ import { Routines } from './Routines';
 type Tab =
   | 'dashboard'
   | 'observatory'
+  | 'ai-agent'
   | 'inbox'
   | 'activity'
   | 'projects'
@@ -441,7 +443,18 @@ export function Shell({ status }: Props) {
             setTab('observatory');
             setOpenModuleId(null);
           },
-          title: '⌘2 · Live + recent agent runs',
+          title: 'Live river of events flowing through Jarvis',
+        },
+        {
+          id: 'ai-agent',
+          label: 'AI Agent',
+          icon: 'A',
+          isActive: tab === 'ai-agent' && !openModuleId,
+          onClick: () => {
+            setTab('ai-agent');
+            setOpenModuleId(null);
+          },
+          title: 'Recent + running agent tasks · constellation + list view',
         },
       ],
     },
@@ -673,6 +686,8 @@ export function Shell({ status }: Props) {
         ) : tab === 'dashboard' ? (
           <Dashboard />
         ) : tab === 'observatory' ? (
+          <FlowStream />
+        ) : tab === 'ai-agent' ? (
           <Observatory />
         ) : tab === 'inbox' ? (
           <Inbox />
