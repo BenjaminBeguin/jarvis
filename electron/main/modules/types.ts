@@ -12,6 +12,8 @@ import type {
   TaskOrigin,
   TaskStatus,
   TaskSummary,
+  WorkflowDef,
+  WorkflowRun,
 } from '@shared/types';
 
 import type { TurnResult } from '../await-turn.js';
@@ -169,6 +171,13 @@ export interface ModuleContext {
    *  is unavailable (offline, auth error, timeout); callers should
    *  fall back to their existing heuristic in that case. */
   classifyIntent(message: string): Promise<ClassifyResult | null>;
+  /** Snapshot of every workflow loaded from ~/.jarvis/workflows/. Used
+   *  by surfaces that need to list workflows (palette, Telegram bot,
+   *  MCP tool). */
+  listWorkflows(): WorkflowDef[];
+  /** Fire a workflow by id, attributing the run to `manual`. Throws
+   *  if the workflow doesn't exist. Returns the freshly-created run. */
+  runWorkflow(id: string): WorkflowRun;
 }
 
 /**

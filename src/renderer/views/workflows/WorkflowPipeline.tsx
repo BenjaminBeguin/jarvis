@@ -50,6 +50,11 @@ interface PipelineNodeData extends Record<string, unknown> {
   hasOutput: boolean;
 }
 
+interface TriggerNodeData extends Record<string, unknown> {
+  trigger: WorkflowDef['trigger'];
+  fired: boolean;
+}
+
 interface Props {
   workflow: WorkflowDef;
   run: WorkflowRun | null;
@@ -123,6 +128,39 @@ function summaryFor(node: WorkflowNodeDef): string {
   return '';
 }
 
+function TriggerNode({ data }: NodeProps<Node<TriggerNodeData>>) {
+  const { trigger, fired } = data;
+  const isCron = trigger.kind === 'cron';
+  const hue = isCron ? '#FFD479' : '#7ADCFF';
+  const glyph = isCron ? '◷' : '⏵';
+  const main = isCron ? `every ${trigger.every}` : 'manual';
+  const sub =
+    trigger.kind === 'manual' && trigger.palette
+      ? `/${trigger.palette}`
+      : isCron
+        ? 'cron'
+        : 'palette · MCP · UI';
+  return (
+    <div
+      className={`wf-trigger${fired ? ' wf-trigger--fired' : ''}`}
+      style={{ ['--node-hue' as string]: hue }}
+    >
+      <div className="wf-trigger__row">
+        <span className="wf-trigger__glyph">{glyph}</span>
+        <div className="wf-trigger__meta">
+          <span className="wf-trigger__main">{main}</span>
+          <span className="wf-trigger__sub">{sub}</span>
+        </div>
+      </div>
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="wf-node__handle"
+      />
+    </div>
+  );
+}
+
 function PipelineNode({ data }: NodeProps<Node<PipelineNodeData>>) {
   const { node, index, state, selected, hasOutput } = data;
   const icon = iconFor(node.type);
@@ -161,7 +199,7 @@ function PipelineNode({ data }: NodeProps<Node<PipelineNodeData>>) {
   );
 }
 
-const NODE_TYPES = { pipeline: PipelineNode };
+const NODE_TYPES = { pipeline: PipelineNode, trigger: TriggerNode };
 
 function edgeStyleFor(
   prev: StageState,
@@ -183,13 +221,25 @@ export function WorkflowPipeline({
   onNodeClick,
 }: Props) {
   const { nodes, edges } = useMemo(() => {
-    const nodes: Node<PipelineNodeData>[] = workflow.pipeline.map(
+    const triggerNode: Node<TriggerNodeData> = {
+      id: 'trigger',
+      type: 'trigger',
+      position: { x: NODE_X_OFFSET, y: NODE_Y },
+      data: { trigger: workflow.trigger, fired: !!run },
+      draggable: false,
+      connectable: false,
+      selectable: false,
+    };
+    const pipelineNodes: Node<PipelineNodeData>[] = workflow.pipeline.map(
       (node, i) => {
         const step = run?.steps[i];
         return {
           id: `n${i}`,
           type: 'pipeline',
-          position: { x: NODE_X_OFFSET + i * NODE_X_SPACING, y: NODE_Y },
+          position: {
+            x: NODE_X_OFFSET + (i + 1) * NODE_X_SPACING,
+            y: NODE_Y,
+          },
           data: {
             node,
             index: i,
@@ -203,7 +253,27 @@ export function WorkflowPipeline({
         };
       },
     );
+    const nodes: Node[] = [triggerNode, ...pipelineNodes];
     const edges: Edge[] = [];
+    // Trigger → step 0.
+    if (workflow.pipeline.length > 0) {
+      const firstState = stateOf(run, 0);
+      const triggerEdgeStyle = edgeStyleFor(
+        run ? 'completed' : 'idle',
+        firstState,
+      );
+      edges.push({
+        id: 'e-trigger',
+        source: 'trigger',
+        target: 'n0',
+        animated: triggerEdgeStyle.animated,
+        style: { stroke: triggerEdgeStyle.stroke, strokeWidth: 1.5 },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: triggerEdgeStyle.stroke,
+        },
+      });
+    }
     for (let i = 0; i < workflow.pipeline.length - 1; i++) {
       const prevState = stateOf(run, i);
       const nextState = stateOf(run, i + 1);

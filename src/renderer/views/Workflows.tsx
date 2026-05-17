@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { WorkflowDef, WorkflowRun } from '../../shared/types';
 import { toast } from './Toaster';
+import { NodeDetail } from './workflows/NodeDetail';
 import { WorkflowPipeline } from './workflows/WorkflowPipeline';
 import { WorkflowSelector } from './workflows/WorkflowSelector';
 
@@ -316,8 +317,7 @@ export function Workflows() {
 
 function triggerLabel(t: WorkflowDef['trigger']): string {
   if (t.kind === 'cron') return `cron · ${t.every}`;
-  if (t.kind === 'manual') return `manual${t.palette ? ' · ' + t.palette : ''}`;
-  return `event · ${t.topic}`;
+  return `manual${t.palette ? ' · ' + t.palette : ''}`;
 }
 
 function RunDetail({
@@ -422,28 +422,37 @@ function StepInspector({
         )}
       </header>
       <div className="wf-step-inspector__body">
-        {!step ? (
-          <div className="wf-dock__empty">
-            No run data yet. Run the workflow to capture this step's
-            output.
-          </div>
-        ) : step.error ? (
-          <pre className="wf-step-inspector__pre wf-step-inspector__pre--error">
-            {step.error}
-          </pre>
-        ) : step.output === undefined ? (
-          <div className="wf-dock__empty">
-            {step.status === 'pending' || step.status === 'running'
-              ? 'Step hasn’t produced output yet.'
-              : step.status === 'skipped'
-                ? 'Step was skipped — no output captured.'
-                : 'No output recorded for this step.'}
-          </div>
-        ) : (
-          <pre className="wf-step-inspector__pre">
-            {formatOutput(step.output)}
-          </pre>
+        {node && (
+          <section className="wf-step-inspector__section">
+            <h4 className="wf-step-inspector__section-title">Configuration</h4>
+            <NodeDetail node={node} />
+          </section>
         )}
+        <section className="wf-step-inspector__section">
+          <h4 className="wf-step-inspector__section-title">Output</h4>
+          {!step ? (
+            <div className="wf-dock__empty">
+              No run data yet. Run the workflow to capture this step's
+              output.
+            </div>
+          ) : step.error ? (
+            <pre className="wf-step-inspector__pre wf-step-inspector__pre--error">
+              {step.error}
+            </pre>
+          ) : step.output === undefined ? (
+            <div className="wf-dock__empty">
+              {step.status === 'pending' || step.status === 'running'
+                ? 'Step hasn’t produced output yet.'
+                : step.status === 'skipped'
+                  ? 'Step was skipped — no output captured.'
+                  : 'No output recorded for this step.'}
+            </div>
+          ) : (
+            <pre className="wf-step-inspector__pre">
+              {formatOutput(step.output)}
+            </pre>
+          )}
+        </section>
       </div>
     </div>
   );

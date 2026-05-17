@@ -881,10 +881,16 @@ export interface WorkflowDef {
   pipeline: WorkflowNodeDef[];
 }
 
+/**
+ * How a workflow is invoked. V1 keeps it simple: scheduled or
+ * user-launched. Event-driven triggers (subscribing to internal
+ * `task.completed` etc.) will land once we have a clear use case
+ * — adding the wire format now would force decisions we don't need
+ * to make yet.
+ */
 export type WorkflowTrigger =
   | { kind: 'cron'; every: string }
-  | { kind: 'manual'; palette?: string }
-  | { kind: 'event'; topic: string };
+  | { kind: 'manual'; palette?: string };
 
 /** Known node `type`s as of V1. Treated as opaque strings on the
  *  wire so adding new node types later doesn't require a type bump.
@@ -932,7 +938,7 @@ export interface WorkflowRunStep {
 export interface WorkflowRun {
   id: string;
   workflowId: string;
-  trigger: 'cron' | 'manual' | 'event';
+  trigger: 'cron' | 'manual';
   startedAt: number;
   endedAt: number | null;
   status: WorkflowRunStatus;

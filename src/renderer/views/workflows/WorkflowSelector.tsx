@@ -16,8 +16,7 @@ interface Props {
 
 function triggerLabel(t: WorkflowDef['trigger']): string {
   if (t.kind === 'cron') return `every ${t.every}`;
-  if (t.kind === 'manual') return `manual${t.palette ? ' · /' + t.palette : ''}`;
-  return `event · ${t.topic}`;
+  return `manual${t.palette ? ' · /' + t.palette : ''}`;
 }
 
 export function WorkflowSelector({ workflows, selectedId, onSelect }: Props) {

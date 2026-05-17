@@ -60,6 +60,7 @@ import { shellNavModule } from './modules/shell-nav.js';
 import { skillSuggesterModule } from './modules/skill-suggester.js';
 import { statusModule } from './modules/status.js';
 import { telegramBotModule } from './modules/telegram-bot/index.js';
+import { workflowsModule } from './modules/workflows.js';
 import { parseIntent } from './intent-router.js';
 import { ProjectMemoryStore } from './project-memory.js';
 import { ProjectStore } from './projects.js';
@@ -281,6 +282,8 @@ runner.setJarvisMcp(
     },
     isPaused: () => loadPaused(),
     getCostBreakdown,
+    workflows,
+    workflowRunner,
   }),
 );
 
@@ -926,6 +929,12 @@ app.whenReady().then(async () => {
     listSkills: () => skills.list(),
     getCostBreakdown: (windowDays) => getCostBreakdown(windowDays),
     classifyIntent: (message) => intentClassifier.classify(message),
+    listWorkflows: () => workflows.list(),
+    runWorkflow: (id) => {
+      const def = workflows.get(id);
+      if (!def) throw new Error(`Workflow not found: ${id}`);
+      return workflowRunner.run(def, 'manual');
+    },
   });
   await modules.register(quickNoteModule);
   await modules.register(claudeCodeWatchModule);
@@ -938,6 +947,7 @@ app.whenReady().then(async () => {
   await modules.register(remindersModule);
   await modules.register(shellNavModule);
   await modules.register(shellModule);
+  await modules.register(workflowsModule);
   await modules.register(telegramBotModule);
 
   // Sync the auto-dedupe routine with the quick-note module's

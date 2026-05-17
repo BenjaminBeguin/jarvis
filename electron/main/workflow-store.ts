@@ -167,14 +167,10 @@ export class WorkflowStore extends EventEmitter {
       return null;
     }
     const trigger = raw.trigger as { kind?: unknown };
-    if (
-      trigger.kind !== 'cron' &&
-      trigger.kind !== 'manual' &&
-      trigger.kind !== 'event'
-    ) {
+    if (trigger.kind !== 'cron' && trigger.kind !== 'manual') {
       this.loadErrors.push({
         filename,
-        message: `trigger.kind must be cron/manual/event, got ${String(trigger.kind)}`,
+        message: `trigger.kind must be cron or manual, got ${String(trigger.kind)}`,
       });
       return null;
     }

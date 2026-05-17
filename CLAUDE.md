@@ -30,6 +30,7 @@ The choice lives in `~/.jarvis/config.json` (`{ "authMode": "subscription" | "ap
 - A **Skill** is a saved Task template: `~/.jarvis/skills/<name>/SKILL.md` with frontmatter `name`, `description`, `allowed-tools`, `mcp-servers`, `model`; body is the system prompt. Built-ins are seeded by `seed.ts` and only written if missing.
 - A **Routine** is `(skillId, cron, input?)`, persisted in `~/.jarvis/routines.json`, scheduled with `node-cron`.
 - A **Reminder** is `(body, mode, fireAt)` persisted in `~/.jarvis/reminders.json`, scheduled with `setTimeout`. `mode='reminder'` fires a notify-style Claude turn; `mode='scheduled'` fires an action-style turn that *does* the thing. Both rehydrate on startup; past-due fire immediately.
+- A **Workflow** is `(trigger, pipeline)` persisted in `~/.jarvis/workflows/<id>.json`. Each pipeline step is a typed node (`http-fetch`, `transform`, `osascript`, `shell`, `inbox-write`, `notify`, `run-skill`). Compiled to an XState v5 machine at load time; the user sees flat JSON. Triggers: `cron` (auto-scheduled) or `manual` (palette / `mcp__jarvis__run_workflow` / UI). Workflows that end in `inbox-write` feed the Inbox under their named source — Linear, Slack, and Calendar inbox feeds are all workflows. See [docs/workflows.md](docs/workflows.md).
 - The palette goes through `parseIntent()` → either a `task` (run now) or a `reminder` (queue for later). Skill-pinned dispatches bypass routing.
 
 ### 2. Modules (extensions)
@@ -176,8 +177,10 @@ Day-to-day:
 - **New stored field on a Task**: extend `TaskSummary`, add a SQLite migration appended to `MIGRATIONS` in `db.ts`, update the insert/update queries, update the renderer.
 - **New MCP integration**: don't hardcode. The user puts servers in `~/.jarvis/mcp.json`; skills opt in via `mcp-servers: [name]` in frontmatter, or `mcp-servers: ["*"]` to inherit every server in mcp.json (used by omnibus skills like `send` so adding a new channel doesn't require a skill edit). The TaskRunner resolves names against the store.
 - **Claude.ai connectors are not Jarvis MCPs.** `claude mcp list` shows entries like `claude.ai Slack: ✓ Connected` — these work in Claude.ai chat and interactive Claude Code but DO NOT propagate to Agent SDK subprocess sessions (which is what `query()` runs as). For Jarvis to use a channel, it must be a local stdio MCP — either user-scoped via `claude mcp add` or in `~/.jarvis/mcp.json`. SendPage surfaces this with a `claude-ai-only` status badge so users aren't surprised.
-- **New time-fired trigger**: there are two systems. `RoutineStore` is for recurring crons; `ReminderStore` is for one-shot fires (both reminders and scheduled actions). Pick the right one — don't introduce a parallel timer.
+- **New time-fired trigger**: there are three systems. `RoutineStore` runs recurring crons of skill tasks; `ReminderStore` is for one-shot fires (reminders + scheduled actions); `WorkflowScheduler` runs cron-triggered workflows. Pick the right one — don't introduce a parallel timer.
 - **New module capability**: extend `ModuleContext` in `electron/main/modules/types.ts`, then implement in `setContext()` in `index.ts`. Modules never import from `electron/main/` directly except through that context.
+- **New workflow node type**: drop a `fromPromise` actor under `electron/main/workflow-nodes/<type>.ts`, register it in `workflow-nodes/index.ts`, add the type literal to `WorkflowNodeType` in `src/shared/types.ts`, and (optionally) extend the Step inspector's `NodeDetail.tsx` to render the params nicely. The compiled XState machine forwards `AbortSignal` into your actor automatically. See [docs/workflows.md](docs/workflows.md).
+- **Every new action gets palette + MCP coverage.** If a feature is worth running, it should be reachable from the palette (a `/<prefix>` intent on a module) AND from the Jarvis MCP server (`mcp__jarvis__<tool>`). Workflows are the canonical example — `/wf <id>`, `mcp__jarvis__run_workflow({ id })`, and the UI "Run now" button all land at the same `workflowRunner.run()`.
 
 ## Phases
 
@@ -189,7 +192,8 @@ We follow `~/.claude/plans/hey-i-would-love-staged-dewdrop.md`:
 - Phase 2.5 ✅ Module system + quick-note module.
 - Phase 3 ✅ meeting recorder + auto-debrief skill, Answer HUD, intent router (reminders / scheduled actions), Dashboard view, /status + /next, command history, inline schedule preview.
 - Phase 3.5 ✅ Telegram bot module (pilot from phone) + AFK mode + notifier singleton + `ctx.routePrompt` / `awaitTurnResult` / `sendMessageToTask` / `abortTask` capabilities + `secret` settings field type. See [docs/telegram.md](docs/telegram.md).
-- Phase 4 — next: skill-to-skill chaining, workflow DAG, calendar-aware briefings, whisper.cpp swap, external/community modules, mobile PWA dashboard over Tailscale (the natural extension to remote control beyond chat).
+- Phase 4 ✅ Workflows — XState-backed JSON pipelines (`http-fetch` → `transform` → `inbox-write` etc.), graph-first UI with React Flow, palette `/wf` + `mcp__jarvis__run_workflow` access surfaces. Linear / Slack / Calendar inbox feeds run as workflows. See [docs/workflows.md](docs/workflows.md).
+- Phase 5 — next: skill-to-skill chaining, branching/parallel in workflows, calendar-aware briefings, whisper.cpp swap, external/community modules, mobile PWA dashboard over Tailscale (the natural extension to remote control beyond chat).
 
 ## What's _not_ in here
 

@@ -11,10 +11,8 @@ import type { WorkflowStore } from './workflow-store.js';
  *   - `cron`: registers a `node-cron` job. `trigger.every` accepts
  *     `5m` / `1h` / `2d` shorthand AND full cron strings.
  *   - `manual`: tracked only; the runner is invoked via the IPC
- *     `runWorkflow` channel or programmatically.
- *   - `event`: subscribe to internal events (`notifier:emitted`,
- *     etc.). Not wired in V1 — slot reserved on the def shape so
- *     workflows authored now don't need a schema bump later.
+ *     `runWorkflow` channel, the palette intent (`/<workflow-id>`),
+ *     or the `run_workflow` Jarvis MCP tool.
  *
  * Maintains an active-jobs map per workflow id so that store changes
  * (file edits, enable/disable, deletion) atomically re-register
@@ -134,7 +132,7 @@ export class WorkflowScheduler {
       this.jobs.delete(def.id);
     }
     if (!def.enabled) return;
-    if (def.trigger.kind !== 'cron') return; // manual/event not scheduled here
+    if (def.trigger.kind !== 'cron') return; // manual not scheduled here
     const cronExpr = expandEvery(def.trigger.every);
     if (!cron.validate(cronExpr)) {
       console.warn(

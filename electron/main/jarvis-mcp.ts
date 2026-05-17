@@ -28,6 +28,8 @@ import type { ProjectMemoryStore } from './project-memory.js';
 import type { ProjectStore } from './projects.js';
 import type { ReminderStore } from './reminders.js';
 import type { UserContextStore } from './user-context.js';
+import type { WorkflowRunner } from './workflow-runner.js';
+import type { WorkflowStore } from './workflow-store.js';
 
 /**
  * The "jarvis" MCP server — runs in-process alongside the agent SDK, no
@@ -61,6 +63,11 @@ export interface JarvisMcpDeps {
   /** Read aggregated spend over the last `windowDays`. Same shape the
    *  Settings → Spend tab renders. */
   getCostBreakdown: typeof getCostBreakdownFn;
+  /** JSON-defined pipelines under ~/.jarvis/workflows/. Used by the
+   *  list/run tools so agents can fire workflows the same way the
+   *  palette does. */
+  workflows: WorkflowStore;
+  workflowRunner: WorkflowRunner;
 }
 
 const ok = (text: string): CallToolResult => ({
@@ -302,6 +309,50 @@ export function createJarvisMcp(
           try {
             const n = args.windowDays ?? 7;
             return json(deps.getCostBreakdown(n));
+          } catch (e) {
+            return err(e instanceof Error ? e.message : String(e));
+          }
+        },
+      ),
+
+      tool(
+        'list_workflows',
+        'List every workflow loaded from ~/.jarvis/workflows/. Returns { id, name, description?, enabled, trigger, nodeCount } per entry. Use to discover what workflows exist before calling run_workflow.',
+        {},
+        async () => {
+          const list = deps.workflows.list().map((w) => ({
+            id: w.id,
+            name: w.name,
+            description: w.description,
+            enabled: w.enabled,
+            trigger: w.trigger,
+            nodeCount: w.pipeline.length,
+          }));
+          return json(list);
+        },
+      ),
+
+      tool(
+        'run_workflow',
+        'Fire a workflow manually by id. Attributes the run to `manual` (same as the palette /wf, "Run now" button). Returns { runId, status } — the run continues in the background. Use list_workflows first to discover ids.',
+        {
+          id: z.string().min(1),
+        },
+        async (args) => {
+          const def = deps.workflows.get(args.id);
+          if (!def) return err(`Workflow not found: ${args.id}`);
+          try {
+            const run = deps.workflowRunner.run(def, 'manual');
+            deps.activity.record({
+              kind: 'workflow.run',
+              label: `Workflow fired (mcp) · ${def.name}`,
+              detail: {
+                workflowId: def.id,
+                runId: run.id,
+                trigger: 'manual',
+              },
+            });
+            return json({ runId: run.id, status: run.status });
           } catch (e) {
             return err(e instanceof Error ? e.message : String(e));
           }

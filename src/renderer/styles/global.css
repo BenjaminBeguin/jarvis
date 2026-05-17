@@ -15186,6 +15186,69 @@ button:disabled:hover {
   outline-offset: 4px;
 }
 
+/* Trigger node — lives before step 1 in the graph */
+
+.wf-trigger {
+  min-width: 160px;
+  max-width: 220px;
+  padding: 10px 12px;
+  background: rgba(14, 20, 28, 0.92);
+  border: 1px dashed var(--node-hue, rgba(255, 255, 255, 0.2));
+  border-radius: 10px;
+  color: var(--text);
+  font-family: var(--font-mono), monospace;
+  position: relative;
+  opacity: 0.85;
+}
+
+.wf-trigger::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 10px;
+  border: 1px solid var(--node-hue);
+  opacity: 0.15;
+  pointer-events: none;
+  filter: blur(3px);
+}
+
+.wf-trigger__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wf-trigger__glyph {
+  font-size: 22px;
+  color: var(--node-hue);
+  text-shadow: 0 0 8px var(--node-hue);
+  width: 22px;
+  text-align: center;
+}
+
+.wf-trigger__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wf-trigger__main {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.wf-trigger__sub {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  text-transform: lowercase;
+}
+
+.wf-trigger--fired {
+  opacity: 1;
+  border-style: solid;
+}
+
 @keyframes wf-node-pulse {
   0%, 100% {
     opacity: 0.85;
@@ -15406,6 +15469,115 @@ button:disabled:hover {
 
 .wf-step-inspector__pre--error {
   color: #FF8585;
+}
+
+/* Inspector sections + type-specific NodeDetail */
+
+.wf-step-inspector__section {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.wf-step-inspector__section:last-child {
+  border-bottom: none;
+}
+
+.wf-step-inspector__section-title {
+  margin: 0;
+  padding: 8px 14px 4px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.wf-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 14px 14px;
+}
+
+.wf-field {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.wf-field__label {
+  min-width: 92px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10.5px;
+  flex-shrink: 0;
+}
+
+.wf-field__value {
+  color: var(--text);
+  word-break: break-word;
+  min-width: 0;
+}
+
+.wf-field__value--mono {
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+}
+
+.wf-field code {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+}
+
+.wf-detail__method {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0, 212, 255, 0.12);
+  color: var(--accent);
+  font-weight: 500;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+}
+
+.wf-detail__url {
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  color: var(--text);
+}
+
+.wf-detail__heading {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
+.wf-detail__hint {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
+.wf-detail__code {
+  margin: 0;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+  max-height: 320px;
+  overflow: auto;
 }
 
 /* Step row in Latest-run tab — show as clickable when output exists */
