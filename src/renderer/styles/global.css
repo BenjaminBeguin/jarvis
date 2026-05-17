@@ -3725,6 +3725,11 @@ button:disabled:hover {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Breathing room between the column header and the first group
+     label inside (e.g. "UPCOMING 0"). The inner compact page has
+     padding:0 so the first row would otherwise sit flush against
+     the column-head border. */
+  padding-top: 16px;
 }
 
 /* When QuickNotePage / RemindersPage render inside CapturePage with
