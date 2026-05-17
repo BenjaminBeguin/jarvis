@@ -19,6 +19,7 @@ export function registerIntentIpc({
   reminders,
   runner,
   auth,
+  activity,
 }: IpcDeps): void {
   ipcMain.handle(IpcChannels.previewIntent, (_e, prompt: string) => {
     if (typeof prompt !== 'string') return { kind: 'task', body: '' };
@@ -65,6 +66,21 @@ export function registerIntentIpc({
               reminderId: reminder.id,
               silent: true,
               onClick: () => openObservatory(),
+            });
+            // Mirror to Activity — palette free-text path was silent
+            // (only the /remind intent module logged it). Now any
+            // "remind me in 2h …" typed in the palette OR sent via
+            // Telegram produces an Activity row at create time, not
+            // just when it fires.
+            activity.record({
+              kind: 'reminder.created',
+              label: `${title} · ${reminder.body.slice(0, 80)}${reminder.body.length > 80 ? '…' : ''}`,
+              detail: {
+                reminderId: reminder.id,
+                mode: reminder.mode,
+                fireAt: reminder.fireAt,
+                cron: hadCron ? reminder.cron ?? null : null,
+              },
             });
           },
         },
