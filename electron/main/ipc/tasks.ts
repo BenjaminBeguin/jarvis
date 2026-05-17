@@ -17,6 +17,7 @@ export function registerTasksIpc({
   runner,
   shellRunner,
   auth,
+  activity,
 }: IpcDeps): void {
   ipcMain.handle(IpcChannels.launchTask, async (_e, req: LaunchTaskRequest) => {
     const status = await auth.refresh();
@@ -40,9 +41,18 @@ export function registerTasksIpc({
     return runner.launch({ ...req, origin: asTaskOrigin(req.origin) });
   });
 
-  ipcMain.handle(IpcChannels.abortTask, (_e, taskId: string) =>
-    runner.abort(taskId),
-  );
+  ipcMain.handle(IpcChannels.abortTask, (_e, taskId: string) => {
+    const task = runner.list().find((t) => t.id === taskId);
+    const ok = runner.abort(taskId);
+    if (ok) {
+      activity.record({
+        kind: 'task.aborted',
+        label: `Task aborted · ${task?.title ?? taskId}`,
+        detail: { taskId, title: task?.title, origin: task?.origin },
+      });
+    }
+    return ok;
+  });
 
   ipcMain.handle(IpcChannels.launchShell, (_e, cmd: string) => {
     if (typeof cmd !== 'string' || !cmd.trim()) {

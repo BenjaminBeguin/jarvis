@@ -862,6 +862,11 @@ app.whenReady().then(async () => {
       saveAfkMode(value);
       broadcast(IpcChannels.afkChanged, value);
       refreshTrayMenu();
+      activity.record({
+        kind: 'afk.toggled',
+        label: `AFK ${value ? 'on' : 'off'} (via module)`,
+        detail: { afk: value },
+      });
     },
     isPaused: () => loadPaused(),
     setPaused: (value) => {
@@ -875,8 +880,30 @@ app.whenReady().then(async () => {
       });
     },
     listReminders: () => reminders.list(),
-    markReminderDone: (id) => reminders.markDone(id),
-    snoozeReminder: (id, msFromNow) => reminders.snooze(id, msFromNow),
+    markReminderDone: (id) => {
+      const before = reminders.list().find((r) => r.id === id);
+      const ok = reminders.markDone(id);
+      if (ok && before) {
+        activity.record({
+          kind: 'reminder.done',
+          label: `Reminder marked done (via module) · ${before.body.slice(0, 80)}`,
+          detail: { reminderId: id },
+        });
+      }
+      return ok;
+    },
+    snoozeReminder: (id, msFromNow) => {
+      const before = reminders.list().find((r) => r.id === id);
+      const result = reminders.snooze(id, msFromNow);
+      if (result && before) {
+        activity.record({
+          kind: 'reminder.snoozed',
+          label: `Reminder snoozed ${Math.round(msFromNow / 60_000)}m (via module) · ${before.body.slice(0, 60)}`,
+          detail: { reminderId: id, msFromNow },
+        });
+      }
+      return result;
+    },
     listSkills: () => skills.list(),
     getCostBreakdown: (windowDays) => getCostBreakdown(windowDays),
     classifyIntent: (message) => intentClassifier.classify(message),

@@ -13,7 +13,11 @@ import type { IpcDeps } from './types.js';
  * — see briefings.ts for the directory layout. The chokidar watcher
  * picks up the new file and broadcasts `briefingsChanged`.
  */
-export function registerBriefingsIpc({ briefings, runner }: IpcDeps): void {
+export function registerBriefingsIpc({
+  briefings,
+  runner,
+  activity,
+}: IpcDeps): void {
   ipcMain.handle(IpcChannels.listBriefingKinds, () => briefings.listKinds());
 
   ipcMain.handle(IpcChannels.listBriefingFiles, (_e, kindId: string) =>
@@ -36,6 +40,11 @@ export function registerBriefingsIpc({ briefings, runner }: IpcDeps): void {
         throw new Error('content must be a string');
       }
       briefings.writeFile(payload.kindId, payload.filename, payload.content);
+      activity.record({
+        kind: 'briefing.edited',
+        label: `Briefing edited · ${payload.kindId}/${payload.filename}`,
+        detail: { kindId: payload.kindId, filename: payload.filename },
+      });
     },
   );
 
@@ -47,10 +56,16 @@ export function registerBriefingsIpc({ briefings, runner }: IpcDeps): void {
     if (!kind) {
       throw new Error(`Unknown briefing kind: ${kindId}`);
     }
-    return runner.launch({
+    const t = runner.launch({
       prompt: `Generate the ${kind.label.toLowerCase()} now and save it under ~/.jarvis/briefings/${kind.id}/.`,
       skillId: kind.skillId,
       origin: asTaskOrigin('palette'),
     });
+    activity.record({
+      kind: 'briefing.generated',
+      label: `Briefing generation requested · ${kind.label}`,
+      detail: { kindId, skillId: kind.skillId, taskId: t.id },
+    });
+    return t;
   });
 }

@@ -411,6 +411,10 @@ const EVENT_KIND_META: Record<
   'telegram.voice': { category: 'other', label: 'telegram · voice' },
   'skill-suggestion.accepted': { category: 'integration', label: 'skill suggestion · accepted' },
   'skill-suggestion.dismissed': { category: 'integration', label: 'skill suggestion · dismissed' },
+  'task.aborted': { category: 'other', label: 'task · aborted' },
+  'reminder.snoozed': { category: 'reminder', label: 'reminder · snoozed' },
+  'briefing.edited': { category: 'note', label: 'briefing · edited' },
+  'briefing.generated': { category: 'integration', label: 'briefing · generated' },
 };
 
 function EventRow({ event }: { event: ActivityEvent }) {
