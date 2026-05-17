@@ -2672,12 +2672,40 @@ button:disabled:hover {
   border-top: 1px solid var(--border);
 }
 
-.shell__sidebar-toggle {
+.shell__sidebar-footer {
   flex-shrink: 0;
-  height: 28px;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.shell__sidebar-footer-btn {
   background: transparent;
   border: 0;
-  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: center;
+  transition: color 120ms ease, background 120ms ease;
+}
+.shell__sidebar-footer-btn:hover {
+  color: var(--accent);
+  background: rgba(0, 212, 255, 0.04);
+}
+.shell__sidebar-footer-btn--active {
+  color: var(--accent);
+  background: rgba(0, 212, 255, 0.06);
+}
+
+.shell__sidebar-toggle {
+  flex-shrink: 0;
+  height: 24px;
+  background: transparent;
+  border: 0;
   color: var(--text-faint);
   font-family: var(--mono);
   font-size: 14px;
@@ -2688,6 +2716,55 @@ button:disabled:hover {
 .shell__sidebar-toggle:hover {
   color: var(--accent);
   background: rgba(0, 212, 255, 0.04);
+}
+
+/* Edit mode — extra controls per row. The row wraps the item button
+   so up/down/hide can sit beside it without breaking the active-tab
+   highlight. Hidden items render dimmed so un-hiding stays one click. */
+.shell__sidebar-row {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+}
+
+.shell__sidebar-row--hidden {
+  opacity: 0.35;
+}
+
+.shell__sidebar--edit .shell__sidebar-item {
+  cursor: default;
+}
+
+.shell__sidebar-edit-controls {
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  align-items: center;
+  margin-left: auto;
+}
+
+.shell__sidebar-edit-btn {
+  background: transparent;
+  border: 0;
+  color: var(--text-faint);
+  font-size: 9px;
+  width: 18px;
+  height: 22px;
+  padding: 0;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+.shell__sidebar-edit-btn:hover:not(:disabled) {
+  color: var(--accent);
+  background: rgba(0, 212, 255, 0.06);
+}
+.shell__sidebar-edit-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.shell__sidebar--edit .shell__sidebar-row {
+  padding-right: 4px;
 }
 
 /* ----- Inbox: daily-driver triage list ----------------------------------- */
