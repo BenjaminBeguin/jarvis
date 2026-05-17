@@ -998,6 +998,13 @@ function InboxSourceRow({
       new CustomEvent('jarvis:navigate', { detail: { tab: 'inbox' } }),
     );
   };
+  const openIntegrations = () => {
+    window.dispatchEvent(
+      new CustomEvent('jarvis:navigate', {
+        detail: { tab: 'settings', settingsSection: 'integrations' },
+      }),
+    );
+  };
   const sk = src.relatedSkillId
     ? skills.find((s) => s.id === src.relatedSkillId)
     : undefined;
@@ -1048,6 +1055,9 @@ function InboxSourceRow({
         )}
         {src.configureHint === 'reminders' && (
           <button onClick={openInbox}>Open Inbox ↗</button>
+        )}
+        {src.configureHint === 'integrations' && (
+          <button onClick={openIntegrations}>Open Integrations ↗</button>
         )}
       </div>
     </li>

@@ -52,13 +52,20 @@ export interface InboxSourceSummary {
   relatedSkillId?: string;
   /**
    * Renderer hint for the "Configure" link:
-   *   - 'inbox-scope': jump to Settings → Inbox (PR project scope)
-   *   - 'routines':    jump to Routines tab
-   *   - 'reminders':   reminders surface in Inbox; jump to Inbox tab
-   *   - 'skill':       jump to the related skill (uses relatedSkillId)
-   *   - null:          no configure action
+   *   - 'inbox-scope':  jump to Settings → Inbox (PR project scope)
+   *   - 'routines':     jump to Routines tab
+   *   - 'reminders':    reminders surface in Inbox; jump to Inbox tab
+   *   - 'skill':        jump to the related skill (uses relatedSkillId)
+   *   - 'integrations': jump to Settings → Integrations (MCP tokens)
+   *   - null:           no configure action
    */
-  configureHint?: 'inbox-scope' | 'routines' | 'reminders' | 'skill' | null;
+  configureHint?:
+    | 'inbox-scope'
+    | 'routines'
+    | 'reminders'
+    | 'skill'
+    | 'integrations'
+    | null;
 }
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {

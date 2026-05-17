@@ -48,6 +48,24 @@ const BUILTIN_SOURCE_META: Record<
       "gh-CLI scan of unresolved threads on PRs you opened. Drops out as soon as you reply.",
     configureHint: 'inbox-scope',
   },
+  linear: {
+    label: 'Linear · needs you',
+    description:
+      'Direct Linear GraphQL fetch — issues assigned to you and not yet done. Token read from the linear MCP entry in ~/.jarvis/mcp.json.',
+    configureHint: 'integrations',
+  },
+  slack: {
+    label: 'Slack · waiting on you',
+    description:
+      'Direct Slack Web API — DMs + @mentions waiting on you. Token read from the slack MCP entry; xoxp- gives the full inbox, xoxb- is degraded (channel mentions only).',
+    configureHint: 'integrations',
+  },
+  calendar: {
+    label: 'Calendar today',
+    description:
+      'macOS Calendar via osascript — events in the next 12h, meeting URLs auto-extracted. No token; requires Calendar automation permission on first run.',
+    configureHint: null,
+  },
 };
 
 /**
