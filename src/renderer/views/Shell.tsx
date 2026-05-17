@@ -640,14 +640,21 @@ export function Shell({ status }: Props) {
               <span className={`shell__afk-dot${afk ? ' shell__afk-dot--on' : ''}`} aria-hidden />
             </button>
           )}
-          <AuthBadgeMenu
-            label={badge}
-            settingsActive={tab === 'settings' && !openModuleId}
-            onOpenSettings={() => {
+          <button
+            className={`shell__auth-badge${
+              tab === 'settings' && !openModuleId
+                ? ' shell__auth-badge--active'
+                : ''
+            }`}
+            onClick={() => {
               setTab('settings');
               setOpenModuleId(null);
             }}
-          />
+            title={`Settings · auth: ${badge}`}
+            type="button"
+          >
+            Settings
+          </button>
           <button
             className="shell__palette-hint"
             onClick={() => void window.jarvis.openPalette()}
@@ -723,55 +730,3 @@ export function Shell({ status }: Props) {
  * accent styling when Settings is the active view so the user can still
  * tell where they are without a dedicated tab.
  */
-function AuthBadgeMenu({
-  label,
-  settingsActive,
-  onOpenSettings,
-}: {
-  label: string;
-  settingsActive: boolean;
-  onOpenSettings: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
-
-  return (
-    <div className="shell__auth-wrap" ref={wrapRef}>
-      <button
-        className={`shell__auth-badge${
-          settingsActive ? ' shell__auth-badge--active' : ''
-        }`}
-        onClick={() => setOpen((v) => !v)}
-        title="Auth mode · click for Settings"
-      >
-        {label}
-        <span className="shell__auth-caret">▾</span>
-      </button>
-      {open && (
-        <div className="shell__auth-menu">
-          <button
-            onClick={() => {
-              setOpen(false);
-              onOpenSettings();
-            }}
-            title="Preferences · Modules · Integrations · API"
-          >
-            ⚙ Settings
-            <span className="shell__auth-hint">
-              Preferences · Modules · Integrations · API
-            </span>
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}

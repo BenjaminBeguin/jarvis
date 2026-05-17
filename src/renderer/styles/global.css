@@ -1697,14 +1697,9 @@ button:disabled:hover {
   box-shadow: var(--accent-glow-soft);
 }
 
-.shell__auth-wrap {
-  position: relative;
-}
-
 .shell__auth-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.12em;
@@ -1714,6 +1709,7 @@ button:disabled:hover {
   border: 1px solid var(--border-strong);
   padding: 4px 10px;
   border-radius: 2px;
+  cursor: pointer;
 }
 
 .shell__auth-badge:hover,
@@ -1721,54 +1717,6 @@ button:disabled:hover {
   color: var(--accent);
   border-color: var(--accent);
   box-shadow: var(--accent-glow-soft);
-}
-
-.shell__auth-caret {
-  font-size: 9px;
-  opacity: 0.7;
-}
-
-.shell__auth-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  background: rgba(4, 7, 11, 0.92);
-  border: 1px solid var(--border-strong);
-  border-radius: 2px;
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  min-width: 200px;
-  z-index: 10;
-  box-shadow:
-    0 0 0 1px rgba(0, 212, 255, 0.05) inset,
-    0 12px 36px rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(12px);
-}
-
-.shell__auth-menu button {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  text-align: left;
-  font-size: 11px;
-  background: transparent;
-  border: 0;
-  padding: 8px 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.shell__auth-menu button:hover:not(:disabled) {
-  background: rgba(0, 212, 255, 0.08);
-}
-
-.shell__auth-hint {
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: none;
-  color: var(--text-faint);
 }
 
 .shell__palette-hint {
