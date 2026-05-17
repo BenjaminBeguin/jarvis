@@ -392,6 +392,23 @@ const EVENT_KIND_META: Record<
   'skill.edited': { category: 'integration', label: 'skill · edited' },
   'skill.deleted': { category: 'integration', label: 'skill · deleted' },
   'jarvis-file.written': { category: 'integration', label: 'file · edited' },
+  // Module-side action logs added in the activity-coverage sweep.
+  'shell.ran': { category: 'other', label: 'shell · run' },
+  'send.dispatched': { category: 'other', label: 'send' },
+  'status.requested': { category: 'other', label: 'status' },
+  'pr.review-queue': { category: 'other', label: 'pr · review queue' },
+  'pr.address-comments': { category: 'other', label: 'pr · address comments' },
+  'skill-suggester.analyzed': { category: 'integration', label: 'skill suggester · analyzed' },
+  'routine.fired': { category: 'integration', label: 'routine · fired' },
+  'routine.auto-disabled': { category: 'integration', label: 'routine · auto-disabled' },
+  'inbox.json-migrated': { category: 'inbox', label: 'inbox · json migrated' },
+  'paused.toggled': { category: 'integration', label: 'pause · toggled' },
+  'afk.toggled': { category: 'integration', label: 'afk · toggled' },
+  'telegram.connected': { category: 'integration', label: 'telegram · connected' },
+  'telegram.connect-failed': { category: 'integration', label: 'telegram · failed' },
+  'telegram.abort': { category: 'other', label: 'telegram · abort' },
+  'telegram.fork': { category: 'other', label: 'telegram · new thread' },
+  'telegram.voice': { category: 'other', label: 'telegram · voice' },
 };
 
 function EventRow({ event }: { event: ActivityEvent }) {
