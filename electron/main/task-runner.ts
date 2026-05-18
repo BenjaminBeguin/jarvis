@@ -205,6 +205,12 @@ export interface AuthContext {
  *  even at one classify-per-minute. */
 const INTERNAL_SESSION_CAP = 1000;
 
+/** A "running" task whose last event is this old or older is treated
+ *  as orphaned by sweepOrphans(). 30 min is conservatively past any
+ *  real long-running SDK turn — most tasks resolve in seconds; the
+ *  occasional legit long task wraps in single-digit minutes. */
+const ORPHAN_IDLE_MS = 30 * 60 * 1000;
+
 export class TaskRunner extends EventEmitter {
   private readonly records = new Map<string, TaskRecord>();
   /** Session ids of internal workers (intent classifier, etc.) that
@@ -375,6 +381,62 @@ export class TaskRunner extends EventEmitter {
         rec.abort.abort();
       }
     }
+  }
+
+  /**
+   * Reap tasks the SDK appears to have abandoned. A "running" task
+   * whose last event is older than ORPHAN_IDLE_MS (30 min by default)
+   * almost certainly had its terminal `result` event dropped — the
+   * runner's `finally` block never wrote the final status, leaving
+   * the row stuck on `running` forever. We can't tell the difference
+   * between a truly long-running task and an orphan from inside the
+   * runner, but 30 minutes with zero stream events is past any
+   * legitimate activity. Mark them errored, abort the controller,
+   * persist, broadcast.
+   *
+   * Called on a ~5-minute interval from index.ts; idempotent — a row
+   * that's already terminal is left alone.
+   *
+   * Returns the number of orphans swept this pass.
+   */
+  sweepOrphans(now: number = Date.now()): number {
+    let swept = 0;
+    for (const rec of this.records.values()) {
+      if (rec.external) continue;
+      if (rec.summary.status !== 'running') continue;
+      const last = rec.events[rec.events.length - 1];
+      const lastActivity = last?.ts ?? rec.summary.startedAt;
+      if (now - lastActivity < ORPHAN_IDLE_MS) continue;
+      rec.summary.status = 'errored';
+      rec.summary.endedAt = lastActivity;
+      rec.summary.awaitingInput = false;
+      try {
+        rec.inputs?.close();
+      } catch {
+        // queue already closed
+      }
+      try {
+        rec.abort.abort();
+      } catch {
+        // controller already aborted
+      }
+      try {
+        updateTaskStatus(
+          rec.summary.id,
+          'errored',
+          lastActivity,
+          rec.summary.costUsd,
+        );
+      } catch (err) {
+        console.warn('[task-runner] failed to persist orphan sweep:', err);
+      }
+      this.emit('status', { ...rec.summary });
+      swept++;
+      console.log(
+        `[task-runner] swept orphan task ${rec.summary.id} (last activity ${Math.round((now - lastActivity) / 60_000)}m ago)`,
+      );
+    }
+    return swept;
   }
 
   /**

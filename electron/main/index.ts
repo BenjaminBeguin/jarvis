@@ -1282,6 +1282,20 @@ app.whenReady().then(async () => {
   inboxProximity.start();
   // Ad-hoc meeting detection via macOS Core Audio / CMIO log stream.
   meetingActivity.start();
+  // Reap tasks whose terminal SDK event got dropped. Without this,
+  // status='running' rows accumulate forever between restarts (the
+  // isLive display fix masks them but the records leak). 5-min cadence
+  // is fast enough that the user notices a stuck task within a tick,
+  // slow enough that a legit long task isn't pre-empted (sweepOrphans
+  // uses a 30-min idle threshold).
+  setInterval(() => {
+    try {
+      const n = runner.sweepOrphans();
+      if (n > 0) console.log(`[task-runner] swept ${n} orphan task(s)`);
+    } catch (err) {
+      console.warn('[task-runner] orphan sweep failed:', err);
+    }
+  }, 5 * 60 * 1000);
 
   // Localhost HTTP API. Auto-generates a bearer token on first launch
   // and binds 127.0.0.1:4747. Lets iOS Shortcuts / CLI / future phone
