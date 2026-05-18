@@ -30,6 +30,12 @@ const BUILTIN_SOURCE_META: Record<
       'One-shot reminders + scheduled actions you set. Surfaces when fireAt is near.',
     configureHint: 'reminders',
   },
+  smart: {
+    label: 'Smart · what matters now',
+    description:
+      'Curated re-rank of the raw inbox by the inbox-curate skill. Reads ~/.jarvis/inbox-priorities.md every 10 min. Edit that file directly, or run /inbox-calibrate to refine it conversationally.',
+    configureHint: null,
+  },
   'failed-routines': {
     label: 'Failed routines',
     description:

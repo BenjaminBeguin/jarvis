@@ -1,6 +1,7 @@
 import type { WorkflowDef } from '@shared/types';
 
 import { CALENDAR_TODAY_WORKFLOW } from './calendar-today.js';
+import { INBOX_CURATE_WORKFLOW } from './inbox-curate.js';
 import { LINEAR_INBOX_WORKFLOW } from './linear-inbox.js';
 import { SLACK_INBOX_WORKFLOW } from './slack-inbox.js';
 
@@ -15,4 +16,5 @@ export const BUILTIN_WORKFLOWS: WorkflowDef[] = [
   LINEAR_INBOX_WORKFLOW,
   SLACK_INBOX_WORKFLOW,
   CALENDAR_TODAY_WORKFLOW,
+  INBOX_CURATE_WORKFLOW,
 ];

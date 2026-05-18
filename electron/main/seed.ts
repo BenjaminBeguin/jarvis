@@ -3,7 +3,12 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 
-import { BUILTIN_SKILLS, SAMPLE_MCP_CONFIG, SAMPLE_PROJECTS } from './seeds/index.js';
+import {
+  BUILTIN_SKILLS,
+  SAMPLE_INBOX_PRIORITIES,
+  SAMPLE_MCP_CONFIG,
+  SAMPLE_PROJECTS,
+} from './seeds/index.js';
 import { BUILTIN_WORKFLOWS } from './seeds/workflows/index.js';
 
 function writeIfMissing(path: string, content: string): void {
@@ -40,6 +45,11 @@ export function seedDefaultsIfEmpty(): void {
 
   writeIfMissing(join(root, 'mcp.json.example'), SAMPLE_MCP_CONFIG);
   writeIfMissing(join(root, 'projects.json.example'), SAMPLE_PROJECTS);
+  // Smart-inbox calibration: a real file (not .example) — the
+  // inbox-curate skill reads it on every refresh, and /inbox-calibrate
+  // appends to it. Seeded once with placeholder bullets; the user
+  // edits in place.
+  writeIfMissing(join(root, 'inbox-priorities.md'), SAMPLE_INBOX_PRIORITIES);
 
   // Each built-in skill seeds only if missing. New built-ins added in later
   // versions show up automatically; user-authored skills are never touched.

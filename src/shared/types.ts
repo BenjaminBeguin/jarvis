@@ -737,6 +737,14 @@ export interface InboxItem {
   /** When the item first appeared. Newest-first when no fireAt is set. */
   createdAt: number;
   /**
+   * Short "why this matters right now" annotation, surfaced inline
+   * under the title. Used by the inbox-curate skill to explain its
+   * ranking — e.g. "Joe is blocking the launch", "PR your colleague
+   * is waiting on". One sentence; the UI renders it dimmed beneath
+   * the subtitle. Plain text; no markdown.
+   */
+  why?: string;
+  /**
    * One-click action button shown to the right of the row. Two flavors:
    *
    *   - **task** (default) — clicking launches a Claude agent via

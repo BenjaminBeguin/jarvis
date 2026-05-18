@@ -14,6 +14,8 @@ import commitHelper from './skills/commit-helper.js';
 import costRecap from './skills/cost-recap.js';
 import dailyBrief from './skills/daily-brief.js';
 import dailyRecap from './skills/daily-recap.js';
+import inboxCalibrate from './skills/inbox-calibrate.js';
+import inboxCurate from './skills/inbox-curate.js';
 import linearInbox from './skills/linear-inbox.js';
 import meetingDebrief from './skills/meeting-debrief.js';
 import memoryTrim from './skills/memory-trim.js';
@@ -40,6 +42,8 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'cost-recap', body: costRecap },
   { name: 'daily-brief', body: dailyBrief },
   { name: 'daily-recap', body: dailyRecap },
+  { name: 'inbox-calibrate', body: inboxCalibrate },
+  { name: 'inbox-curate', body: inboxCurate },
   { name: 'linear-inbox', body: linearInbox },
   { name: 'meeting-debrief', body: meetingDebrief },
   { name: 'memory-trim', body: memoryTrim },
@@ -55,4 +59,8 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'workflow-author', body: workflowAuthor },
 ];
 
-export { SAMPLE_MCP_CONFIG, SAMPLE_PROJECTS } from './samples.js';
+export {
+  SAMPLE_INBOX_PRIORITIES,
+  SAMPLE_MCP_CONFIG,
+  SAMPLE_PROJECTS,
+} from './samples.js';

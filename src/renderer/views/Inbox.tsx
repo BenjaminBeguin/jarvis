@@ -401,7 +401,10 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
       )}
 
       {grouped.map(({ source, label, items: rows }) => (
-        <section key={source} className="inbox__group">
+        <section
+          key={source}
+          className={`inbox__group${source === 'smart' ? ' inbox__group--smart' : ''}`}
+        >
           <h3 className="inbox__group-head">
             {label} <span className="inbox__group-count">{rows.length}</span>
           </h3>
@@ -658,6 +661,7 @@ function InboxRow({
           {item.title}
         </div>
         {item.subtitle && <div className="inbox__row-sub">{item.subtitle}</div>}
+        {item.why && <div className="inbox__row-why">{item.why}</div>}
       </div>
       <div className="inbox__row-meta">
         {item.fireAt != null && (
@@ -787,6 +791,11 @@ interface Group {
  *  then work-tracker / chat / ambient. Unknown sources fall through
  *  to the bottom with their raw source name as label. */
 const SOURCE_ORDER: Record<string, { rank: number; label: string }> = {
+  // The Smart section sits above everything else — it's a re-rank +
+  // annotation of the raw sources beneath, written by the
+  // inbox-curate skill. Empty when the curator hasn't run yet or
+  // when nothing pressing exists; harmless either way.
+  smart: { rank: -1, label: 'Smart · what matters now' },
   reminders: { rank: 0, label: 'Scheduled' },
   'failed-routines': { rank: 1, label: 'Needs attention' },
   'pr-comments': { rank: 2, label: 'Comments on your PRs' },

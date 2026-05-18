@@ -4136,6 +4136,26 @@ button:disabled:hover {
   gap: 6px;
 }
 
+/* The Smart section is a curated re-rank above the raw sources —
+   subtle accent background + glow on the head so it reads as
+   "Jarvis's pick" not "another raw feed". */
+.inbox__group--smart .inbox__group-head {
+  color: var(--accent);
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.5);
+}
+
+.inbox__group--smart {
+  padding: 10px 0;
+  border-top: 1px solid rgba(0, 212, 255, 0.15);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.15);
+  background:
+    linear-gradient(
+      90deg,
+      rgba(0, 212, 255, 0.04) 0%,
+      transparent 70%
+    );
+}
+
 .inbox__group-head {
   margin: 0;
   font-family: var(--mono);
@@ -4239,6 +4259,20 @@ button:disabled:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* "Why this matters" annotation from the inbox-curate skill. Sits
+   below the subtitle on rows in the Smart section (or any other row
+   with item.why set). Italic + faintly accent-tinted so it reads as
+   the curator's note vs the source's own metadata. */
+.inbox__row-why {
+  color: rgba(0, 212, 255, 0.75);
+  font-size: 10.5px;
+  font-style: italic;
+  margin-top: 2px;
+  letter-spacing: 0.02em;
+  white-space: normal;
+  line-height: 1.4;
 }
 
 .inbox__row-meta {
