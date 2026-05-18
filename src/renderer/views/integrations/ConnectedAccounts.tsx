@@ -31,6 +31,12 @@ export function ConnectedAccounts() {
   const [activeFlow, setActiveFlow] = useState<
     Record<string, string | undefined>
   >({});
+  // Per-account latest test result. Surfaces a "✓ ok 2m ago" /
+  // "✗ failed" chip next to the Test button so the user gets
+  // persistent feedback instead of a transient toast.
+  const [testResults, setTestResults] = useState<
+    Record<string, { ok: boolean; summary?: string; message?: string; ts: number }>
+  >({});
 
   const refresh = async (): Promise<void> => {
     const next = await window.jarvis.listIntegrations();
@@ -134,6 +140,15 @@ export function ConnectedAccounts() {
     setBusy(account.id, true);
     try {
       const r = await window.jarvis.testIntegrationAccount(account.id);
+      setTestResults((prev) => ({
+        ...prev,
+        [account.id]: {
+          ok: r.ok,
+          summary: r.ok ? r.summary : undefined,
+          message: r.ok ? undefined : r.message,
+          ts: Date.now(),
+        },
+      }));
       if (r.ok) {
         toast({ message: `✓ ${r.summary ?? account.label}` });
       } else {
@@ -240,6 +255,7 @@ export function ConnectedAccounts() {
               void handleSetSlackSendAs(account, value)
             }
             isAccountBusy={(accountId) => pending.has(accountId)}
+            testResults={testResults}
           />
         ))}
       </div>
@@ -263,6 +279,64 @@ interface RowProps {
   onSetDefault: (accountId: string) => void;
   onSetSlackSendAs: (account: ConnectorAccount, value: 'bot' | 'user') => void;
   isAccountBusy: (accountId: string) => boolean;
+  testResults: Record<
+    string,
+    { ok: boolean; summary?: string; message?: string; ts: number }
+  >;
+}
+
+/**
+ * Inline chip rendering the latest test outcome for a connected
+ * account. Sticky across page refreshes within a session (state lives
+ * on the parent), so the user always sees "✓ ok 4m ago" rather than
+ * having to retest just to remember whether they checked. Failures
+ * render red with the message as a tooltip.
+ */
+function TestResultChip({
+  result,
+}: {
+  result: { ok: boolean; summary?: string; message?: string; ts: number };
+}) {
+  const ago = relTimeShort(Date.now() - result.ts);
+  if (result.ok) {
+    return (
+      <span
+        title={result.summary ?? ''}
+        style={{
+          fontSize: 11,
+          color: '#7ae2a0',
+          background: 'rgba(122, 226, 160, 0.08)',
+          padding: '2px 8px',
+          borderRadius: 3,
+        }}
+      >
+        ✓ {ago}
+      </span>
+    );
+  }
+  return (
+    <span
+      title={result.message ?? 'failed'}
+      style={{
+        fontSize: 11,
+        color: '#ff7b7b',
+        background: 'rgba(255, 123, 123, 0.08)',
+        padding: '2px 8px',
+        borderRadius: 3,
+      }}
+    >
+      ✗ {ago}
+    </span>
+  );
+}
+
+function relTimeShort(ms: number): string {
+  if (ms < 60_000) return 'just now';
+  const m = Math.floor(ms / 60_000);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
 }
 
 function ConnectorRow({
@@ -279,6 +353,7 @@ function ConnectorRow({
   onSetDefault,
   onSetSlackSendAs,
   isAccountBusy,
+  testResults,
 }: RowProps) {
   const hasAccounts = summary.accounts.length > 0;
   const setup = getConnectorSetup(summary.id);
@@ -429,6 +504,9 @@ function ConnectorRow({
                     >
                       Make default
                     </button>
+                  )}
+                  {testResults[account.id] && (
+                    <TestResultChip result={testResults[account.id]!} />
                   )}
                   <button
                     onClick={() => onTest(account)}
