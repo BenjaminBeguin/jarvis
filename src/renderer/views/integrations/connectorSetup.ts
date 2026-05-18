@@ -141,7 +141,7 @@ export const CONNECTOR_SETUP: Record<string, ConnectorSetup> = {
     steps: [
       {
         title: 'Create a Linear OAuth application',
-        body: 'Settings → API → "Create new application". Name + URL whatever you like.',
+        body: 'Open the link below (Workspace settings → API → Applications — admin only; if "API" isn\'t in your sidebar you\'re not an admin in this workspace). Click "Create new application", name + URL whatever you like.',
         url: 'https://linear.app/settings/api/applications',
         urlLabel: 'Linear API applications',
       },
