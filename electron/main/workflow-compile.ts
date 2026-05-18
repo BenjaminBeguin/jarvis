@@ -28,6 +28,11 @@ export interface WorkflowMachineContext {
   /** Per-step status, indexed by step. Used by the runner to emit
    *  WorkflowRunStep events back to the UI. */
   stepStatus: Array<'pending' | 'running' | 'completed' | 'errored' | 'skipped'>;
+  /** Per-step error message, indexed by step. Lets the Step inspector
+   *  show "this is what failed" without the user having to dig through
+   *  the run-level error (which is the SAME message for the step that
+   *  triggered the failure, but the linkage is implicit otherwise). */
+  stepErrors: Array<string | null>;
   /** Index of the most recent step that started. -1 before any step
    *  runs. The runner reads this on each context change to know which
    *  step's status just transitioned. */
@@ -80,6 +85,7 @@ export function compileWorkflow(
       // refuses to start workflows with unknownTypes anyway; this is
       // belt-and-suspenders so the compiled machine stays a valid
       // graph regardless.
+      const unknownMsg = `Unknown node type: ${node.type}`;
       states[`step_${i}`] = {
         entry: assign({
           stepStatus: ({ context }: { context: unknown }) => {
@@ -88,7 +94,13 @@ export function compileWorkflow(
             next[i] = 'errored';
             return next;
           },
-          error: `Unknown node type: ${node.type}`,
+          stepErrors: ({ context }: { context: unknown }) => {
+            const c = context as WorkflowMachineContext;
+            const next = [...c.stepErrors];
+            next[i] = unknownMsg;
+            return next;
+          },
+          error: unknownMsg,
           currentStep: i,
         }),
         always: 'errored',
@@ -143,6 +155,16 @@ export function compileWorkflow(
               next[i] = 'errored';
               return next;
             },
+            stepErrors: ({ context, event }: { context: unknown; event: unknown }) => {
+              const c = context as WorkflowMachineContext;
+              const err = (event as { error: unknown }).error;
+              const msg = err instanceof Error
+                ? err.message
+                : String(err ?? 'unknown error');
+              const next = [...c.stepErrors];
+              next[i] = msg;
+              return next;
+            },
             error: ({ event }: { event: unknown }) => {
               const err = (event as { error: unknown }).error;
               return err instanceof Error
@@ -167,6 +189,7 @@ export function compileWorkflow(
       stepStatus: new Array(def.pipeline.length).fill('pending') as Array<
         'pending' | 'running' | 'completed' | 'errored' | 'skipped'
       >,
+      stepErrors: new Array<string | null>(def.pipeline.length).fill(null),
       currentStep: -1,
     } as WorkflowMachineContext,
     // Loose cast: see comment on `states` above.

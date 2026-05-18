@@ -3,7 +3,10 @@ import { useEffect, useMemo, useState } from 'react';
 import type { WorkflowDef, WorkflowRun } from '../../shared/types';
 import { toast } from './Toaster';
 import { NodeDetail } from './workflows/NodeDetail';
-import { WorkflowPipeline } from './workflows/WorkflowPipeline';
+import {
+  WorkflowPipeline,
+  type WorkflowSelection,
+} from './workflows/WorkflowPipeline';
 import { WorkflowSelector } from './workflows/WorkflowSelector';
 
 /**
@@ -36,7 +39,9 @@ export function Workflows() {
   const [recentRun, setRecentRun] = useState<WorkflowRun | null>(null);
   const [dockOpen, setDockOpen] = useState<boolean>(true);
   const [dockTab, setDockTab] = useState<DockTab>('json');
-  const [selectedStepIdx, setSelectedStepIdx] = useState<number | null>(null);
+  const [selectedNode, setSelectedNode] = useState<WorkflowSelection | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -66,11 +71,11 @@ export function Workflows() {
   useEffect(() => {
     if (!selected) {
       setDraft('');
-      setSelectedStepIdx(null);
+      setSelectedNode(null);
       return;
     }
     setDraft(JSON.stringify(selected, null, 2));
-    setSelectedStepIdx(null);
+    setSelectedNode(null);
   }, [selected]);
 
   useEffect(() => {
@@ -209,9 +214,9 @@ export function Workflows() {
             <WorkflowPipeline
               workflow={selected}
               run={recentRun}
-              selectedIndex={selectedStepIdx}
-              onNodeClick={(i) => {
-                setSelectedStepIdx(i);
+              selected={selectedNode}
+              onSelect={(sel) => {
+                setSelectedNode(sel);
                 setDockOpen(true);
                 setDockTab('step');
               }}
@@ -243,19 +248,25 @@ export function Workflows() {
                   </span>
                 )}
               </button>
-              {selectedStepIdx !== null && (
+              {selectedNode && (
                 <button
                   type="button"
                   className={`wf-dock__tab${dockTab === 'step' ? ' wf-dock__tab--active' : ''}`}
                   onClick={() => setDockTab('step')}
                 >
-                  Step {selectedStepIdx + 1}
-                  {recentRun?.steps[selectedStepIdx] && (
-                    <span
-                      className={`wf-dock__tab-status wf-dock__tab-status--${recentRun.steps[selectedStepIdx]!.status}`}
-                    >
-                      · {recentRun.steps[selectedStepIdx]!.status}
-                    </span>
+                  {selectedNode.kind === 'trigger' ? (
+                    'Trigger'
+                  ) : (
+                    <>
+                      Step {selectedNode.index + 1}
+                      {recentRun?.steps[selectedNode.index] && (
+                        <span
+                          className={`wf-dock__tab-status wf-dock__tab-status--${recentRun.steps[selectedNode.index]!.status}`}
+                        >
+                          · {recentRun.steps[selectedNode.index]!.status}
+                        </span>
+                      )}
+                    </>
                   )}
                 </button>
               )}
@@ -293,19 +304,25 @@ export function Workflows() {
                 ) : (
                   <RunDetail
                     run={recentRun}
-                    selectedIndex={selectedStepIdx}
+                    selectedIndex={
+                      selectedNode?.kind === 'step' ? selectedNode.index : null
+                    }
                     onSelectStep={(i) => {
-                      setSelectedStepIdx(i);
+                      setSelectedNode({ kind: 'step', index: i });
                       setDockTab('step');
                     }}
                   />
                 ))}
-              {dockTab === 'step' && selectedStepIdx !== null && selected && (
-                <StepInspector
-                  workflow={selected}
-                  run={recentRun}
-                  index={selectedStepIdx}
-                />
+              {dockTab === 'step' && selectedNode && selected && (
+                selectedNode.kind === 'trigger' ? (
+                  <TriggerInspector workflow={selected} run={recentRun} />
+                ) : (
+                  <StepInspector
+                    workflow={selected}
+                    run={recentRun}
+                    index={selectedNode.index}
+                  />
+                )
               )}
             </div>
           </div>
@@ -352,15 +369,24 @@ function RunDetail({
                 ? '…'
                 : '';
           const hasOutput = s.output !== undefined;
+          // Errored rows are clickable even without a captured output —
+          // the inspector falls back to the run-level error.
+          const clickable = hasOutput || s.status === 'errored';
           const isSelected = selectedIndex === s.index;
           return (
             <li
               key={s.index}
-              className={`workflows__step workflows__step--${s.status}${isSelected ? ' workflows__step--selected' : ''}${hasOutput ? ' workflows__step--clickable' : ''}`}
-              onClick={hasOutput ? () => onSelectStep(s.index) : undefined}
-              role={hasOutput ? 'button' : undefined}
-              tabIndex={hasOutput ? 0 : undefined}
-              title={hasOutput ? 'Click to inspect output' : undefined}
+              className={`workflows__step workflows__step--${s.status}${isSelected ? ' workflows__step--selected' : ''}${clickable ? ' workflows__step--clickable' : ''}`}
+              onClick={clickable ? () => onSelectStep(s.index) : undefined}
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              title={
+                clickable
+                  ? s.status === 'errored'
+                    ? 'Click to inspect error'
+                    : 'Click to inspect output'
+                  : undefined
+              }
             >
               <span className="workflows__step-index">{s.index + 1}</span>
               <span className="workflows__step-type">{s.nodeType}</span>
@@ -429,7 +455,9 @@ function StepInspector({
           </section>
         )}
         <section className="wf-step-inspector__section">
-          <h4 className="wf-step-inspector__section-title">Output</h4>
+          <h4 className="wf-step-inspector__section-title">
+            {step?.status === 'errored' ? 'Error' : 'Output'}
+          </h4>
           {!step ? (
             <div className="wf-dock__empty">
               No run data yet. Run the workflow to capture this step's
@@ -438,6 +466,16 @@ function StepInspector({
           ) : step.error ? (
             <pre className="wf-step-inspector__pre wf-step-inspector__pre--error">
               {step.error}
+            </pre>
+          ) : step.status === 'errored' ? (
+            // Errored step but the per-step error wasn't captured —
+            // either an older run from before step-error tracking
+            // landed, or an XState transition that didn't carry an
+            // `error` event. Fall back to the run-level message so the
+            // inspector isn't a dead end.
+            <pre className="wf-step-inspector__pre wf-step-inspector__pre--error">
+              {run?.error ??
+                'Step failed but no error message was captured. Re-run the workflow to surface details.'}
             </pre>
           ) : step.output === undefined ? (
             <div className="wf-dock__empty">
@@ -451,6 +489,101 @@ function StepInspector({
             <pre className="wf-step-inspector__pre">
               {formatOutput(step.output)}
             </pre>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Renders the trigger ("step 0") — cron schedule or manual entrypoints,
+ * plus a tiny last-fire summary if a run exists. The trigger isn't a
+ * pipeline node, so it gets its own panel instead of being shoehorned
+ * into StepInspector with NaN indices.
+ */
+function TriggerInspector({
+  workflow,
+  run,
+}: {
+  workflow: WorkflowDef;
+  run: WorkflowRun | null;
+}) {
+  const t = workflow.trigger;
+  const palette = t.kind === 'manual' && t.palette ? `/${t.palette}` : null;
+  return (
+    <div className="wf-step-inspector">
+      <header className="wf-step-inspector__head">
+        <span className="wf-step-inspector__index">trigger</span>
+        <span className="wf-step-inspector__type">
+          {t.kind === 'cron' ? `cron · ${t.every}` : 'manual'}
+        </span>
+      </header>
+      <div className="wf-step-inspector__body">
+        <section className="wf-step-inspector__section">
+          <h4 className="wf-step-inspector__section-title">Configuration</h4>
+          <div className="wf-detail">
+            <div className="wf-field">
+              <span className="wf-field__label">Kind</span>
+              <span className="wf-field__value">{t.kind}</span>
+            </div>
+            {t.kind === 'cron' && (
+              <div className="wf-field">
+                <span className="wf-field__label">Schedule</span>
+                <span className="wf-field__value wf-field__value--mono">
+                  <code>{t.every}</code>
+                </span>
+              </div>
+            )}
+            {t.kind === 'manual' && (
+              <div className="wf-field">
+                <span className="wf-field__label">Entrypoints</span>
+                <span className="wf-field__value">
+                  {palette ? (
+                    <>
+                      palette <code>{palette}</code> · MCP · UI
+                    </>
+                  ) : (
+                    'palette · MCP · UI'
+                  )}
+                </span>
+              </div>
+            )}
+            <div className="wf-detail__hint">
+              Triggers are configured in JSON — edit the <code>trigger</code>{' '}
+              block above.
+            </div>
+          </div>
+        </section>
+        <section className="wf-step-inspector__section">
+          <h4 className="wf-step-inspector__section-title">Last fire</h4>
+          {!run ? (
+            <div className="wf-dock__empty">
+              Not fired yet. Hit Run now or wait for the trigger to fire.
+            </div>
+          ) : (
+            <div className="wf-detail">
+              <div className="wf-field">
+                <span className="wf-field__label">When</span>
+                <span className="wf-field__value">
+                  {new Date(run.startedAt).toLocaleString()}
+                </span>
+              </div>
+              <div className="wf-field">
+                <span className="wf-field__label">Source</span>
+                <span className="wf-field__value">
+                  <code>{run.trigger}</code>
+                </span>
+              </div>
+              <div className="wf-field">
+                <span className="wf-field__label">Outcome</span>
+                <span
+                  className={`wf-step-inspector__status wf-step-inspector__status--${run.status}`}
+                >
+                  {run.status}
+                </span>
+              </div>
+            </div>
           )}
         </section>
       </div>

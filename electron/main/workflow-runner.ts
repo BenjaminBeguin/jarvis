@@ -148,6 +148,7 @@ export class WorkflowRunner extends EventEmitter {
           output = captured.value;
           outputTruncated = captured.truncated;
         }
+        const stepError = ctx.stepErrors?.[i] ?? null;
         return {
           ...s,
           status: next as WorkflowRunStep['status'],
@@ -155,6 +156,7 @@ export class WorkflowRunner extends EventEmitter {
           endedAt,
           ...(output !== undefined ? { output } : {}),
           ...(outputTruncated ? { outputTruncated: true } : {}),
+          ...(stepError ? { error: stepError } : {}),
         };
       });
 
