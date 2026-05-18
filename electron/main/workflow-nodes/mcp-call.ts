@@ -88,9 +88,9 @@ export const mcpCallNode = fromPromise<
     );
   }
   // Early-fail when the workflow was stopped before we even started
-  // the call. The actor's signal will already be aborted; downstream
-  // we can't cancel an in-flight invokeMcpTool() (its signature
-  // doesn't take a signal), but at least don't pay the call cost.
+  // the call. invokeMcpTool now accepts a signal too, so a mid-call
+  // abort SIGTERMs the MCP subprocess and surfaces "aborted by
+  // caller".
   if (signal.aborted) {
     throw new Error('mcp-call: aborted before dispatch');
   }
@@ -109,6 +109,7 @@ export const mcpCallNode = fromPromise<
     params.mcp,
     params.tool,
     params.args ?? {},
+    signal,
   );
   if (!result.ok) {
     throw new Error(

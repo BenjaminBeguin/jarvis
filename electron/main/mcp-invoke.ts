@@ -30,6 +30,7 @@ export async function invokeMcpTool(
   id: string,
   toolName: string,
   args: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<InvokeResult> {
   const cfg = mcp.resolve([id])[id];
   if (!cfg) return { ok: false, message: `No mcp.json entry for "${id}".` };
@@ -39,6 +40,11 @@ export async function invokeMcpTool(
       ok: false,
       message: `Only stdio and sdk servers can be invoked; ${id} is ${cfg.type}.`,
     };
+  }
+  // Pre-flight: bail immediately on a pre-aborted signal so we don't
+  // pay the spawn cost for a call the caller already cancelled.
+  if (signal?.aborted) {
+    return { ok: false, message: 'aborted before dispatch' };
   }
 
   const started = Date.now();
@@ -52,6 +58,9 @@ export async function invokeMcpTool(
       } catch {
         // ignore
       }
+      if (signal && onAbort) {
+        signal.removeEventListener('abort', onAbort);
+      }
       resolve({ ...r, durationMs: Date.now() - started });
     };
 
@@ -59,6 +68,16 @@ export async function invokeMcpTool(
       env: { ...process.env, ...(cfg.env ?? {}) },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+
+    // Mid-call cancellation: the caller (e.g. a stopped workflow run)
+    // can abort the signal to SIGTERM the MCP subprocess. Clean up the
+    // listener in finish() so we don't leak after a settled call.
+    const onAbort = signal
+      ? () => finish({ ok: false, message: 'aborted by caller' })
+      : null;
+    if (signal && onAbort) {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
 
     proc.on('error', (err) => {
       finish({ ok: false, message: `spawn failed: ${err.message}` });
