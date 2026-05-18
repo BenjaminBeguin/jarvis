@@ -40,7 +40,8 @@ export const CONNECTOR_SETUP: Record<string, ConnectorSetup> = {
       },
       {
         title: 'Create the OAuth client',
-        body: 'Credentials → Create credentials → OAuth client ID. Application type: Desktop app (PKCE — no secret) OR Web application (with secret). If you pick Web, add redirect URI: http://127.0.0.1:4747/oauth/callback/google',
+        body: 'Credentials → Create credentials → OAuth client ID. Application type: Desktop app (PKCE — no secret) OR Web application (with secret). If you pick Web, add the redirect URI below to "Authorized redirect URIs".',
+        command: 'http://127.0.0.1:4747/oauth/callback/google',
       },
       {
         title: 'Paste credentials below',
@@ -115,16 +116,17 @@ export const CONNECTOR_SETUP: Record<string, ConnectorSetup> = {
         urlLabel: 'Manage integrations',
       },
       {
-        title: 'Configure OAuth Domain & URIs',
-        body: 'Redirect URIs: add http://127.0.0.1:4747/oauth/callback/notion',
+        title: 'Add the redirect URI',
+        body: 'OAuth Domain & URIs section → Redirect URIs → paste the URL below. Notion only accepts loopback redirects in the literal form http://localhost:<port>; http://127.0.0.1 and https://... are rejected.',
+        command: 'http://localhost:4747/oauth/callback/notion',
       },
       {
-        title: 'Copy Secrets',
+        title: 'Copy Client ID + Client Secret',
         body: 'Secrets section: copy OAuth client ID and OAuth client secret. Both required.',
       },
       {
-        title: 'Paste credentials below',
-        body: 'Paste into the form above and Save.',
+        title: 'Paste credentials above',
+        body: 'Drop both into the credentials form above and Save.',
       },
       {
         title: 'Click Start OAuth flow',
@@ -144,8 +146,9 @@ export const CONNECTOR_SETUP: Record<string, ConnectorSetup> = {
         urlLabel: 'Linear API applications',
       },
       {
-        title: 'Configure callback URLs',
-        body: 'Callback URLs: http://127.0.0.1:4747/oauth/callback/linear',
+        title: 'Add the callback URL',
+        body: 'In the application config, paste the URL below into the "Callback URLs" field.',
+        command: 'http://127.0.0.1:4747/oauth/callback/linear',
       },
       {
         title: 'Copy the Client ID',

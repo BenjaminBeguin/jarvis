@@ -28,7 +28,16 @@ import { buildNotionMcp } from './notion-mcp/index.js';
 
 const FALLBACK_CLIENT_ID = 'REPLACE_ME_NOTION_CLIENT_ID';
 const FALLBACK_CLIENT_SECRET = 'REPLACE_ME_NOTION_CLIENT_SECRET';
-const REDIRECT_URI = 'http://127.0.0.1:4747/oauth/callback/notion';
+/**
+ * Notion's special-case loopback: their console requires the redirect
+ * URI to either be HTTPS or one of the literal forms
+ * `http://localhost` / `http://localhost:<port>`. Bare `http://127.0.0.1`
+ * is rejected at registration. We bind the HTTP server to 127.0.0.1
+ * (rest of the connectors send 127.0.0.1 in their redirect) — on
+ * macOS `localhost` resolves there via /etc/hosts so the callback
+ * still lands on Jarvis's local server.
+ */
+const REDIRECT_URI = 'http://localhost:4747/oauth/callback/notion';
 
 interface ResolvedCreds {
   clientId: string;

@@ -62,7 +62,7 @@ One OAuth client covers both APIs.
 
 1. <https://www.notion.so/profile/integrations> → **+ New integration** → choose **Public integration** (so multiple workspaces can install).
 2. **Capabilities** → enable read user info, read content, update content, insert content. Comments + databases as needed.
-3. **OAuth Domain & URIs** → **Redirect URIs** → add `http://127.0.0.1:4747/oauth/callback/notion`.
+3. **OAuth Domain & URIs** → **Redirect URIs** → add `http://localhost:4747/oauth/callback/notion`. Notion is stricter than other providers about loopback: it only accepts `http://localhost` (not `http://127.0.0.1`) and rejects `https://` for non-public hosts. The connector sends this exact value; `localhost` resolves to `127.0.0.1` on macOS so the callback still lands on the Jarvis HTTP server.
 4. **Secrets** → copy the **OAuth client ID** and **OAuth client secret**.
 5. Paste both into [electron/main/oauth/connectors/notion.ts](../electron/main/oauth/connectors/notion.ts) — `CLIENT_ID` and `CLIENT_SECRET`, replacing the `REPLACE_ME_…` placeholders.
 6. `pnpm dev` → Settings → Integrations → Connect Notion. Pick the workspace + the pages/databases the integration should see (Notion gates access per-page; grant the parents you want Jarvis to read or write).
