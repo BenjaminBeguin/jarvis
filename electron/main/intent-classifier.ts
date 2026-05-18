@@ -51,6 +51,17 @@ export class IntentClassifier {
   private active = 0;
   private readonly queue: Array<() => void> = [];
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Called with each classify() invocation's claude session_id so the
+   *  consumer (TaskRunner) can mark it owned. Wired in main/index.ts. */
+  private sessionTracker: ((id: string) => void) | null = null;
+
+  /** Register a callback that receives the SDK's session_id on every
+   *  classifier invocation. The wired-up callback adds the id to
+   *  TaskRunner's internal-session set, which makes claude-code-watch
+   *  skip the resulting jsonl file. */
+  setSessionTracker(fn: (id: string) => void): void {
+    this.sessionTracker = fn;
+  }
 
   constructor(private readonly cachePath: string, auth: AuthContext) {
     this.auth = auth;
@@ -141,8 +152,24 @@ export class IntentClassifier {
       for await (const msg of stream as AsyncIterable<SDKMessage>) {
         const m = msg as {
           type?: string;
+          subtype?: string;
+          session_id?: unknown;
           message?: { content?: unknown[] };
         };
+        // Each classifier invocation spawns a fresh Claude session,
+        // which Claude Code logs to ~/.claude/projects/<repo>/. Without
+        // tagging it as Jarvis-owned, claude-code-watch ingests it and
+        // floods the Observatory with one "jarvis · session XXX" row
+        // per classify() call. Register the id on system/init so the
+        // watcher skips the file.
+        if (
+          m.type === 'system' &&
+          m.subtype === 'init' &&
+          typeof m.session_id === 'string' &&
+          this.sessionTracker
+        ) {
+          this.sessionTracker(m.session_id);
+        }
         if (m.type === 'assistant' && Array.isArray(m.message?.content)) {
           for (const block of m.message.content) {
             if (

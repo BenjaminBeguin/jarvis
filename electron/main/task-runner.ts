@@ -200,8 +200,17 @@ export interface AuthContext {
   claudeOauthToken?: string | null;
 }
 
+/** Cap on the internal-session-id LRU so classifier sessions over a
+ *  long uptime don't grow the set without bound. ~1k entries is plenty
+ *  even at one classify-per-minute. */
+const INTERNAL_SESSION_CAP = 1000;
+
 export class TaskRunner extends EventEmitter {
   private readonly records = new Map<string, TaskRecord>();
+  /** Session ids of internal workers (intent classifier, etc.) that
+   *  call query() directly — claude-code-watch consults isOwnedSessionId
+   *  to skip the resulting jsonl files. */
+  private readonly internalSessionIds = new Set<string>();
   private skills: SkillStore | null = null;
   private mcp: McpConfigStore | null = null;
   private projects: ProjectStore | null = null;
@@ -865,10 +874,36 @@ export class TaskRunner extends EventEmitter {
 
   /** True if any Jarvis-owned task is bound to this claude session id. */
   isOwnedSessionId(sessionId: string): boolean {
+    if (this.internalSessionIds.has(sessionId)) return true;
     for (const rec of this.records.values()) {
       if (!rec.external && rec.sdkSessionId === sessionId) return true;
     }
     return false;
+  }
+
+  /**
+   * Internal worker sessions (intent classifier, future workers) call
+   * the Agent SDK's `query()` directly without going through
+   * TaskRunner. Each call still creates a Claude Code session file
+   * under ~/.claude/projects/, which claude-code-watch would otherwise
+   * ingest as an external task — flooding the Observatory with one
+   * "jarvis · session XXX" entry per classifier turn.
+   *
+   * Workers register their session id here as soon as they receive the
+   * SDK's system/init event; isOwnedSessionId() then makes
+   * claude-code-watch skip the file the same way it skips Jarvis-owned
+   * task sessions. Capped to keep the set bounded over long-lived
+   * sessions.
+   */
+  registerInternalSessionId(id: string): void {
+    if (this.internalSessionIds.has(id)) return;
+    this.internalSessionIds.add(id);
+    if (this.internalSessionIds.size > INTERNAL_SESSION_CAP) {
+      // Drop the oldest insertion order entry. Set iteration is
+      // insertion-ordered in modern JS.
+      const oldest = this.internalSessionIds.values().next().value;
+      if (oldest !== undefined) this.internalSessionIds.delete(oldest);
+    }
   }
 
   removeExternal(taskId: string): boolean {

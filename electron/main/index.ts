@@ -268,6 +268,12 @@ runner.setUserContextStore(userContext);
 runner.setPreferencesStore(preferences);
 runner.setSkillSessionStore(skillSessions);
 runner.setClassifier(intentClassifier);
+// Each classifier turn spawns a fresh Claude session that
+// claude-code-watch would otherwise mirror as an external "jarvis ·
+// session XXX" row. Have the classifier register each session id with
+// the runner so the watcher's existing isOwnedSessionId() filter
+// catches them.
+intentClassifier.setSessionTracker((id) => runner.registerInternalSessionId(id));
 skillSessions.init();
 
 // In-process Jarvis MCP — always available to every task. Tools:
