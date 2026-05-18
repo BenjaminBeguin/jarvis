@@ -68,9 +68,18 @@ export function registerTasksIpc({
   );
 
   ipcMain.handle(IpcChannels.listTasks, () => {
+    // Always merge live (in-memory) + persisted (SQLite history). Live
+    // wins on id collision — it has fresher status / cost / awaiting.
+    //
+    // The old "if live.length > 0 return live; else SQLite" pattern
+    // hid archived tasks the moment any task was active, which broke
+    // surfaces that pin a specific task id (Routines history pane,
+    // TaskAnswerPreview, etc.) — those would stall on a "loading"
+    // status forever because the runner had already aged out the row.
     const live = runner.list();
-    if (live.length > 0) return live;
-    return listRecentTasks();
+    const liveIds = new Set(live.map((t) => t.id));
+    const persisted = listRecentTasks().filter((t) => !liveIds.has(t.id));
+    return [...live, ...persisted];
   });
 
   ipcMain.handle(IpcChannels.getTaskHistory, (_e, taskId: string) => {

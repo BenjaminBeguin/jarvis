@@ -47,7 +47,16 @@ export function TaskAnswerPreview({
     void window.jarvis.listTasks().then((all) => {
       if (cancelled) return;
       const t = all.find((x) => x.id === taskId);
-      if (t) setStatus(t.awaitingInput ? 'awaiting' : t.status);
+      if (t) {
+        setStatus(t.awaitingInput ? 'awaiting' : t.status);
+      } else {
+        // listTasks merges live + SQLite — if we still didn't find it,
+        // the task was never persisted (crash mid-run) or the row was
+        // pruned. Flip out of the empty/'loading' state so the row
+        // doesn't spin forever; we'll still stream live events if a
+        // status broadcast arrives later.
+        setStatus('archived');
+      }
     });
     return () => {
       cancelled = true;
