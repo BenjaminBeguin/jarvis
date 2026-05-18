@@ -36,6 +36,7 @@ export function registerAllIpc(deps: IpcDeps): void {
     integrations: deps.integrations,
     registry: deps.connectorRegistry,
     orchestrator: deps.oauth,
+    activity: deps.activity,
   });
   registerIntentIpc(deps);
   registerMcpIpc(deps);

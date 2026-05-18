@@ -125,6 +125,16 @@ export interface Connector {
    *  doesn't care if the provider's revoke endpoint is down. */
   disconnect(account: ConnectorAccount, hooks: ConnectorHooks): Promise<void>;
 
+  /** Optional health-check call. The renderer's "Test" button invokes
+   *  this — implementations should run the harmless read most likely
+   *  to surface a stale-token / revoked-grant situation (e.g.
+   *  /viewer, /me, /users.list). Return {ok: true, summary} on
+   *  success or {ok: false, message} on failure. Skipped if absent. */
+  test?(
+    account: ConnectorAccount,
+    hooks: ConnectorHooks,
+  ): Promise<{ ok: true; summary: string } | { ok: false; message: string }>;
+
   /** Optional one-shot init called by index.ts after the
    *  IntegrationsStore has loaded its accounts at boot. Useful for
    *  connectors that publish stdio MCPs and need to read their

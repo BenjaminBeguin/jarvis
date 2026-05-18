@@ -551,6 +551,10 @@ const api = {
       connectorId,
       apiKey,
     }),
+  testIntegrationAccount: (
+    accountId: string,
+  ): Promise<{ ok: boolean; summary?: string; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.testIntegrationAccount, { accountId }),
   disconnectIntegration: (
     accountId: string,
   ): Promise<{ ok: boolean; message?: string }> =>

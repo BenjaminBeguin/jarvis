@@ -199,6 +199,28 @@ class NotionConnector implements Connector {
     };
   }
 
+  async test(
+    account: ConnectorAccount,
+    hooks: ConnectorHooks,
+  ): Promise<{ ok: true; summary: string } | { ok: false; message: string }> {
+    try {
+      const current = (await hooks.getToken(account.id)) as
+        | NotionTokenPayload
+        | null;
+      if (!current?.accessToken) {
+        return { ok: false, message: 'No token in Keychain' };
+      }
+      const me = await fetchNotionMe(current.accessToken);
+      const ws = me.bot?.workspace_name ?? current.workspaceName;
+      return { ok: true, summary: `Notion · ${ws}` };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
   async disconnect(account: ConnectorAccount): Promise<void> {
     this.mcpCache.delete(account.id);
     // Notion has no documented revoke endpoint for OAuth tokens —

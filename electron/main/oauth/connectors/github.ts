@@ -219,6 +219,27 @@ class GitHubConnector implements Connector {
     };
   }
 
+  async test(
+    account: ConnectorAccount,
+    hooks: ConnectorHooks,
+  ): Promise<{ ok: true; summary: string } | { ok: false; message: string }> {
+    try {
+      const current = (await hooks.getToken(account.id)) as
+        | GitHubTokenPayload
+        | null;
+      if (!current?.accessToken) {
+        return { ok: false, message: 'No token in Keychain' };
+      }
+      const user = await fetchGitHubUser(current.accessToken);
+      return { ok: true, summary: `GitHub · ${user.login}` };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
   async disconnect(
     account: ConnectorAccount,
     hooks: ConnectorHooks,

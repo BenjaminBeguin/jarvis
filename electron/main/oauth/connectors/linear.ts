@@ -293,6 +293,33 @@ class LinearConnector implements Connector {
     }
   }
 
+  async test(
+    account: ConnectorAccount,
+    hooks: ConnectorHooks,
+  ): Promise<{ ok: true; summary: string } | { ok: false; message: string }> {
+    try {
+      const current = (await hooks.getToken(account.id)) as
+        | LinearTokenPayload
+        | null;
+      if (!current?.accessToken) {
+        return { ok: false, message: 'No token in Keychain' };
+      }
+      const viewer = await fetchViewer(
+        current.accessToken,
+        current.authMode ?? 'oauth',
+      );
+      return {
+        ok: true,
+        summary: `Linear viewer · ${viewer.email ?? viewer.name ?? viewer.id}`,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
   async disconnect(
     account: ConnectorAccount,
     hooks: ConnectorHooks,

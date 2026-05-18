@@ -266,6 +266,36 @@ class GoogleConnector implements Connector {
     }
   }
 
+  async test(
+    account: ConnectorAccount,
+    _hooks: ConnectorHooks,
+  ): Promise<{ ok: true; summary: string } | { ok: false; message: string }> {
+    try {
+      const token = await this.getValidAccessToken(account.id);
+      if (!token) return { ok: false, message: 'No token in Keychain' };
+      const res = await fetch(
+        'https://openidconnect.googleapis.com/v1/userinfo',
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) {
+        return {
+          ok: false,
+          message: `userinfo returned ${res.status}`,
+        };
+      }
+      const data = (await res.json()) as { email?: string };
+      return {
+        ok: true,
+        summary: `Google · ${data.email ?? account.label}`,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
   async disconnect(
     account: ConnectorAccount,
     hooks: ConnectorHooks,

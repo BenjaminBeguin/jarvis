@@ -130,6 +130,23 @@ export function ConnectedAccounts() {
     }
   };
 
+  const handleTest = async (account: ConnectorAccount): Promise<void> => {
+    setBusy(account.id, true);
+    try {
+      const r = await window.jarvis.testIntegrationAccount(account.id);
+      if (r.ok) {
+        toast({ message: `✓ ${r.summary ?? account.label}` });
+      } else {
+        toast({
+          kind: 'error',
+          message: `Test failed: ${r.message ?? 'unknown'}`,
+        });
+      }
+    } finally {
+      setBusy(account.id, false);
+    }
+  };
+
   const handleConnectByApiKey = async (
     summary: ConnectorSummary,
     apiKey: string,
@@ -214,6 +231,7 @@ export function ConnectedAccounts() {
               return ok;
             }}
             onCancelConnect={() => void handleCancelConnect(summary)}
+            onTest={(account) => void handleTest(account)}
             onDisconnect={(account) => void handleDisconnect(account)}
             onSetDefault={(accountId) =>
               void handleSetDefault(summary, accountId)
@@ -240,6 +258,7 @@ interface RowProps {
   onStartConnect: () => void | Promise<void>;
   onSubmitApiKey: (apiKey: string) => Promise<boolean>;
   onCancelConnect: () => void;
+  onTest: (account: ConnectorAccount) => void;
   onDisconnect: (account: ConnectorAccount) => void;
   onSetDefault: (accountId: string) => void;
   onSetSlackSendAs: (account: ConnectorAccount, value: 'bot' | 'user') => void;
@@ -255,6 +274,7 @@ function ConnectorRow({
   onStartConnect,
   onSubmitApiKey,
   onCancelConnect,
+  onTest,
   onDisconnect,
   onSetDefault,
   onSetSlackSendAs,
@@ -410,6 +430,13 @@ function ConnectorRow({
                       Make default
                     </button>
                   )}
+                  <button
+                    onClick={() => onTest(account)}
+                    disabled={isAccountBusy(account.id)}
+                    title="Run a harmless read against this provider to confirm the token still works"
+                  >
+                    Test
+                  </button>
                   <button
                     onClick={() => onDisconnect(account)}
                     disabled={isAccountBusy(account.id)}

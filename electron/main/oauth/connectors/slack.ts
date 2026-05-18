@@ -206,6 +206,39 @@ class SlackConnector implements Connector {
     };
   }
 
+  async test(
+    account: ConnectorAccount,
+    hooks: ConnectorHooks,
+  ): Promise<{ ok: true; summary: string } | { ok: false; message: string }> {
+    try {
+      const current = (await hooks.getToken(account.id)) as SlackTokenPayload | null;
+      if (!current?.botAccessToken) {
+        return { ok: false, message: 'No bot token in Keychain' };
+      }
+      const res = await fetch('https://slack.com/api/auth.test', {
+        headers: { Authorization: `Bearer ${current.botAccessToken}` },
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        team?: string;
+        url?: string;
+        error?: string;
+      };
+      if (!data.ok) {
+        return { ok: false, message: data.error ?? 'auth.test refused' };
+      }
+      return {
+        ok: true,
+        summary: `Slack · ${data.team ?? current.teamName}`,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
   async disconnect(
     account: ConnectorAccount,
     hooks: ConnectorHooks,

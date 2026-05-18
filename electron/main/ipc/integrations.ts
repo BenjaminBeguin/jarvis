@@ -7,6 +7,7 @@ import type {
   ConnectorSummary,
 } from '@shared/types';
 
+import type { ActivityStore } from '../activity-store.js';
 import type { IntegrationsStore } from '../integrations-store.js';
 import type { ConnectorRegistry } from '../oauth/connector-registry.js';
 import type { OAuthOrchestrator } from '../oauth/orchestrator.js';
@@ -23,10 +24,11 @@ export interface IntegrationsIpcDeps {
   integrations: IntegrationsStore;
   registry: ConnectorRegistry;
   orchestrator: OAuthOrchestrator;
+  activity: ActivityStore;
 }
 
 export function registerIntegrationsIpc(deps: IntegrationsIpcDeps): void {
-  const { integrations, registry, orchestrator } = deps;
+  const { integrations, registry, orchestrator, activity } = deps;
 
   ipcMain.handle(
     IpcChannels.listIntegrations,
@@ -122,6 +124,15 @@ export function registerIntegrationsIpc(deps: IntegrationsIpcDeps): void {
           return { ok: false, message: 'Invalid flowId' };
         }
         const account = await orchestrator.awaitFlow(payload.flowId);
+        activity.record({
+          kind: 'integration.connected',
+          label: `${account.connectorId} connected · ${account.label}`,
+          detail: {
+            connectorId: account.connectorId,
+            accountId: account.id,
+            via: 'oauth',
+          },
+        });
         return { ok: true, account };
       } catch (err) {
         return {
@@ -149,6 +160,14 @@ export function registerIntegrationsIpc(deps: IntegrationsIpcDeps): void {
           await orchestrator.disconnect(connector, account);
         }
         integrations.remove(account.id);
+        activity.record({
+          kind: 'integration.disconnected',
+          label: `${account.connectorId} disconnected · ${account.label}`,
+          detail: {
+            connectorId: account.connectorId,
+            accountId: account.id,
+          },
+        });
         return { ok: true };
       } catch (err) {
         return {
@@ -156,6 +175,46 @@ export function registerIntegrationsIpc(deps: IntegrationsIpcDeps): void {
           message: err instanceof Error ? err.message : String(err),
         };
       }
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.testIntegrationAccount,
+    async (
+      _e,
+      payload: { accountId: string },
+    ): Promise<{ ok: boolean; summary?: string; message?: string }> => {
+      if (!payload || typeof payload.accountId !== 'string') {
+        return { ok: false, message: 'Invalid accountId' };
+      }
+      const account = integrations.get(payload.accountId);
+      if (!account) return { ok: false, message: 'Account not found' };
+      const connector = registry.get(account.connectorId);
+      if (!connector) return { ok: false, message: 'Unknown connector' };
+      if (!connector.test) {
+        return {
+          ok: false,
+          message: 'This connector does not expose a test endpoint',
+        };
+      }
+      const hooks = makeApiKeyHooks(account.connectorId);
+      const result = await connector.test(account, hooks);
+      activity.record({
+        kind: result.ok ? 'integration.test-ok' : 'integration.test-failed',
+        label: result.ok
+          ? `${account.connectorId} test · ${result.summary}`
+          : `${account.connectorId} test failed · ${result.message}`,
+        detail: {
+          connectorId: account.connectorId,
+          accountId: account.id,
+          ...(result.ok
+            ? { summary: result.summary }
+            : { error: result.message }),
+        },
+      });
+      return result.ok
+        ? { ok: true, summary: result.summary }
+        : { ok: false, message: result.message };
     },
   );
 
@@ -296,6 +355,15 @@ export function registerIntegrationsIpc(deps: IntegrationsIpcDeps): void {
           hooks,
         );
         integrations.upsert(account);
+        activity.record({
+          kind: 'integration.connected',
+          label: `${account.connectorId} connected · ${account.label}`,
+          detail: {
+            connectorId: account.connectorId,
+            accountId: account.id,
+            via: 'api-key',
+          },
+        });
         return { ok: true, account };
       } catch (err) {
         return {
