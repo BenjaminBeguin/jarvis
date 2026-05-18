@@ -16221,3 +16221,13 @@ button:disabled:hover {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+.connector-row__connect--cancel {
+  background: rgba(255, 120, 120, 0.08) !important;
+  border-color: rgba(255, 120, 120, 0.4) !important;
+  color: #ff9999 !important;
+}
+
+.connector-row__connect--cancel:hover {
+  background: rgba(255, 120, 120, 0.16) !important;
+}

@@ -195,6 +195,7 @@ export const IpcChannels = {
   setIntegrationDefault: 'integrations:setDefault',
   setIntegrationCredentials: 'integrations:setCredentials',
   clearIntegrationCredentials: 'integrations:clearCredentials',
+  cancelIntegrationFlow: 'integrations:cancelFlow',
   integrationsChanged: 'integrations:changed',
 
   // ─── Workflows ───────────────────────────────────────────────────

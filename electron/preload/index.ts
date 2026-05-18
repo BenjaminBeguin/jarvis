@@ -539,6 +539,10 @@ const api = {
     flowId: string,
   ): Promise<{ ok: boolean; account?: ConnectorAccount; message?: string }> =>
     ipcRenderer.invoke(IpcChannels.awaitIntegrationCallback, { flowId }),
+  cancelIntegrationFlow: (
+    flowId: string,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.cancelIntegrationFlow, { flowId }),
   disconnectIntegration: (
     accountId: string,
   ): Promise<{ ok: boolean; message?: string }> =>

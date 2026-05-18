@@ -25,6 +25,12 @@ export function ConnectedAccounts() {
   // a second click on the same row closes; a click on a different row
   // swaps. Null = none open.
   const [setupOpenId, setSetupOpenId] = useState<string | null>(null);
+  // In-flight OAuth flow ids by connector. Needed so the Cancel button
+  // can abort the backend's pending-flow promise instead of the
+  // renderer hanging until the 5-min orchestrator TTL.
+  const [activeFlow, setActiveFlow] = useState<
+    Record<string, string | undefined>
+  >({});
 
   const refresh = async (): Promise<void> => {
     const next = await window.jarvis.listIntegrations();
@@ -47,6 +53,7 @@ export function ConnectedAccounts() {
 
   const handleConnect = async (summary: ConnectorSummary): Promise<void> => {
     setBusy(summary.id, true);
+    let flowId: string | undefined;
     try {
       const init = await window.jarvis.connectIntegration(summary.id);
       if (!init.ok || !init.flowId) {
@@ -56,6 +63,8 @@ export function ConnectedAccounts() {
         });
         return;
       }
+      flowId = init.flowId;
+      setActiveFlow((cur) => ({ ...cur, [summary.id]: init.flowId }));
       const result = await window.jarvis.awaitIntegrationCallback(init.flowId);
       if (!result.ok) {
         toast({
@@ -69,7 +78,25 @@ export function ConnectedAccounts() {
       });
     } finally {
       setBusy(summary.id, false);
+      if (flowId) {
+        setActiveFlow((cur) => {
+          const next = { ...cur };
+          delete next[summary.id];
+          return next;
+        });
+      }
     }
+  };
+
+  const handleCancelConnect = async (
+    summary: ConnectorSummary,
+  ): Promise<void> => {
+    const flowId = activeFlow[summary.id];
+    if (!flowId) return;
+    await window.jarvis.cancelIntegrationFlow(flowId);
+    // The awaitIntegrationCallback promise rejects on cancellation; the
+    // `finally` in handleConnect clears busy + activeFlow. No extra
+    // state mutation needed here.
   };
 
   const handleDisconnect = async (account: ConnectorAccount): Promise<void> => {
@@ -146,6 +173,7 @@ export function ConnectedAccounts() {
             key={summary.id}
             summary={summary}
             busy={pending.has(summary.id)}
+            flowActive={!!activeFlow[summary.id]}
             setupOpen={setupOpenId === summary.id}
             onToggleSetup={() =>
               setSetupOpenId((cur) => (cur === summary.id ? null : summary.id))
@@ -154,6 +182,7 @@ export function ConnectedAccounts() {
               setSetupOpenId(null);
               await handleConnect(summary);
             }}
+            onCancelConnect={() => void handleCancelConnect(summary)}
             onDisconnect={(account) => void handleDisconnect(account)}
             onSetDefault={(accountId) =>
               void handleSetDefault(summary, accountId)
@@ -172,9 +201,13 @@ export function ConnectedAccounts() {
 interface RowProps {
   summary: ConnectorSummary;
   busy: boolean;
+  /** True when an OAuth flow is in flight for this connector (waiting
+   *  for the browser callback). Shows a Cancel affordance. */
+  flowActive: boolean;
   setupOpen: boolean;
   onToggleSetup: () => void;
   onStartConnect: () => void | Promise<void>;
+  onCancelConnect: () => void;
   onDisconnect: (account: ConnectorAccount) => void;
   onSetDefault: (accountId: string) => void;
   onSetSlackSendAs: (account: ConnectorAccount, value: 'bot' | 'user') => void;
@@ -184,9 +217,11 @@ interface RowProps {
 function ConnectorRow({
   summary,
   busy,
+  flowActive,
   setupOpen,
   onToggleSetup,
   onStartConnect,
+  onCancelConnect,
   onDisconnect,
   onSetDefault,
   onSetSlackSendAs,
@@ -209,20 +244,31 @@ function ConnectorRow({
             <p className="connector-row__desc">{summary.description}</p>
           </div>
         </div>
-        <button
-          onClick={onToggleSetup}
-          disabled={busy}
-          className={`connector-row__connect${setupOpen ? ' connector-row__connect--open' : ''}`}
-          title={
-            hasAccounts
-              ? 'Add another account for this provider'
-              : 'Connect this provider'
-          }
-        >
-          {busy
-            ? '…'
-            : `${hasAccounts ? '+ Add account' : 'Connect'} ${setupOpen ? '▾' : '▸'}`}
-        </button>
+        {busy && flowActive ? (
+          <button
+            type="button"
+            onClick={onCancelConnect}
+            className="connector-row__connect connector-row__connect--cancel"
+            title="Cancel the in-flight OAuth attempt"
+          >
+            Cancel
+          </button>
+        ) : (
+          <button
+            onClick={onToggleSetup}
+            disabled={busy}
+            className={`connector-row__connect${setupOpen ? ' connector-row__connect--open' : ''}`}
+            title={
+              hasAccounts
+                ? 'Add another account for this provider'
+                : 'Connect this provider'
+            }
+          >
+            {busy
+              ? '…'
+              : `${hasAccounts ? '+ Add account' : 'Connect'} ${setupOpen ? '▾' : '▸'}`}
+          </button>
+        )}
       </header>
 
       {setupOpen && (

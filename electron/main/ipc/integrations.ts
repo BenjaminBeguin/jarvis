@@ -80,6 +80,22 @@ export function registerIntegrationsIpc(deps: IntegrationsIpcDeps): void {
   );
 
   ipcMain.handle(
+    IpcChannels.cancelIntegrationFlow,
+    (
+      _e,
+      payload: { flowId: string },
+    ): { ok: boolean; message?: string } => {
+      if (!payload || typeof payload.flowId !== 'string') {
+        return { ok: false, message: 'Invalid flowId' };
+      }
+      const cancelled = orchestrator.cancelFlow(payload.flowId);
+      return cancelled
+        ? { ok: true }
+        : { ok: false, message: 'Flow not found (already completed?)' };
+    },
+  );
+
+  ipcMain.handle(
     IpcChannels.awaitIntegrationCallback,
     async (
       _e,

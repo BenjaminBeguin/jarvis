@@ -141,6 +141,20 @@ export class OAuthOrchestrator {
   }
 
   /**
+   * Abort an in-flight flow. Rejects the awaitFlow promise immediately
+   * so the renderer's "waiting for browser" spinner clears even though
+   * the user closed the consent tab or hit an error in the provider
+   * console. No-op if the flowId is unknown / already completed.
+   */
+  cancelFlow(flowId: string): boolean {
+    const flow = this.pendingByFlowId.get(flowId);
+    if (!flow) return false;
+    this.cleanup(flow);
+    flow.reject(new Error('OAuth flow cancelled'));
+    return true;
+  }
+
+  /**
    * Drop tokens for an account. The integrations store handles removing
    * the row + MCP entries separately.
    */

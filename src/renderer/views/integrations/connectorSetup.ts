@@ -61,29 +61,38 @@ export const CONNECTOR_SETUP: Record<string, ConnectorSetup> = {
 
   slack: {
     intro:
-      "One Slack OAuth grant gives Jarvis both a bot token (xoxb-) and a user token (xoxp-). After connecting, flip the per-account 'send as' dropdown to switch chat.postMessage between bot and you.",
+      "You'll paste two things into Jarvis: Client ID + Client Secret. The bot token (xoxb-) and user token (xoxp-) come back automatically through OAuth — you never copy or paste those yourself. After connecting, flip the per-account 'send as' dropdown to switch chat.postMessage between bot and you.",
     steps: [
       {
         title: 'Create a Slack app',
-        body: '"From scratch", pick your workspace, give it a name.',
+        body: 'Open the Slack app dashboard, "Create New App" → "From scratch". Name it (e.g. "Jarvis"), pick your workspace, click Create.',
         url: 'https://api.slack.com/apps',
-        urlLabel: 'Manage apps',
+        urlLabel: 'api.slack.com/apps',
       },
       {
-        title: 'Configure OAuth & Permissions',
-        body: 'Add redirect URL: http://127.0.0.1:4747/oauth/callback/slack. Bot Token Scopes: chat:write, chat:write.public, channels:read, groups:read, users:read, users:read.email, search:read. User Token Scopes: chat:write, search:read.',
+        title: 'Add the redirect URL',
+        body: 'Left sidebar → "OAuth & Permissions". Scroll to "Redirect URLs" → "Add New Redirect URL". Paste the URL below, click Add, then Save URLs. Without this, the OAuth flow fails with redirect_uri_mismatch.',
+        command: 'http://127.0.0.1:4747/oauth/callback/slack',
       },
       {
-        title: 'Copy Basic Information',
-        body: 'Settings → Basic Information. Copy Client ID and Client Secret. Both are required.',
+        title: 'Add Bot Token Scopes',
+        body: 'Same page, scroll to "Scopes" → "Bot Token Scopes". Click "Add an OAuth Scope" once per scope: chat:write, chat:write.public, channels:read, groups:read, users:read, users:read.email, search:read.',
       },
       {
-        title: 'Paste credentials below',
-        body: 'Paste both into the form above and Save.',
+        title: 'Add User Token Scopes',
+        body: 'Same page, "User Token Scopes" section (right below Bot). Add: chat:write (lets Jarvis post AS YOU when sendAs=user), search:read (search your DMs + private channels).',
+      },
+      {
+        title: 'Copy Client ID + Client Secret',
+        body: 'Left sidebar → "Basic Information" → "App Credentials". Copy the Client ID. Click "Show" next to Client Secret and copy that too. These are the ONLY two values you paste into Jarvis — bot/user tokens are obtained automatically by the OAuth flow.',
+      },
+      {
+        title: 'Paste into the credentials form above',
+        body: 'Client ID → top input. Client Secret → second input. Click Save credentials. The Start button below becomes active.',
       },
       {
         title: 'Click Start OAuth flow',
-        body: 'Browser opens at slack.com/oauth/v2/authorize. Pick the workspace, approve both scope sets.',
+        body: 'Browser opens at slack.com. Pick the workspace, approve both scope sets. Slack redirects back to 127.0.0.1:4747, Jarvis exchanges the code for xoxb + xoxp tokens, both land in Keychain. The new account row appears with a send-as dropdown — flip any time.',
       },
     ],
     scopes: [
