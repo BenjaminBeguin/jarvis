@@ -127,8 +127,12 @@ function extractSessionContext(filePath: string): SessionContext {
 
   // Title: first user prompt anywhere in the file. Scan generously — some
   // sessions have hundreds of system/init lines before the first enqueue.
+  // We also keep the line *index* so the backfill below can preserve the
+  // event even when it falls outside the recent-N window.
   let found = false;
-  for (const line of lines) {
+  let firstPromptLineIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
     if (!line.trim()) continue;
     let parsed: unknown;
     try {
@@ -144,6 +148,7 @@ function extractSessionContext(filePath: string): SessionContext {
       e['content']
     ) {
       ctx.title = truncate(e['content']);
+      firstPromptLineIdx = i;
       found = true;
       break;
     }
@@ -160,6 +165,7 @@ function extractSessionContext(filePath: string): SessionContext {
   // the end so the renderer sees them in chronological order. The FIRST event
   // we hit (last in file order) tells us if the agent is awaiting input.
   const collected: unknown[] = [];
+  let earliestIdx = lines.length;
   for (let i = lines.length - 1; i >= 0 && collected.length < BACKFILL_EVENT_COUNT; i--) {
     const line = lines[i];
     if (!line || !line.trim()) continue;
@@ -178,8 +184,24 @@ function extractSessionContext(filePath: string): SessionContext {
       }
     }
     collected.push(event);
+    earliestIdx = i;
   }
-  ctx.backfill = collected.reverse();
+  const backfill = collected.reverse();
+
+  // Always include the first user prompt — otherwise long sessions show
+  // up with only the tail of the conversation and the question that
+  // started it is invisible. Skip when the prompt is already inside the
+  // tail window we just collected.
+  if (firstPromptLineIdx >= 0 && firstPromptLineIdx < earliestIdx) {
+    try {
+      const firstParsed = JSON.parse(lines[firstPromptLineIdx]!);
+      const firstEvent = transformEvent(firstParsed);
+      if (firstEvent) backfill.unshift(firstEvent);
+    } catch {
+      // shouldn't happen — we already parsed this line above
+    }
+  }
+  ctx.backfill = backfill;
   return ctx;
 }
 
