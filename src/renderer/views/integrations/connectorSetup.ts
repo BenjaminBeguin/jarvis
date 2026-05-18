@@ -130,7 +130,7 @@ export const CONNECTOR_SETUP: Record<string, ConnectorSetup> = {
       },
       {
         title: 'Click Start OAuth flow',
-        body: 'Browser opens at notion.so. Pick the workspace + the pages/databases the integration should see. Jarvis can only access pages you explicitly grant.',
+        body: 'Browser opens at notion.so. Pick the workspace + the pages/databases the integration should see. Jarvis can only access pages you explicitly grant — child pages inherit automatically, so granting a parent (workspace root, "Knowledge", "Team", etc.) covers everything underneath including pages created later. New TOP-level pages stay invisible until you share them; manage anytime at notion.so/profile/integrations → My connections.',
       },
     ],
   },

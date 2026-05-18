@@ -324,6 +324,20 @@ function ConnectorRow({
                   )}
                 </div>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {summary.id === 'notion' && (
+                    <button
+                      type="button"
+                      className="connector-row__provider-link"
+                      onClick={() =>
+                        void window.jarvis.openExternal(
+                          'https://www.notion.so/profile/integrations',
+                        )
+                      }
+                      title="Notion gates access per-page — open notion.so to add or remove pages this integration can see."
+                    >
+                      Manage pages ↗
+                    </button>
+                  )}
                   {summary.id === 'slack' && (
                     <label
                       style={{

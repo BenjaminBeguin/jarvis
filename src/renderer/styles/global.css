@@ -16231,3 +16231,19 @@ button:disabled:hover {
 .connector-row__connect--cancel:hover {
   background: rgba(255, 120, 120, 0.16) !important;
 }
+
+.connector-row__provider-link {
+  font-size: 12px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.connector-row__provider-link:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.95);
+}
