@@ -5,6 +5,11 @@ import { type Actor, createActor } from 'xstate';
 
 import type { WorkflowDef, WorkflowRun, WorkflowRunStep } from '@shared/types';
 
+import {
+  getWorkflowRun as dbGetWorkflowRun,
+  listWorkflowRuns as dbListWorkflowRuns,
+  upsertWorkflowRun,
+} from './db.js';
 import { compileWorkflow, type WorkflowMachineContext } from './workflow-compile.js';
 import type { WorkflowNodeContext } from './workflow-nodes/index.js';
 
@@ -95,6 +100,7 @@ export class WorkflowRunner extends EventEmitter {
         error: `Unknown node types: ${compile.unknownTypes.join(', ')}`,
       };
       this.storeRun(failed);
+      this.persist(failed);
       this.emit('run-changed', failed);
       return failed;
     }
@@ -118,6 +124,10 @@ export class WorkflowRunner extends EventEmitter {
     const actor = createActor(compile.machine);
     const handle: RunHandle = { actor, run };
     this.storeRun(run);
+    // Persist the initial row so a crash mid-run leaves a 'running'
+    // marker on disk — the renderer can surface it as "stuck" rather
+    // than the row vanishing entirely.
+    this.persist(run);
 
     // Subscribe to the actor BEFORE starting so we don't miss the
     // initial transition.
@@ -174,6 +184,7 @@ export class WorkflowRunner extends EventEmitter {
           s.status === 'pending' ? { ...s, status: 'skipped' } : s,
         );
       }
+      this.persist(run);
       this.emit('run-changed', { ...run });
     });
 
@@ -195,21 +206,58 @@ export class WorkflowRunner extends EventEmitter {
         ? { ...s, status: 'errored', endedAt: Date.now() }
         : s,
     );
+    this.persist(handle.run);
     this.emit('run-changed', { ...handle.run });
     return true;
   }
 
   get(runId: string): WorkflowRun | null {
-    return this.runs.get(runId)?.run ?? null;
+    // Live run wins; fall back to disk so a restart-survived run is
+    // still inspectable from the renderer's Runs tab.
+    const live = this.runs.get(runId)?.run;
+    if (live) return live;
+    const persisted = dbGetWorkflowRun(runId);
+    return persisted ? (persisted as WorkflowRun) : null;
   }
 
-  /** Newest first. */
+  /**
+   * Newest first. Merges live in-memory runs (which may not have
+   * been flushed to disk yet at the moment of the call) with the
+   * persistent history. SQLite is the source of truth past the live
+   * window; in-memory takes precedence for the same id.
+   */
   list(workflowId?: string): WorkflowRun[] {
-    const all = [...this.runs.values()].map((h) => h.run);
-    const filtered = workflowId
-      ? all.filter((r) => r.workflowId === workflowId)
-      : all;
-    return filtered.sort((a, b) => b.startedAt - a.startedAt);
+    const live = [...this.runs.values()].map((h) => h.run);
+    const liveFiltered = workflowId
+      ? live.filter((r) => r.workflowId === workflowId)
+      : live;
+    const persisted = dbListWorkflowRuns(workflowId, 200) as WorkflowRun[];
+    const seen = new Set(liveFiltered.map((r) => r.id));
+    const merged: WorkflowRun[] = [
+      ...liveFiltered,
+      ...persisted.filter((r) => !seen.has(r.id)),
+    ];
+    return merged.sort((a, b) => b.startedAt - a.startedAt);
+  }
+
+  private persist(run: WorkflowRun): void {
+    try {
+      upsertWorkflowRun({
+        id: run.id,
+        workflowId: run.workflowId,
+        startedAt: run.startedAt,
+        endedAt: run.endedAt,
+        status: run.status,
+        trigger: run.trigger,
+        snapshot: run,
+      });
+    } catch (err) {
+      console.warn(
+        '[workflow-runner] failed to persist run',
+        run.id,
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 
   /** Stop everything — used during app shutdown. */

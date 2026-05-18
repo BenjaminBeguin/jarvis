@@ -58,6 +58,22 @@ const MIGRATIONS = [
   // /note turns today, 9 were pooled — skipped ~9 cold starts").
   // 0 = fresh, 1 = pooled.
   `ALTER TABLE tasks ADD COLUMN pooled INTEGER NOT NULL DEFAULT 0;`,
+  // Persistent workflow run history. Previously runs lived in-memory
+  // only with a 60-entry cap; restart wiped everything. `run_json`
+  // holds the full WorkflowRun snapshot — runs are small (~few KB
+  // even with truncated step outputs) and storing them as a blob is
+  // simpler than mirroring every field as a column.
+  `CREATE TABLE IF NOT EXISTS workflow_runs (
+    id TEXT PRIMARY KEY,
+    workflow_id TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    status TEXT NOT NULL,
+    trigger TEXT NOT NULL,
+    run_json TEXT NOT NULL
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_workflow_runs_started ON workflow_runs(started_at DESC);`,
+  `CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow ON workflow_runs(workflow_id, started_at DESC);`,
 ];
 
 let db: DatabaseType | null = null;
@@ -421,4 +437,103 @@ export function getCostSummary(): {
       taskCount: r.task_count,
     })),
   };
+}
+
+// ─── Workflow runs ──────────────────────────────────────────────────────────
+
+interface WorkflowRunRow {
+  id: string;
+  workflow_id: string;
+  started_at: number;
+  ended_at: number | null;
+  status: string;
+  trigger: string;
+  run_json: string;
+}
+
+/**
+ * Upsert a workflow run. Called on every WorkflowRunner state
+ * transition so the persisted snapshot is always close to live —
+ * cheap because runs are small and SQLite is fast. The full run
+ * (including step outputs) is stored as JSON in `run_json`; top-
+ * level columns are mirrors of common fields for indexing.
+ */
+export function upsertWorkflowRun(run: {
+  id: string;
+  workflowId: string;
+  startedAt: number;
+  endedAt: number | null;
+  status: string;
+  trigger: string;
+  // Full snapshot — includes steps[], error, etc. Typed as unknown to
+  // avoid a circular shared/types dependency from db.ts.
+  snapshot: unknown;
+}): void {
+  const db = getDb();
+  const runJson = JSON.stringify(run.snapshot);
+  db.prepare(
+    `INSERT INTO workflow_runs (
+      id, workflow_id, started_at, ended_at, status, trigger, run_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      ended_at = excluded.ended_at,
+      status = excluded.status,
+      run_json = excluded.run_json`,
+  ).run(
+    run.id,
+    run.workflowId,
+    run.startedAt,
+    run.endedAt,
+    run.status,
+    run.trigger,
+    runJson,
+  );
+}
+
+/**
+ * Newest-first run history, optionally filtered to one workflow id.
+ * Returns parsed run JSON ready to hand back to the renderer. Caps
+ * at `limit` (default 200) — past that, runs stay on disk but the
+ * UI doesn't ask for them.
+ */
+export function listWorkflowRuns(
+  workflowId: string | undefined,
+  limit = 200,
+): unknown[] {
+  const db = getDb();
+  const rows = workflowId
+    ? db
+        .prepare<[string, number], WorkflowRunRow>(
+          `SELECT * FROM workflow_runs
+           WHERE workflow_id = ?
+           ORDER BY started_at DESC
+           LIMIT ?`,
+        )
+        .all(workflowId, limit)
+    : db
+        .prepare<[number], WorkflowRunRow>(
+          `SELECT * FROM workflow_runs
+           ORDER BY started_at DESC
+           LIMIT ?`,
+        )
+        .all(limit);
+  return rows.map((r) => safeParseRun(r.run_json));
+}
+
+export function getWorkflowRun(id: string): unknown | null {
+  const db = getDb();
+  const row = db
+    .prepare<[string], WorkflowRunRow>(
+      `SELECT * FROM workflow_runs WHERE id = ?`,
+    )
+    .get(id);
+  return row ? safeParseRun(row.run_json) : null;
+}
+
+function safeParseRun(json: string): unknown {
+  try {
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
 }
