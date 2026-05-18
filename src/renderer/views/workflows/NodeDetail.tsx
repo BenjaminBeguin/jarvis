@@ -1,3 +1,8 @@
+import Prism from 'prismjs';
+import 'prismjs/components/prism-applescript';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-json';
+
 import type { WorkflowNodeDef } from '../../../shared/types';
 
 /**
@@ -9,6 +14,8 @@ import type { WorkflowNodeDef } from '../../../shared/types';
  * For unknown node types or unexpected params shapes, falls back to
  * pretty-printed JSON.
  */
+
+type SyntaxLanguage = 'applescript' | 'javascript' | 'bash' | 'json' | 'plain';
 
 interface Props {
   node: WorkflowNodeDef;
@@ -31,9 +38,36 @@ export function NodeDetail({ node }: Props) {
       return <NotifyDetail p={p} />;
     case 'run-skill':
       return <RunSkillDetail p={p} />;
+    case 'mcp-call':
+      return <McpCallDetail p={p} />;
     default:
       return <GenericDetail p={p} />;
   }
+}
+
+function McpCallDetail({ p }: { p: Record<string, unknown> }) {
+  const mcp = typeof p['mcp'] === 'string' ? (p['mcp'] as string) : '';
+  const tool = typeof p['tool'] === 'string' ? (p['tool'] as string) : '';
+  const parse = typeof p['parse'] === 'string' ? (p['parse'] as string) : 'text';
+  const args = p['args'];
+  return (
+    <>
+      <Field label="MCP" value={mcp} mono />
+      <Field label="Tool" value={tool} mono />
+      <Field label="Parse" value={parse} />
+      {args !== undefined && (
+        <Field
+          label="Args"
+          value={
+            <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+              {JSON.stringify(args, null, 2)}
+            </pre>
+          }
+          mono
+        />
+      )}
+    </>
+  );
 }
 
 function Field({
@@ -55,8 +89,48 @@ function Field({
   );
 }
 
-function CodeBlock({ children }: { children: string }) {
-  return <pre className="wf-detail__code">{children}</pre>;
+/**
+ * Syntax-highlighted code block with a line-number gutter. The whole
+ * block is highlighted in one pass (so multi-line tokens like template
+ * literals or block comments stay tokenized correctly); line numbers
+ * are a separate read-only column that scrolls with the code.
+ *
+ * `language='plain'` (or an unknown grammar) skips highlighting and
+ * just renders the raw text — same shell, no spans.
+ */
+function SyntaxCode({
+  code,
+  language,
+}: {
+  code: string;
+  language: SyntaxLanguage;
+}) {
+  const grammar = language !== 'plain' ? Prism.languages[language] : null;
+  const html = grammar
+    ? Prism.highlight(code, grammar, language)
+    : escapeHtml(code);
+  const lineCount = code.split('\n').length;
+  const gutter = Array.from({ length: lineCount }, (_, i) => String(i + 1)).join(
+    '\n',
+  );
+  return (
+    <pre className={`wf-detail__code wf-detail__code--${language}`}>
+      <span className="wf-detail__code-gutter" aria-hidden="true">
+        {gutter}
+      </span>
+      <code
+        className={`wf-detail__code-body language-${language}`}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    </pre>
+  );
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 function asString(v: unknown): string {
@@ -118,7 +192,10 @@ function HttpFetchDetail({ p }: { p: Record<string, unknown> }) {
         <>
           <Field label="Body encoding" value={<code>{bodyEncoding}</code>} />
           <div className="wf-detail__heading">Body</div>
-          <CodeBlock>{asString(p.body)}</CodeBlock>
+          <SyntaxCode
+            code={asString(p.body)}
+            language={bodyEncoding === 'json' ? 'json' : 'plain'}
+          />
         </>
       )}
     </div>
@@ -136,7 +213,7 @@ function OsascriptDetail({ p }: { p: Record<string, unknown> }) {
         }
       />
       <div className="wf-detail__heading">AppleScript</div>
-      <CodeBlock>{script}</CodeBlock>
+      <SyntaxCode code={script.replace(/^\n+/, '')} language="applescript" />
     </div>
   );
 }
@@ -154,6 +231,12 @@ function ShellDetail({ p }: { p: Record<string, unknown> }) {
       {typeof p.timeoutMs === 'number' && (
         <Field label="Timeout" value={`${p.timeoutMs}ms`} />
       )}
+      {cmd && (
+        <>
+          <div className="wf-detail__heading">Invocation</div>
+          <SyntaxCode code={[cmd, args].filter(Boolean).join(' ')} language="bash" />
+        </>
+      )}
     </div>
   );
 }
@@ -167,7 +250,7 @@ function TransformDetail({ p }: { p: Record<string, unknown> }) {
         value="new Function('$', `return (…)`) — no globals, no imports"
       />
       <div className="wf-detail__heading">Function body</div>
-      <CodeBlock>{fn}</CodeBlock>
+      <SyntaxCode code={fn} language="javascript" />
     </div>
   );
 }
@@ -221,7 +304,7 @@ function RunSkillDetail({ p }: { p: Record<string, unknown> }) {
       {typeof p.prompt === 'string' && (
         <>
           <div className="wf-detail__heading">Prompt</div>
-          <CodeBlock>{p.prompt}</CodeBlock>
+          <SyntaxCode code={p.prompt} language="plain" />
         </>
       )}
     </div>
@@ -232,7 +315,7 @@ function GenericDetail({ p }: { p: Record<string, unknown> }) {
   return (
     <div className="wf-detail">
       <div className="wf-detail__heading">Params</div>
-      <CodeBlock>{asString(p)}</CodeBlock>
+      <SyntaxCode code={asString(p)} language="json" />
     </div>
   );
 }

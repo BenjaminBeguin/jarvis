@@ -915,7 +915,8 @@ export type WorkflowNodeType =
   | 'transform'
   | 'inbox-write'
   | 'notify'
-  | 'run-skill';
+  | 'run-skill'
+  | 'mcp-call';
 
 export interface WorkflowNodeDef {
   type: string;
