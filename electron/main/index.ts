@@ -37,11 +37,21 @@ import { InboxStore } from './inbox.js';
 import { ConnectorRegistry } from './oauth/connector-registry.js';
 import { OAuthOrchestrator } from './oauth/orchestrator.js';
 import { TokenRefresher } from './oauth/refresher.js';
+import { githubConnector } from './oauth/connectors/github.js';
 import { googleConnector } from './oauth/connectors/google.js';
 import { linearConnector } from './oauth/connectors/linear.js';
 import { notionConnector } from './oauth/connectors/notion.js';
 import { slackConnector } from './oauth/connectors/slack.js';
 import { testEchoConnector } from './oauth/connectors/test-echo.js';
+import type {
+  ConnectorHooks,
+  ConnectorTokenPayload,
+} from './oauth/types.js';
+import {
+  clearConnectorToken,
+  getConnectorToken,
+  setConnectorToken,
+} from './secrets.js';
 import { InboxProximityWatcher } from './inbox-proximity.js';
 import { MeetingActivityWatcher } from './meeting-activity-watcher.js';
 import { BUILTIN_BRIEFING_KINDS } from './seeds/briefing-kinds.js';
@@ -682,6 +692,51 @@ function registerGlobalShortcut(): void {
   }
 }
 
+/**
+ * Call connector.init() for every registered connector that
+ * implements it. Used at boot to warm caches (GitHub's stdio MCP
+ * needs the PAT in main-process memory because mcpEntries is sync).
+ * Connectors without init() are skipped — most don't need it.
+ */
+async function warmConnectorCaches(): Promise<void> {
+  for (const connector of connectorRegistry.list()) {
+    if (!connector.init) continue;
+    const accounts = integrationsStore
+      .list()
+      .filter((a) => a.connectorId === connector.id);
+    if (accounts.length === 0) continue;
+    const hooks = makeConnectorHooks(connector.id);
+    try {
+      await connector.init(accounts, hooks);
+    } catch (err) {
+      console.warn(
+        `[connectors] ${connector.id}.init() threw:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+}
+
+function makeConnectorHooks(connectorId: string): ConnectorHooks {
+  return {
+    async getToken(accountId): Promise<ConnectorTokenPayload | null> {
+      const raw = await getConnectorToken(connectorId, accountId);
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as ConnectorTokenPayload;
+      } catch {
+        return null;
+      }
+    },
+    async setToken(accountId, payload): Promise<void> {
+      await setConnectorToken(connectorId, accountId, JSON.stringify(payload));
+    },
+    async clearToken(accountId): Promise<void> {
+      await clearConnectorToken(connectorId, accountId);
+    },
+  };
+}
+
 // ─── bootstrap ───────────────────────────────────────────────────────────────
 
 app.setName('Jarvis');
@@ -711,6 +766,7 @@ app.whenReady().then(async () => {
   connectorRegistry.register(slackConnector);
   connectorRegistry.register(notionConnector);
   connectorRegistry.register(linearConnector);
+  connectorRegistry.register(githubConnector);
   // Slack reads sendAs from the live account record on every tool
   // call — wire the reader so the user's toggle in Settings takes
   // effect without rebuilding the MCP instance.
@@ -720,6 +776,9 @@ app.whenReady().then(async () => {
   integrationsStore.init();
   mcp.setManagedSource(integrationsStore);
   mcp.init();
+  // Warm any connector caches (stdio-MCP connectors like GitHub need
+  // the token in memory at spawn time because mcpEntries is sync).
+  await warmConnectorCaches();
   // Start the refresher AFTER the integrations store init so the
   // first tick sees the actually-restored accounts.
   tokenRefresher.start();

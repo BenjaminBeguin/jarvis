@@ -963,7 +963,13 @@ export interface WorkflowRun {
  *  future connectors that haven't been registered as part of the core
  *  enum (test-echo lives here so the renderer can render it like any
  *  other). */
-export type ConnectorId = 'test-echo' | 'slack' | 'google' | 'notion' | 'linear';
+export type ConnectorId =
+  | 'test-echo'
+  | 'slack'
+  | 'google'
+  | 'notion'
+  | 'linear'
+  | 'github';
 
 /** What the renderer sees about a single connected account. Tokens
  *  never cross IPC — they live in Keychain only. */

@@ -166,6 +166,40 @@ export const CONNECTOR_SETUP: Record<string, ConnectorSetup> = {
     scopes: ['read · everything you can see', 'write · create + edit issues, comments'],
   },
 
+  github: {
+    intro:
+      "Two ways in: paste a Personal Access Token (fastest, no app to register), or register a GitHub OAuth App and use the OAuth tab. SSH keys aren't an option — those only authenticate `git push/pull`, not GitHub's REST API. For Bash-level `git` operations, your existing `git` setup already works inside Jarvis tasks.",
+    steps: [
+      {
+        title: 'Open the OAuth Apps dashboard (OAuth tab only)',
+        body: 'Skip this step if you\'re using the Personal Access Token tab — go straight to step 4. For OAuth: GitHub → Settings → Developer settings → OAuth Apps → New OAuth App.',
+        url: 'https://github.com/settings/developers',
+        urlLabel: 'github.com/settings/developers',
+      },
+      {
+        title: 'Configure the OAuth App (OAuth tab only)',
+        body: 'Authorization callback URL: paste the URL below. Homepage URL: anything (e.g. your repo). Click Register application.',
+        command: 'http://127.0.0.1:4747/oauth/callback/github',
+      },
+      {
+        title: 'Copy Client ID + Generate a client secret (OAuth tab only)',
+        body: 'On the new app\'s page: copy Client ID. Click "Generate a new client secret" and copy that too. Paste both into the credentials form above, save, then click Start OAuth flow.',
+      },
+      {
+        title: 'OR generate a Personal Access Token',
+        body: 'For the API Key tab: open Settings → Developer settings → Personal access tokens → Tokens (classic) or Fine-grained tokens. Scopes for a "do everything" token: repo, read:user, read:org, workflow. Generate, copy, paste into the API Key tab above, click Add account.',
+        url: 'https://github.com/settings/tokens',
+        urlLabel: 'github.com/settings/tokens',
+      },
+    ],
+    scopes: [
+      'repo · read + write code, issues, PRs',
+      'read:user · identify the connecting account',
+      'read:org · enumerate organizations + teams',
+      'workflow · trigger + read GitHub Actions',
+    ],
+  },
+
   'test-echo': {
     intro:
       "A no-op connector that round-trips the entire OAuth pipeline without touching a real provider. Useful when iterating on the orchestrator + callback handler.",

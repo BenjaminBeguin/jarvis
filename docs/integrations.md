@@ -70,6 +70,25 @@ One OAuth client covers both APIs.
 
 **API surface.** Per-workspace MCP entry `notion-<workspaceId>` (aliased to `notion` for the default workspace). Tools: `search`, `get_page`, `query_database`, `get_database`, `create_page`, `update_page_properties`, `append_blocks`. Notion-Version is pinned at `2022-06-28` — bump it in [electron/main/oauth/connectors/notion-mcp/index.ts](../electron/main/oauth/connectors/notion-mcp/index.ts) if you need newer endpoints.
 
+### GitHub
+
+GitHub has TWO auth paths — pick whichever fits.
+
+**Personal Access Token (no app to register)**:
+1. <https://github.com/settings/tokens> → Generate new token (classic or fine-grained).
+2. Scopes: `repo`, `read:user`, `read:org`, `workflow`.
+3. In Jarvis: Settings → Integrations → Connect GitHub → **API Key** tab → paste → Add account.
+
+**OAuth App (for distribution to other users)**:
+1. <https://github.com/settings/developers> → OAuth Apps → New OAuth App.
+2. Authorization callback URL: `http://127.0.0.1:4747/oauth/callback/github`.
+3. Copy **Client ID**, generate + copy **Client Secret**.
+4. In Jarvis: paste both into the OAuth credentials form, then **Start OAuth flow**.
+
+**Note: SSH keys aren't supported.** They only authenticate `git push/pull`, not GitHub's REST API. For SSH-based git operations from inside a task, the agent uses Bash + `git` directly — your existing SSH setup applies, nothing extra needed in Jarvis.
+
+The connector publishes one stdio MCP entry per account (`github-<login>`) running `@modelcontextprotocol/server-github` with the token in env. Token is cached in main-process memory on boot (`init` lifecycle hook); never written to mcp.json.
+
 ### Linear
 
 1. <https://linear.app/settings/api/applications> → **Create new application**.

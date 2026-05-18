@@ -16,6 +16,7 @@ const STYLES: Record<string, BrandStyle> = {
   slack: { letter: 'S', background: '#4A154B', color: '#fff' },
   notion: { letter: 'N', background: '#000', color: '#fff' },
   linear: { letter: 'L', background: '#5E6AD2', color: '#fff' },
+  github: { letter: 'G', background: '#24292f', color: '#fff' },
   'test-echo': {
     letter: 'T',
     background: 'rgba(255,255,255,0.12)',

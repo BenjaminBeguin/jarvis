@@ -124,6 +124,17 @@ export interface Connector {
    *  removal separately. Errors are logged, never propagated — the user
    *  doesn't care if the provider's revoke endpoint is down. */
   disconnect(account: ConnectorAccount, hooks: ConnectorHooks): Promise<void>;
+
+  /** Optional one-shot init called by index.ts after the
+   *  IntegrationsStore has loaded its accounts at boot. Useful for
+   *  connectors that publish stdio MCPs and need to read their
+   *  tokens into a sync-accessible cache before mcpEntries() can
+   *  return a usable config. SDK-MCP connectors typically don't
+   *  need this — their tool callbacks read tokens lazily. */
+  init?(
+    accounts: ConnectorAccount[],
+    hooks: ConnectorHooks,
+  ): Promise<void>;
 }
 
 /**
