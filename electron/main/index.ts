@@ -32,6 +32,7 @@ import {
   getCostSummary,
   initDatabase,
   listRecentTasks,
+  pruneWorkflowRuns,
 } from './db.js';
 import { startHttpServer, type HttpServerHandle } from './http-server.js';
 import { ActivityStore } from './activity-store.js';
@@ -1296,6 +1297,24 @@ app.whenReady().then(async () => {
       console.warn('[task-runner] orphan sweep failed:', err);
     }
   }, 5 * 60 * 1000);
+  // Cap persisted workflow run history: at most 200 runs per workflow
+  // + nothing older than 30 days. Runs every hour. The Workflows page
+  // only ever asks for the latest 200, so anything older is dead
+  // weight in SQLite. First pass also fires on boot so a long-running
+  // install doesn't carry years of rows.
+  const pruneRuns = (): void => {
+    try {
+      const n = pruneWorkflowRuns({
+        perWorkflowCap: 200,
+        maxAgeMs: 30 * 24 * 60 * 60 * 1000,
+      });
+      if (n > 0) console.log(`[workflow-runner] pruned ${n} run row(s)`);
+    } catch (err) {
+      console.warn('[workflow-runner] run history prune failed:', err);
+    }
+  };
+  pruneRuns();
+  setInterval(pruneRuns, 60 * 60 * 1000);
 
   // Localhost HTTP API. Auto-generates a bearer token on first launch
   // and binds 127.0.0.1:4747. Lets iOS Shortcuts / CLI / future phone

@@ -537,3 +537,47 @@ function safeParseRun(json: string): unknown {
     return null;
   }
 }
+
+/**
+ * Cap the persisted run history. Each workflow keeps at most
+ * `perWorkflowCap` rows; anything older than `maxAgeMs` is dropped
+ * regardless of cap (so a workflow that fires once a week doesn't
+ * keep a decade of history). Returns the row count deleted.
+ *
+ * Called periodically from index.ts. Fast: two indexed deletes.
+ */
+export function pruneWorkflowRuns(opts: {
+  perWorkflowCap: number;
+  maxAgeMs: number;
+}): number {
+  const { perWorkflowCap, maxAgeMs } = opts;
+  const db = getDb();
+  const ageCutoff = Date.now() - maxAgeMs;
+  let deleted = 0;
+  // Age-based prune first — strictly oldest, no per-workflow logic.
+  const ageResult = db
+    .prepare(`DELETE FROM workflow_runs WHERE started_at < ?`)
+    .run(ageCutoff);
+  deleted += Number(ageResult.changes ?? 0);
+  // Per-workflow cap. For each workflow_id, keep the N most recent
+  // rows; delete the rest. Done in a single CTE so we don't iterate
+  // workflows in JS.
+  const capResult = db
+    .prepare(
+      `DELETE FROM workflow_runs
+       WHERE id IN (
+         SELECT id FROM (
+           SELECT id,
+             ROW_NUMBER() OVER (
+               PARTITION BY workflow_id
+               ORDER BY started_at DESC
+             ) AS rn
+           FROM workflow_runs
+         )
+         WHERE rn > ?
+       )`,
+    )
+    .run(perWorkflowCap);
+  deleted += Number(capResult.changes ?? 0);
+  return deleted;
+}
