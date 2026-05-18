@@ -19,19 +19,32 @@ import type { WorkflowDef } from '@shared/types';
  */
 
 // AppleScript: pull next 12 hours of events from Calendar.app and
-// emit one TAB-delimited line per event. ISO 8601 dates built by
-// hand — the «class isot» form is unreliable across macOS versions
-// (returns -2741 "Expected ',' but found class name" on some
-// installs). pad2 + isoStr keep it portable.
+// emit one TAB-delimited line per event. ISO 8601 built by hand.
+//
+// Quirks worked around:
+//   - The «class isot» token is rejected on newer macOS (-2741
+//     "Expected ',' but found class name"). Don't use it.
+//   - AppleScript's `as` binds tightly enough inside function-call
+//     parens that `pad2(month of d as integer)` is parsed as
+//     `pad2(month of (d as integer))` and trips the SAME -2741
+//     because `d as integer` is invalid for a date. Pre-compute
+//     every component into a local so the call sites are bare
+//     identifiers — no nested `as` inside `pad2(…)`.
 const CAL_SCRIPT = `
 on pad2(n)
-  set s to (n as integer) as string
+  set s to n as text
   if (length of s) < 2 then return "0" & s
   return s
 end pad2
 
 on isoStr(d)
-  return (year of d as string) & "-" & pad2(month of d as integer) & "-" & pad2(day of d) & "T" & pad2(hours of d) & ":" & pad2(minutes of d) & ":" & pad2(seconds of d)
+  set y to year of d
+  set mo to (month of d) as integer
+  set da to day of d
+  set hh to hours of d
+  set mn to minutes of d
+  set ss to seconds of d
+  return (y as text) & "-" & pad2(mo) & "-" & pad2(da) & "T" & pad2(hh) & ":" & pad2(mn) & ":" & pad2(ss)
 end isoStr
 
 set theStart to current date

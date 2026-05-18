@@ -1620,6 +1620,22 @@ function migrateLegacyHttpFetchAuth(
   }
 }
 
+/**
+ * Detection signature for "this osascript is broken with -2741."
+ * Fires on:
+ *   - the original `«class isot»` form (pre-fix), AND
+ *   - the broken first-fix `pad2(month of d as integer)` form, which
+ *     hits the same -2741 because `as` binds loose enough inside a
+ *     function-call arg to parse as `month of (d as integer)`.
+ * The current good script pre-computes `mo` as a local, so neither
+ * substring appears — migration is a no-op on healthy workflows.
+ */
+function isBrokenCalendarScript(script: string): boolean {
+  if (script.includes('«class isot»')) return true;
+  if (script.includes('pad2(month of d as integer)')) return true;
+  return false;
+}
+
 function migrateLegacyCalendarOsascript(
   workflows: WorkflowStore,
   activity: ActivityStore,
@@ -1631,7 +1647,7 @@ function migrateLegacyCalendarOsascript(
       const params = step.params as Record<string, unknown> | undefined;
       const script = params?.['script'];
       if (typeof script !== 'string') return step;
-      if (!script.includes('«class isot»')) return step;
+      if (!isBrokenCalendarScript(script)) return step;
       touched = true;
       return {
         ...step,
@@ -1649,19 +1665,24 @@ function migrateLegacyCalendarOsascript(
 }
 
 /** Verbatim duplicate of CAL_SCRIPT in seeds/workflows/calendar-today.ts.
- *  Keeping the migration's source-of-truth inline so the seed file can
- *  evolve independently — the migration only fires when the OLD
- *  `«class isot»` form is on disk, so a future seed update doesn't
- *  silently overwrite user edits. */
+ *  Inline so the migration's source-of-truth doesn't drift if the seed
+ *  evolves — the detector only fires when a known-broken form is on
+ *  disk, never on user edits. */
 const CALENDAR_ISO_SCRIPT = `
 on pad2(n)
-  set s to (n as integer) as string
+  set s to n as text
   if (length of s) < 2 then return "0" & s
   return s
 end pad2
 
 on isoStr(d)
-  return (year of d as string) & "-" & pad2(month of d as integer) & "-" & pad2(day of d) & "T" & pad2(hours of d) & ":" & pad2(minutes of d) & ":" & pad2(seconds of d)
+  set y to year of d
+  set mo to (month of d) as integer
+  set da to day of d
+  set hh to hours of d
+  set mn to minutes of d
+  set ss to seconds of d
+  return (y as text) & "-" & pad2(mo) & "-" & pad2(da) & "T" & pad2(hh) & ":" & pad2(mn) & ":" & pad2(ss)
 end isoStr
 
 set theStart to current date
