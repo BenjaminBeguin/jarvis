@@ -1294,7 +1294,14 @@ app.whenReady().then(async () => {
   setInterval(() => {
     try {
       const n = runner.sweepOrphans();
-      if (n > 0) console.log(`[task-runner] swept ${n} orphan task(s)`);
+      if (n > 0) {
+        console.log(`[task-runner] swept ${n} orphan task(s)`);
+        activity.record({
+          kind: 'housekeeping.task-orphans-swept',
+          label: `Swept ${n} stuck task${n === 1 ? '' : 's'} (>30m idle, status still 'running')`,
+          detail: { count: n },
+        });
+      }
     } catch (err) {
       console.warn('[task-runner] orphan sweep failed:', err);
     }
@@ -1310,7 +1317,14 @@ app.whenReady().then(async () => {
         perWorkflowCap: 200,
         maxAgeMs: 30 * 24 * 60 * 60 * 1000,
       });
-      if (n > 0) console.log(`[workflow-runner] pruned ${n} run row(s)`);
+      if (n > 0) {
+        console.log(`[workflow-runner] pruned ${n} run row(s)`);
+        activity.record({
+          kind: 'housekeeping.workflow-runs-pruned',
+          label: `Pruned ${n} workflow run row${n === 1 ? '' : 's'} (cap 200/workflow, 30-day age limit)`,
+          detail: { count: n },
+        });
+      }
     } catch (err) {
       console.warn('[workflow-runner] run history prune failed:', err);
     }

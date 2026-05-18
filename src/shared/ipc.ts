@@ -97,6 +97,8 @@ export const IpcChannels = {
   costBreakdown: 'tasks:costBreakdown',
   costPrefsRead: 'cost:prefsRead',
   costPrefsWrite: 'cost:prefsWrite',
+  workingHoursRead: 'workingHours:read',
+  workingHoursWrite: 'workingHours:write',
   pickDirectory: 'fs:pickDirectory',
 
   httpApiStatus: 'http:status',

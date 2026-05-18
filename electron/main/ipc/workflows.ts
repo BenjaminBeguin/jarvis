@@ -1,8 +1,9 @@
 import { ipcMain } from 'electron';
 
 import { IpcChannels } from '@shared/ipc';
-import type { WorkflowDef } from '@shared/types';
+import type { WorkflowDef, WorkingHoursPrefs } from '@shared/types';
 
+import { loadWorkingHours, saveWorkingHours } from '../auth.js';
 import { broadcast } from '../windows.js';
 import type { IpcDeps } from './types.js';
 
@@ -31,6 +32,33 @@ export function registerWorkflowsIpc({
     workflows: workflows.list(),
     errors: workflows.errors(),
   }));
+
+  // Working-hours preference drives the `{businessHours}` cron token
+  // for every workflow that opts in. Read returns the current pref
+  // with defaults applied; write persists + triggers a scheduler
+  // resync so existing cron jobs pick up the new window without an
+  // app restart.
+  ipcMain.handle(IpcChannels.workingHoursRead, () => loadWorkingHours());
+  ipcMain.handle(
+    IpcChannels.workingHoursWrite,
+    (_e, prefs: WorkingHoursPrefs): { ok: boolean; message?: string } => {
+      try {
+        saveWorkingHours(prefs);
+        workflowScheduler.resync();
+        activity.record({
+          kind: 'preferences.working-hours-changed',
+          label: `Working hours updated · ${prefs.startHour}-${prefs.endHour} on ${prefs.daysOfWeek}`,
+          detail: { ...prefs },
+        });
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
 
   ipcMain.handle(
     IpcChannels.saveWorkflow,

@@ -103,6 +103,27 @@ export const DEFAULT_INBOX_PREFS: InboxPrefs = {
 };
 
 /**
+ * User's working-hours window. Drives the `{businessHours}` token
+ * substitution in workflow cron expressions — a single setting
+ * controls every inbox feed's schedule.
+ *
+ * Hours are inclusive 24h ("9-18" = the 9am hour through 18:59).
+ * `daysOfWeek` is POSIX cron day-of-week (0 or 7 = Sunday;
+ * "1-5" = Mon-Fri).
+ */
+export interface WorkingHoursPrefs {
+  startHour: number;
+  endHour: number;
+  daysOfWeek: string;
+}
+
+export const DEFAULT_WORKING_HOURS_PREFS: WorkingHoursPrefs = {
+  startHour: 9,
+  endHour: 18,
+  daysOfWeek: '1-5',
+};
+
+/**
  * Schema for a module's user-facing settings. Modules declare a
  * `settings.fields` array (typed below); the Settings UI renders a
  * panel automatically. Values are persisted in config.json under

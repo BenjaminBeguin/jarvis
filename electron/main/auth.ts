@@ -6,10 +6,12 @@ import { homedir } from 'node:os';
 import {
   DEFAULT_INBOX_PREFS,
   DEFAULT_NOTIFICATION_PREFS,
+  DEFAULT_WORKING_HOURS_PREFS,
   type AuthMode,
   type InboxPrefs,
   type ModuleSettingsValues,
   type NotificationPrefs,
+  type WorkingHoursPrefs,
 } from '@shared/types';
 
 interface PersistedConfig {
@@ -226,28 +228,6 @@ export function savePaused(value: boolean): void {
   writeConfig({ ...readConfig(), paused: value });
 }
 
-/**
- * The user's working-hours window. Used by workflow seeds whose cron
- * expressions include the `{businessHours}` placeholder — the
- * scheduler substitutes "<start>-<end> * * <days>" at fire time, so
- * editing this here updates every workflow that references it.
- *
- * Hours are inclusive 24h ("9-18" = the 9am hour through the 18:00
- * hour, i.e. 9:00 to 18:59). Days are POSIX cron day-of-week (0 or 7
- * = Sunday; "1-5" = Mon-Fri).
- */
-export interface WorkingHoursPrefs {
-  startHour: number;
-  endHour: number;
-  daysOfWeek: string;
-}
-
-export const DEFAULT_WORKING_HOURS: WorkingHoursPrefs = {
-  startHour: 9,
-  endHour: 18,
-  daysOfWeek: '1-5',
-};
-
 export function loadWorkingHours(): WorkingHoursPrefs {
   const cfg = readConfig() as { workingHours?: Partial<WorkingHoursPrefs> };
   const wh = cfg.workingHours ?? {};
@@ -257,20 +237,33 @@ export function loadWorkingHours(): WorkingHoursPrefs {
       wh.startHour >= 0 &&
       wh.startHour <= 23
         ? wh.startHour
-        : DEFAULT_WORKING_HOURS.startHour,
+        : DEFAULT_WORKING_HOURS_PREFS.startHour,
     endHour:
       typeof wh.endHour === 'number' && wh.endHour >= 0 && wh.endHour <= 23
         ? wh.endHour
-        : DEFAULT_WORKING_HOURS.endHour,
+        : DEFAULT_WORKING_HOURS_PREFS.endHour,
     daysOfWeek:
       typeof wh.daysOfWeek === 'string' && wh.daysOfWeek.trim()
         ? wh.daysOfWeek.trim()
-        : DEFAULT_WORKING_HOURS.daysOfWeek,
+        : DEFAULT_WORKING_HOURS_PREFS.daysOfWeek,
   };
 }
 
 export function saveWorkingHours(value: WorkingHoursPrefs): void {
-  writeConfig({ ...readConfig(), workingHours: value });
+  // Normalize before persisting — caller may pass invalid hours.
+  const safe: WorkingHoursPrefs = {
+    startHour: clampHour(value.startHour, DEFAULT_WORKING_HOURS_PREFS.startHour),
+    endHour: clampHour(value.endHour, DEFAULT_WORKING_HOURS_PREFS.endHour),
+    daysOfWeek:
+      typeof value.daysOfWeek === 'string' && value.daysOfWeek.trim()
+        ? value.daysOfWeek.trim()
+        : DEFAULT_WORKING_HOURS_PREFS.daysOfWeek,
+  };
+  writeConfig({ ...readConfig(), workingHours: safe });
+}
+
+function clampHour(v: unknown, fallback: number): number {
+  return typeof v === 'number' && v >= 0 && v <= 23 ? Math.floor(v) : fallback;
 }
 
 export interface CostPrefs {

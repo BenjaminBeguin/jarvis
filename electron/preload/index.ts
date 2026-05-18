@@ -30,6 +30,7 @@ import type {
   NotifierEmitPayload,
   WorkflowDef,
   WorkflowRun,
+  WorkingHoursPrefs,
   ProjectDef,
   ProjectInput,
   ProjectMemoryFile,
@@ -125,6 +126,12 @@ const api = {
     ipcRenderer.invoke(IpcChannels.costPrefsRead),
   costPrefsWrite: (prefs: CostPrefs): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.costPrefsWrite, prefs),
+  workingHoursRead: (): Promise<WorkingHoursPrefs> =>
+    ipcRenderer.invoke(IpcChannels.workingHoursRead),
+  workingHoursWrite: (
+    prefs: WorkingHoursPrefs,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.workingHoursWrite, prefs),
 
   httpApiStatus: (): Promise<HttpApiStatus> =>
     ipcRenderer.invoke(IpcChannels.httpApiStatus),
