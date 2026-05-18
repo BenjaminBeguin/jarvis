@@ -45,8 +45,8 @@ One OAuth client covers both APIs.
 1. <https://api.slack.com/apps> → **Create New App → From scratch** → name + workspace.
 2. **OAuth & Permissions** → **Redirect URLs** → add `http://127.0.0.1:4747/oauth/callback/slack` → Save.
 3. **OAuth & Permissions** → **Scopes**:
-   - **Bot Token Scopes** (the connector's defaults): `chat:write`, `chat:write.public`, `channels:read`, `groups:read`, `users:read`, `users:read.email`, `search:read`.
-   - **User Token Scopes** ("send as me" + read-as-you): `chat:write`, `search:read`.
+   - **Bot Token Scopes** (the connector's defaults): `chat:write`, `chat:write.public`, `channels:read`, `groups:read`, `users:read`, `users:read.email`.
+   - **User Token Scopes** ("send as me" + search): `chat:write`, `search:read`. Note: `search:read` is **user-only** on Slack's API — requesting it as a bot scope makes the OAuth call fail with "Invalid permissions requested".
 4. **Settings → Basic Information** → copy **Client ID** + **Client Secret**.
 5. Paste both into the constants at the top of [electron/main/oauth/connectors/slack.ts](../electron/main/oauth/connectors/slack.ts) — `CLIENT_ID` and `CLIENT_SECRET`, replacing the `REPLACE_ME_…` placeholders.
 6. (Optional) **Install to Workspace** from the App's left nav — pre-warms the OAuth grant so the consent dialog is shorter on first Connect.

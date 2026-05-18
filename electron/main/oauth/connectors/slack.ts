@@ -53,7 +53,10 @@ const AUTH_URL = 'https://slack.com/oauth/v2/authorize';
 const TOKEN_URL = 'https://slack.com/api/oauth.v2.access';
 const REVOKE_URL = 'https://slack.com/api/auth.revoke';
 
-/** Bot-side scopes: what the app can do as a workspace participant. */
+/** Bot-side scopes: what the app can do as a workspace participant.
+ *  Notably absent: `search:read` — Slack only exposes message search
+ *  to USER tokens, requesting it as a bot scope makes the OAuth call
+ *  fail with "Invalid permissions requested". */
 const BOT_SCOPES = [
   'chat:write',
   'chat:write.public',
@@ -61,11 +64,9 @@ const BOT_SCOPES = [
   'groups:read',
   'users:read',
   'users:read.email',
-  'search:read',
 ];
 /** User-side scopes: what the app can do impersonating the installer
- *  (the "send as me" path). Keep minimal — we only need writes + read
- *  scopes for read-as-user paths. */
+ *  (the "send as me" path) plus search (user-only on Slack's side). */
 const USER_SCOPES = ['chat:write', 'search:read'];
 
 /** Per-account preference. Determines which token `chat.postMessage`

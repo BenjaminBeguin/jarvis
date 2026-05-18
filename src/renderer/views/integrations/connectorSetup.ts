@@ -76,7 +76,7 @@ export const CONNECTOR_SETUP: Record<string, ConnectorSetup> = {
       },
       {
         title: 'Add Bot Token Scopes',
-        body: 'Same page, scroll to "Scopes" → "Bot Token Scopes". Click "Add an OAuth Scope" once per scope: chat:write, chat:write.public, channels:read, groups:read, users:read, users:read.email, search:read.',
+        body: 'Same page, scroll to "Scopes" → "Bot Token Scopes". Click "Add an OAuth Scope" once per scope: chat:write, chat:write.public, channels:read, groups:read, users:read, users:read.email. (search:read goes under User scopes — Slack only exposes search to user tokens.)',
       },
       {
         title: 'Add User Token Scopes',
@@ -99,9 +99,8 @@ export const CONNECTOR_SETUP: Record<string, ConnectorSetup> = {
       'bot · chat:write · post in channels',
       'bot · channels:read · list channels',
       'bot · users:read · resolve @mentions',
-      'bot · search:read · search messages',
       'user · chat:write · post as you (when sendAs=user)',
-      'user · search:read · search as you',
+      'user · search:read · search messages (Slack restricts search to user tokens)',
     ],
   },
 
