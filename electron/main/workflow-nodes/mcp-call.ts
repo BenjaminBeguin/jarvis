@@ -55,16 +55,54 @@ function isTextBlock(b: unknown): b is TextBlock {
   );
 }
 
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
 export const mcpCallNode = fromPromise<
   unknown,
   NodeHandlerInput<McpCallParams>
->(async ({ input }) => {
+>(async ({ input, signal }) => {
   const { params, ctx } = input;
   if (!params.mcp || typeof params.mcp !== 'string') {
-    throw new Error('mcp-call: params.mcp is required');
+    throw new Error('mcp-call: params.mcp is required (the server id)');
   }
   if (!params.tool || typeof params.tool !== 'string') {
-    throw new Error('mcp-call: params.tool is required');
+    throw new Error(
+      'mcp-call: params.tool is required (tool name without the mcp__ prefix)',
+    );
+  }
+  if (params.args !== undefined && !isPlainObject(params.args)) {
+    throw new Error(
+      `mcp-call: params.args must be a plain object, got ${Array.isArray(params.args) ? 'array' : typeof params.args}`,
+    );
+  }
+  if (
+    params.parse !== undefined &&
+    params.parse !== 'text' &&
+    params.parse !== 'json' &&
+    params.parse !== 'raw'
+  ) {
+    throw new Error(
+      `mcp-call: params.parse must be 'text' | 'json' | 'raw', got ${String(params.parse)}`,
+    );
+  }
+  // Early-fail when the workflow was stopped before we even started
+  // the call. The actor's signal will already be aborted; downstream
+  // we can't cancel an in-flight invokeMcpTool() (its signature
+  // doesn't take a signal), but at least don't pay the call cost.
+  if (signal.aborted) {
+    throw new Error('mcp-call: aborted before dispatch');
+  }
+  // Pre-flight: confirm the MCP id exists in the resolved config.
+  // invokeMcpTool returns a friendly `ok: false` for missing entries,
+  // but surfacing it here gives the user the workflow context
+  // (which step + node) rather than a bare "No mcp.json entry".
+  const resolved = ctx.mcp.resolve([params.mcp]);
+  if (!resolved[params.mcp]) {
+    throw new Error(
+      `mcp-call: MCP server '${params.mcp}' not registered. Check Settings → Integrations · MCP Servers, or your ~/.jarvis/mcp.json.`,
+    );
   }
   const result = await invokeMcpTool(
     ctx.mcp,
@@ -74,7 +112,7 @@ export const mcpCallNode = fromPromise<
   );
   if (!result.ok) {
     throw new Error(
-      `mcp-call: ${params.mcp}.${params.tool} failed — ${result.message ?? 'unknown'}`,
+      `mcp-call: ${params.mcp}.${params.tool} failed — ${result.message ?? 'unknown error'}`,
     );
   }
   if (result.isError) {
@@ -84,7 +122,9 @@ export const mcpCallNode = fromPromise<
           .map((b) => b.text)
           .join('\n')
       : 'unknown server-side error';
-    throw new Error(`mcp-call: ${params.mcp}.${params.tool} → ${text}`);
+    throw new Error(
+      `mcp-call: ${params.mcp}.${params.tool} returned isError — ${text || 'no message'}`,
+    );
   }
   const parse = params.parse ?? 'text';
   if (parse === 'raw') return result.content ?? [];
