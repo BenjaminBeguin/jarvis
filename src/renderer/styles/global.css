@@ -7090,6 +7090,40 @@ button:disabled:hover {
   color: var(--accent-strong);
 }
 
+.task-list-view__bg-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 2px;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+}
+
+.task-list-view__bg-toggle:hover {
+  color: var(--text-dim);
+  border-color: var(--border-strong);
+}
+
+.task-list-view__bg-toggle--on {
+  color: var(--text);
+  border-style: solid;
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.task-list-view__bg-toggle input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .task-list-view__rows {
   flex: 1;
   overflow-y: auto;

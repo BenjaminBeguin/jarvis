@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { TaskStatus, TaskSummary } from '../../shared/types';
 
-type Filter = 'all' | 'live' | 'awaiting' | 'mine' | 'external' | 'background';
+type Filter = 'all' | 'live' | 'awaiting' | 'mine' | 'external';
 
 interface Props {
   tasks: TaskSummary[];
@@ -12,6 +12,9 @@ interface Props {
 
 export function TaskList({ tasks, selectedId, onSelect }: Props) {
   const [filter, setFilter] = useState<Filter>('all');
+  // Off by default — seeing thousands of Claude Code metadata writes
+  // pop up is alarming. Flip on if you want to peek at the archive.
+  const [showBackground, setShowBackground] = useState(false);
   // Re-render every 30s so relative timestamps stay accurate.
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -22,32 +25,36 @@ export function TaskList({ tasks, selectedId, onSelect }: Props) {
   const visible = useMemo(
     () =>
       tasks
-        .filter((t) => matchesFilter(t, filter))
+        .filter((t) => (showBackground || !t.background) && matchesFilter(t, filter))
         .sort((a, b) => b.startedAt - a.startedAt),
-    [tasks, filter],
+    [tasks, filter, showBackground],
   );
 
-  // Counts mirror what each filter ends up showing — i.e. all the
-  // non-background filters exclude background tasks. Without this the
-  // "all" count says e.g. 4173 while the visible list has 20.
-  const counts = useMemo(
-    () => ({
-      all: tasks.filter((t) => !t.background).length,
-      live: tasks.filter((t) => !t.background && t.status === 'running').length,
-      awaiting: tasks.filter((t) => !t.background && t.awaitingInput).length,
-      mine: tasks.filter((t) => !t.background && t.origin !== 'external').length,
-      external: tasks.filter((t) => !t.background && t.origin === 'external').length,
-      background: tasks.filter((t) => t.background).length,
-    }),
+  // Counts mirror what each filter ends up showing — i.e. honour
+  // the showBackground toggle. Without that the "all" count says
+  // e.g. 4173 while the visible list has 20.
+  const counts = useMemo(() => {
+    const pool = showBackground
+      ? tasks
+      : tasks.filter((t) => !t.background);
+    return {
+      all: pool.length,
+      live: pool.filter((t) => t.status === 'running').length,
+      awaiting: pool.filter((t) => t.awaitingInput).length,
+      mine: pool.filter((t) => t.origin !== 'external').length,
+      external: pool.filter((t) => t.origin === 'external').length,
+    };
+  }, [tasks, showBackground]);
+
+  const backgroundCount = useMemo(
+    () => tasks.filter((t) => t.background).length,
     [tasks],
   );
 
   return (
     <section className="task-list-view">
       <header className="task-list-view__filters">
-        {(
-          ['all', 'live', 'awaiting', 'mine', 'external', 'background'] as Filter[]
-        ).map((f) => (
+        {(['all', 'live', 'awaiting', 'mine', 'external'] as Filter[]).map((f) => (
           <button
             key={f}
             className={`task-list-view__filter${filter === f ? ' task-list-view__filter--active' : ''}`}
@@ -56,6 +63,20 @@ export function TaskList({ tasks, selectedId, onSelect }: Props) {
             {f} <span className="task-list-view__count">{counts[f]}</span>
           </button>
         ))}
+        {backgroundCount > 0 && (
+          <label
+            className={`task-list-view__bg-toggle${showBackground ? ' task-list-view__bg-toggle--on' : ''}`}
+            title="Show Claude Code's background metadata writes (AI-title backfill etc.) alongside real activity"
+          >
+            <input
+              type="checkbox"
+              checked={showBackground}
+              onChange={(e) => setShowBackground(e.target.checked)}
+            />
+            background?{' '}
+            <span className="task-list-view__count">{backgroundCount}</span>
+          </label>
+        )}
       </header>
       <div className="task-list-view__rows">
         {visible.length === 0 && (
@@ -136,11 +157,6 @@ function Row({ task, active, onClick }: RowProps) {
 }
 
 function matchesFilter(t: TaskSummary, f: Filter): boolean {
-  // The background tab is the only place these surface — everywhere
-  // else we treat them as if they didn't exist so the default view
-  // isn't drowned by Claude Code's own metadata writes.
-  if (f === 'background') return !!t.background;
-  if (t.background) return false;
   if (f === 'all') return true;
   if (f === 'live') return t.status === 'running';
   if (f === 'awaiting') return !!t.awaitingInput;
