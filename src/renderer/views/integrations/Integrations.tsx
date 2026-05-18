@@ -30,7 +30,11 @@ export function Integrations() {
   const [claudeMcps, setClaudeMcps] = useState<ClaudeMcpEntry[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
-  const [fileContents, setFileContents] = useState<string | null>(null);
+  // undefined → not loaded yet (show "Loading…"); null → loaded but
+  // file doesn't exist (show empty-state); string → loaded contents.
+  const [fileContents, setFileContents] = useState<string | null | undefined>(
+    undefined,
+  );
   const [filePath, setFilePath] = useState<string>('~/.jarvis/mcp.json');
   const [showFile, setShowFile] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -151,7 +155,17 @@ export function Integrations() {
           >
             {refreshing ? '↻ Refreshing…' : '↻ Refresh'}
           </button>
-          <button onClick={() => setShowFile((v) => !v)}>
+          <button
+            onClick={() => {
+              setShowFile((v) => {
+                const next = !v;
+                // Re-fetch on open so a freshly-saved mcp.json is
+                // visible without the user clicking Refresh first.
+                if (next) void refreshFile();
+                return next;
+              });
+            }}
+          >
             {showFile ? '▾ Hide JSON' : '▸ View JSON'}
           </button>
           <button onClick={() => void window.jarvis.revealMcpFile()}>
@@ -246,7 +260,7 @@ function McpFileEditor({
   onSaved,
 }: {
   path: string;
-  contents: string | null;
+  contents: string | null | undefined;
   onSaved: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -330,12 +344,13 @@ function McpFileEditor({
             if (e.key === 'Escape' && !saving) cancel();
           }}
         />
+      ) : contents === undefined ? (
+        <div className="integrations__file-empty">Loading…</div>
       ) : contents ? (
         <pre className="integrations__file-body">{contents}</pre>
       ) : (
         <div className="integrations__file-empty">
-          File not yet created — saving a catalog entry (or this editor)
-          will write it.
+          File not yet created — saving the editor will write it.
           <button
             className="integrations__file-empty-cta"
             onClick={startEditing}
