@@ -4,67 +4,33 @@ import type { WorkflowDef } from '@shared/types';
  * Calendar inbox workflow.
  *
  *   trigger:  every 10 min
- *   pipeline: osascript (JXA) → transform → inbox-write
+ *   pipeline: mcp-call (Google Calendar) → transform → inbox-write
  *
- * macOS-only. Uses JavaScript for Automation (JXA) instead of
- * AppleScript: same `osascript` host, JS syntax, native Date objects,
- * JSON output. The previous AppleScript version kept tripping over
- * operator-precedence quirks (`month of d as integer` etc.) — JXA
- * sidesteps the entire class of bugs.
+ * Pulls upcoming events from your **Google Calendar** via the
+ * OAuth-managed `calendar-*` MCP server (Settings → Integrations →
+ * Connected accounts → Google). Replaces an earlier osascript/JXA
+ * approach that tripped over macOS Calendar.app's permission and
+ * scripting-target quirks (-1701 / -2753 errors that even Apple's
+ * own AppleScript snippets couldn't reproduce reliably).
  *
- * Quiet failure: if Calendar.app isn't running or automation
- * permission hasn't been granted, JXA throws and the workflow step
- * shows `errored`. The next tick recovers once permission is in place.
+ * Trade-off: requires the user to have connected a Google account.
+ * Without one, the workflow errors with a friendly "MCP server
+ * 'calendar' not registered" message — far easier to diagnose than
+ * Calendar.app's silent failures. If you live in iCloud / Exchange
+ * land and need those calendars, duplicate this workflow and swap
+ * the `mcp-call` for an `osascript` step against Calendar.app once
+ * you've granted automation access in System Settings.
+ *
+ * Prefix-matching on the `mcp` id means `'calendar'` resolves to
+ * whichever `calendar-<accountId>` is registered first — single
+ * account by default. To pick a specific account, use the full id
+ * (e.g. `calendar-personal@example.com`).
  */
 
-// JXA: enumerate Calendar.app events in the next 12h and emit a JSON
-// array. All the gnarly date math happens in real JavaScript on
-// native Date objects — no string-concat ISO formatter to maintain.
-const CAL_SCRIPT = `
-(function () {
-  const Calendar = Application('Calendar');
-  const now = new Date();
-  const end = new Date(now.getTime() + 12 * 60 * 60 * 1000);
-  const out = [];
-  const cals = Calendar.calendars();
-  for (let i = 0; i < cals.length; i++) {
-    const cal = cals[i];
-    let evts;
-    try {
-      evts = cal.events.whose({
-        _and: [
-          { startDate: { _greaterThanEquals: now } },
-          { startDate: { _lessThan: end } },
-        ],
-      })();
-    } catch (e) {
-      continue;
-    }
-    const calName = cal.name();
-    for (let j = 0; j < evts.length; j++) {
-      const evt = evts[j];
-      try {
-        out.push({
-          uid: evt.uid(),
-          summary: evt.summary() || '',
-          startIso: evt.startDate().toISOString(),
-          endIso: evt.endDate() ? evt.endDate().toISOString() : '',
-          calendar: calName,
-          location: evt.location() || '',
-          description: evt.description() || '',
-          allDay: evt.alldayEvent() === true,
-        });
-      } catch (e) {
-        // Skip a single bad event; don't kill the whole sync.
-      }
-    }
-  }
-  return JSON.stringify(out);
-})();
-`;
-
-// Transform receives the JSON string from JXA, parses it, and maps to
-// InboxItem[]. No more TSV parsing — just JSON.parse + array methods.
+// list_events defaults to "next 14 days, 25 results ordered by
+// startTime" when no timeMin/timeMax is passed (see google-mcp/
+// calendar.ts). We bump maxResults so a busy week doesn't truncate
+// before the transform can window down to the next 12h.
 const CAL_TRANSFORM = `((() => {
   const MEETING_URL_RE = /https?:\\/\\/[a-z0-9.-]*(?:meet\\.google|zoom\\.us|teams\\.microsoft|webex|whereby|jitsi)[^\\s<>\"']*/i;
   const hhmm = (iso) => {
@@ -72,32 +38,48 @@ const CAL_TRANSFORM = `((() => {
     if (Number.isNaN(d.getTime())) return '';
     return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }).replace(/\\s+/g, '');
   };
-  let events = [];
-  try { events = JSON.parse(typeof $ === 'string' ? $ : '[]'); } catch { events = []; }
-  if (!Array.isArray(events)) events = [];
+  // mcp-call parse:'json' returns an array whose first element is
+  // the slimEvent[] from the calendar MCP. Walk every block + flatten
+  // so a future MCP that returns multiple text blocks still works.
+  const blocks = Array.isArray($) ? $ : [$];
+  const events = [];
+  for (const b of blocks) {
+    if (Array.isArray(b)) events.push(...b);
+  }
+  const LOOKAHEAD_MS = 12 * 60 * 60 * 1000;
+  const now = Date.now();
+  const horizon = now + LOOKAHEAD_MS;
   return events
     .map((evt) => {
-      const startMs = new Date(evt.startIso).getTime();
+      if (!evt || typeof evt !== 'object') return null;
+      const startIso = evt.start;
+      const endIso = evt.end;
+      const startMs = startIso ? new Date(startIso).getTime() : NaN;
       if (!Number.isFinite(startMs)) return null;
-      if (startMs < Date.now() - 60000) return null;
-      if (evt.allDay) return null;
+      // Skip past events + anything beyond the 12-hour window. The
+      // mcp tool returns up to 14 days; we want today-ish only.
+      if (startMs < now - 60_000) return null;
+      if (startMs > horizon) return null;
+      // All-day events have date (YYYY-MM-DD) on start/end instead of
+      // dateTime. We skip those — they clutter a time-pressured inbox.
+      const isAllDay = typeof startIso === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(startIso);
+      if (isAllDay) return null;
       const loc = String(evt.location || '');
-      const desc = String(evt.description || '');
+      const hangout = String(evt.hangoutLink || '');
       const locMatch = loc.match(MEETING_URL_RE);
-      const descMatch = desc.match(MEETING_URL_RE);
-      const meetingUrl = (locMatch && locMatch[0]) || (descMatch && descMatch[0]) || null;
-      const startLabel = hhmm(evt.startIso);
-      const endLabel = hhmm(evt.endIso);
+      const meetingUrl = hangout || (locMatch && locMatch[0]) || null;
+      const startLabel = hhmm(startIso);
+      const endLabel = endIso ? hhmm(endIso) : '';
       const time = startLabel + (endLabel ? '–' + endLabel : '');
-      const subtitle = [evt.calendar, time].filter(Boolean).join(' · ');
+      const subtitle = time || (loc.length > 0 && loc.length < 60 ? loc : '');
       return {
-        id: 'calendar-' + evt.uid,
+        id: 'calendar-' + (evt.id || startIso),
         source: 'calendar',
         title: String(evt.summary || '(untitled event)'),
         subtitle,
         fireAt: startMs,
         createdAt: Date.now(),
-        ...(meetingUrl ? { url: meetingUrl } : {}),
+        ...(meetingUrl ? { url: meetingUrl } : evt.htmlLink ? { url: evt.htmlLink } : {}),
       };
     })
     .filter((i) => i !== null)
@@ -108,16 +90,17 @@ export const CALENDAR_TODAY_WORKFLOW: WorkflowDef = {
   id: 'calendar-today-sync',
   name: 'Sync Calendar today',
   description:
-    'Every 10 minutes, pull upcoming events from Calendar.app for the next 12 hours.',
+    'Every 10 minutes, pull upcoming Google Calendar events for the next 12 hours via the OAuth-managed calendar MCP. Requires a connected Google account.',
   enabled: true,
   trigger: { kind: 'cron', every: '10m' },
   pipeline: [
     {
-      type: 'osascript',
+      type: 'mcp-call',
       params: {
-        script: CAL_SCRIPT,
-        language: 'javascript',
-        timeoutMs: 10_000,
+        mcp: 'calendar',
+        tool: 'list_events',
+        args: { maxResults: 50 },
+        parse: 'json',
       },
     },
     {

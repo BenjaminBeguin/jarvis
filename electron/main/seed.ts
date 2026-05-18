@@ -32,15 +32,17 @@ const WORKFLOW_STALE_DETECTORS: Record<
   (def: WorkflowDef) => boolean
 > = {
   // Old calendar workflow used AppleScript with a pad2(n) helper.
-  // The new one uses JXA (osascript -l JavaScript) and outputs JSON.
-  // Detect: osascript step with a script string containing "on pad2".
+  // Calendar workflow lineage:
+  //   1. AppleScript with `on pad2(n)` helper (-2741 on newer macOS).
+  //   2. First-gen JXA with `_and: [{ startDate: … }]` (-1701).
+  //   3. Second-gen JXA with single-property whose() + fallback loop
+  //      — still depends on macOS Calendar.app automation access,
+  //      which most users haven't granted to osascript.
+  //   4. Current: mcp-call to the Google Calendar OAuth MCP. No
+  //      Calendar.app dependency at all. Detect any earlier shape
+  //      (any osascript step) and rewrite.
   'calendar-today-sync': (def) => {
-    const osa = def.pipeline.find((n) => n.type === 'osascript');
-    if (!osa) return false;
-    const p = osa.params ?? {};
-    const isJxa = p['language'] === 'javascript';
-    const script = typeof p['script'] === 'string' ? p['script'] : '';
-    return !isJxa && /on\s+pad2\s*\(/.test(script);
+    return def.pipeline.some((n) => n.type === 'osascript');
   },
   // Old slack workflow had no `validate` clause on the http-fetch,
   // so { ok: false } responses went silently through and zero items
