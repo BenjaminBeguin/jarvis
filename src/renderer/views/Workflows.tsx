@@ -141,7 +141,14 @@ export function Workflows() {
       toast({ kind: 'error', message: result.message ?? 'Save failed' });
       return;
     }
-    toast({ message: `Saved · ${parsed.name}` });
+    if (result.warnings && result.warnings.length > 0) {
+      toast({
+        kind: 'info',
+        message: `Saved · ${parsed.name} — ${result.warnings.length} warning${result.warnings.length === 1 ? '' : 's'}: ${result.warnings[0]}${result.warnings.length > 1 ? ` (+${result.warnings.length - 1} more)` : ''}`,
+      });
+    } else {
+      toast({ message: `Saved · ${parsed.name}` });
+    }
   };
 
   const runNow = async (): Promise<void> => {

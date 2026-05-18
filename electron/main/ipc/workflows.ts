@@ -4,6 +4,7 @@ import { IpcChannels } from '@shared/ipc';
 import type { WorkflowDef, WorkingHoursPrefs } from '@shared/types';
 
 import { loadWorkingHours, saveWorkingHours } from '../auth.js';
+import { validateWorkflow } from '../workflow-validate.js';
 import { broadcast } from '../windows.js';
 import type { IpcDeps } from './types.js';
 
@@ -20,6 +21,8 @@ export function registerWorkflowsIpc({
   workflowRunner,
   workflowScheduler,
   activity,
+  skills,
+  mcp,
 }: IpcDeps): void {
   workflows.on('changed', (list: WorkflowDef[]) => {
     broadcast(IpcChannels.workflowsChanged, list);
@@ -62,8 +65,17 @@ export function registerWorkflowsIpc({
 
   ipcMain.handle(
     IpcChannels.saveWorkflow,
-    (_e, def: WorkflowDef): { ok: boolean; message?: string } => {
+    (
+      _e,
+      def: WorkflowDef,
+    ): { ok: boolean; message?: string; warnings?: string[] } => {
       const before = workflows.get(def.id);
+      // Validate first — hard errors block the save, soft warnings
+      // ride along with `ok: true` so the renderer can surface them.
+      const v = validateWorkflow(def, { skills, mcp });
+      if (v.errors.length > 0) {
+        return { ok: false, message: v.errors.join('\n') };
+      }
       try {
         workflows.save(def);
         activity.record({
@@ -73,7 +85,9 @@ export function registerWorkflowsIpc({
             : `Workflow created · ${def.name}`,
           detail: { id: def.id, name: def.name, trigger: def.trigger },
         });
-        return { ok: true };
+        return v.warnings.length > 0
+          ? { ok: true, warnings: v.warnings }
+          : { ok: true };
       } catch (err) {
         return {
           ok: false,

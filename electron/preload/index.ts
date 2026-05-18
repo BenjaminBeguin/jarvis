@@ -604,7 +604,9 @@ const api = {
   // ─── Workflows ──────────────────────────────────────────────────
   listWorkflows: (): Promise<{ workflows: WorkflowDef[]; errors: Array<{ filename: string; message: string }> }> =>
     ipcRenderer.invoke(IpcChannels.listWorkflows),
-  saveWorkflow: (def: WorkflowDef): Promise<{ ok: boolean; message?: string }> =>
+  saveWorkflow: (
+    def: WorkflowDef,
+  ): Promise<{ ok: boolean; message?: string; warnings?: string[] }> =>
     ipcRenderer.invoke(IpcChannels.saveWorkflow, def),
   deleteWorkflow: (id: string): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.deleteWorkflow, id),
