@@ -6,12 +6,11 @@ import type { WorkflowDef } from '@shared/types';
  *   trigger:  every 5 min
  *   pipeline: http-fetch (search.messages) → transform → inbox-write
  *
- * Auth: reads `SLACK_BOT_TOKEN` from the `slack` MCP entry. The env
- * var is named "bot" upstream but accepts user tokens (xoxp-*) too —
- * search.messages requires a user token (Tier 2 + search:read scope),
- * so this workflow only does anything useful when a user token is
- * configured. With a bot token, Slack returns ok:false and the
- * transform emits zero items.
+ * Auth: pulls the connected Slack workspace's user token (xoxp-*)
+ * from Keychain via the OAuth integration. search.messages requires
+ * the user token (Tier 2 + search:read scope) — bot tokens
+ * (xoxb-*) get `ok:false: not_allowed_token_type`, which the
+ * validate expression below surfaces as a workflow error.
  *
  * Query uses Slack's `to:me` and `is:mention` modifiers, evaluated
  * server-side against the calling user's id — no separate auth.test
@@ -54,7 +53,7 @@ export const SLACK_INBOX_WORKFLOW: WorkflowDef = {
       params: {
         url: 'https://slack.com/api/search.messages',
         method: 'POST',
-        auth: { mcp: 'slack', var: 'SLACK_BOT_TOKEN', scheme: 'bearer' },
+        auth: { connector: 'slack', field: 'userAccessToken', scheme: 'bearer' },
         bodyEncoding: 'form',
         body: {
           query: '(to:me OR is:mention) -from:me',

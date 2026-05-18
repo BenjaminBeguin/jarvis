@@ -1,6 +1,7 @@
 import type { fromPromise } from 'xstate';
 
 import type { InboxStore } from '../inbox.js';
+import type { IntegrationsStore } from '../integrations-store.js';
 import type { McpConfigStore } from '../mcp-config.js';
 import type { notifier as Notifier } from '../notifier.js';
 import type { TaskRunner } from '../task-runner.js';
@@ -13,6 +14,9 @@ import type { TaskRunner } from '../task-runner.js';
 export interface WorkflowNodeContext {
   /** Tokens read from `~/.jarvis/mcp.json` via `auth.mcp` in params. */
   mcp: McpConfigStore;
+  /** OAuth-managed accounts. Lets nodes resolve a connector's default
+   *  account + look up its Keychain token (via auth.connector). */
+  integrations: IntegrationsStore | null;
   /** Inbox-write node target. */
   inbox: InboxStore;
   /** Notify node target. */

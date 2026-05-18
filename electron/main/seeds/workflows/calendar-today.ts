@@ -18,7 +18,22 @@ import type { WorkflowDef } from '@shared/types';
  * permission is in place.
  */
 
+// AppleScript: pull next 12 hours of events from Calendar.app and
+// emit one TAB-delimited line per event. ISO 8601 dates built by
+// hand — the «class isot» form is unreliable across macOS versions
+// (returns -2741 "Expected ',' but found class name" on some
+// installs). pad2 + isoStr keep it portable.
 const CAL_SCRIPT = `
+on pad2(n)
+  set s to (n as integer) as string
+  if (length of s) < 2 then return "0" & s
+  return s
+end pad2
+
+on isoStr(d)
+  return (year of d as string) & "-" & pad2(month of d as integer) & "-" & pad2(day of d) & "T" & pad2(hours of d) & ":" & pad2(minutes of d) & ":" & pad2(seconds of d)
+end isoStr
+
 set theStart to current date
 set theEnd to theStart + 12 * hours
 set TAB to (ASCII character 9)
@@ -41,7 +56,9 @@ tell application "Calendar"
       on error
         set evtAllDay to false
       end try
-      set out to out & (uid of evt) & TAB & (summary of evt) & TAB & ((start date of evt) as «class isot» as string) & TAB & ((end date of evt) as «class isot» as string) & TAB & (name of cal) & TAB & evtLoc & TAB & evtDesc & TAB & evtAllDay & linefeed
+      set startIso to my isoStr(start date of evt)
+      set endIso to my isoStr(end date of evt)
+      set out to out & (uid of evt) & TAB & (summary of evt) & TAB & startIso & TAB & endIso & TAB & (name of cal) & TAB & evtLoc & TAB & evtDesc & TAB & evtAllDay & linefeed
     end repeat
   end repeat
 end tell

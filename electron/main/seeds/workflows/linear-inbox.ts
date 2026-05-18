@@ -6,10 +6,13 @@ import type { WorkflowDef } from '@shared/types';
  *   trigger:  every 5 min
  *   pipeline: http-fetch → transform → inbox-write
  *
- * Auth: reads `LINEAR_API_TOKEN` from the `linear` MCP entry in
- * `~/.jarvis/mcp.json`. Falls back to `LINEAR_API_KEY` for community
- * server variants — the http-fetch node checks both via its auth.var
- * (only one wins; if you use a different var name, set it here).
+ * Auth: pulls the connected Linear account's token from Keychain via
+ * the OAuth integration ({ connector: 'linear', scheme: 'auto' }).
+ * 'auto' picks the right Authorization-header format — `Bearer
+ * <token>` for OAuth grants, raw token for personal API keys
+ * (Linear rejects `Bearer lin_api_…`). Connect Linear from Settings
+ * → Integrations; the default account is used unless you pin one
+ * with auth.accountId.
  *
  * Filter (V1): issues assigned to me, state.type not in
  * completed/canceled, sorted by updatedAt, capped at 40. Same shape
@@ -76,7 +79,7 @@ export const LINEAR_INBOX_WORKFLOW: WorkflowDef = {
       params: {
         url: 'https://api.linear.app/graphql',
         method: 'POST',
-        auth: { mcp: 'linear', var: 'LINEAR_API_TOKEN' },
+        auth: { connector: 'linear', scheme: 'auto' },
         body: { query: LINEAR_QUERY },
       },
     },

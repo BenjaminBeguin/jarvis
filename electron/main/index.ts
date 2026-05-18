@@ -797,6 +797,7 @@ app.whenReady().then(async () => {
   // scheduler wires cron jobs from whatever's already on disk.
   workflowRunner.setNodeContext({
     mcp,
+    integrations: integrationsStore,
     inbox,
     notifier,
     runner,
@@ -1165,6 +1166,19 @@ app.whenReady().then(async () => {
   mcp.on('changed', () =>
     syncAutoInboxRoutines(jarvisRoot, skills, mcp, routines, activity),
   );
+
+  // Convert legacy http-fetch auth (auth.mcp + auth.var, expecting
+  // env vars on a stdio mcp.json entry) to the new connector form
+  // (auth.connector, pulls from Keychain). Old seeded workflows hit
+  // "MCP server 'linear' not found or not stdio" against the OAuth-
+  // managed registry; this rewrite makes them work without forcing
+  // the user to re-seed.
+  migrateLegacyHttpFetchAuth(workflows, activity);
+  // Rewrite the calendar-today workflow's osascript if it still
+  // carries the `«class isot»` token — newer macOS rejects it with
+  // -2741 "Expected ',' but found class name." The replacement
+  // emits ISO 8601 by hand and is portable.
+  migrateLegacyCalendarOsascript(workflows, activity);
 
   // ─── change → broadcast event fan-out ──────────────────────────────────────
 
@@ -1551,6 +1565,136 @@ function syncAutoInboxRoutines(
  * Idempotent: second run sees `enabled: false` on the routines and
  * the JSON files already gone, so it does nothing.
  */
+/**
+ * One-shot rewrite: convert workflows whose http-fetch nodes still
+ * carry the legacy { auth: { mcp, var } } shape (expecting a stdio
+ * env var) to the new { auth: { connector } } shape (Keychain via
+ * OAuth integration). Only touches connectors we own (linear /
+ * slack / google / notion); leaves stdio entries (e.g. github when
+ * a token's still in mcp.json) untouched.
+ *
+ * Idempotent — second run sees no auth.mcp left and no-ops. Adds
+ * `workflow.migrated` activity rows so the user can see what
+ * changed under the hood after upgrading.
+ */
+const CONNECTOR_AUTH_DEFAULTS: Record<
+  string,
+  { connector: string; field?: string; scheme?: 'raw' | 'bearer' | 'auto' }
+> = {
+  linear: { connector: 'linear', scheme: 'auto' },
+  slack: { connector: 'slack', field: 'userAccessToken', scheme: 'bearer' },
+  google: { connector: 'google', scheme: 'bearer' },
+  notion: { connector: 'notion', scheme: 'bearer' },
+  gmail: { connector: 'google', scheme: 'bearer' },
+  calendar: { connector: 'google', scheme: 'bearer' },
+};
+
+function migrateLegacyHttpFetchAuth(
+  workflows: WorkflowStore,
+  activity: ActivityStore,
+): void {
+  for (const wf of workflows.list()) {
+    let touched = false;
+    const nextPipeline = wf.pipeline.map((step) => {
+      if (step.type !== 'http-fetch') return step;
+      const params = step.params as Record<string, unknown> | undefined;
+      const auth = params?.['auth'] as
+        | Record<string, unknown>
+        | undefined;
+      if (!auth || typeof auth['mcp'] !== 'string') return step;
+      const replacement = CONNECTOR_AUTH_DEFAULTS[auth['mcp']];
+      if (!replacement) return step;
+      touched = true;
+      return {
+        ...step,
+        params: { ...params, auth: { ...replacement } },
+      };
+    });
+    if (!touched) continue;
+    workflows.save({ ...wf, pipeline: nextPipeline });
+    activity.record({
+      kind: 'workflow.migrated',
+      label: `Workflow auth rewritten · ${wf.id} → OAuth connector`,
+      detail: { workflowId: wf.id },
+    });
+  }
+}
+
+function migrateLegacyCalendarOsascript(
+  workflows: WorkflowStore,
+  activity: ActivityStore,
+): void {
+  for (const wf of workflows.list()) {
+    let touched = false;
+    const nextPipeline = wf.pipeline.map((step) => {
+      if (step.type !== 'osascript') return step;
+      const params = step.params as Record<string, unknown> | undefined;
+      const script = params?.['script'];
+      if (typeof script !== 'string') return step;
+      if (!script.includes('«class isot»')) return step;
+      touched = true;
+      return {
+        ...step,
+        params: { ...params, script: CALENDAR_ISO_SCRIPT },
+      };
+    });
+    if (!touched) continue;
+    workflows.save({ ...wf, pipeline: nextPipeline });
+    activity.record({
+      kind: 'workflow.migrated',
+      label: `Workflow osascript rewritten · ${wf.id} (portable ISO format)`,
+      detail: { workflowId: wf.id },
+    });
+  }
+}
+
+/** Verbatim duplicate of CAL_SCRIPT in seeds/workflows/calendar-today.ts.
+ *  Keeping the migration's source-of-truth inline so the seed file can
+ *  evolve independently — the migration only fires when the OLD
+ *  `«class isot»` form is on disk, so a future seed update doesn't
+ *  silently overwrite user edits. */
+const CALENDAR_ISO_SCRIPT = `
+on pad2(n)
+  set s to (n as integer) as string
+  if (length of s) < 2 then return "0" & s
+  return s
+end pad2
+
+on isoStr(d)
+  return (year of d as string) & "-" & pad2(month of d as integer) & "-" & pad2(day of d) & "T" & pad2(hours of d) & ":" & pad2(minutes of d) & ":" & pad2(seconds of d)
+end isoStr
+
+set theStart to current date
+set theEnd to theStart + 12 * hours
+set TAB to (ASCII character 9)
+set out to ""
+tell application "Calendar"
+  repeat with cal in calendars
+    repeat with evt in (events of cal whose start date is greater than or equal to theStart and start date is less than theEnd)
+      try
+        set evtLoc to location of evt
+      on error
+        set evtLoc to ""
+      end try
+      try
+        set evtDesc to description of evt
+      on error
+        set evtDesc to ""
+      end try
+      try
+        set evtAllDay to allday event of evt
+      on error
+        set evtAllDay to false
+      end try
+      set startIso to my isoStr(start date of evt)
+      set endIso to my isoStr(end date of evt)
+      set out to out & (uid of evt) & TAB & (summary of evt) & TAB & startIso & TAB & endIso & TAB & (name of cal) & TAB & evtLoc & TAB & evtDesc & TAB & evtAllDay & linefeed
+    end repeat
+  end repeat
+end tell
+return out
+`;
+
 function migrateRetiredLegacyGoogleMcps(
   mcp: McpConfigStore,
   activity: ActivityStore,

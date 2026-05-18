@@ -1,5 +1,6 @@
 import { fromPromise } from 'xstate';
 
+import { getConnectorToken } from '../secrets.js';
 import type { NodeHandlerInput } from './types.js';
 
 /**
@@ -11,14 +12,27 @@ import type { NodeHandlerInput } from './types.js';
  *     url: string
  *     method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'  // default GET
  *     headers?: Record<string, string>
- *     auth?: {
- *       mcp: 'linear' | 'slack' | ...;
- *       var: 'LINEAR_API_TOKEN' | ...;
- *       scheme?: 'raw' | 'bearer'  // default 'raw' (Linear-style)
- *     }
- *       Reads a token from ~/.jarvis/mcp.json env on the named server.
- *       'raw' → `Authorization: <token>` (Linear style).
- *       'bearer' → `Authorization: Bearer <token>` (Slack, most others).
+ *
+ *     auth?:
+ *       // Stdio MCP form — reads a token from ~/.jarvis/mcp.json env.
+ *       | { mcp: 'github' | ...; var: 'GITHUB_TOKEN' | ...;
+ *           scheme?: 'raw' | 'bearer' }
+ *       // OAuth connector form — reads a token from Keychain via the
+ *       // connected account. Defaults to the connector's default
+ *       // account; pass accountId to target a specific one.
+ *       | { connector: 'linear' | 'slack' | 'google' | 'notion' | 'github';
+ *           accountId?: string;
+ *           field?: 'accessToken' | 'userAccessToken' | 'botAccessToken' | ...;
+ *           scheme?: 'raw' | 'bearer' | 'auto' }
+ *
+ *       For the mcp form: 'raw' → `Authorization: <token>` (Linear personal
+ *         keys); 'bearer' → `Authorization: Bearer <token>` (Slack stdio).
+ *       For the connector form: 'auto' (default) picks 'raw' when the
+ *         payload is a personal API key (Linear's authMode='apiKey'),
+ *         otherwise 'bearer'. 'field' defaults to 'accessToken'; pick
+ *         'userAccessToken' for Slack search.messages (needs xoxp-*) or
+ *         'botAccessToken' for chat.postMessage (xoxb-*).
+ *
  *     body?: string | object
  *       Encoded according to `bodyEncoding`.
  *     bodyEncoding?: 'json' | 'form'  // default 'json'
@@ -39,15 +53,29 @@ import type { NodeHandlerInput } from './types.js';
  * Output: parsed JSON body (responseType:'json') or raw text.
  */
 
+type StdioAuth = { mcp: string; var: string; scheme?: 'raw' | 'bearer' };
+type ConnectorAuth = {
+  connector: string;
+  accountId?: string;
+  field?: string;
+  scheme?: 'raw' | 'bearer' | 'auto';
+};
+
 interface HttpFetchParams {
   url: string;
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   headers?: Record<string, string>;
-  auth?: { mcp: string; var: string; scheme?: 'raw' | 'bearer' };
+  auth?: StdioAuth | ConnectorAuth;
   body?: unknown;
   bodyEncoding?: 'json' | 'form';
   responseType?: 'json' | 'text';
   validate?: string;
+}
+
+function isConnectorAuth(
+  auth: StdioAuth | ConnectorAuth,
+): auth is ConnectorAuth {
+  return typeof (auth as ConnectorAuth).connector === 'string';
 }
 
 export const httpFetchNode = fromPromise<
@@ -62,21 +90,28 @@ export const httpFetchNode = fromPromise<
   const headers: Record<string, string> = { ...(params.headers ?? {}) };
 
   if (params.auth) {
-    const resolved = ctx.mcp.resolve([params.auth.mcp]);
-    const entry = resolved[params.auth.mcp];
-    if (!entry || entry.type !== 'stdio') {
-      throw new Error(
-        `http-fetch: MCP server '${params.auth.mcp}' not found or not stdio`,
+    if (isConnectorAuth(params.auth)) {
+      headers['Authorization'] = await resolveConnectorAuth(
+        params.auth,
+        ctx.integrations,
       );
+    } else {
+      const resolved = ctx.mcp.resolve([params.auth.mcp]);
+      const entry = resolved[params.auth.mcp];
+      if (!entry || entry.type !== 'stdio') {
+        throw new Error(
+          `http-fetch: MCP server '${params.auth.mcp}' not found or not stdio`,
+        );
+      }
+      const token = entry.env?.[params.auth.var];
+      if (!token) {
+        throw new Error(
+          `http-fetch: token '${params.auth.var}' not set on MCP '${params.auth.mcp}'`,
+        );
+      }
+      headers['Authorization'] =
+        params.auth.scheme === 'bearer' ? `Bearer ${token}` : token;
     }
-    const token = entry.env?.[params.auth.var];
-    if (!token) {
-      throw new Error(
-        `http-fetch: token '${params.auth.var}' not set on MCP '${params.auth.mcp}'`,
-      );
-    }
-    headers['Authorization'] =
-      params.auth.scheme === 'bearer' ? `Bearer ${token}` : token;
   }
 
   let body: BodyInit | undefined;
@@ -148,3 +183,65 @@ export const httpFetchNode = fromPromise<
   }
   return parsed;
 });
+
+/**
+ * Pull a token from the OAuth-managed Keychain payload for a
+ * connected account. Picks the connector's default account when
+ * accountId isn't pinned. Throws with an actionable message when
+ * the account doesn't exist or has no token yet (e.g. user nuked it
+ * from Settings → Integrations and forgot to reconnect).
+ */
+async function resolveConnectorAuth(
+  auth: ConnectorAuth,
+  integrations: WorkflowNodeContextLite['integrations'],
+): Promise<string> {
+  if (!integrations) {
+    throw new Error(
+      `http-fetch: auth.connector='${auth.connector}' but the workflow runner has no IntegrationsStore wired in`,
+    );
+  }
+  const accountId =
+    auth.accountId ?? integrations.defaultFor(auth.connector as never);
+  if (!accountId) {
+    throw new Error(
+      `http-fetch: no connected account for '${auth.connector}'. Connect one from Settings → Integrations.`,
+    );
+  }
+  const raw = await getConnectorToken(auth.connector, accountId);
+  if (!raw) {
+    throw new Error(
+      `http-fetch: no Keychain token for ${auth.connector}/${accountId} — reconnect from Settings → Integrations.`,
+    );
+  }
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    throw new Error(
+      `http-fetch: token payload for ${auth.connector}/${accountId} is not JSON.`,
+    );
+  }
+  const field = auth.field ?? 'accessToken';
+  const token = payload[field];
+  if (typeof token !== 'string' || token.length === 0) {
+    throw new Error(
+      `http-fetch: field '${field}' missing/empty on ${auth.connector}/${accountId} token. Try field: 'userAccessToken' (Slack) or check the payload shape.`,
+    );
+  }
+  let scheme = auth.scheme ?? 'auto';
+  if (scheme === 'auto') {
+    // Linear personal API keys (authMode==='apiKey') must be sent raw —
+    // Linear rejects 'Bearer lin_api_…'. Everything else defaults to
+    // Bearer, which is correct for Google, Slack, Notion, and Linear
+    // OAuth.
+    scheme = payload['authMode'] === 'apiKey' ? 'raw' : 'bearer';
+  }
+  return scheme === 'bearer' ? `Bearer ${token}` : token;
+}
+
+/** Local helper type — imports the integrations field shape without
+ *  pulling the full WorkflowNodeContext into the helper's signature
+ *  (which would make the helper less reusable). */
+type WorkflowNodeContextLite = {
+  integrations: import('./types.js').WorkflowNodeContext['integrations'];
+};

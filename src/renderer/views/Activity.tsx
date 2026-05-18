@@ -428,6 +428,7 @@ const EVENT_KIND_META: Record<
   'workflow.completed': { category: 'workflow', label: 'workflow · completed' },
   'workflow.errored': { category: 'workflow', label: 'workflow · errored' },
   'workflow.aborted': { category: 'workflow', label: 'workflow · aborted' },
+  'workflow.migrated': { category: 'workflow', label: 'workflow · migrated' },
   // OAuth integrations — connect / disconnect / test result / paste-creds.
   'integration.connected': { category: 'integration', label: 'integration · connected' },
   'integration.disconnected': { category: 'integration', label: 'integration · disconnected' },
