@@ -53,13 +53,18 @@ interface PipelineNodeData extends Record<string, unknown> {
 interface TriggerNodeData extends Record<string, unknown> {
   trigger: WorkflowDef['trigger'];
   fired: boolean;
+  selected: boolean;
 }
+
+export type WorkflowSelection =
+  | { kind: 'step'; index: number }
+  | { kind: 'trigger' };
 
 interface Props {
   workflow: WorkflowDef;
   run: WorkflowRun | null;
-  selectedIndex?: number | null;
-  onNodeClick?: (index: number) => void;
+  selected?: WorkflowSelection | null;
+  onSelect?: (selection: WorkflowSelection) => void;
 }
 
 const NODE_X_SPACING = 340;
@@ -129,7 +134,7 @@ function summaryFor(node: WorkflowNodeDef): string {
 }
 
 function TriggerNode({ data }: NodeProps<Node<TriggerNodeData>>) {
-  const { trigger, fired } = data;
+  const { trigger, fired, selected } = data;
   const isCron = trigger.kind === 'cron';
   const hue = isCron ? '#FFD479' : '#7ADCFF';
   const glyph = isCron ? '◷' : '⏵';
@@ -142,7 +147,7 @@ function TriggerNode({ data }: NodeProps<Node<TriggerNodeData>>) {
         : 'palette · MCP · UI';
   return (
     <div
-      className={`wf-trigger${fired ? ' wf-trigger--fired' : ''}`}
+      className={`wf-trigger${fired ? ' wf-trigger--fired' : ''}${selected ? ' wf-trigger--selected' : ''}`}
       style={{ ['--node-hue' as string]: hue }}
     >
       <div className="wf-trigger__row">
@@ -217,18 +222,22 @@ function edgeStyleFor(
 export function WorkflowPipeline({
   workflow,
   run,
-  selectedIndex,
-  onNodeClick,
+  selected,
+  onSelect,
 }: Props) {
   const { nodes, edges } = useMemo(() => {
     const triggerNode: Node<TriggerNodeData> = {
       id: 'trigger',
       type: 'trigger',
       position: { x: NODE_X_OFFSET, y: NODE_Y },
-      data: { trigger: workflow.trigger, fired: !!run },
+      data: {
+        trigger: workflow.trigger,
+        fired: !!run,
+        selected: selected?.kind === 'trigger',
+      },
       draggable: false,
       connectable: false,
-      selectable: false,
+      selectable: !!onSelect,
     };
     const pipelineNodes: Node<PipelineNodeData>[] = workflow.pipeline.map(
       (node, i) => {
@@ -244,12 +253,12 @@ export function WorkflowPipeline({
             node,
             index: i,
             state: stateOf(run, i),
-            selected: selectedIndex === i,
+            selected: selected?.kind === 'step' && selected.index === i,
             hasOutput: step?.output !== undefined,
           },
           draggable: false,
           connectable: false,
-          selectable: !!onNodeClick,
+          selectable: !!onSelect,
         };
       },
     );
@@ -288,7 +297,7 @@ export function WorkflowPipeline({
       });
     }
     return { nodes, edges };
-  }, [workflow, run, selectedIndex, onNodeClick]);
+  }, [workflow, run, selected, onSelect]);
 
   const showMinimap = workflow.pipeline.length > 4;
 
@@ -302,10 +311,14 @@ export function WorkflowPipeline({
         fitViewOptions={{ padding: 0.2, maxZoom: 1.2 }}
         proOptions={{ hideAttribution: true }}
         onNodeClick={
-          onNodeClick
+          onSelect
             ? (_, n) => {
+                if (n.id === 'trigger') {
+                  onSelect({ kind: 'trigger' });
+                  return;
+                }
                 const d = n.data as PipelineNodeData;
-                onNodeClick(d.index);
+                onSelect({ kind: 'step', index: d.index });
               }
             : undefined
         }
@@ -313,7 +326,7 @@ export function WorkflowPipeline({
         zoomOnScroll
         nodesDraggable={false}
         nodesConnectable={false}
-        elementsSelectable={!!onNodeClick}
+        elementsSelectable={!!onSelect}
       >
         <Background
           variant={BackgroundVariant.Dots}
