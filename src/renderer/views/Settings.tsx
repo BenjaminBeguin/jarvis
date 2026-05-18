@@ -311,42 +311,170 @@ function PreferencesPanel() {
   };
 
   return (
+    <>
+      <WorkingHoursPanel />
+      <div className="settings__section">
+        <h3>Preferences</h3>
+        <p className="settings__hint">
+          Prepended to every task's system prompt as{' '}
+          <code>## User preferences</code>. Edit freely. <kbd>⌘S</kbd> to save.
+        </p>
+        <textarea
+          ref={textareaRef}
+          className="preferences-dialog__textarea"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+              e.preventDefault();
+              void save();
+            }
+          }}
+          spellCheck={false}
+        />
+        <div className="settings__row-actions">
+          <small className="settings__hint settings__hint--dim" title={path}>
+            {path}
+          </small>
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={() => void window.jarvis.revealPreferences()}
+            disabled={busy}
+          >
+            Reveal in Finder
+          </button>
+          <button
+            className="settings__primary"
+            onClick={() => void save()}
+            disabled={busy || !dirty}
+          >
+            {busy ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+          </button>
+        </div>
+        {error && <div className="project-dialog__error">{error}</div>}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Working-hours pref. Drives the `{businessHours}` token in every
+ * workflow cron that opts in (Slack / Linear / inbox-curate by
+ * default) — one setting, all feeds. Saving resyncs the workflow
+ * scheduler so existing jobs pick up the new window immediately.
+ */
+function WorkingHoursPanel() {
+  const [startHour, setStartHour] = useState(9);
+  const [endHour, setEndHour] = useState(18);
+  const [daysOfWeek, setDaysOfWeek] = useState('1-5');
+  const [loaded, setLoaded] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.jarvis.workingHoursRead().then((prefs) => {
+      if (cancelled) return;
+      setStartHour(prefs.startHour);
+      setEndHour(prefs.endHour);
+      setDaysOfWeek(prefs.daysOfWeek);
+      setLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const save = async (): Promise<void> => {
+    const r = await window.jarvis.workingHoursWrite({
+      startHour,
+      endHour,
+      daysOfWeek,
+    });
+    if (!r.ok) {
+      toast({ kind: 'error', message: r.message ?? 'Save failed' });
+      return;
+    }
+    setSavedAt(Date.now());
+    toast({ message: 'Working hours saved · scheduler resynced' });
+  };
+
+  return (
     <div className="settings__section">
-      <h3>Preferences</h3>
+      <h3>Working hours</h3>
       <p className="settings__hint">
-        Prepended to every task's system prompt as{' '}
-        <code>## User preferences</code>. Edit freely. <kbd>⌘S</kbd> to save.
+        Drives the <code>{'{businessHours}'}</code> cron token in workflow
+        triggers. Slack, Linear, and the smart-inbox curator default to
+        this window — one knob, every feed. Saving resyncs running cron
+        jobs immediately.
       </p>
-      <textarea
-        ref={textareaRef}
-        className="preferences-dialog__textarea"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-            e.preventDefault();
-            void save();
-          }
-        }}
-        spellCheck={false}
-      />
-      <div className="settings__row-actions">
-        <small className="settings__hint settings__hint--dim" title={path}>
-          {path}
-        </small>
-        <div style={{ flex: 1 }} />
-        <button onClick={() => void window.jarvis.revealPreferences()} disabled={busy}>
-          Reveal in Finder
-        </button>
+      <div className="settings__row" style={{ gap: 16, flexWrap: 'wrap' }}>
+        <label
+          style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          title="Hour of day (0–23) when your working window starts"
+        >
+          Start
+          <input
+            type="number"
+            min={0}
+            max={23}
+            value={startHour}
+            disabled={!loaded}
+            onChange={(e) =>
+              setStartHour(Math.max(0, Math.min(23, Number(e.target.value) || 0)))
+            }
+            style={{ width: 64 }}
+          />
+        </label>
+        <label
+          style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          title="Hour of day (0–23) when your working window ends — inclusive (end-of-hour)"
+        >
+          End
+          <input
+            type="number"
+            min={0}
+            max={23}
+            value={endHour}
+            disabled={!loaded}
+            onChange={(e) =>
+              setEndHour(Math.max(0, Math.min(23, Number(e.target.value) || 0)))
+            }
+            style={{ width: 64 }}
+          />
+        </label>
+        <label
+          style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          title="POSIX cron day-of-week field. 0 or 7 = Sunday. Examples: 1-5 (Mon-Fri), 1-6 (Mon-Sat), 0-6 (every day)"
+        >
+          Days
+          <input
+            type="text"
+            value={daysOfWeek}
+            disabled={!loaded}
+            onChange={(e) => setDaysOfWeek(e.target.value)}
+            placeholder="1-5"
+            style={{ width: 88 }}
+          />
+        </label>
         <button
           className="settings__primary"
           onClick={() => void save()}
-          disabled={busy || !dirty}
+          disabled={!loaded}
         >
-          {busy ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+          Save
         </button>
+        {savedAt !== null && (
+          <small className="settings__hint settings__hint--dim">
+            applied {new Date(savedAt).toLocaleTimeString()}
+          </small>
+        )}
       </div>
-      {error && <div className="project-dialog__error">{error}</div>}
+      <p className="settings__hint settings__hint--dim" style={{ marginTop: 8 }}>
+        Resolves to <code>{startHour}-{endHour} * * {daysOfWeek}</code>{' '}
+        (POSIX cron). A workflow with{' '}
+        <code>{'*/15 {businessHours}'}</code> fires every 15 minutes during
+        this window.
+      </p>
     </div>
   );
 }
