@@ -50,7 +50,7 @@ export function buildSlackMcp(
     tools: [
       tool(
         'list_channels',
-        'List Slack channels (public + private the user is in). Returns id, name, is_member, is_private for each.',
+        'List Slack channels visible to the bot. Defaults to public channels (Slack scope channels:read). To include private channels, add groups:read to the Slack app + the connector\'s BOT_SCOPES.',
         {
           types: z
             .enum(['public_channel', 'private_channel', 'mpim', 'im'])
@@ -59,13 +59,17 @@ export function buildSlackMcp(
           excludeArchived: z.boolean().optional(),
         },
         async (args) =>
-          callSlack(hooks, 'user', async (token) => {
+          callSlack(hooks, 'bot', async (token) => {
             const url = new URL(
               'https://slack.com/api/conversations.list',
             );
+            // Default to public-only — opting into private/mpim/im
+            // requires extra Slack scopes the connector doesn't ask
+            // for by default. Agent can override if the user added
+            // the right scopes manually.
             url.searchParams.set(
               'types',
-              args.types ?? 'public_channel,private_channel',
+              args.types ?? 'public_channel',
             );
             url.searchParams.set('limit', String(args.limit ?? 100));
             url.searchParams.set(
@@ -93,7 +97,7 @@ export function buildSlackMcp(
         'List workspace members. Returns id, name, real_name, email (where granted), is_bot.',
         { limit: z.number().int().min(1).max(200).optional() },
         async (args) =>
-          callSlack(hooks, 'user', async (token) => {
+          callSlack(hooks, 'bot', async (token) => {
             const url = new URL('https://slack.com/api/users.list');
             url.searchParams.set('limit', String(args.limit ?? 200));
             const data = await get(url, token);
@@ -119,7 +123,7 @@ export function buildSlackMcp(
         'Look up a Slack user by email. Returns the full user record if found, error otherwise.',
         { email: z.string().email() },
         async (args) =>
-          callSlack(hooks, 'user', async (token) => {
+          callSlack(hooks, 'bot', async (token) => {
             const url = new URL(
               'https://slack.com/api/users.lookupByEmail',
             );
@@ -185,27 +189,10 @@ export function buildSlackMcp(
             return json(data['messages']);
           }),
       ),
-      tool(
-        'get_thread',
-        'Fetch all replies in a thread. `channel` is the channel id, `ts` is the parent message timestamp.',
-        {
-          channel: z.string().min(1),
-          ts: z.string().min(1),
-          limit: z.number().int().min(1).max(200).optional(),
-        },
-        async (args) =>
-          callSlack(hooks, 'user', async (token) => {
-            const url = new URL(
-              'https://slack.com/api/conversations.replies',
-            );
-            url.searchParams.set('channel', args.channel);
-            url.searchParams.set('ts', args.ts);
-            url.searchParams.set('limit', String(args.limit ?? 50));
-            const data = await get(url, token);
-            if (!data.ok) return err(slackError(data));
-            return json(data['messages']);
-          }),
-      ),
+      // get_thread (conversations.replies) needs channels:history /
+      // groups:history / im:history scopes the default scope set
+      // doesn't ask for. If you need it, add the right history scope
+      // to your Slack app + the connector and re-add the tool here.
     ],
   });
 }

@@ -75,12 +75,12 @@ export const CONNECTOR_SETUP: Record<string, ConnectorSetup> = {
         command: 'http://127.0.0.1:4747/oauth/callback/slack',
       },
       {
-        title: 'Add Bot Token Scopes',
-        body: 'Same page, scroll to "Scopes" → "Bot Token Scopes". Click "Add an OAuth Scope" once per scope: chat:write, chat:write.public, channels:read, groups:read, users:read, users:read.email. (search:read goes under User scopes — Slack only exposes search to user tokens.)',
+        title: 'Add Bot Token Scopes (5 total)',
+        body: 'Same page, scroll to "Scopes" → "Bot Token Scopes". Click "Add an OAuth Scope" once per scope: chat:write, chat:write.public, channels:read, users:read, users:read.email. The bot owns all read + post operations.',
       },
       {
-        title: 'Add User Token Scopes',
-        body: 'Same page, "User Token Scopes" section (right below Bot). Add: chat:write (lets Jarvis post AS YOU when sendAs=user), search:read (search your DMs + private channels).',
+        title: 'Add User Token Scopes (2 total)',
+        body: 'Same page, "User Token Scopes" section (right below Bot). Add: chat:write (lets Jarvis post AS YOU when sendAs=user), search:read (Slack only exposes search via user tokens). Bot scopes don\'t include either — keep them only under User.',
       },
       {
         title: 'Copy Client ID + Client Secret',
