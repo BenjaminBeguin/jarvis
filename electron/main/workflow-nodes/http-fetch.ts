@@ -24,6 +24,16 @@ import type { NodeHandlerInput } from './types.js';
  *     bodyEncoding?: 'json' | 'form'  // default 'json'
  *       'form' → URLSearchParams + Content-Type: application/x-www-form-urlencoded.
  *     responseType?: 'json' | 'text'  // default 'json'
+ *     validate?: string
+ *       JS expression run against `$` (the parsed response) AFTER the
+ *       HTTP request returns 2xx. Catches APIs that return 200 with a
+ *       `{ ok: false }` envelope (Slack, Notion, GitHub GraphQL, …).
+ *       Convention:
+ *         - return a string → throw that string as the error
+ *         - return null/undefined/true → pass
+ *         - return false → throw a generic message
+ *       Example (Slack):
+ *         "$.ok === false ? ($.error || 'Slack API failure') : null"
  *   }
  *
  * Output: parsed JSON body (responseType:'json') or raw text.
@@ -37,6 +47,7 @@ interface HttpFetchParams {
   body?: unknown;
   bodyEncoding?: 'json' | 'form';
   responseType?: 'json' | 'text';
+  validate?: string;
 }
 
 export const httpFetchNode = fromPromise<
@@ -101,5 +112,39 @@ export const httpFetchNode = fromPromise<
     throw new Error(`http-fetch: ${params.method ?? 'GET'} ${params.url} → ${res.status}`);
   }
   const responseType = params.responseType ?? 'json';
-  return responseType === 'text' ? await res.text() : await res.json();
+  const parsed =
+    responseType === 'text' ? await res.text() : await res.json();
+
+  if (typeof params.validate === 'string' && params.validate.trim()) {
+    let validator: (dollar: unknown) => unknown;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      validator = new Function('$', `return (${params.validate})`) as (
+        d: unknown,
+      ) => unknown;
+    } catch (err) {
+      throw new Error(
+        `http-fetch: failed to compile validate expression — ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    let result: unknown;
+    try {
+      result = validator(parsed);
+    } catch (err) {
+      throw new Error(
+        `http-fetch: validate threw — ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    // String result → error message. False → generic message. Anything
+    // truthy non-string (true / object / number) → pass.
+    if (typeof result === 'string' && result.length > 0) {
+      throw new Error(`http-fetch: ${result}`);
+    }
+    if (result === false) {
+      throw new Error(
+        'http-fetch: validate returned false (response failed the workflow\'s validate check)',
+      );
+    }
+  }
+  return parsed;
 });

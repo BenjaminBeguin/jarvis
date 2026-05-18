@@ -62,6 +62,13 @@ export const SLACK_INBOX_WORKFLOW: WorkflowDef = {
           sort: 'timestamp',
           sort_dir: 'desc',
         },
+        // Slack returns 200 with `ok: false` on auth failures (e.g.
+        // not_allowed_token_type when the configured token is xoxb- but
+        // search.messages requires xoxp-). Surface that as a workflow
+        // error instead of letting the transform run on a bad body and
+        // silently writing 0 items to the inbox.
+        validate:
+          "$.ok === false ? ('Slack API: ' + ($.error || 'unknown failure')) : null",
       },
     },
     {
