@@ -293,8 +293,19 @@ export class McpConfigStore extends EventEmitter {
     }
     for (const id of ids) {
       if (id === '*') continue;
+      // Exact match first (manual mcp.json entry named e.g. "slack").
       const cfg = merged.get(id);
       if (cfg) tryAdd(id, cfg);
+      // Also match any entry whose key starts with "<id>-" so a skill
+      // requesting `mcp-servers: [slack]` picks up every managed
+      // account, e.g. `slack-T0ABC`, `slack-T0DEF`. Mirrors how users
+      // think about integrations ("Slack is connected") even though
+      // each account gets its own MCP instance under the hood.
+      const prefix = `${id}-`;
+      for (const [entryId, entryCfg] of merged.entries()) {
+        if (entryId === id) continue;
+        if (entryId.startsWith(prefix)) tryAdd(entryId, entryCfg);
+      }
     }
     if (clearedExpired) this.writeAll();
     return out;

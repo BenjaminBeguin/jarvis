@@ -42,12 +42,12 @@ import type { InboxSource } from '../inbox.js';
 const INBOX_DIR = join(homedir(), '.jarvis', 'inbox');
 
 /**
- * Source names owned by direct-JS built-ins (linear/slack/calendar
- * inbox-sources). If a JSON file shows up here with one of these
- * names — either a stale file from before the migration or a user
- * who manually re-ran the retired skill — we skip it. The built-in
- * source is the canonical owner; letting the JSON shadow it would
- * produce ghost rows under the wrong section.
+ * Source names owned by built-in workflows (linear-inbox-sync,
+ * slack-inbox-sync, calendar-today-sync). Their inbox-write nodes feed
+ * InboxStore.setExternalItems() directly. If a JSON file with one of
+ * these source names lands here — stale from a prior install, or a
+ * user who manually wrote one — we skip it so it can't shadow the
+ * canonical workflow-owned section.
  */
 const RESERVED_SOURCES = new Set(['linear', 'slack', 'calendar']);
 let loggedReserved = false;
