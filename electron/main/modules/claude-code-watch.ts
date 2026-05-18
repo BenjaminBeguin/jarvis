@@ -14,8 +14,6 @@ import type { Module, ModuleContext } from './types.js';
 
 const PROJECTS_ROOT = join(homedir(), '.claude', 'projects');
 
-/** Sessions touched within this window are surfaced on startup. */
-const STARTUP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /** A session is "running" if its file was modified more recently than this. */
 const ACTIVE_THRESHOLD_MS = 5 * 60 * 1000;
 /** How often we re-scan for new content, new sessions, and status changes. */
@@ -241,7 +239,12 @@ export class ClaudeCodeWatchModule implements Module {
         const filePath = join(projDir, f);
         try {
           const stat = statSync(filePath);
-          if (Date.now() - stat.mtimeMs > STARTUP_WINDOW_MS) continue;
+          // Only surface sessions that are *currently active*. Older
+          // completed jsonl files would otherwise flood the Observatory
+          // (~/.claude/projects/ accumulates one file per session and is
+          // never pruned). The ongoing scanAll() loop will pick up
+          // sessions when they next become active.
+          if (Date.now() - stat.mtimeMs > ACTIVE_THRESHOLD_MS) continue;
           this.ingest(filePath, slug, stat.size, stat.mtimeMs, stat.birthtimeMs);
         } catch {
           // skip
@@ -379,7 +382,10 @@ export class ClaudeCodeWatchModule implements Module {
         }
         const existing = this.sessions.get(filePath);
         if (!existing) {
-          if (now - stat.mtimeMs > STARTUP_WINDOW_MS) continue;
+          // Same active-only filter as scanExisting — never ingest a
+          // session that's already gone cold. Newly-started sessions
+          // get picked up on the next tick once their mtime is fresh.
+          if (now - stat.mtimeMs > ACTIVE_THRESHOLD_MS) continue;
           this.ingest(filePath, slug, stat.size, stat.mtimeMs, stat.birthtimeMs);
           continue;
         }
