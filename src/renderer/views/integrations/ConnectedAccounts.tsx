@@ -130,6 +130,32 @@ export function ConnectedAccounts() {
     }
   };
 
+  const handleConnectByApiKey = async (
+    summary: ConnectorSummary,
+    apiKey: string,
+  ): Promise<boolean> => {
+    setBusy(summary.id, true);
+    try {
+      const r = await window.jarvis.connectIntegrationByApiKey(
+        summary.id,
+        apiKey,
+      );
+      if (!r.ok) {
+        toast({
+          kind: 'error',
+          message: r.message ?? `Couldn't validate ${summary.name} key`,
+        });
+        return false;
+      }
+      toast({
+        message: `Connected ${summary.name} · ${r.account?.label ?? ''}`,
+      });
+      return true;
+    } finally {
+      setBusy(summary.id, false);
+    }
+  };
+
   const handleSetSlackSendAs = async (
     account: ConnectorAccount,
     value: 'bot' | 'user',
@@ -182,6 +208,11 @@ export function ConnectedAccounts() {
               setSetupOpenId(null);
               await handleConnect(summary);
             }}
+            onSubmitApiKey={async (apiKey) => {
+              const ok = await handleConnectByApiKey(summary, apiKey);
+              if (ok) setSetupOpenId(null);
+              return ok;
+            }}
             onCancelConnect={() => void handleCancelConnect(summary)}
             onDisconnect={(account) => void handleDisconnect(account)}
             onSetDefault={(accountId) =>
@@ -207,6 +238,7 @@ interface RowProps {
   setupOpen: boolean;
   onToggleSetup: () => void;
   onStartConnect: () => void | Promise<void>;
+  onSubmitApiKey: (apiKey: string) => Promise<boolean>;
   onCancelConnect: () => void;
   onDisconnect: (account: ConnectorAccount) => void;
   onSetDefault: (accountId: string) => void;
@@ -221,6 +253,7 @@ function ConnectorRow({
   setupOpen,
   onToggleSetup,
   onStartConnect,
+  onSubmitApiKey,
   onCancelConnect,
   onDisconnect,
   onSetDefault,
@@ -277,6 +310,7 @@ function ConnectorRow({
           summary={summary}
           onCancel={onToggleSetup}
           onStart={() => void onStartConnect()}
+          onSubmitApiKey={onSubmitApiKey}
           busy={busy}
         />
       )}
@@ -409,17 +443,26 @@ function ConnectorSetupPanel({
   busy,
   onCancel,
   onStart,
+  onSubmitApiKey,
 }: {
   setup: ConnectorSetup | null;
   summary: ConnectorSummary;
   busy: boolean;
   onCancel: () => void;
   onStart: () => void;
+  onSubmitApiKey: (apiKey: string) => Promise<boolean>;
 }) {
   const providerId = summary.id;
   const providerName = summary.name;
   const needsCredentials = summary.credentialSpec.needsCredentials;
   const credentialsConfigured = summary.credentialsConfigured;
+  const hasApiKeyMode = !!summary.apiKeyMode;
+  const [mode, setMode] = useState<'oauth' | 'apiKey'>('oauth');
+  // If the connector ONLY supports api-key, start there.
+  useEffect(() => {
+    if (hasApiKeyMode && !needsCredentials) setMode('apiKey');
+  }, [hasApiKeyMode, needsCredentials]);
+
   const startDisabled =
     busy || (needsCredentials && !credentialsConfigured);
   const startTitle = startDisabled
@@ -440,61 +483,155 @@ function ConnectorSetupPanel({
         </p>
       )}
 
-      {needsCredentials && (
-        <CredentialsBlock
-          summary={summary}
-        />
-      )}
-
-      {setup && setup.steps.length > 0 && (
-        <ol className="connector-setup__steps">
-          {setup.steps.map((step, i) => (
-            <li key={i} className="connector-setup__step">
-              <div className="connector-setup__step-title">
-                <span className="connector-setup__step-num">{i + 1}</span>
-                <span>{step.title}</span>
-                {step.url && (
-                  <button
-                    type="button"
-                    className="connector-setup__open"
-                    onClick={() => void window.jarvis.openExternal(step.url!)}
-                    title={step.url}
-                  >
-                    ↗ {step.urlLabel ?? 'Open'}
-                  </button>
-                )}
-              </div>
-              {step.body && (
-                <p className="connector-setup__step-body">{step.body}</p>
-              )}
-              {step.command && <CommandLine command={step.command} />}
-            </li>
-          ))}
-        </ol>
-      )}
-
-      {setup && setup.scopes && setup.scopes.length > 0 && (
-        <div className="connector-setup__scopes">
-          <div className="connector-setup__scopes-title">
-            Scopes requested
-          </div>
-          <ul>
-            {setup.scopes.map((s) => (
-              <li key={s}>{s}</li>
-            ))}
-          </ul>
+      {hasApiKeyMode && (
+        <div className="connector-setup__mode" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'oauth'}
+            className={`connector-setup__mode-tab${mode === 'oauth' ? ' connector-setup__mode-tab--active' : ''}`}
+            onClick={() => setMode('oauth')}
+          >
+            OAuth
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'apiKey'}
+            className={`connector-setup__mode-tab${mode === 'apiKey' ? ' connector-setup__mode-tab--active' : ''}`}
+            onClick={() => setMode('apiKey')}
+          >
+            {summary.apiKeyMode?.label ?? 'API key'}
+          </button>
         </div>
       )}
 
+      {mode === 'apiKey' && summary.apiKeyMode ? (
+        <ApiKeyBlock
+          summary={summary}
+          busy={busy}
+          onSubmit={onSubmitApiKey}
+        />
+      ) : (
+        <>
+          {needsCredentials && <CredentialsBlock summary={summary} />}
+
+          {setup && setup.steps.length > 0 && (
+            <ol className="connector-setup__steps">
+              {setup.steps.map((step, i) => (
+                <li key={i} className="connector-setup__step">
+                  <div className="connector-setup__step-title">
+                    <span className="connector-setup__step-num">{i + 1}</span>
+                    <span>{step.title}</span>
+                    {step.url && (
+                      <button
+                        type="button"
+                        className="connector-setup__open"
+                        onClick={() =>
+                          void window.jarvis.openExternal(step.url!)
+                        }
+                        title={step.url}
+                      >
+                        ↗ {step.urlLabel ?? 'Open'}
+                      </button>
+                    )}
+                  </div>
+                  {step.body && (
+                    <p className="connector-setup__step-body">{step.body}</p>
+                  )}
+                  {step.command && <CommandLine command={step.command} />}
+                </li>
+              ))}
+            </ol>
+          )}
+
+          {setup && setup.scopes && setup.scopes.length > 0 && (
+            <div className="connector-setup__scopes">
+              <div className="connector-setup__scopes-title">
+                Scopes requested
+              </div>
+              <ul>
+                {setup.scopes.map((s) => (
+                  <li key={s}>{s}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <footer className="connector-setup__actions">
+            <button onClick={onCancel}>Cancel</button>
+            <button
+              className="connector-setup__start"
+              onClick={onStart}
+              disabled={startDisabled}
+              title={startTitle}
+            >
+              {busy ? 'Starting…' : 'Start OAuth flow'}
+            </button>
+          </footer>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Paste a personal API key" path for connectors that expose one
+ * (Linear today; Notion internal-integration tokens later). The key
+ * is validated server-side via the connector's `viewer`/`me` query;
+ * a successful round-trip creates the account just like OAuth would.
+ */
+function ApiKeyBlock({
+  summary,
+  busy,
+  onSubmit,
+}: {
+  summary: ConnectorSummary;
+  busy: boolean;
+  onSubmit: (apiKey: string) => Promise<boolean>;
+}) {
+  const [key, setKey] = useState('');
+  const mode = summary.apiKeyMode;
+  if (!mode) return null;
+  const submit = async (): Promise<void> => {
+    if (!key.trim()) {
+      toast({ kind: 'error', message: 'API key is required' });
+      return;
+    }
+    const ok = await onSubmit(key.trim());
+    if (ok) setKey('');
+  };
+  return (
+    <div className="connector-apikey">
+      <p className="connector-apikey__help">{mode.helpText}</p>
+      {mode.helpUrl && (
+        <button
+          type="button"
+          className="connector-setup__open"
+          onClick={() => void window.jarvis.openExternal(mode.helpUrl!)}
+          title={mode.helpUrl}
+        >
+          ↗ Open {summary.name} settings
+        </button>
+      )}
+      <label className="connector-creds__field">
+        <span>{mode.label}</span>
+        <input
+          type="password"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          placeholder={mode.placeholder}
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </label>
       <footer className="connector-setup__actions">
-        <button onClick={onCancel}>Cancel</button>
         <button
           className="connector-setup__start"
-          onClick={onStart}
-          disabled={startDisabled}
-          title={startTitle}
+          onClick={() => void submit()}
+          disabled={busy || !key.trim()}
         >
-          {busy ? 'Starting…' : 'Start OAuth flow'}
+          {busy ? 'Validating…' : 'Add account'}
         </button>
       </footer>
     </div>

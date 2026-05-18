@@ -16247,3 +16247,56 @@ button:disabled:hover {
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.95);
 }
+
+/* ── OAuth / API-key mode toggle ─────────────────────────────────────── */
+
+.connector-setup__mode {
+  display: inline-flex;
+  margin: 8px 0 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.connector-setup__mode-tab {
+  font-size: 12px;
+  padding: 5px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.connector-setup__mode-tab:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.connector-setup__mode-tab--active {
+  background: rgba(0, 212, 255, 0.12);
+  color: #00d4ff;
+  cursor: default;
+}
+
+/* ── API-key block ───────────────────────────────────────────────────── */
+
+.connector-apikey {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  margin: 0 0 12px;
+  background: rgba(94, 106, 210, 0.05);
+  border: 1px solid rgba(94, 106, 210, 0.2);
+  border-radius: 6px;
+}
+
+.connector-apikey__help {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.5;
+}

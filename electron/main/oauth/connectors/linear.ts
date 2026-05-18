@@ -10,6 +10,7 @@ import {
 } from '../../secrets.js';
 import { challengeFor, generateVerifier, randomState } from '../pkce.js';
 import type {
+  ApiKeyMode,
   Connector,
   ConnectorHooks,
   ConnectorTokenPayload,
@@ -42,6 +43,9 @@ const VIEWER_QUERY = `query Viewer { viewer { id name email } }`;
 const SCOPES = ['read', 'write'];
 
 export interface LinearTokenPayload extends ConnectorTokenPayload {
+  /** OAuth access token OR a personal API key (depending on
+   *  `authMode`). Both are sent as Bearer to Linear's GraphQL
+   *  endpoint, so the MCP doesn't care which. */
   accessToken: string;
   refreshToken?: string;
   expiresAt: number | null;
@@ -49,6 +53,10 @@ export interface LinearTokenPayload extends ConnectorTokenPayload {
   userId: string;
   userName?: string;
   userEmail?: string;
+  /** 'oauth' means OAuth flow produced this; 'apiKey' means the user
+   *  pasted a personal API key. Determines whether the refresher
+   *  touches this account. */
+  authMode: 'oauth' | 'apiKey';
 }
 
 class LinearConnector implements Connector {
@@ -61,6 +69,41 @@ class LinearConnector implements Connector {
     needsCredentials: true,
     // PKCE flow — no client_secret to gather.
     needsClientSecret: 'never',
+  };
+  readonly apiKeyMode: ApiKeyMode = {
+    label: 'Personal API Key',
+    helpText:
+      'Skip OAuth entirely — paste a personal API key. Generate one in Linear at Settings → Account → API → Personal API keys → Create key. The key is stored in Keychain and sent as a Bearer token directly. No workspace admin needed.',
+    helpUrl: 'https://linear.app/settings/account/api',
+    placeholder: 'lin_api_...',
+    connect: async (apiKey, hooks) => {
+      const viewer = await fetchViewer(apiKey);
+      const payload: LinearTokenPayload = {
+        accessToken: apiKey,
+        // Personal keys don't expire and don't have refresh tokens.
+        expiresAt: null,
+        scope: 'personal-api-key',
+        userId: viewer.id,
+        userName: viewer.name,
+        userEmail: viewer.email,
+        authMode: 'apiKey',
+      };
+      await hooks.setToken(viewer.id, payload);
+      return {
+        id: viewer.id,
+        connectorId: 'linear',
+        label: `${viewer.email ?? viewer.name ?? viewer.id} (API key)`,
+        addedAt: Date.now(),
+        expiresAt: null,
+        scopes: ['personal-api-key'],
+        meta: {
+          userId: viewer.id,
+          userName: viewer.name ?? null,
+          userEmail: viewer.email ?? null,
+          authMode: 'apiKey',
+        },
+      };
+    },
   };
 
   private readonly mcpCache = new Map<string, McpSdkServerConfigWithInstance>();
@@ -114,6 +157,7 @@ class LinearConnector implements Connector {
       userId: viewer.id,
       userName: viewer.name,
       userEmail: viewer.email,
+      authMode: 'oauth',
     };
     await hooks.setToken(payload.userId, payload);
     return {
@@ -127,6 +171,7 @@ class LinearConnector implements Connector {
         userId: viewer.id,
         userName: viewer.name ?? null,
         userEmail: viewer.email ?? null,
+        authMode: 'oauth',
       },
     };
   }
@@ -136,6 +181,9 @@ class LinearConnector implements Connector {
     hooks: ConnectorHooks,
   ): Promise<ConnectorAccount | null> {
     const current = (await hooks.getToken(account.id)) as LinearTokenPayload | null;
+    // Personal API keys don't expire and have no refresh leg —
+    // nothing to do here.
+    if (current?.authMode === 'apiKey') return null;
     if (!current?.refreshToken) {
       // Linear tokens without a refresh leg are essentially permanent
       // until revoked. Nothing to do.
@@ -176,7 +224,8 @@ class LinearConnector implements Connector {
 
   /** Proactive refresh inside the 60 s expiry buffer — same pattern
    *  as Google. Linear tokens are usually long-lived so this is
-   *  rarely exercised, but cheap insurance. */
+   *  rarely exercised, but cheap insurance. Personal API keys
+   *  short-circuit (no expiry, no refresh leg). */
   private async getValidAccessToken(accountId: string): Promise<string | null> {
     const raw = await getConnectorToken('linear', accountId);
     if (!raw) return null;
@@ -186,6 +235,7 @@ class LinearConnector implements Connector {
     } catch {
       return null;
     }
+    if (payload.authMode === 'apiKey') return payload.accessToken;
     const BUFFER_MS = 60 * 1000;
     if (
       payload.expiresAt == null ||
@@ -219,7 +269,10 @@ class LinearConnector implements Connector {
   ): Promise<void> {
     this.mcpCache.delete(account.id);
     const current = (await hooks.getToken(account.id)) as LinearTokenPayload | null;
-    if (current?.accessToken) {
+    // Personal API keys aren't OAuth tokens — Linear's revoke
+    // endpoint refuses them. The user manages key lifecycle from
+    // their Linear API settings; we just drop the local copy.
+    if (current?.accessToken && current.authMode !== 'apiKey') {
       try {
         await fetch(REVOKE_URL, {
           method: 'POST',

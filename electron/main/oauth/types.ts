@@ -41,6 +41,30 @@ export interface CredentialSpec {
 }
 
 /**
+ * Some providers ship long-lived personal API keys that bypass OAuth
+ * entirely (Linear's "Personal API keys", Notion's "Internal
+ * integration secret", etc.). When a connector declares an
+ * `ApiKeyMode`, the Integrations UI offers a second tab next to the
+ * OAuth flow where the user pastes a key directly. Useful when the
+ * user can't / won't register an OAuth app (no workspace admin
+ * access, solo use, etc.).
+ */
+export interface ApiKeyMode {
+  /** Label shown on the tab + the input. e.g. "Personal API Key". */
+  label: string;
+  /** One-paragraph explanation of where to find the key. */
+  helpText: string;
+  /** Optional deep link to the provider's key-management page. */
+  helpUrl?: string;
+  /** Placeholder for the input. e.g. "lin_api_...". */
+  placeholder: string;
+  /** Validate the key + create an account record. Implementations
+   *  typically call the provider's `viewer` / `me` endpoint to confirm
+   *  the key works + derive the account id. Throws on bad key. */
+  connect(apiKey: string, hooks: ConnectorHooks): Promise<ConnectorAccount>;
+}
+
+/**
  * The minimum surface a connector must implement. Phase 1 wires the
  * registry + orchestrator against this shape; phase 2+ ships concrete
  * Slack/Google/Notion/Linear implementations.
@@ -55,6 +79,10 @@ export interface Connector {
   /** Credential requirements. Connector surface in the Settings UI
    *  reads this to decide whether to render input fields + which ones. */
   readonly credentialSpec: CredentialSpec;
+  /** Optional personal-API-key path that sidesteps OAuth entirely.
+   *  When present, the renderer offers a second tab in the setup
+   *  panel for pasting a key directly. */
+  readonly apiKeyMode?: ApiKeyMode;
   /** True when the connector has working credentials — either user-
    *  supplied (Keychain) or the bundled constants in the connector
    *  source. False means "Connect" should be disabled until the user

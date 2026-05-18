@@ -10,9 +10,13 @@ import type {
 import type { IntegrationsStore } from '../integrations-store.js';
 import type { ConnectorRegistry } from '../oauth/connector-registry.js';
 import type { OAuthOrchestrator } from '../oauth/orchestrator.js';
+import type { ConnectorHooks, ConnectorTokenPayload } from '../oauth/types.js';
 import {
   clearConnectorCredentials,
+  clearConnectorToken,
+  getConnectorToken,
   setConnectorCredentials,
+  setConnectorToken,
 } from '../secrets.js';
 
 export interface IntegrationsIpcDeps {
@@ -43,6 +47,18 @@ export function registerIntegrationsIpc(deps: IntegrationsIpcDeps): void {
           credentialsConfigured: connector.credentialSpec.needsCredentials
             ? await connector.hasUsableCredentials()
             : true,
+          ...(connector.apiKeyMode
+            ? {
+                apiKeyMode: {
+                  label: connector.apiKeyMode.label,
+                  helpText: connector.apiKeyMode.helpText,
+                  ...(connector.apiKeyMode.helpUrl
+                    ? { helpUrl: connector.apiKeyMode.helpUrl }
+                    : {}),
+                  placeholder: connector.apiKeyMode.placeholder,
+                },
+              }
+            : {}),
         })),
       );
     },
@@ -252,6 +268,45 @@ export function registerIntegrationsIpc(deps: IntegrationsIpcDeps): void {
   );
 
   ipcMain.handle(
+    IpcChannels.connectIntegrationByApiKey,
+    async (
+      _e,
+      payload: { connectorId: ConnectorId; apiKey: string },
+    ): Promise<{ ok: boolean; account?: ConnectorAccount; message?: string }> => {
+      try {
+        if (
+          !payload ||
+          typeof payload.connectorId !== 'string' ||
+          typeof payload.apiKey !== 'string' ||
+          payload.apiKey.trim().length === 0
+        ) {
+          return { ok: false, message: 'apiKey is required' };
+        }
+        const connector = registry.get(payload.connectorId);
+        if (!connector) return { ok: false, message: 'Unknown connector' };
+        if (!connector.apiKeyMode) {
+          return {
+            ok: false,
+            message: 'This connector does not support API-key auth',
+          };
+        }
+        const hooks = makeApiKeyHooks(payload.connectorId);
+        const account = await connector.apiKeyMode.connect(
+          payload.apiKey.trim(),
+          hooks,
+        );
+        integrations.upsert(account);
+        return { ok: true, account };
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
+
+  ipcMain.handle(
     IpcChannels.clearIntegrationCredentials,
     async (
       _e,
@@ -272,4 +327,26 @@ export function registerIntegrationsIpc(deps: IntegrationsIpcDeps): void {
       }
     },
   );
+}
+
+/** Minimal hooks injected into a connector's API-key connect path.
+ *  Same shape the orchestrator builds for OAuth callbacks. */
+function makeApiKeyHooks(connectorId: string): ConnectorHooks {
+  return {
+    async getToken(accountId): Promise<ConnectorTokenPayload | null> {
+      const raw = await getConnectorToken(connectorId, accountId);
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as ConnectorTokenPayload;
+      } catch {
+        return null;
+      }
+    },
+    async setToken(accountId, payload): Promise<void> {
+      await setConnectorToken(connectorId, accountId, JSON.stringify(payload));
+    },
+    async clearToken(accountId): Promise<void> {
+      await clearConnectorToken(connectorId, accountId);
+    },
+  };
 }

@@ -543,6 +543,14 @@ const api = {
     flowId: string,
   ): Promise<{ ok: boolean; message?: string }> =>
     ipcRenderer.invoke(IpcChannels.cancelIntegrationFlow, { flowId }),
+  connectIntegrationByApiKey: (
+    connectorId: ConnectorId,
+    apiKey: string,
+  ): Promise<{ ok: boolean; account?: ConnectorAccount; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.connectIntegrationByApiKey, {
+      connectorId,
+      apiKey,
+    }),
   disconnectIntegration: (
     accountId: string,
   ): Promise<{ ok: boolean; message?: string }> =>

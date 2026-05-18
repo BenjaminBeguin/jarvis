@@ -989,6 +989,17 @@ export interface ConnectorCredentialSpec {
   needsClientSecret: 'required' | 'optional' | 'never';
 }
 
+/** Renderer-side mirror of the connector's API-key path metadata.
+ *  Only the descriptive fields cross IPC — the validating callback
+ *  stays on main. Presence in `ConnectorSummary.apiKeyMode` is the
+ *  signal to render the "API key" tab. */
+export interface ConnectorApiKeyMode {
+  label: string;
+  helpText: string;
+  helpUrl?: string;
+  placeholder: string;
+}
+
 /** Per-connector summary the renderer renders into the Integrations
  *  page's "Connected accounts" section. Built by the orchestrator from
  *  the registry + the account store. */
@@ -1008,6 +1019,9 @@ export interface ConnectorSummary {
    *  and the Connect button can fire OAuth. False means the setup
    *  panel should surface a credentials form first. */
   credentialsConfigured: boolean;
+  /** Set when the connector exposes a personal-API-key path; renderer
+   *  offers it as an alternative tab in the setup panel. */
+  apiKeyMode?: ConnectorApiKeyMode;
 }
 
 /** What `integrations:connect` returns. Renderer opens `authUrl` in the
