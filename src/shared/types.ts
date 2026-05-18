@@ -250,6 +250,14 @@ export interface TaskSummary {
   /** True when this task resumed a pooled SDK session (skipped cold
    *  start). Powers the Spend dashboard's "savings via pooling" stat. */
   pooled?: boolean;
+  /**
+   * Marks "passive" activity that Jarvis observes but the user almost
+   * never wants to see in the main view — e.g. Claude Code's background
+   * AI-title backfill writing single lines to old session files. Still
+   * ingested + clickable, but the task list's default filters exclude
+   * these and surface them only under a dedicated "background" tab.
+   */
+  background?: boolean;
 }
 
 export interface TaskEvent {

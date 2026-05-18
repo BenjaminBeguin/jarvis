@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { TaskStatus, TaskSummary } from '../../shared/types';
 
-type Filter = 'all' | 'live' | 'awaiting' | 'mine' | 'external';
+type Filter = 'all' | 'live' | 'awaiting' | 'mine' | 'external' | 'background';
 
 interface Props {
   tasks: TaskSummary[];
@@ -27,13 +27,17 @@ export function TaskList({ tasks, selectedId, onSelect }: Props) {
     [tasks, filter],
   );
 
+  // Counts mirror what each filter ends up showing — i.e. all the
+  // non-background filters exclude background tasks. Without this the
+  // "all" count says e.g. 4173 while the visible list has 20.
   const counts = useMemo(
     () => ({
-      all: tasks.length,
-      live: tasks.filter((t) => t.status === 'running').length,
-      awaiting: tasks.filter((t) => t.awaitingInput).length,
-      mine: tasks.filter((t) => t.origin !== 'external').length,
-      external: tasks.filter((t) => t.origin === 'external').length,
+      all: tasks.filter((t) => !t.background).length,
+      live: tasks.filter((t) => !t.background && t.status === 'running').length,
+      awaiting: tasks.filter((t) => !t.background && t.awaitingInput).length,
+      mine: tasks.filter((t) => !t.background && t.origin !== 'external').length,
+      external: tasks.filter((t) => !t.background && t.origin === 'external').length,
+      background: tasks.filter((t) => t.background).length,
     }),
     [tasks],
   );
@@ -41,7 +45,9 @@ export function TaskList({ tasks, selectedId, onSelect }: Props) {
   return (
     <section className="task-list-view">
       <header className="task-list-view__filters">
-        {(['all', 'live', 'awaiting', 'mine', 'external'] as Filter[]).map((f) => (
+        {(
+          ['all', 'live', 'awaiting', 'mine', 'external', 'background'] as Filter[]
+        ).map((f) => (
           <button
             key={f}
             className={`task-list-view__filter${filter === f ? ' task-list-view__filter--active' : ''}`}
@@ -130,6 +136,11 @@ function Row({ task, active, onClick }: RowProps) {
 }
 
 function matchesFilter(t: TaskSummary, f: Filter): boolean {
+  // The background tab is the only place these surface — everywhere
+  // else we treat them as if they didn't exist so the default view
+  // isn't drowned by Claude Code's own metadata writes.
+  if (f === 'background') return !!t.background;
+  if (t.background) return false;
   if (f === 'all') return true;
   if (f === 'live') return t.status === 'running';
   if (f === 'awaiting') return !!t.awaitingInput;

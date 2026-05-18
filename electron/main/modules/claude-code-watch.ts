@@ -305,10 +305,6 @@ export class ClaudeCodeWatchModule implements Module {
           // never pruned). The ongoing scanAll() loop will pick up
           // sessions when they next become active.
           if (Date.now() - stat.mtimeMs > ACTIVE_THRESHOLD_MS) continue;
-          // Filter out mtime bumps where the only new content is
-          // Claude Code retro-filling AI titles on old sessions — those
-          // are background metadata updates, not real activity.
-          if (lastEventIsMetadataOnly(filePath)) continue;
           this.ingest(filePath, slug, stat.size, stat.mtimeMs, stat.birthtimeMs);
         } catch {
           // skip
@@ -337,6 +333,11 @@ export class ClaudeCodeWatchModule implements Module {
     } = extractSessionContext(filePath);
     const title = `${prettyProject(projectSlug)} · ${rawTitle}`;
     const isActive = Date.now() - mtimeMs < ACTIVE_THRESHOLD_MS;
+    // "Background" means Claude Code's own metadata writes (the
+    // AI-title backfill, etc.) rather than a real conversation turn.
+    // We still ingest so the entry exists if the user goes looking;
+    // the renderer hides it by default.
+    const isBackground = lastEventIsMetadataOnly(filePath);
     const summary: TaskSummary = {
       id: taskId,
       skillId: null,
@@ -349,6 +350,7 @@ export class ClaudeCodeWatchModule implements Module {
       inputPreview: title,
       groupKey: `claude-code:${projectSlug}`,
       awaitingInput: lastKind === 'assistant',
+      ...(isBackground ? { background: true } : {}),
     };
     ctx.registerExternalTask(summary);
 
@@ -450,9 +452,6 @@ export class ClaudeCodeWatchModule implements Module {
           // session that's already gone cold. Newly-started sessions
           // get picked up on the next tick once their mtime is fresh.
           if (now - stat.mtimeMs > ACTIVE_THRESHOLD_MS) continue;
-          // Same metadata filter as scanExisting — ignore Claude Code's
-          // background AI-title backfill.
-          if (lastEventIsMetadataOnly(filePath)) continue;
           this.ingest(filePath, slug, stat.size, stat.mtimeMs, stat.birthtimeMs);
           continue;
         }

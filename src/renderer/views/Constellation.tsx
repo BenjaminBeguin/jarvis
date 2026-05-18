@@ -41,6 +41,10 @@ function lastActivityAt(task: TaskSummary): number {
 }
 
 function shouldDisplay(task: TaskSummary): boolean {
+  // Background tasks (Claude Code's AI-title backfill etc.) are kept
+  // in the registry but excluded from the map — they're reachable via
+  // the dedicated background tab in the list view.
+  if (task.background) return false;
   if (task.status === 'running') return true;
   if (task.origin !== 'external') return false;
   const ended = task.endedAt ?? 0;
