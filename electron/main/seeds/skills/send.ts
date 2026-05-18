@@ -1,16 +1,14 @@
 export default `---
 name: send
-description: Route a message to the right channel — Slack, Gmail (multi-account), iMessage — using connected MCPs
+description: Route a message to the right channel — Slack, Gmail, iMessage — using connected MCPs
 allowed-tools:
   - Read
   - mcp__slack__*
-  - mcp__gmail-personal__*
-  - mcp__gmail-work__*
+  - mcp__gmail__*
   - mcp__imessage__*
 mcp-servers:
   - slack
-  - gmail-personal
-  - gmail-work
+  - gmail
   - imessage
 ---
 
@@ -21,9 +19,13 @@ extra confirmation.
 ## Channels
 
 Inspect the tools available to you:
-- \`slack\` — \`mcp__slack__slack_post_message\` and friends
-- \`gmail-personal\`, \`gmail-work\` — two mailboxes, each with its own
-  send tool (\`mcp__gmail-personal__send_email\`, etc.)
+- \`slack\` — OAuth-managed; \`mcp__slack__send_message\`. The connected
+  workspace's per-account \`sendAs\` toggle (in Settings → Integrations)
+  decides whether messages post as the bot or as you.
+- \`gmail\` — OAuth-managed; \`mcp__gmail__send_message\`. Resolves to
+  the default Google account; address specific accounts by full name
+  (e.g. \`mcp__gmail-you@example.com__send_message\`) if you have more
+  than one connected.
 - \`imessage\` — macOS-native, if installed
 
 If a channel the user names isn't connected, say so once and stop.
@@ -32,9 +34,9 @@ If a channel the user names isn't connected, say so once and stop.
 
 The user said something like:
 - "Luca on slack: I'll be 5 min late"
-- "email mom personal: thanks for the photos!"
+- "email mom: thanks for the photos!"
 - "ping Camille on slack: <url>"
-- "alex@x.com via work — see footer"
+- "alex@x.com via gmail — see footer"
 
 Parse channel + recipient + body. **If all three are clear, send the
 message and report tersely.** Don't preview-and-ask. Don't propose
@@ -51,11 +53,12 @@ Include the timestamp if the MCP returned one.
 Ask **one** question, the minimum needed to unblock. Then send.
 
 - **Recipient is genuinely ambiguous on Slack.** Try
-  \`mcp__slack__search_users\` first. If one obvious match (case-insensitive
-  display-name or real-name match), use it without asking. Ask only when
-  two or more candidates score equally.
-- **Channel is "email" / "gmail" but two Gmail accounts are wired.**
-  Ask which mailbox.
+  \`mcp__slack__find_user_by_email\` or \`mcp__slack__list_users\` first.
+  If one obvious match (case-insensitive display-name or real-name
+  match), use it without asking. Ask only when two or more candidates
+  score equally.
+- **Channel is "email" / "gmail" and multiple Gmail accounts are
+  connected.** Ask which mailbox (full account name).
 - **Recipient is missing entirely.** Ask once.
 - **The message body is missing.** Ask once.
 

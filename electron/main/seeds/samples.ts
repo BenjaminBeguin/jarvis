@@ -4,24 +4,13 @@
  */
 
 export const SAMPLE_MCP_CONFIG = `{
-  "//": "Define MCP servers globally; skills opt-in via mcp-servers: [name] in their frontmatter, or 'mcp-servers: [\\"*\\"]' to inherit everything here. Copy this file to ~/.jarvis/mcp.json (drop the .example) and fill in tokens.",
+  "//": "Define custom MCP servers globally; skills opt-in via mcp-servers: [name] in their frontmatter, or 'mcp-servers: [\\"*\\"]' to inherit everything here. Copy this file to ~/.jarvis/mcp.json (drop the .example) and fill in any tokens.",
 
-  "//slack": "Slack: create a Slack app at https://api.slack.com/apps, install to your workspace, copy the Bot User OAuth Token (xoxb-...) and Team ID. The claude.ai Slack connector does NOT propagate to Jarvis tasks — you need this local entry to use /send.",
+  "//note": "For Slack, Google (Gmail + Calendar), Notion, and Linear, use Settings → Integrations → Connected accounts instead — those run OAuth, store tokens in Keychain, and publish managed MCP entries automatically.",
 
-  "//gmail": "Two options. (A) Easiest: install via 'claude mcp add gmail-personal --scope user -- sh -c \\"cd ~/.gmail-mcp-personal && exec npx -y @gongrzhe/server-gmail-autoauth-mcp\\"' after running the GongRzhe auth flow once. (B) Or pin it here under mcpServers with the same sh-c command — same effect, scoped to Jarvis only.",
-
-  "//linear": "Linear: see https://linear.app/changelog/2025-mcp or the @tacticlaunch/mcp-linear community server.",
+  "//custom": "This file is for everything else: filesystem access, custom or in-house MCPs, etc.",
 
   "mcpServers": {
-    "slack": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-slack"],
-      "env": {
-        "SLACK_BOT_TOKEN": "xoxb-...",
-        "SLACK_TEAM_ID": "T0000..."
-      }
-    },
     "filesystem": {
       "type": "stdio",
       "command": "npx",

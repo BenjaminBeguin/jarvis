@@ -103,50 +103,17 @@ export interface CatalogEntry {
 }
 
 export const CATALOG: CatalogEntry[] = [
-  {
-    id: 'slack',
-    name: 'Slack',
-    description: 'Send messages, search users, read channels',
-    aliases: ['slack', 'Slack'],
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-slack'],
-    fields: [
-      {
-        key: 'SLACK_BOT_TOKEN',
-        label: 'Bot User OAuth Token',
-        placeholder: 'xoxb-…',
-        kind: 'secret',
-        required: true,
-      },
-      {
-        key: 'SLACK_TEAM_ID',
-        label: 'Team ID',
-        placeholder: 'T0XXXXX',
-        kind: 'text',
-        required: true,
-        hint: 'Found in any Slack channel URL — the T0XXXXX part.',
-      },
-    ],
-    setupUrl: 'https://api.slack.com/apps?new_app=1',
-    setupNotes:
-      "Create a Slack app (From scratch), add Bot Token Scopes: chat:write, chat:write.public, im:write, users:read, users:read.email, channels:read, files:write. Install to workspace, then copy the Bot User OAuth Token (xoxb-…).",
-    configFile: {
-      path: 'slack-watchlist.md',
-      label: 'Edit watchlist',
-      description:
-        'Channels, DMs, and people the slack-pulse / daily-recap skills scan. Markdown; edit freely.',
-    },
-    inboxFiles: ['slack-pulse.json'],
-  },
-  // Gmail · personal / Gmail · work / Calendar · personal / Calendar · work
-  // used to live here — each one a separate stdio MCP wrapping
-  // @gongrzhe/server-gmail-autoauth-mcp or @cocal/google-calendar-mcp with
-  // per-account OAuth files under ~/.jarvis/secrets/. They've been
-  // retired in favour of the unified Google connector (Connected
-  // accounts → Google → Add account), which covers Gmail + Calendar
-  // in one OAuth grant per account with tokens in Keychain. The
-  // migration in electron/main/index.ts strips the legacy entries
-  // from ~/.jarvis/mcp.json on first launch.
+  // Slack / Gmail · personal / Gmail · work / Calendar · personal /
+  // Calendar · work used to live here — each one wrapped a stdio MCP
+  // (@modelcontextprotocol/server-slack,
+  // @gongrzhe/server-gmail-autoauth-mcp, @cocal/google-calendar-mcp)
+  // with hand-managed tokens. They've all been retired in favour of
+  // the OAuth-managed connectors under "Connected accounts" (Slack +
+  // Google so far; Notion + Linear coming). Those publish their own
+  // MCP entries with tokens in Keychain — the `slack` alias still
+  // resolves so skills with `mcp-servers: [slack]` keep working.
+  // The shadowed-MCP banner above the Installed list offers one-click
+  // cleanup if a legacy entry is still in mcp.json.
   {
     id: 'linear',
     name: 'Linear',
