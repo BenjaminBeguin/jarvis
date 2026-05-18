@@ -46,7 +46,7 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     type: 'mcp-call',
     label: 'MCP Tool Call',
     description:
-      'Invoke a tool on any stdio MCP server (github, linear, custom). Output is the tool result (text / json / raw).',
+      'Invoke a tool on any MCP server (stdio in mcp.json, OAuth integrations like calendar / gmail / slack / notion / linear, GitHub). Output is the tool result.',
     group: 'Fetch',
     template: () => ({
       type: 'mcp-call',

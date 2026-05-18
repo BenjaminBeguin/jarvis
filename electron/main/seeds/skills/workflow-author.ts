@@ -51,9 +51,12 @@ node's input. The first node receives \`undefined\`.
   \`{ url, method?: 'GET'|'POST'|..., headers?, auth?: { mcp, var, scheme?: 'raw'|'bearer' }, body?, bodyEncoding?: 'json'|'form', responseType?: 'json'|'text', validate?: <js expr against $> }\`
   Use \`auth.mcp\` to pull a token from a Jarvis-managed MCP env (e.g. \`{ mcp: 'slack', var: 'SLACK_BOT_TOKEN' }\`).
 
-- \`mcp-call\` — invoke any stdio MCP tool (GitHub, Linear-legacy, custom).
-  \`{ mcp: 'github', tool: 'list_issues', args?: {...}, parse?: 'text'|'json'|'raw' }\`
-  Does NOT work for SDK-managed integrations (Google / Slack / Notion / Linear OAuth) — use http-fetch or run-skill for those.
+- \`mcp-call\` — invoke any MCP tool (stdio or SDK-managed).
+  \`{ mcp: 'github-foo', tool: 'list_issues', args?: {...}, parse?: 'text'|'json'|'raw' }\`
+  Works for stdio entries from mcp.json AND for OAuth-managed in-process
+  servers (Google / Slack / Notion / Linear / Calendar). Multi-account
+  ids include the suffix (e.g. \`calendar-foo@x.com\`, \`slack-T0ABC\`) —
+  the user can find the exact id in Settings → Integrations.
 
 - \`transform\` — JS expression on \`$\`.
   \`{ fn: '$.filter(x => x.priority === 1)' }\`

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 
-import type { McpConfigStore } from './mcp-config.js';
+import type { McpConfigStore, McpServerConfig } from './mcp-config.js';
 
 export interface InvokeResult {
   ok: boolean;
@@ -15,11 +15,15 @@ export interface InvokeResult {
 const INVOKE_TIMEOUT_MS = 60_000;
 
 /**
- * Spawn the MCP server, complete the JSON-RPC handshake, invoke a single
- * tool, and return the result. The playground UI uses this to let users
- * try a tool with concrete inputs and see what comes back — useful for
- * verifying credentials work and for exploring what each tool actually
- * returns before writing a skill that depends on it.
+ * Invoke a single tool on any Jarvis-known MCP server. Stdio servers
+ * are spawned, handshaked, and torn down per call (used by the
+ * playground UI for tool exploration). SDK-managed in-process servers
+ * — Google Gmail / Calendar, Slack, Notion, Linear from OAuth — are
+ * invoked directly by reaching into their registered tool map, no
+ * subprocess involved.
+ *
+ * Returns the raw `content` array so downstream code (workflow nodes,
+ * playground UI) can post-process however it wants.
  */
 export async function invokeMcpTool(
   mcp: McpConfigStore,
@@ -29,10 +33,11 @@ export async function invokeMcpTool(
 ): Promise<InvokeResult> {
   const cfg = mcp.resolve([id])[id];
   if (!cfg) return { ok: false, message: `No mcp.json entry for "${id}".` };
+  if (cfg.type === 'sdk') return invokeSdkTool(cfg, toolName, args);
   if (cfg.type !== 'stdio') {
     return {
       ok: false,
-      message: `Only stdio servers can be invoked; ${id} is ${cfg.type}.`,
+      message: `Only stdio and sdk servers can be invoked; ${id} is ${cfg.type}.`,
     };
   }
 
@@ -147,4 +152,76 @@ export async function invokeMcpTool(
       INVOKE_TIMEOUT_MS,
     );
   });
+}
+
+/**
+ * SDK-managed in-process MCP servers (Google / Slack / Notion / Linear
+ * from OAuth) keep their registered tools on `instance._registeredTools`
+ * as `{ name, description, inputSchema, handler }`. The handler is the
+ * async function we passed to `tool(...)` in the connector factory; it
+ * returns `{ content, isError? }` directly.
+ *
+ * We reach in rather than spinning an in-memory transport because the
+ * @modelcontextprotocol/sdk isn't a direct dep here — the Agent SDK
+ * bundles it. The internals are stable enough (the field name comes
+ * from the upstream MCP server class) that this is a reasonable
+ * tradeoff vs. duplicating the dependency.
+ */
+async function invokeSdkTool(
+  cfg: Extract<McpServerConfig, { type: 'sdk' }>,
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<InvokeResult> {
+  const started = Date.now();
+  const instance = cfg.instance as unknown as {
+    _registeredTools?: Record<
+      string,
+      {
+        enabled?: boolean;
+        handler: (
+          args: Record<string, unknown>,
+          extra: Record<string, unknown>,
+        ) => Promise<{ content?: unknown; isError?: boolean }>;
+      }
+    >;
+  };
+  const registry = instance._registeredTools;
+  if (!registry) {
+    return {
+      ok: false,
+      message:
+        'SDK MCP instance is missing _registeredTools — Agent SDK upgrade likely broke direct invocation.',
+      durationMs: Date.now() - started,
+    };
+  }
+  const tool = registry[toolName];
+  if (!tool) {
+    return {
+      ok: false,
+      message: `Tool "${toolName}" not found on this SDK MCP server.`,
+      durationMs: Date.now() - started,
+    };
+  }
+  if (tool.enabled === false) {
+    return {
+      ok: false,
+      message: `Tool "${toolName}" is disabled.`,
+      durationMs: Date.now() - started,
+    };
+  }
+  try {
+    const result = await tool.handler(args, {});
+    return {
+      ok: true,
+      content: result.content,
+      isError: !!result.isError,
+      durationMs: Date.now() - started,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+      durationMs: Date.now() - started,
+    };
+  }
 }

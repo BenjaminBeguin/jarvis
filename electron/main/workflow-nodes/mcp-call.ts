@@ -4,15 +4,21 @@ import { invokeMcpTool } from '../mcp-invoke.js';
 import type { NodeHandlerInput } from './types.js';
 
 /**
- * MCP-call node. Invokes a single tool on any stdio MCP server
- * Jarvis knows about (mcp.json entries + connector-managed stdio
- * entries like GitHub). Used when a workflow needs structured output
- * from a provider — e.g. `mcp__github__list_issues`, `mcp__linear__
- * issueCreate`, or a custom in-house MCP.
+ * MCP-call node. Invokes a single tool on any MCP server Jarvis
+ * knows about — stdio entries from mcp.json, connector-managed stdio
+ * entries like GitHub, AND in-process SDK servers managed by the
+ * OAuth connectors (Google Gmail / Calendar, Slack, Notion, Linear).
+ * Used when a workflow needs structured output from a provider — e.g.
+ * `mcp__calendar__list_events`, `mcp__github__list_issues`,
+ * `mcp__linear__issueCreate`, or a custom in-house MCP.
+ *
+ * For multi-account integrations the per-account suffix is included
+ * in the mcp id (e.g. `calendar-foo@x.com`, `slack-T0ABC`). Use the
+ * exact id from Settings → MCP Servers / Connected Accounts.
  *
  * Params:
  *   {
- *     mcp: string          // mcp.json server id (e.g. "github", "linear")
+ *     mcp: string          // server id (e.g. "github", "calendar-me@x.com")
  *     tool: string         // tool name as the MCP exposes it (without
  *                          //   the mcp__<server>__ prefix)
  *     args?: object        // forwarded to the tool's input
@@ -26,12 +32,6 @@ import type { NodeHandlerInput } from './types.js';
  *
  * Output: depends on `parse` (default the joined text). Throws if the
  *   server flags isError or the call itself fails.
- *
- * Limitation: SDK-managed integrations (Google / Slack / Notion /
- *   Linear OAuth) publish in-process MCPs that aren't reachable via
- *   this stdio invocation path. For those, the agent must call the
- *   tool through Claude (run-skill node) or hit the provider's REST
- *   API directly with http-fetch.
  */
 
 interface McpCallParams {
