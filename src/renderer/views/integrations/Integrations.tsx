@@ -174,37 +174,6 @@ export function Integrations() {
       <ConnectedAccounts />
 
       <section>
-        <h3 className="integrations__section-title">Catalog</h3>
-        <div className="integrations__grid">
-          {CATALOG.map((entry) => {
-            const status = statusFor(entry);
-            const inboxItemCount = (entry.inboxFiles ?? []).reduce(
-              (sum, f) => sum + (inboxCounts[f] ?? 0),
-              0,
-            );
-            const local = localServers.find((s) => s.id === entry.id);
-            return (
-              <CatalogCard
-                key={entry.id}
-                entry={entry}
-                status={status}
-                disabled={!!local?.disabled}
-                inboxItemCount={inboxItemCount}
-                editing={editingId === entry.id}
-                onEdit={() => setEditingId(entry.id)}
-                onClose={() => setEditingId(null)}
-                onEditConfig={() => setConfigEntry(entry)}
-                onRemove={async () => {
-                  await removeIntegrationWithCleanup(entry);
-                  await refreshFile();
-                }}
-              />
-            );
-          })}
-        </div>
-      </section>
-
-      <section>
         <h3 className="integrations__section-title">Custom MCP</h3>
         {customOpen ? (
           <CustomForm
@@ -259,12 +228,6 @@ export function Integrations() {
         />
       </section>
 
-      {configEntry?.configFile && (
-        <ConfigFileEditor
-          entry={configEntry}
-          onClose={() => setConfigEntry(null)}
-        />
-      )}
     </section>
   );
 }

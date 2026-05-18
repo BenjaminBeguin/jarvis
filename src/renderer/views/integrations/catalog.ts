@@ -114,48 +114,12 @@ export const CATALOG: CatalogEntry[] = [
   // resolves so skills with `mcp-servers: [slack]` keep working.
   // The shadowed-MCP banner above the Installed list offers one-click
   // cleanup if a legacy entry is still in mcp.json.
-  {
-    id: 'linear',
-    name: 'Linear',
-    description: 'Read + create Linear issues',
-    aliases: ['linear', 'Linear'],
-    command: 'npx',
-    args: ['-y', '@tacticlaunch/mcp-linear'],
-    fields: [
-      {
-        key: 'LINEAR_API_KEY',
-        label: 'API Key',
-        placeholder: 'lin_api_…',
-        kind: 'secret',
-        required: true,
-        hint: 'Linear → Settings → API → Personal API keys → Create new key.',
-      },
-    ],
-    setupUrl: 'https://linear.app/settings/api',
-    setupNotes:
-      "Create a personal API key in Linear's settings. The key has access to whatever you do — treat it like a password.",
-  },
-  {
-    id: 'notion',
-    name: 'Notion',
-    description: 'Search + create + edit Notion pages and databases',
-    aliases: ['notion', 'Notion'],
-    command: 'npx',
-    args: ['-y', '@notionhq/notion-mcp-server'],
-    fields: [
-      {
-        key: 'NOTION_API_KEY',
-        label: 'Internal Integration Secret',
-        placeholder: 'secret_…',
-        kind: 'secret',
-        required: true,
-        hint: 'Create an internal integration in Notion, then share the pages you want it to access.',
-      },
-    ],
-    setupUrl: 'https://www.notion.so/profile/integrations',
-    setupNotes:
-      'Create an internal integration in Notion → Profile → Integrations. Copy the Internal Integration Secret. Then for each Notion page/database the integration should access, open it and Add connections → your integration.',
-  },
+  // Linear + Notion used to live here as catalog cards (paste an API
+  // key / integration secret into a form, write the stdio MCP entry
+  // to mcp.json). Both now ship as OAuth-managed connectors under
+  // "Connected accounts" with an alternative "Personal API key" tab
+  // for users who can't / don't want to register an OAuth app. Kept
+  // out of the catalog so they don't duplicate.
   {
     id: 'github',
     name: 'GitHub',
