@@ -9,6 +9,7 @@ import {
 } from '../../secrets.js';
 import { randomState } from '../pkce.js';
 import type {
+  ApiKeyMode,
   Connector,
   ConnectorHooks,
   ConnectorTokenPayload,
@@ -63,6 +64,10 @@ export interface NotionTokenPayload extends ConnectorTokenPayload {
   botId: string;
   ownerUserId: string | null;
   ownerEmail: string | null;
+  /** 'oauth' = public-integration grant; 'apiKey' = internal-
+   *  integration secret. Same Bearer header format for both; the
+   *  flag is just so the renderer can surface the source. */
+  authMode: 'oauth' | 'apiKey';
 }
 
 class NotionConnector implements Connector {
@@ -74,6 +79,46 @@ class NotionConnector implements Connector {
   readonly credentialSpec: CredentialSpec = {
     needsCredentials: true,
     needsClientSecret: 'required',
+  };
+  readonly apiKeyMode: ApiKeyMode = {
+    label: 'Internal Integration Secret',
+    helpText:
+      'Skip OAuth — paste an Internal Integration Secret. Create one at notion.so/profile/integrations → "+ New integration" → Internal. SAME grant model as OAuth: the integration only sees pages you explicitly share with it (page → "Add connections" → your integration). Per-workspace.',
+    helpUrl: 'https://www.notion.so/profile/integrations',
+    placeholder: 'secret_… or ntn_…',
+    connect: async (apiKey, hooks) => {
+      const me = await fetchNotionMe(apiKey);
+      const workspaceName = me.bot?.workspace_name ?? 'Notion workspace';
+      // Internal integrations don't return a workspace_id from
+      // /users/me, so the bot id stands in as the account identifier.
+      // It's stable for the lifetime of the integration.
+      const accountId = me.id;
+      const payload: NotionTokenPayload = {
+        accessToken: apiKey,
+        workspaceId: accountId,
+        workspaceName,
+        workspaceIcon: null,
+        botId: me.id,
+        ownerUserId: null,
+        ownerEmail: null,
+        authMode: 'apiKey',
+      };
+      await hooks.setToken(accountId, payload);
+      return {
+        id: accountId,
+        connectorId: 'notion',
+        label: `${workspaceName} (API key)`,
+        addedAt: Date.now(),
+        expiresAt: null,
+        scopes: ['workspace'],
+        meta: {
+          workspaceId: accountId,
+          workspaceName,
+          ownerEmail: null,
+          authMode: 'apiKey',
+        },
+      };
+    },
   };
 
   private readonly mcpCache = new Map<string, McpSdkServerConfigWithInstance>();
@@ -119,6 +164,7 @@ class NotionConnector implements Connector {
       botId: data.bot_id,
       ownerUserId: data.owner?.user?.id ?? null,
       ownerEmail: data.owner?.user?.person?.email ?? null,
+      authMode: 'oauth',
     };
     await hooks.setToken(payload.workspaceId, payload);
     return {
@@ -132,6 +178,7 @@ class NotionConnector implements Connector {
         workspaceId: payload.workspaceId,
         workspaceName: payload.workspaceName,
         ownerEmail: payload.ownerEmail,
+        authMode: 'oauth',
       },
     };
   }
@@ -214,6 +261,37 @@ async function readToken(accountId: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+interface NotionMeResponse {
+  object: 'user';
+  id: string;
+  name?: string;
+  type?: 'person' | 'bot';
+  bot?: {
+    owner?: { type: string; workspace?: boolean };
+    workspace_name?: string;
+  };
+}
+
+/**
+ * Validate a Notion API key + pull the workspace identity. Returns
+ * the parsed `/v1/users/me` response; throws with a helpful message
+ * on auth failure so the renderer toast names the problem.
+ */
+async function fetchNotionMe(apiKey: string): Promise<NotionMeResponse> {
+  const res = await fetch('https://api.notion.com/v1/users/me', {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Notion-Version': '2022-06-28',
+    },
+  });
+  if (!res.ok) {
+    throw new Error(
+      `Notion auth check failed (${res.status}): ${await res.text()}`,
+    );
+  }
+  return (await res.json()) as NotionMeResponse;
 }
 
 export const notionConnector = new NotionConnector();
