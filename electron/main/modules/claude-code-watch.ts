@@ -16,6 +16,14 @@ const PROJECTS_ROOT = join(homedir(), '.claude', 'projects');
 
 /** A session is "running" if its file was modified more recently than this. */
 const ACTIVE_THRESHOLD_MS = 5 * 60 * 1000;
+/**
+ * Lines whose only purpose is metadata Claude Code retro-fills onto
+ * existing sessions (currently just the AI-generated title). A file
+ * whose ONLY recent change is one of these events isn't an active
+ * session — it's Claude Code touching its archive. Surfacing it as
+ * a "running agent" floods the Observatory with thousands of ghosts.
+ */
+const METADATA_ONLY_EVENT_TYPES = new Set(['ai-title']);
 /** How often we re-scan for new content, new sessions, and status changes. */
 const POLL_INTERVAL_MS = 1500;
 /** Trim title to a sensible width for the sidebar. */
@@ -108,6 +116,36 @@ function extractAssistantText(event: unknown): string {
     )
     .join('\n')
     .trim();
+}
+
+/**
+ * Returns true when the most recent line in the file is a
+ * metadata-only event (currently `ai-title`). Used to filter out
+ * mtime bumps that Claude Code itself does retroactively to add
+ * titles to old sessions — those shouldn't count as activity.
+ *
+ * Cheap: we read the last few KB and parse the last JSON line.
+ */
+function lastEventIsMetadataOnly(filePath: string): boolean {
+  try {
+    const raw = readFileSync(filePath, 'utf8');
+    // Walk from the end to find the last non-empty line.
+    const lines = raw.split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      if (!line || !line.trim()) continue;
+      try {
+        const parsed = JSON.parse(line) as { type?: unknown };
+        const t = typeof parsed.type === 'string' ? parsed.type : '';
+        return METADATA_ONLY_EVENT_TYPES.has(t);
+      } catch {
+        return false;
+      }
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 function extractSessionContext(filePath: string): SessionContext {
@@ -267,6 +305,10 @@ export class ClaudeCodeWatchModule implements Module {
           // never pruned). The ongoing scanAll() loop will pick up
           // sessions when they next become active.
           if (Date.now() - stat.mtimeMs > ACTIVE_THRESHOLD_MS) continue;
+          // Filter out mtime bumps where the only new content is
+          // Claude Code retro-filling AI titles on old sessions — those
+          // are background metadata updates, not real activity.
+          if (lastEventIsMetadataOnly(filePath)) continue;
           this.ingest(filePath, slug, stat.size, stat.mtimeMs, stat.birthtimeMs);
         } catch {
           // skip
@@ -408,6 +450,9 @@ export class ClaudeCodeWatchModule implements Module {
           // session that's already gone cold. Newly-started sessions
           // get picked up on the next tick once their mtime is fresh.
           if (now - stat.mtimeMs > ACTIVE_THRESHOLD_MS) continue;
+          // Same metadata filter as scanExisting — ignore Claude Code's
+          // background AI-title backfill.
+          if (lastEventIsMetadataOnly(filePath)) continue;
           this.ingest(filePath, slug, stat.size, stat.mtimeMs, stat.birthtimeMs);
           continue;
         }
