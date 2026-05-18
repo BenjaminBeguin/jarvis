@@ -230,6 +230,16 @@ function ExchangeView({ exchange }: { exchange: Exchange }) {
       <div className="wf-chat__prompt">
         <span className="wf-chat__prompt-glyph">›</span>
         <span className="wf-chat__prompt-text">{exchange.prompt}</span>
+        {exchange.taskId && (
+          <button
+            type="button"
+            className="wf-chat__open-obs"
+            title="Open the full transcript in the Observatory"
+            onClick={() => void window.jarvis.openObservatory(exchange.taskId)}
+          >
+            ↗
+          </button>
+        )}
       </div>
       {stream.length === 0 && !exchange.done && (
         <div className="wf-chat__pending">
