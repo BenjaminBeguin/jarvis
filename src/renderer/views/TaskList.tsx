@@ -4,6 +4,24 @@ import type { TaskStatus, TaskSummary } from '../../shared/types';
 
 type Filter = 'all' | 'live' | 'awaiting' | 'mine' | 'external';
 
+/**
+ * A task is "live" only if it's actually doing something the user
+ * might care about right now — running AND (awaiting input OR started
+ * recently). status='running' alone isn't enough: orphaned tasks
+ * whose terminal SDK event got dropped stay in `running` forever
+ * (we've seen 22h-old routine fires still flagged live). Using the
+ * start time as the freshness proxy is rough but defensible: a real
+ * task that takes >15 min without the awaitingInput flag is rare; an
+ * orphaned routine that "started 22h ago" is obvious.
+ */
+const LIVE_STALE_MS = 15 * 60 * 1000;
+
+function isLive(t: TaskSummary, now: number): boolean {
+  if (t.status !== 'running') return false;
+  if (t.awaitingInput) return true;
+  return now - t.startedAt < LIVE_STALE_MS;
+}
+
 interface Props {
   tasks: TaskSummary[];
   selectedId: string | null;
@@ -34,12 +52,13 @@ export function TaskList({ tasks, selectedId, onSelect }: Props) {
   // the showBackground toggle. Without that the "all" count says
   // e.g. 4173 while the visible list has 20.
   const counts = useMemo(() => {
+    const now = Date.now();
     const pool = showBackground
       ? tasks
       : tasks.filter((t) => !t.background);
     return {
       all: pool.length,
-      live: pool.filter((t) => t.status === 'running').length,
+      live: pool.filter((t) => isLive(t, now)).length,
       awaiting: pool.filter((t) => t.awaitingInput).length,
       mine: pool.filter((t) => t.origin !== 'external').length,
       external: pool.filter((t) => t.origin === 'external').length,
@@ -158,7 +177,7 @@ function Row({ task, active, onClick }: RowProps) {
 
 function matchesFilter(t: TaskSummary, f: Filter): boolean {
   if (f === 'all') return true;
-  if (f === 'live') return t.status === 'running';
+  if (f === 'live') return isLive(t, Date.now());
   if (f === 'awaiting') return !!t.awaitingInput;
   if (f === 'mine') return t.origin !== 'external';
   if (f === 'external') return t.origin === 'external';
@@ -166,6 +185,11 @@ function matchesFilter(t: TaskSummary, f: Filter): boolean {
 }
 
 function statusClass(t: TaskSummary): TaskStatus {
+  // Match isLive(): a stale 'running' task gets a 'completed' dot so
+  // the row doesn't visually pulse green for hours after the SDK
+  // 'result' event got dropped. Doesn't mutate the underlying status
+  // (Activity / cost still see the real value).
+  if (t.status === 'running' && !isLive(t, Date.now())) return 'completed';
   return t.status;
 }
 
