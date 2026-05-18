@@ -10,9 +10,69 @@ import {
   SAMPLE_PROJECTS,
 } from './seeds/index.js';
 import { BUILTIN_WORKFLOWS } from './seeds/workflows/index.js';
+import type { WorkflowDef } from '@shared/types';
 
 function writeIfMissing(path: string, content: string): void {
   if (!existsSync(path)) writeFileSync(path, content, 'utf8');
+}
+
+/**
+ * Per-built-in detectors that recognise a previous, known-broken
+ * seed shape on disk and authorize replacement. Each entry returns
+ * true when the on-disk JSON looks like the "old seed we shipped" —
+ * i.e. the user almost certainly hasn't customized it, just kept
+ * the bug. When true, the seeder overwrites with the latest body.
+ *
+ * Conservative by design: we only replace shapes we can fingerprint
+ * confidently. Anything we can't recognise is treated as "user-
+ * customized" and left alone.
+ */
+const WORKFLOW_STALE_DETECTORS: Record<
+  string,
+  (def: WorkflowDef) => boolean
+> = {
+  // Old calendar workflow used AppleScript with a pad2(n) helper.
+  // The new one uses JXA (osascript -l JavaScript) and outputs JSON.
+  // Detect: osascript step with a script string containing "on pad2".
+  'calendar-today-sync': (def) => {
+    const osa = def.pipeline.find((n) => n.type === 'osascript');
+    if (!osa) return false;
+    const p = osa.params ?? {};
+    const isJxa = p['language'] === 'javascript';
+    const script = typeof p['script'] === 'string' ? p['script'] : '';
+    return !isJxa && /on\s+pad2\s*\(/.test(script);
+  },
+  // Old slack workflow had no `validate` clause on the http-fetch,
+  // so { ok: false } responses went silently through and zero items
+  // got written. New seed includes the validate expression.
+  'slack-inbox-sync': (def) => {
+    const fetch = def.pipeline.find((n) => n.type === 'http-fetch');
+    if (!fetch) return false;
+    const p = fetch.params ?? {};
+    return typeof p['validate'] !== 'string';
+  },
+};
+
+/**
+ * Replace `<workflowsRoot>/<id>.json` with the latest seed body when
+ * the on-disk shape matches a fingerprinted "old seed" we know is
+ * buggy. Quietly skips files the user has customized past the
+ * fingerprint — and any built-in without a detector.
+ */
+function migrateWorkflowIfStale(workflowsRoot: string, wf: WorkflowDef): void {
+  const detector = WORKFLOW_STALE_DETECTORS[wf.id];
+  if (!detector) return;
+  const path = join(workflowsRoot, `${wf.id}.json`);
+  if (!existsSync(path)) return;
+  let parsed: WorkflowDef;
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf8')) as WorkflowDef;
+  } catch {
+    return;
+  }
+  if (!detector(parsed)) return;
+  writeFileSync(path, JSON.stringify(wf, null, 2) + '\n', 'utf8');
+  console.info(`[seed] migrated stale workflow seed: ${wf.id}`);
 }
 
 /**
@@ -60,10 +120,18 @@ export function seedDefaultsIfEmpty(): void {
   // Same model for workflows: seed if the file is missing; never
   // overwrite a user edit. New built-in workflows show up in later
   // releases automatically.
+  //
+  // Exception: a handful of built-ins shipped with bugs the user
+  // can't realistically have customized around (broken AppleScript,
+  // missing validate clause). For those, a per-id fingerprint
+  // detector authorises a one-shot rewrite — see
+  // WORKFLOW_STALE_DETECTORS above.
   for (const wf of BUILTIN_WORKFLOWS) {
-    writeIfMissing(
-      join(workflowsRoot, `${wf.id}.json`),
-      JSON.stringify(wf, null, 2) + '\n',
-    );
+    const path = join(workflowsRoot, `${wf.id}.json`);
+    if (!existsSync(path)) {
+      writeFileSync(path, JSON.stringify(wf, null, 2) + '\n', 'utf8');
+      continue;
+    }
+    migrateWorkflowIfStale(workflowsRoot, wf);
   }
 }
