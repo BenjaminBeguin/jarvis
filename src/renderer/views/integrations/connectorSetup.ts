@@ -140,8 +140,8 @@ export const CONNECTOR_SETUP: Record<string, ConnectorSetup> = {
       "Linear OAuth with PKCE — no client_secret to manage. Tokens last 10 years by default and refresh transparently.",
     steps: [
       {
-        title: 'Create a Linear OAuth application',
-        body: 'Open the link below (Workspace settings → API → Applications — admin only; if "API" isn\'t in your sidebar you\'re not an admin in this workspace). Click "Create new application", name + URL whatever you like.',
+        title: 'Create a Linear OAuth application (admin only)',
+        body: 'Workspace settings → API → Applications → Create new application. The link below uses the slugless form; if it redirects you to /account/profile, try https://linear.app/<your-workspace-slug>/settings/api/applications. If "API" still doesn\'t appear in your sidebar you\'re not an admin in that workspace — either ask one to register the app + share the Client ID (it\'s safe to share, OAuth users authorize per-install), or register in a workspace where you are an admin and OAuth into the one you actually use.',
         url: 'https://linear.app/settings/api/applications',
         urlLabel: 'Linear API applications',
       },
