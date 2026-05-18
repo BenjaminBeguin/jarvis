@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 
+import type { McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
 import type { McpServerSummary } from '@shared/types';
 
 /**
@@ -37,7 +38,23 @@ type HttpConfig = DisableMixin & {
   headers?: Record<string, string>;
 };
 
-export type McpServerConfig = StdioConfig | SseConfig | HttpConfig;
+/**
+ * In-process MCP server provided by a managed integration (e.g. the
+ * Gmail / Calendar wrappers spawned by the Google OAuth connector).
+ * Lives in main-process memory only — never serialized to mcp.json,
+ * never crosses IPC. The renderer doesn't see these in the "Installed"
+ * list; they're rendered under "Connected accounts" instead.
+ *
+ * TaskRunner unwraps `instance` and passes it to the Agent SDK's
+ * `mcpServers` option directly — same path the always-on `jarvis` MCP
+ * uses.
+ */
+type SdkConfig = DisableMixin & {
+  type: 'sdk';
+  instance: McpSdkServerConfigWithInstance;
+};
+
+export type McpServerConfig = StdioConfig | SseConfig | HttpConfig | SdkConfig;
 
 /** Is this server currently disabled? Treats expired disabledUntil as
  * "not disabled" — caller is responsible for persisting the cleared
@@ -58,14 +75,32 @@ function isMcpServerConfig(value: unknown): value is McpServerConfig {
   return v.type === 'stdio' || v.type === 'sse' || v.type === 'http';
 }
 
+/**
+ * The minimum surface mcp-config needs to overlay managed integration
+ * entries on top of human-edited mcp.json. Implemented by IntegrationsStore.
+ * Typed as an interface here to avoid a circular dependency.
+ */
+export interface ManagedMcpSource extends EventEmitter {
+  allMcpEntries(): Record<string, McpServerConfig>;
+}
+
 export class McpConfigStore extends EventEmitter {
   private servers = new Map<string, McpServerConfig>();
   private watcher: FSWatcher | null = null;
+  private managed: ManagedMcpSource | null = null;
   readonly path: string;
 
   constructor(path = join(homedir(), '.jarvis', 'mcp.json')) {
     super();
     this.path = path;
+  }
+
+  /** Attach a managed source (the IntegrationsStore). Its entries
+   *  overlay mcp.json on every resolve(); changes to it re-emit our
+   *  own 'changed' so consumers (renderer, runner) refresh. */
+  setManagedSource(source: ManagedMcpSource): void {
+    this.managed = source;
+    source.on('changed', () => this.emit('changed', this.list()));
   }
 
   init(): void {
@@ -91,16 +126,41 @@ export class McpConfigStore extends EventEmitter {
 
   list(): McpServerSummary[] {
     const now = Date.now();
+    const managedIds = this.managed
+      ? new Set(Object.keys(this.managed.allMcpEntries()))
+      : new Set<string>();
     return [...this.servers.entries()]
       .map(([id, cfg]) => ({
         id,
-        type: cfg.type,
+        type: cfg.type as 'stdio' | 'sse' | 'http',
         command: cfg.type === 'stdio' ? cfg.command : undefined,
-        url: cfg.type !== 'stdio' ? cfg.url : undefined,
+        url:
+          cfg.type === 'sse' || cfg.type === 'http' ? cfg.url : undefined,
         disabled: isCurrentlyDisabled(cfg, now),
         disabledUntil: cfg.disabledUntil ?? null,
+        // When a connected integration publishes an MCP under the same
+        // name, the mcp.json entry never reaches TaskRunner — flag it
+        // so the renderer can offer a one-click cleanup.
+        shadowedByManaged: managedIds.has(id),
       }))
       .sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  /**
+   * Combine hand-edited mcp.json entries with any managed overlay
+   * (IntegrationsStore). Managed entries win on key conflict — if the
+   * user has both a manual `slack` entry and a connected Slack account,
+   * the managed one is what the runner sees. The Integrations UI shows
+   * a warning so the user knows the manual entry is shadowed.
+   */
+  private mergedEntries(): Map<string, McpServerConfig> {
+    const out = new Map<string, McpServerConfig>(this.servers);
+    if (this.managed) {
+      for (const [id, cfg] of Object.entries(this.managed.allMcpEntries())) {
+        out.set(id, cfg);
+      }
+    }
+    return out;
   }
 
   /**
@@ -212,6 +272,7 @@ export class McpConfigStore extends EventEmitter {
     const out: Record<string, McpServerConfig> = {};
     const now = Date.now();
     let clearedExpired = false;
+    const merged = this.mergedEntries();
     const tryAdd = (id: string, cfg: McpServerConfig) => {
       // Auto-expire disabledUntil that's in the past so the entry comes
       // back online without manual intervention.
@@ -223,16 +284,16 @@ export class McpConfigStore extends EventEmitter {
       if (isCurrentlyDisabled(cfg, now)) return; // skip — paused by user
       out[id] = cfg;
     };
-    // '*' opts the skill into every server in ~/.jarvis/mcp.json so the
-    // user can add new ones without editing every skill that wants them.
-    // Useful for omnibus skills like `send` where the channel list is
-    // expected to grow.
+    // '*' opts the skill into every server in ~/.jarvis/mcp.json + every
+    // managed integration so the user can add new ones without editing
+    // every skill that wants them. Useful for omnibus skills like
+    // `send` where the channel list is expected to grow.
     if (ids.includes('*')) {
-      for (const [id, cfg] of this.servers.entries()) tryAdd(id, cfg);
+      for (const [id, cfg] of merged.entries()) tryAdd(id, cfg);
     }
     for (const id of ids) {
       if (id === '*') continue;
-      const cfg = this.servers.get(id);
+      const cfg = merged.get(id);
       if (cfg) tryAdd(id, cfg);
     }
     if (clearedExpired) this.writeAll();

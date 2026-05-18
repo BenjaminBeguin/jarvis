@@ -594,6 +594,11 @@ export interface McpServerSummary {
   /** ms epoch when the disable auto-expires; null/undefined = disabled
    * indefinitely (only manual re-enable). */
   disabledUntil?: number | null;
+  /** True when an OAuth-managed integration publishes an MCP entry
+   *  under the same name, so the manual mcp.json copy is invisible to
+   *  TaskRunner. UI surfaces a migration banner + per-row badge so the
+   *  user can clean up without hand-editing the JSON. */
+  shadowedByManaged?: boolean;
 }
 
 export interface ProjectMemoryFile {
@@ -952,4 +957,62 @@ export interface WorkflowRun {
   status: WorkflowRunStatus;
   steps: WorkflowRunStep[];
   error?: string;
+}
+
+/** Built-in connector ids. Open to extension via custom string for any
+ *  future connectors that haven't been registered as part of the core
+ *  enum (test-echo lives here so the renderer can render it like any
+ *  other). */
+export type ConnectorId = 'test-echo' | 'slack' | 'google' | 'notion' | 'linear';
+
+/** What the renderer sees about a single connected account. Tokens
+ *  never cross IPC — they live in Keychain only. */
+export interface ConnectorAccount {
+  id: string;
+  connectorId: ConnectorId;
+  label: string;
+  addedAt: number;
+  /** ms epoch; null = non-expiring (Slack, Notion). */
+  expiresAt: number | null;
+  scopes: string[];
+  /** Connector-specific extras (e.g. Slack `sendAs`, Google `email`). */
+  meta: Record<string, unknown>;
+  /** True if the most recent refresh attempt failed and the user needs
+   *  to re-authorize. Surfaces a "Reconnect" affordance in the UI. */
+  needsReauth?: boolean;
+}
+
+/** What credentials a connector wants from the user. Drives the form
+ *  rendered inside the per-connector setup panel. */
+export interface ConnectorCredentialSpec {
+  needsCredentials: boolean;
+  needsClientSecret: 'required' | 'optional' | 'never';
+}
+
+/** Per-connector summary the renderer renders into the Integrations
+ *  page's "Connected accounts" section. Built by the orchestrator from
+ *  the registry + the account store. */
+export interface ConnectorSummary {
+  id: ConnectorId;
+  name: string;
+  description: string;
+  /** When false, the "Connect" button is hidden — the connector is in
+   *  the registry but not yet ready for production use. Test-echo uses
+   *  this to opt out of looking like a real provider. */
+  builtIn: boolean;
+  accounts: ConnectorAccount[];
+  defaultAccountId: string | null;
+  /** What credentials this connector expects. */
+  credentialSpec: ConnectorCredentialSpec;
+  /** True when credentials are present (Keychain or bundled fallback)
+   *  and the Connect button can fire OAuth. False means the setup
+   *  panel should surface a credentials form first. */
+  credentialsConfigured: boolean;
+}
+
+/** What `integrations:connect` returns. Renderer opens `authUrl` in the
+ *  external browser, then awaits the callback via `integrations:awaitCallback`. */
+export interface ConnectInit {
+  flowId: string;
+  authUrl: string;
 }

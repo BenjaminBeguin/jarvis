@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { ConnectorAccount, ConnectorSummary } from '../../../shared/types';
 import { toast } from '../Toaster';
+import { ConnectorIcon } from './ConnectorIcon';
 import { getConnectorSetup, type ConnectorSetup } from './connectorSetup';
 
 /**
@@ -197,9 +198,16 @@ function ConnectorRow({
     <div className="integrations__catalog-card connector-row">
       <header className="connector-row__head">
         <div>
-          <strong>{summary.name}</strong>
-          {!summary.builtIn && <span className="connector-row__dev">dev</span>}
-          <p className="connector-row__desc">{summary.description}</p>
+          <ConnectorIcon id={summary.id} />
+          <div className="connector-row__title-block">
+            <span>
+              <strong>{summary.name}</strong>
+              {!summary.builtIn && (
+                <span className="connector-row__dev">dev</span>
+              )}
+            </span>
+            <p className="connector-row__desc">{summary.description}</p>
+          </div>
         </div>
         <button
           onClick={onToggleSetup}
@@ -220,8 +228,7 @@ function ConnectorRow({
       {setupOpen && (
         <ConnectorSetupPanel
           setup={setup}
-          providerId={summary.id}
-          providerName={summary.name}
+          summary={summary}
           onCancel={onToggleSetup}
           onStart={() => void onStartConnect()}
           busy={busy}
@@ -328,67 +335,58 @@ function ConnectorRow({
 /**
  * Inline panel beneath a Connect button. Renders the per-connector
  * setup steps (URLs to open, copy-able commands), the requested
- * scopes, a developer-prereq warning when applicable, and the
- * Start / Cancel buttons.
+ * scopes, a credentials form when the connector still needs OAuth
+ * client_id / client_secret, and the Start / Cancel buttons.
  *
- * No form fields yet — every current connector does pure OAuth, so
- * there's no user-typed token to capture. The slot is reserved for
- * PAT-style connectors landing later.
+ * The Start button is disabled until the connector reports
+ * `credentialsConfigured: true`. Saving credentials writes them to
+ * Keychain (via setIntegrationCredentials); the renderer re-reads the
+ * summary on the integrations-changed broadcast and the gate opens.
  */
 function ConnectorSetupPanel({
   setup,
-  providerId,
-  providerName,
+  summary,
   busy,
   onCancel,
   onStart,
 }: {
   setup: ConnectorSetup | null;
-  providerId: string;
-  providerName: string;
+  summary: ConnectorSummary;
   busy: boolean;
   onCancel: () => void;
   onStart: () => void;
 }) {
-  // Fallback when a connector hasn't been mapped in connectorSetup.ts —
-  // still allow the user to start OAuth.
-  if (!setup) {
-    return (
-      <div className="connector-setup">
+  const providerId = summary.id;
+  const providerName = summary.name;
+  const needsCredentials = summary.credentialSpec.needsCredentials;
+  const credentialsConfigured = summary.credentialsConfigured;
+  const startDisabled =
+    busy || (needsCredentials && !credentialsConfigured);
+  const startTitle = startDisabled
+    ? needsCredentials && !credentialsConfigured
+      ? 'Save credentials first'
+      : 'Starting…'
+    : `Start OAuth for ${providerId}`;
+
+  return (
+    <div className="connector-setup">
+      {setup?.intro && (
+        <p className="connector-setup__intro">{setup.intro}</p>
+      )}
+      {!setup && (
         <p className="connector-setup__intro">
           {providerName} hasn't been documented here yet. Connecting opens
           the standard OAuth flow.
         </p>
-        <footer className="connector-setup__actions">
-          <button onClick={onCancel}>Cancel</button>
-          <button
-            className="connector-setup__start"
-            onClick={onStart}
-            disabled={busy}
-          >
-            {busy ? 'Starting…' : 'Start OAuth flow'}
-          </button>
-        </footer>
-      </div>
-    );
-  }
-  return (
-    <div className="connector-setup">
-      <p className="connector-setup__intro">{setup.intro}</p>
-
-      {setup.developerSetupRequired && (
-        <div className="connector-setup__dev-warn">
-          <strong>Developer step required.</strong>
-          <p>
-            This connector's OAuth client isn't registered yet. Paste
-            your <code>CLIENT_ID</code> + <code>CLIENT_SECRET</code> into{' '}
-            <code>{setup.developerSetupPath}</code>, restart Jarvis, then
-            click Start.
-          </p>
-        </div>
       )}
 
-      {setup.steps.length > 0 && (
+      {needsCredentials && (
+        <CredentialsBlock
+          summary={summary}
+        />
+      )}
+
+      {setup && setup.steps.length > 0 && (
         <ol className="connector-setup__steps">
           {setup.steps.map((step, i) => (
             <li key={i} className="connector-setup__step">
@@ -409,15 +407,13 @@ function ConnectorSetupPanel({
               {step.body && (
                 <p className="connector-setup__step-body">{step.body}</p>
               )}
-              {step.command && (
-                <CommandLine command={step.command} />
-              )}
+              {step.command && <CommandLine command={step.command} />}
             </li>
           ))}
         </ol>
       )}
 
-      {setup.scopes && setup.scopes.length > 0 && (
+      {setup && setup.scopes && setup.scopes.length > 0 && (
         <div className="connector-setup__scopes">
           <div className="connector-setup__scopes-title">
             Scopes requested
@@ -435,12 +431,148 @@ function ConnectorSetupPanel({
         <button
           className="connector-setup__start"
           onClick={onStart}
-          disabled={busy}
-          title={`Start OAuth for ${providerId}`}
+          disabled={startDisabled}
+          title={startTitle}
         >
           {busy ? 'Starting…' : 'Start OAuth flow'}
         </button>
       </footer>
+    </div>
+  );
+}
+
+/**
+ * The credentials form / saved-state block above the setup steps.
+ * When the connector hasn't been configured yet, renders the client_id
+ * (and optional client_secret) inputs + Save. After saving — or when
+ * fallback constants in the connector source are already populated —
+ * shows a "✓ Saved" pill with Replace / Clear.
+ */
+function CredentialsBlock({ summary }: { summary: ConnectorSummary }) {
+  const [editing, setEditing] = useState(false);
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [saving, setSaving] = useState(false);
+  const secretRule = summary.credentialSpec.needsClientSecret;
+  const wantsSecret = secretRule !== 'never';
+  const secretRequired = secretRule === 'required';
+
+  const handleSave = async (): Promise<void> => {
+    if (!clientId.trim()) {
+      toast({ kind: 'error', message: 'Client ID is required' });
+      return;
+    }
+    if (secretRequired && !clientSecret.trim()) {
+      toast({ kind: 'error', message: 'Client secret is required' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await window.jarvis.setIntegrationCredentials(
+        summary.id,
+        clientId.trim(),
+        wantsSecret && clientSecret.trim()
+          ? clientSecret.trim()
+          : undefined,
+      );
+      if (!r.ok) {
+        toast({ kind: 'error', message: r.message ?? 'Save failed' });
+        return;
+      }
+      toast({ message: `${summary.name} credentials saved` });
+      setEditing(false);
+      setClientId('');
+      setClientSecret('');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClear = async (): Promise<void> => {
+    if (!confirm(`Clear ${summary.name} OAuth credentials from Keychain?`)) {
+      return;
+    }
+    const r = await window.jarvis.clearIntegrationCredentials(summary.id);
+    if (!r.ok) {
+      toast({ kind: 'error', message: r.message ?? 'Clear failed' });
+    } else {
+      toast({ kind: 'info', message: `${summary.name} credentials cleared` });
+    }
+  };
+
+  if (summary.credentialsConfigured && !editing) {
+    return (
+      <div className="connector-creds">
+        <span className="connector-creds__ok">✓ OAuth credentials saved</span>
+        <div className="connector-creds__row-actions">
+          <button type="button" onClick={() => setEditing(true)}>
+            Replace
+          </button>
+          <button type="button" onClick={() => void handleClear()}>
+            Clear
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="connector-creds connector-creds--form">
+      <div className="connector-creds__title">
+        OAuth credentials
+        {summary.credentialsConfigured && (
+          <button
+            type="button"
+            className="connector-creds__cancel"
+            onClick={() => setEditing(false)}
+          >
+            Cancel
+          </button>
+        )}
+      </div>
+      <label className="connector-creds__field">
+        <span>Client ID</span>
+        <input
+          type="text"
+          value={clientId}
+          onChange={(e) => setClientId(e.target.value)}
+          placeholder={`Paste your ${summary.name} OAuth client_id`}
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </label>
+      {wantsSecret && (
+        <label className="connector-creds__field">
+          <span>
+            Client Secret
+            {!secretRequired && (
+              <em className="connector-creds__optional"> · optional</em>
+            )}
+          </span>
+          <input
+            type="password"
+            value={clientSecret}
+            onChange={(e) => setClientSecret(e.target.value)}
+            placeholder={
+              secretRequired
+                ? `Paste your ${summary.name} OAuth client_secret`
+                : 'Leave blank for PKCE / Desktop clients'
+            }
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </label>
+      )}
+      <div className="connector-creds__row-actions">
+        <button
+          type="button"
+          className="connector-creds__save"
+          onClick={() => void handleSave()}
+          disabled={saving}
+        >
+          {saving ? 'Saving…' : 'Save credentials'}
+        </button>
+      </div>
     </div>
   );
 }

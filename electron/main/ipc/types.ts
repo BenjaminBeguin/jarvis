@@ -4,8 +4,11 @@ import type { ActivityStore } from '../activity-store.js';
 import type { BriefingsStore } from '../briefings.js';
 import type { DashboardStore } from '../dashboard-store.js';
 import type { InboxStore } from '../inbox.js';
+import type { IntegrationsStore } from '../integrations-store.js';
 import type { McpConfigStore } from '../mcp-config.js';
 import type { ModuleRegistry } from '../module-registry.js';
+import type { ConnectorRegistry } from '../oauth/connector-registry.js';
+import type { OAuthOrchestrator } from '../oauth/orchestrator.js';
 import type { PreferencesStore } from '../preferences-store.js';
 import type { ProjectMemoryStore } from '../project-memory.js';
 import type { ProjectStore } from '../projects.js';
@@ -47,6 +50,9 @@ export interface IpcDeps {
   workflows: WorkflowStore;
   workflowRunner: WorkflowRunner;
   workflowScheduler: WorkflowScheduler;
+  integrations: IntegrationsStore;
+  connectorRegistry: ConnectorRegistry;
+  oauth: OAuthOrchestrator;
   jarvisRoot: string;
   auth: {
     /** Reconcile auth state from disk + keychain; returns the next status. */

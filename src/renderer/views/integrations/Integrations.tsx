@@ -227,6 +227,10 @@ export function Integrations() {
 
       <section>
         <h3 className="integrations__section-title">Installed</h3>
+        <ShadowedBanner
+          servers={localServers}
+          onRefresh={refreshFile}
+        />
         <InstalledList
           localServers={localServers}
           claudeMcps={claudeMcps}
@@ -1582,6 +1586,9 @@ interface Row {
   disabled: boolean;
   disabledUntil?: number | null;
   id: string;
+  /** True when an OAuth-managed integration publishes an MCP with the
+   *  same id — this row is in mcp.json but doesn't reach TaskRunner. */
+  shadowed?: boolean;
 }
 
 function InstalledList({
@@ -1604,6 +1611,7 @@ function InstalledList({
       disabled: !!s.disabled,
       disabledUntil: s.disabledUntil,
       id: s.id,
+      shadowed: !!s.shadowedByManaged,
     });
   }
   for (const m of claudeMcps) {
@@ -1630,7 +1638,10 @@ function InstalledList({
   return (
     <ul className="installed-list">
       {rows.map((r) => (
-        <li key={`${r.sourceLabel}-${r.id}`} className="installed-list__row">
+        <li
+          key={`${r.sourceLabel}-${r.id}`}
+          className={`installed-list__row${r.shadowed ? ' installed-row--shadowed' : ''}`}
+        >
           <div className="installed-list__main">
             <span className={`installed-list__dot installed-list__dot--${r.status}`} />
             <span className="installed-list__name">{r.name}</span>
@@ -1638,6 +1649,14 @@ function InstalledList({
             {r.disabled && (
               <span className="installed-list__badge">
                 {formatDisabledLabel(r.disabledUntil)}
+              </span>
+            )}
+            {r.shadowed && (
+              <span
+                className="installed-row__shadow-badge"
+                title="An OAuth-managed integration with the same name supersedes this entry; TaskRunner uses the managed one."
+              >
+                shadowed
               </span>
             )}
           </div>
@@ -1713,4 +1732,82 @@ function formatDisabledLabel(untilMs?: number | null): string {
   if (h < 24) return `disabled · ${h}h`;
   const d = Math.round(h / 24);
   return `disabled · ${d}d`;
+}
+
+/**
+ * Top-of-Installed banner that surfaces mcp.json entries shadowed by
+ * managed integrations (Connected accounts publishes an entry with the
+ * same name). The shadowed manual entries are invisible to TaskRunner
+ * but still cluttering mcp.json — banner offers a one-click bulk
+ * remove so cleanup isn't a JSON-editing chore.
+ */
+function ShadowedBanner({
+  servers,
+  onRefresh,
+}: {
+  servers: McpServerSummary[];
+  onRefresh: () => Promise<void> | void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const shadowed = servers.filter((s) => s.shadowedByManaged);
+  if (shadowed.length === 0) return null;
+
+  const cleanup = async (): Promise<void> => {
+    const ids = shadowed.map((s) => s.id);
+    const msg =
+      ids.length === 1
+        ? `Remove "${ids[0]}" from ~/.jarvis/mcp.json? It's already covered by an OAuth-managed integration.`
+        : `Remove ${ids.length} shadowed entries (${ids.join(', ')}) from ~/.jarvis/mcp.json? They're already covered by OAuth-managed integrations.`;
+    if (!confirm(msg)) return;
+    setBusy(true);
+    try {
+      for (const id of ids) {
+        const r = await window.jarvis.removeMcpServer(id);
+        if (!r.ok) {
+          toast({ kind: 'error', message: `Couldn't remove ${id}: ${r.message ?? ''}` });
+        }
+      }
+      toast({ message: `Removed ${ids.length} shadowed entr${ids.length === 1 ? 'y' : 'ies'}` });
+      await onRefresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mcp-shadow-banner">
+      <div className="mcp-shadow-banner__title">
+        {shadowed.length === 1
+          ? '1 manual entry is shadowed by a managed integration'
+          : `${shadowed.length} manual entries are shadowed by managed integrations`}
+      </div>
+      <div className="mcp-shadow-banner__body">
+        These mcp.json entries are no longer used — the OAuth-managed
+        version published from Connected accounts above wins on name
+        conflict. Clean them up so mcp.json reflects what's actually
+        active.
+        <div className="mcp-shadow-banner__entries">
+          {shadowed.map((s) => (
+            <span key={s.id} className="mcp-shadow-banner__entry">
+              {s.id}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="mcp-shadow-banner__actions">
+        <button
+          type="button"
+          className="mcp-shadow-banner__cleanup"
+          onClick={() => void cleanup()}
+          disabled={busy}
+        >
+          {busy
+            ? 'Removing…'
+            : shadowed.length === 1
+              ? 'Remove shadowed entry'
+              : `Remove ${shadowed.length} shadowed entries`}
+        </button>
+      </div>
+    </div>
+  );
 }

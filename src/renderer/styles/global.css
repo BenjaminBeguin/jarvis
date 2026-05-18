@@ -16010,3 +16010,214 @@ button:disabled:hover {
   opacity: 0.5;
   cursor: wait;
 }
+
+/* ── Per-connector credentials block ─────────────────────────────────── */
+
+.connector-creds {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  margin: 12px 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.connector-creds__title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.connector-creds__cancel {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.connector-creds__cancel:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.connector-creds__ok {
+  color: #6dd58c;
+  font-size: 13px;
+  flex: 1;
+}
+
+.connector-creds__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.connector-creds__field > span {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.connector-creds__optional {
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
+
+.connector-creds__field input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.connector-creds__field input:focus {
+  outline: none;
+  border-color: rgba(0, 212, 255, 0.5);
+}
+
+.connector-creds__row-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.connector-creds__save {
+  background: rgba(0, 212, 255, 0.1) !important;
+  border-color: rgba(0, 212, 255, 0.3) !important;
+}
+
+.connector-creds__save:hover:not(:disabled) {
+  background: rgba(0, 212, 255, 0.18) !important;
+}
+
+.connector-creds--form {
+  background: rgba(255, 200, 50, 0.04);
+  border-color: rgba(255, 200, 50, 0.2);
+}
+
+/* ── Connector brand badge ───────────────────────────────────────────── */
+
+.connector-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  border-radius: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.connector-icon--md {
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  margin-right: 10px;
+}
+
+.connector-icon--sm {
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+  margin-right: 6px;
+}
+
+/* Tighten the header layout now that the icon sits inline with the name. */
+.connector-row__head > div:first-child {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.connector-row__head .connector-row__title-block {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── mcp.json migration banner ───────────────────────────────────────── */
+
+.mcp-shadow-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  margin: 12px 0;
+  background: rgba(255, 200, 50, 0.06);
+  border: 1px solid rgba(255, 200, 50, 0.3);
+  border-radius: 6px;
+}
+
+.mcp-shadow-banner__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffce5c;
+}
+
+.mcp-shadow-banner__body {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.5;
+}
+
+.mcp-shadow-banner__entries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.mcp-shadow-banner__entry {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.mcp-shadow-banner__actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.mcp-shadow-banner__cleanup {
+  background: rgba(255, 200, 50, 0.15) !important;
+  border-color: rgba(255, 200, 50, 0.4) !important;
+  color: #ffce5c !important;
+}
+
+.mcp-shadow-banner__cleanup:hover:not(:disabled) {
+  background: rgba(255, 200, 50, 0.25) !important;
+}
+
+.installed-row--shadowed {
+  opacity: 0.55;
+}
+
+.installed-row__shadow-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  background: rgba(255, 200, 50, 0.15);
+  border: 1px solid rgba(255, 200, 50, 0.4);
+  color: #ffce5c;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}

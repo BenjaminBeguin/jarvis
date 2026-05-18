@@ -1,0 +1,259 @@
+import { ipcMain, shell } from 'electron';
+
+import { IpcChannels } from '@shared/ipc';
+import type {
+  ConnectorAccount,
+  ConnectorId,
+  ConnectorSummary,
+} from '@shared/types';
+
+import type { IntegrationsStore } from '../integrations-store.js';
+import type { ConnectorRegistry } from '../oauth/connector-registry.js';
+import type { OAuthOrchestrator } from '../oauth/orchestrator.js';
+import {
+  clearConnectorCredentials,
+  setConnectorCredentials,
+} from '../secrets.js';
+
+export interface IntegrationsIpcDeps {
+  integrations: IntegrationsStore;
+  registry: ConnectorRegistry;
+  orchestrator: OAuthOrchestrator;
+}
+
+export function registerIntegrationsIpc(deps: IntegrationsIpcDeps): void {
+  const { integrations, registry, orchestrator } = deps;
+
+  ipcMain.handle(
+    IpcChannels.listIntegrations,
+    async (): Promise<ConnectorSummary[]> => {
+      const accounts = integrations.list();
+      return Promise.all(
+        registry.list().map(async (connector) => ({
+          id: connector.id,
+          name: connector.name,
+          description: connector.description,
+          builtIn: connector.builtIn,
+          accounts: accounts.filter((a) => a.connectorId === connector.id),
+          defaultAccountId: integrations.defaultFor(connector.id),
+          credentialSpec: {
+            needsCredentials: connector.credentialSpec.needsCredentials,
+            needsClientSecret: connector.credentialSpec.needsClientSecret,
+          },
+          credentialsConfigured: connector.credentialSpec.needsCredentials
+            ? await connector.hasUsableCredentials()
+            : true,
+        })),
+      );
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.connectIntegration,
+    async (
+      _e,
+      payload: { connectorId: ConnectorId },
+    ): Promise<{
+      ok: boolean;
+      flowId?: string;
+      authUrl?: string;
+      message?: string;
+    }> => {
+      try {
+        if (!payload || typeof payload.connectorId !== 'string') {
+          return { ok: false, message: 'Invalid connectorId' };
+        }
+        const { authUrl, flowId } = await orchestrator.start(
+          payload.connectorId,
+        );
+        // Open the consent URL in the user's default browser. The
+        // loopback callback fires once they grant.
+        void shell.openExternal(authUrl);
+        return { ok: true, authUrl, flowId };
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.awaitIntegrationCallback,
+    async (
+      _e,
+      payload: { flowId: string },
+    ): Promise<{ ok: boolean; account?: ConnectorAccount; message?: string }> => {
+      try {
+        if (!payload || typeof payload.flowId !== 'string') {
+          return { ok: false, message: 'Invalid flowId' };
+        }
+        const account = await orchestrator.awaitFlow(payload.flowId);
+        return { ok: true, account };
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.disconnectIntegration,
+    async (
+      _e,
+      payload: { accountId: string },
+    ): Promise<{ ok: boolean; message?: string }> => {
+      try {
+        if (!payload || typeof payload.accountId !== 'string') {
+          return { ok: false, message: 'Invalid accountId' };
+        }
+        const account = integrations.get(payload.accountId);
+        if (!account) return { ok: false, message: 'Account not found' };
+        const connector = registry.get(account.connectorId);
+        if (connector) {
+          await orchestrator.disconnect(connector, account);
+        }
+        integrations.remove(account.id);
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.setIntegrationAccountMeta,
+    (
+      _e,
+      payload: { accountId: string; patch: Partial<ConnectorAccount> },
+    ): { ok: boolean; message?: string } => {
+      if (
+        !payload ||
+        typeof payload.accountId !== 'string' ||
+        !payload.patch ||
+        typeof payload.patch !== 'object'
+      ) {
+        return { ok: false, message: 'Invalid payload' };
+      }
+      // The renderer is only allowed to update `meta` and `label`
+      // through this channel — never tokens, scopes, expiresAt, or id.
+      const safePatch: Partial<ConnectorAccount> = {};
+      if ('label' in payload.patch && typeof payload.patch.label === 'string') {
+        safePatch.label = payload.patch.label;
+      }
+      if ('meta' in payload.patch && typeof payload.patch.meta === 'object') {
+        // Merge with the existing meta so a single-key partial update
+        // (e.g. `{ sendAs: 'user' }`) doesn't blow away the other keys
+        // the connector populated at connect time (teamId, email, …).
+        const existing = integrations.get(payload.accountId);
+        if (!existing) return { ok: false, message: 'Account not found' };
+        safePatch.meta = {
+          ...existing.meta,
+          ...(payload.patch.meta as Record<string, unknown>),
+        };
+      }
+      const ok = integrations.update(payload.accountId, safePatch);
+      return ok ? { ok: true } : { ok: false, message: 'Account not found' };
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.setIntegrationDefault,
+    (
+      _e,
+      payload: { connectorId: ConnectorId; accountId: string | null },
+    ): { ok: boolean; message?: string } => {
+      if (
+        !payload ||
+        typeof payload.connectorId !== 'string' ||
+        (payload.accountId !== null && typeof payload.accountId !== 'string')
+      ) {
+        return { ok: false, message: 'Invalid payload' };
+      }
+      const ok = integrations.setDefault(
+        payload.connectorId,
+        payload.accountId,
+      );
+      return ok
+        ? { ok: true }
+        : { ok: false, message: 'No change (already that default)' };
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.setIntegrationCredentials,
+    async (
+      _e,
+      payload: {
+        connectorId: ConnectorId;
+        clientId: string;
+        clientSecret?: string;
+      },
+    ): Promise<{ ok: boolean; message?: string }> => {
+      try {
+        if (
+          !payload ||
+          typeof payload.connectorId !== 'string' ||
+          typeof payload.clientId !== 'string' ||
+          payload.clientId.trim().length === 0
+        ) {
+          return { ok: false, message: 'clientId is required' };
+        }
+        const connector = registry.get(payload.connectorId);
+        if (!connector) return { ok: false, message: 'Unknown connector' };
+        if (
+          connector.credentialSpec.needsClientSecret === 'required' &&
+          !payload.clientSecret?.trim()
+        ) {
+          return {
+            ok: false,
+            message: 'clientSecret is required for this connector',
+          };
+        }
+        await setConnectorCredentials(payload.connectorId, {
+          clientId: payload.clientId.trim(),
+          clientSecret:
+            payload.clientSecret && payload.clientSecret.trim().length > 0
+              ? payload.clientSecret.trim()
+              : undefined,
+        });
+        // Trigger a renderer refresh so credentialsConfigured flips.
+        integrations.emit('changed');
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.clearIntegrationCredentials,
+    async (
+      _e,
+      payload: { connectorId: ConnectorId },
+    ): Promise<{ ok: boolean; message?: string }> => {
+      try {
+        if (!payload || typeof payload.connectorId !== 'string') {
+          return { ok: false, message: 'Invalid connectorId' };
+        }
+        await clearConnectorCredentials(payload.connectorId);
+        integrations.emit('changed');
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
+}

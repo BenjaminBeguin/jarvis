@@ -4,6 +4,7 @@ import type { LaunchTaskRequest } from '@shared/types';
 
 import { parseIntent } from './intent-router.js';
 import type { InboxStore } from './inbox.js';
+import type { OAuthOrchestrator } from './oauth/orchestrator.js';
 import type { ReminderStore } from './reminders.js';
 import { asTaskOrigin, type TaskRunner } from './task-runner.js';
 
@@ -32,6 +33,7 @@ export interface HttpDeps {
   runner: TaskRunner;
   reminders: ReminderStore;
   inbox: InboxStore;
+  oauth: OAuthOrchestrator;
   token: string;
   version: string;
 }
@@ -100,6 +102,22 @@ async function handle(
   // with auth. Everything else requires a valid bearer token.
   if (req.method === 'GET' && path === '/v1/status') {
     sendJson(res, 200, { ok: true, name: 'jarvis', version: deps.version });
+    return;
+  }
+
+  // OAuth callbacks come from the user's browser after consent, with no
+  // way to attach our bearer token. The flow is protected by the OAuth
+  // `state` nonce matched inside the orchestrator instead.
+  const oauthMatch = path.match(/^\/oauth\/callback\/([^/]+)$/);
+  if (req.method === 'GET' && oauthMatch) {
+    const provider = oauthMatch[1]!;
+    try {
+      await deps.oauth.handleCallback(provider, url.searchParams);
+      sendHtml(res, 200, successPage(provider));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      sendHtml(res, 400, errorPage(provider, msg));
+    }
     return;
   }
 
@@ -269,4 +287,46 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.end(JSON.stringify(body));
+}
+
+function sendHtml(res: ServerResponse, status: number, body: string): void {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.end(body);
+}
+
+function escape(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+const OAUTH_PAGE_STYLE = `
+  body { font: 14px -apple-system, system-ui, sans-serif; background: #0e1116; color: #e8eaed; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .card { max-width: 360px; padding: 32px; text-align: center; }
+  h1 { font-size: 18px; margin: 0 0 12px; font-weight: 500; }
+  p { margin: 0 0 8px; color: #a8b0bb; }
+  .ok { color: #6dd58c; }
+  .err { color: #ff7b7b; }
+`;
+
+function successPage(provider: string): string {
+  return `<!doctype html><html><head><title>Connected</title><style>${OAUTH_PAGE_STYLE}</style></head>
+<body><div class="card">
+  <h1 class="ok">${escape(provider)} connected</h1>
+  <p>You can close this tab and return to Jarvis.</p>
+</div>
+<script>setTimeout(() => window.close(), 800);</script>
+</body></html>`;
+}
+
+function errorPage(provider: string, message: string): string {
+  return `<!doctype html><html><head><title>Couldn't connect</title><style>${OAUTH_PAGE_STYLE}</style></head>
+<body><div class="card">
+  <h1 class="err">Couldn't connect ${escape(provider)}</h1>
+  <p>${escape(message)}</p>
+  <p>You can close this tab and try again from Jarvis.</p>
+</div></body></html>`;
 }

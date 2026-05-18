@@ -6,6 +6,9 @@ import type {
   AppStatus,
   AuthMode,
   ClaudeMcpEntry,
+  ConnectorAccount,
+  ConnectorId,
+  ConnectorSummary,
   InboxPrefs,
   DispatchIntentResult,
   JarvisFileEntry,
@@ -524,6 +527,56 @@ const api = {
    *  by the FlowStream page for terminal-stage orbs. */
   onNotifierEmitted: (listener: Listener<NotifierEmitPayload>): Unsubscribe =>
     subscribe(IpcChannels.notifierEmitted, listener),
+
+  // ─── OAuth Integrations ─────────────────────────────────────────
+  listIntegrations: (): Promise<ConnectorSummary[]> =>
+    ipcRenderer.invoke(IpcChannels.listIntegrations),
+  connectIntegration: (
+    connectorId: ConnectorId,
+  ): Promise<{ ok: boolean; flowId?: string; authUrl?: string; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.connectIntegration, { connectorId }),
+  awaitIntegrationCallback: (
+    flowId: string,
+  ): Promise<{ ok: boolean; account?: ConnectorAccount; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.awaitIntegrationCallback, { flowId }),
+  disconnectIntegration: (
+    accountId: string,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.disconnectIntegration, { accountId }),
+  setIntegrationAccountMeta: (
+    accountId: string,
+    patch: Partial<ConnectorAccount>,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.setIntegrationAccountMeta, {
+      accountId,
+      patch,
+    }),
+  setIntegrationDefault: (
+    connectorId: ConnectorId,
+    accountId: string | null,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.setIntegrationDefault, {
+      connectorId,
+      accountId,
+    }),
+  setIntegrationCredentials: (
+    connectorId: ConnectorId,
+    clientId: string,
+    clientSecret?: string,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.setIntegrationCredentials, {
+      connectorId,
+      clientId,
+      ...(clientSecret ? { clientSecret } : {}),
+    }),
+  clearIntegrationCredentials: (
+    connectorId: ConnectorId,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.clearIntegrationCredentials, {
+      connectorId,
+    }),
+  onIntegrationsChanged: (listener: Listener<void>): Unsubscribe =>
+    subscribe(IpcChannels.integrationsChanged, listener),
 
   // ─── Workflows ──────────────────────────────────────────────────
   listWorkflows: (): Promise<{ workflows: WorkflowDef[]; errors: Array<{ filename: string; message: string }> }> =>

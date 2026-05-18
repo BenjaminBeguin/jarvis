@@ -3,6 +3,7 @@ import { registerAuthIpc } from './auth.js';
 import { registerBriefingsIpc } from './briefings.js';
 import { registerDashboardIpc } from './dashboard.js';
 import { registerInboxIpc } from './inbox.js';
+import { registerIntegrationsIpc } from './integrations.js';
 import { registerIntentIpc } from './intent.js';
 import { registerMcpIpc } from './mcp.js';
 import { registerMediaIpc } from './media.js';
@@ -31,6 +32,11 @@ export function registerAllIpc(deps: IpcDeps): void {
   registerBriefingsIpc(deps);
   registerDashboardIpc(deps);
   registerInboxIpc(deps);
+  registerIntegrationsIpc({
+    integrations: deps.integrations,
+    registry: deps.connectorRegistry,
+    orchestrator: deps.oauth,
+  });
   registerIntentIpc(deps);
   registerMcpIpc(deps);
   registerMediaIpc(deps);

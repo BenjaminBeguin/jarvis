@@ -130,13 +130,17 @@ If a new feature breaks either primitive, push back before implementing.
   meetings/<project>/<ts>-…       # meeting-recorder when scoped
   projects/<name>/memory/*.md     # per-project agent memory (growing scratchpad)
   routines.json                   # array of routine defs, schema in routines.ts
+  integrations.json               # OAuth account metadata (no tokens — those live in Keychain)
+  intent-cache.json               # sha1→awaiting-classification cache (intent-classifier.ts)
   config.json                     # authMode, disabledModules, moduleSettings.<id>, afkMode
   jarvis.sqlite                   # tasks + task_events
 ```
 
 **Secrets** live in macOS Keychain (service `app.jarvis`), not config.json.
-Today's accounts: `anthropic-api-key`, `claude-code-subscription-token`,
-`jarvis-http-api-token`, `telegram-bot-token`. See `electron/main/secrets.ts`.
+Fixed accounts: `anthropic-api-key`, `claude-code-subscription-token`,
+`jarvis-http-api-token`, `telegram-bot-token`. OAuth connectors add one
+account per connected provider account: `connector-<connectorId>-<accountId>`
+(JSON payload — connector decides the shape). See `electron/main/secrets.ts`.
 
 Migrations live in `electron/main/db.ts` as an ordered array. **Append, never edit.**
 
@@ -179,6 +183,7 @@ Day-to-day:
 - **Claude.ai connectors are not Jarvis MCPs.** `claude mcp list` shows entries like `claude.ai Slack: ✓ Connected` — these work in Claude.ai chat and interactive Claude Code but DO NOT propagate to Agent SDK subprocess sessions (which is what `query()` runs as). For Jarvis to use a channel, it must be a local stdio MCP — either user-scoped via `claude mcp add` or in `~/.jarvis/mcp.json`. SendPage surfaces this with a `claude-ai-only` status badge so users aren't surprised.
 - **New time-fired trigger**: there are three systems. `RoutineStore` runs recurring crons of skill tasks; `ReminderStore` is for one-shot fires (reminders + scheduled actions); `WorkflowScheduler` runs cron-triggered workflows. Pick the right one — don't introduce a parallel timer.
 - **New module capability**: extend `ModuleContext` in `electron/main/modules/types.ts`, then implement in `setContext()` in `index.ts`. Modules never import from `electron/main/` directly except through that context.
+- **New OAuth connector** (Slack/Google/Notion/Linear-style click-to-connect): add `electron/main/oauth/connectors/<name>.ts` implementing the `Connector` interface from `electron/main/oauth/types.ts`, then register it in `electron/main/index.ts` next to `googleConnector`. The orchestrator, loopback callback (`/oauth/callback/<name>` on port 4747), Keychain (`connector-<name>-<accountId>`), token refresher, and Integrations UI all pick it up automatically. Dev-side OAuth app registration steps (Google Cloud Console, Slack app, Notion integration, Linear app) and distribution caveats (Google verification, Slack App Directory) live in [docs/integrations.md](docs/integrations.md) — keep that doc current when you add a provider.
 - **New workflow node type**: drop a `fromPromise` actor under `electron/main/workflow-nodes/<type>.ts`, register it in `workflow-nodes/index.ts`, add the type literal to `WorkflowNodeType` in `src/shared/types.ts`, and (optionally) extend the Step inspector's `NodeDetail.tsx` to render the params nicely. The compiled XState machine forwards `AbortSignal` into your actor automatically. See [docs/workflows.md](docs/workflows.md).
 - **Every new action gets palette + MCP coverage.** If a feature is worth running, it should be reachable from the palette (a `/<prefix>` intent on a module) AND from the Jarvis MCP server (`mcp__jarvis__<tool>`). Workflows are the canonical example — `/wf <id>`, `mcp__jarvis__run_workflow({ id })`, and the UI "Run now" button all land at the same `workflowRunner.run()`.
 

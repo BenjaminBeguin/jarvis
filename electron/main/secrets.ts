@@ -77,3 +77,101 @@ export async function setTelegramBotToken(value: string): Promise<void> {
 export async function clearTelegramBotToken(): Promise<void> {
   await keytar.deletePassword(SERVICE, ACCOUNT_TELEGRAM_BOT_TOKEN);
 }
+
+/**
+ * OAuth integrations — one Keychain entry per connected account. The
+ * payload is JSON encoded: connectors define their own shape (Slack
+ * stores bot + user tokens, Google stores access + refresh + expiresAt,
+ * etc.). Tokens never cross IPC; the renderer only ever sees account
+ * metadata via integrations.json.
+ *
+ * Account name format: `connector-<connectorId>-<accountId>`.
+ */
+function connectorAccount(connectorId: string, accountId: string): string {
+  return `connector-${connectorId}-${accountId}`;
+}
+
+export async function getConnectorToken(
+  connectorId: string,
+  accountId: string,
+): Promise<string | null> {
+  return keytar.getPassword(SERVICE, connectorAccount(connectorId, accountId));
+}
+
+export async function setConnectorToken(
+  connectorId: string,
+  accountId: string,
+  payload: string,
+): Promise<void> {
+  await keytar.setPassword(
+    SERVICE,
+    connectorAccount(connectorId, accountId),
+    payload,
+  );
+}
+
+export async function clearConnectorToken(
+  connectorId: string,
+  accountId: string,
+): Promise<void> {
+  await keytar.deletePassword(
+    SERVICE,
+    connectorAccount(connectorId, accountId),
+  );
+}
+
+/**
+ * Per-connector OAuth app credentials (client_id + optional secret).
+ * Lets users paste their own provider credentials at runtime instead
+ * of editing the bundled constants in the connector source. Connectors
+ * still ship with constant fallbacks for the dev path, but when a
+ * Keychain payload exists it takes precedence.
+ *
+ * Account name: `connector-creds-<connectorId>`. Payload JSON:
+ *   { clientId: string, clientSecret?: string }
+ */
+export interface ConnectorCredentials {
+  clientId: string;
+  clientSecret?: string;
+}
+
+function connectorCredsAccount(connectorId: string): string {
+  return `connector-creds-${connectorId}`;
+}
+
+export async function getConnectorCredentials(
+  connectorId: string,
+): Promise<ConnectorCredentials | null> {
+  const raw = await keytar.getPassword(
+    SERVICE,
+    connectorCredsAccount(connectorId),
+  );
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as ConnectorCredentials;
+    if (!parsed.clientId || typeof parsed.clientId !== 'string') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export async function setConnectorCredentials(
+  connectorId: string,
+  creds: ConnectorCredentials,
+): Promise<void> {
+  await keytar.setPassword(
+    SERVICE,
+    connectorCredsAccount(connectorId),
+    JSON.stringify({
+      clientId: creds.clientId,
+      ...(creds.clientSecret ? { clientSecret: creds.clientSecret } : {}),
+    }),
+  );
+}
+
+export async function clearConnectorCredentials(
+  connectorId: string,
+): Promise<void> {
+  await keytar.deletePassword(SERVICE, connectorCredsAccount(connectorId));
+}

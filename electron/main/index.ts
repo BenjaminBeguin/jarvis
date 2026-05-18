@@ -30,9 +30,18 @@ import {
 } from './db.js';
 import { startHttpServer, type HttpServerHandle } from './http-server.js';
 import { ActivityStore } from './activity-store.js';
+import { IntegrationsStore } from './integrations-store.js';
 import { IntentClassifier } from './intent-classifier.js';
 import { createJarvisMcp } from './jarvis-mcp.js';
 import { InboxStore } from './inbox.js';
+import { ConnectorRegistry } from './oauth/connector-registry.js';
+import { OAuthOrchestrator } from './oauth/orchestrator.js';
+import { TokenRefresher } from './oauth/refresher.js';
+import { googleConnector } from './oauth/connectors/google.js';
+import { linearConnector } from './oauth/connectors/linear.js';
+import { notionConnector } from './oauth/connectors/notion.js';
+import { slackConnector } from './oauth/connectors/slack.js';
+import { testEchoConnector } from './oauth/connectors/test-echo.js';
 import { InboxProximityWatcher } from './inbox-proximity.js';
 import { MeetingActivityWatcher } from './meeting-activity-watcher.js';
 import { BUILTIN_BRIEFING_KINDS } from './seeds/briefing-kinds.js';
@@ -132,6 +141,15 @@ const intentClassifier = new IntentClassifier(
   join(homedir(), '.jarvis', 'intent-cache.json'),
   { mode: 'subscription' },
 );
+const connectorRegistry = new ConnectorRegistry();
+const integrationsStore = new IntegrationsStore(
+  join(homedir(), '.jarvis', 'integrations.json'),
+  connectorRegistry,
+);
+const oauthOrchestrator = new OAuthOrchestrator(connectorRegistry, {
+  upsertAccount: (account) => integrationsStore.upsert(account),
+});
+const tokenRefresher = new TokenRefresher(connectorRegistry, integrationsStore);
 const inbox = new InboxStore();
 const activity = new ActivityStore();
 const briefings = new BriefingsStore(BUILTIN_BRIEFING_KINDS);
@@ -679,7 +697,26 @@ app.whenReady().then(async () => {
   await refreshAuth();
   seedDefaultsIfEmpty();
   skills.init();
+  // Integrations store + connector registry come up before mcp so the
+  // managed-source overlay is ready by the first resolve() call.
+  // Phase 2 = Google; phase 3 = Slack; phase 4 = Notion; phase 5 = Linear.
+  connectorRegistry.register(testEchoConnector);
+  connectorRegistry.register(googleConnector);
+  connectorRegistry.register(slackConnector);
+  connectorRegistry.register(notionConnector);
+  connectorRegistry.register(linearConnector);
+  // Slack reads sendAs from the live account record on every tool
+  // call — wire the reader so the user's toggle in Settings takes
+  // effect without rebuilding the MCP instance.
+  slackConnector.setAccountReader((accountId) =>
+    integrationsStore.get(accountId),
+  );
+  integrationsStore.init();
+  mcp.setManagedSource(integrationsStore);
   mcp.init();
+  // Start the refresher AFTER the integrations store init so the
+  // first tick sees the actually-restored accounts.
+  tokenRefresher.start();
   projects.init();
   preferences.init();
   dashboard.init();
@@ -1025,6 +1062,13 @@ app.whenReady().then(async () => {
 
   skills.on('changed', (list) => broadcast(IpcChannels.listSkills, list));
   mcp.on('changed', (list) => broadcast(IpcChannels.listMcpServers, list));
+  // Re-publish the integrations summary every time accounts change so
+  // the renderer's Integrations panel reflects connect/disconnect/flip
+  // events without polling. Payload is intentionally empty — the
+  // renderer fetches via `listIntegrations` to get the full summary.
+  integrationsStore.on('changed', () =>
+    broadcast(IpcChannels.integrationsChanged, undefined),
+  );
   routines.on('changed', (list) => broadcast(IpcChannels.routinesChanged, list));
   reminders.on('changed', (list) => {
     broadcast(IpcChannels.remindersChanged, list);
@@ -1128,6 +1172,7 @@ app.whenReady().then(async () => {
       runner,
       reminders,
       inbox,
+      oauth: oauthOrchestrator,
       token,
       version: app.getVersion(),
     });
@@ -1156,6 +1201,7 @@ app.whenReady().then(async () => {
         runner,
         reminders,
         inbox,
+        oauth: oauthOrchestrator,
         token: fresh,
         version: app.getVersion(),
       });
@@ -1187,6 +1233,9 @@ app.whenReady().then(async () => {
     workflows,
     workflowRunner,
     workflowScheduler,
+    integrations: integrationsStore,
+    connectorRegistry,
+    oauth: oauthOrchestrator,
     jarvisRoot,
     auth: {
       refresh: refreshAuth,
@@ -1232,6 +1281,7 @@ app.on('before-quit', () => {
   preferences.close();
   inbox.stopAutoRefresh();
   inboxProximity.stop();
+  tokenRefresher.stop();
   meetingActivity.stop();
   briefings.close();
   void httpServer?.close();

@@ -684,7 +684,12 @@ export class TaskRunner extends EventEmitter {
       if (this.mcp) {
         const wanted = skill?.mcpServers.length ? skill.mcpServers : ['*'];
         const resolved = this.mcp.resolve(wanted);
-        for (const [k, v] of Object.entries(resolved)) mcpServers[k] = v;
+        for (const [k, v] of Object.entries(resolved)) {
+          // SDK-backed entries (managed Gmail / Calendar / etc.) ship
+          // the actual in-process server inside `.instance`. The Agent
+          // SDK eats that directly, same as our always-on `jarvis` MCP.
+          mcpServers[k] = v.type === 'sdk' ? v.instance : v;
+        }
       }
       if (this.jarvisMcp) {
         mcpServers['jarvis'] = this.jarvisMcp;

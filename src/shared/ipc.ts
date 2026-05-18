@@ -186,6 +186,17 @@ export const IpcChannels = {
    *  event (no onClick callback). */
   notifierEmitted: 'notifier:emitted',
 
+  // ─── OAuth Integrations ──────────────────────────────────────────
+  listIntegrations: 'integrations:list',
+  connectIntegration: 'integrations:connect',
+  awaitIntegrationCallback: 'integrations:awaitCallback',
+  disconnectIntegration: 'integrations:disconnect',
+  setIntegrationAccountMeta: 'integrations:setAccountMeta',
+  setIntegrationDefault: 'integrations:setDefault',
+  setIntegrationCredentials: 'integrations:setCredentials',
+  clearIntegrationCredentials: 'integrations:clearCredentials',
+  integrationsChanged: 'integrations:changed',
+
   // ─── Workflows ───────────────────────────────────────────────────
   listWorkflows: 'workflows:list',
   saveWorkflow: 'workflows:save',
