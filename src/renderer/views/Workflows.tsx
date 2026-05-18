@@ -242,78 +242,115 @@ export function Workflows() {
   return (
     <section className="wf-page">
       <header className="wf-toolbar">
-        <WorkflowSelector
-          workflows={workflows}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-        />
-        <button
-          type="button"
-          onClick={() => void createWorkflow()}
-          title="Create a new empty workflow"
-        >
-          + New
-        </button>
+        <div className="wf-toolbar__group">
+          <WorkflowSelector
+            workflows={workflows}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
+          <button
+            type="button"
+            className="wf-btn"
+            onClick={() => void createWorkflow()}
+            title="Create a new empty workflow"
+          >
+            <span className="wf-btn__glyph">+</span> New
+          </button>
+        </div>
         {selected && (
-          <div className="wf-toolbar__actions">
-            <span className="wf-toolbar__trigger">
-              {triggerLabel(selected.trigger)}
-            </span>
-            <div className="wf-palette" ref={paletteRef}>
+          <>
+            <div className="wf-toolbar__divider" aria-hidden />
+            <div className="wf-toolbar__group">
+              <span
+                className={`wf-toolbar__trigger wf-toolbar__trigger--${selected.trigger.kind}`}
+                title={
+                  selected.enabled
+                    ? `Trigger: ${triggerLabel(selected.trigger)}`
+                    : 'Workflow is disabled'
+                }
+              >
+                <span
+                  className={`wf-toolbar__trigger-dot${selected.enabled ? ' wf-toolbar__trigger-dot--on' : ''}`}
+                  aria-hidden
+                />
+                {triggerLabel(selected.trigger)}
+              </span>
+              <div className="wf-palette" ref={paletteRef}>
+                <button
+                  type="button"
+                  className="wf-btn"
+                  onClick={() => setPaletteOpen((v) => !v)}
+                  aria-expanded={paletteOpen}
+                  title="Append a new step"
+                >
+                  <span className="wf-btn__glyph">+</span> Add node
+                  <span className="wf-btn__caret">{paletteOpen ? '▾' : '▸'}</span>
+                </button>
+                {paletteOpen && (
+                  <div className="wf-palette__menu" role="menu">
+                    {NODE_TEMPLATES.map((tpl) => (
+                      <button
+                        key={tpl.type}
+                        type="button"
+                        className="wf-palette__item"
+                        onClick={() => void addNode(tpl.template())}
+                      >
+                        <span className="wf-palette__item-head">
+                          <strong>{tpl.label}</strong>
+                          <span className="wf-palette__item-group">
+                            {tpl.group}
+                          </span>
+                        </span>
+                        <span className="wf-palette__item-desc">
+                          {tpl.description}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
-                onClick={() => setPaletteOpen((v) => !v)}
-                aria-expanded={paletteOpen}
-                title="Append a new step"
+                className="wf-btn wf-btn--primary"
+                onClick={() => void runNow()}
+                title="Trigger this workflow immediately"
               >
-                + Add node {paletteOpen ? '▾' : '▸'}
+                ▶ Run now
               </button>
-              {paletteOpen && (
-                <div className="wf-palette__menu" role="menu">
-                  {NODE_TEMPLATES.map((tpl) => (
-                    <button
-                      key={tpl.type}
-                      type="button"
-                      className="wf-palette__item"
-                      onClick={() => void addNode(tpl.template())}
-                    >
-                      <span className="wf-palette__item-head">
-                        <strong>{tpl.label}</strong>
-                        <span className="wf-palette__item-group">
-                          {tpl.group}
-                        </span>
-                      </span>
-                      <span className="wf-palette__item-desc">
-                        {tpl.description}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <button
+                type="button"
+                className="wf-btn"
+                onClick={() => void toggleEnabled()}
+                title={
+                  selected.enabled
+                    ? 'Pause the trigger; you can still Run now'
+                    : 'Resume the trigger'
+                }
+              >
+                {selected.enabled ? 'Disable' : 'Enable'}
+              </button>
+              <button
+                type="button"
+                className="wf-btn wf-btn--icon wf-btn--danger"
+                onClick={() => void remove()}
+                title="Delete this workflow (removes the JSON file)"
+                aria-label="Delete workflow"
+              >
+                ×
+              </button>
             </div>
-            <button onClick={() => void toggleEnabled()}>
-              {selected.enabled ? 'Disable' : 'Enable'}
-            </button>
-            <button onClick={() => void runNow()} className="wf-toolbar__run">
-              Run now
-            </button>
-            <button
-              onClick={() => void remove()}
-              className="wf-toolbar__delete"
-            >
-              Delete
-            </button>
-          </div>
+          </>
         )}
         <div className="wf-toolbar__spacer" />
         <button
           type="button"
-          className="wf-toolbar__dock-toggle"
+          className="wf-btn wf-btn--ghost"
           onClick={() => setDockOpen((v) => !v)}
           aria-pressed={dockOpen}
-          title={dockOpen ? 'Hide details' : 'Show details'}
+          title={dockOpen ? 'Hide the dock' : 'Show the dock'}
         >
-          {dockOpen ? 'Hide details ▾' : 'Show details ▴'}
+          {dockOpen ? 'Hide details' : 'Show details'}
+          <span className="wf-btn__caret">{dockOpen ? '▾' : '▴'}</span>
         </button>
       </header>
 
