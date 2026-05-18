@@ -186,6 +186,45 @@ export function Workflows() {
   };
 
   /**
+   * Fork the selected workflow into a user-owned copy. Useful when
+   * the user wants to customize a built-in (Slack / Linear / etc.)
+   * without the seed migration ever overwriting their changes —
+   * the migration only touches the original ids, not derived ones.
+   *
+   * Picks a fresh id by suffixing -copy / -copy-2 / ... until a slot
+   * is free, then saves + switches focus.
+   */
+  const duplicate = async (): Promise<void> => {
+    if (!selected) return;
+    const baseId = `${selected.id}-copy`;
+    const existingIds = new Set(workflows.map((w) => w.id));
+    let id = baseId;
+    let suffix = 1;
+    while (existingIds.has(id)) {
+      suffix += 1;
+      id = `${baseId}-${suffix}`;
+    }
+    // Disabled by default — the user usually wants to tweak before
+    // it starts firing. They can flip Enable when ready.
+    const copy: WorkflowDef = {
+      ...selected,
+      id,
+      name: `${selected.name} (copy)`,
+      description: selected.description
+        ? `Copy of ${selected.id}. ${selected.description}`
+        : `Copy of ${selected.id}.`,
+      enabled: false,
+    };
+    const r = await window.jarvis.saveWorkflow(copy);
+    if (!r.ok) {
+      toast({ kind: 'error', message: r.message ?? 'Duplicate failed' });
+      return;
+    }
+    toast({ message: `Duplicated · ${copy.name}` });
+    setSelectedId(copy.id);
+  };
+
+  /**
    * Append a fresh stub of the requested node type to the selected
    * workflow's pipeline and persist. The dock auto-switches to JSON
    * so the user can fine-tune the stub (URLs, args, etc.) — most
@@ -335,6 +374,14 @@ export function Workflows() {
                 }
               >
                 {selected.enabled ? 'Disable' : 'Enable'}
+              </button>
+              <button
+                type="button"
+                className="wf-btn"
+                onClick={() => void duplicate()}
+                title="Fork this workflow into a user-owned copy (built-in seed migration won't touch the copy)"
+              >
+                Duplicate
               </button>
               <button
                 type="button"
