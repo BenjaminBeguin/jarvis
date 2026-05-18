@@ -63,12 +63,24 @@ we don't need to make yet.
 ### `cron`
 
 ```json
-{ "kind": "cron", "every": "5m" }
+{ "kind": "cron", "every": "*/15 {businessHours}" }
 ```
 
-`every` accepts shorthand (`5m`, `1h`, `2d`) and full 5-field cron
-strings (`0 9 * * 1-5`). Globally-paused workflows skip fires — same
-semantics as `RoutineStore`. Missed fires don't replay.
+`every` accepts:
+
+- Shorthand: `5m`, `1h`, `2d` — expanded to a standard cron expression.
+- Full 5-field cron strings: `0 9 * * 1-5`.
+- The `{businessHours}` token — resolves at fire time to
+  `<startHour>-<endHour> * * <daysOfWeek>` from the user's working-hours
+  preference (Settings → Preferences → Working hours, stored in
+  `config.json.workingHours`). A single setting drives every workflow
+  that opts in. Slack / Linear / inbox-curate use it by default.
+
+Globally-paused workflows skip fires — same semantics as `RoutineStore`.
+Missed fires don't replay.
+
+Editing the working-hours preference resyncs all cron jobs immediately
+(no app restart). See `WorkflowScheduler.resync()`.
 
 ### `manual`
 
@@ -96,13 +108,14 @@ without any thread-the-signal-manually plumbing.
 
 | type | What it does | Output |
 |---|---|---|
-| `http-fetch` | HTTP request. `auth.scheme` = `'raw'` (default, Linear-style) or `'bearer'` (Slack). `bodyEncoding` = `'json'` (default) or `'form'`. | Parsed JSON body (or text). |
-| `osascript` | macOS-only AppleScript via `osascript -e`. | stdout, trimmed. |
+| `http-fetch` | HTTP request. `auth.scheme` = `'raw'` (default, Linear-style) or `'bearer'` (Slack). `bodyEncoding` = `'json'` (default) or `'form'`. Optional `validate` JS expression catches APIs that return 200 with `{ok:false}` (Slack et al.) — returns a string → throws that as the error. | Parsed JSON body (or text). |
+| `osascript` | macOS-only — `osascript -e` driver. `language?: 'applescript' \| 'javascript'` (default applescript). Use `'javascript'` (JXA) for anything non-trivial; AppleScript's date + string handling is a tarpit. | stdout, trimmed. |
 | `shell` | Arbitrary command via `execFile`. | stdout, trimmed. |
 | `transform` | JS expression body. `$` is `prev`. Sandbox: `new Function('$', \`return (${fn})\`)`. No globals, no imports. | Whatever `fn($)` returns. |
 | `inbox-write` | Writes `InboxItem[]` to the Inbox under a named source. Always the last node in inbox-feeding workflows. | Pass-through of items. |
-| `notify` | OS notification via the Jarvis notifier. | `prev` pass-through. |
+| `notify` | OS notification via the Jarvis notifier. Respects the global pause flag. | `prev` pass-through. |
 | `run-skill` | Launches a skill task and awaits the first SDK result. Bridges into agentic work. | Final assistant text. |
+| `mcp-call` | Invokes a single tool on any registered MCP server (stdio + SDK). Pre-resolves the id; forwards the workflow's `AbortSignal` so Stop on a running run SIGTERMs the subprocess. `parse?: 'text' \| 'json' \| 'raw'` controls how content blocks are flattened. | Joined text / array of parsed JSON / raw content blocks. |
 
 Adding a node type: drop a file under
 [electron/main/workflow-nodes/](../electron/main/workflow-nodes/)
@@ -156,6 +169,25 @@ Each surface lands in the same place: `workflowRunner.run(def, 'manual')`.
 Every fire records a `workflow.run` activity entry with the surface
 and run id, so the Activity tab shows where each invocation came from.
 
+## Seed migration
+
+Built-in workflows are seeded if missing — user edits to
+`~/.jarvis/workflows/<id>.json` are never overwritten. The exception
+is a small set of per-id fingerprint detectors in
+[seed.ts](../electron/main/seed.ts) that rewrite known-broken or
+known-default shapes (e.g. an old AppleScript Calendar workflow with
+the `pad2(n)` helper; a Slack workflow missing the `validate` clause;
+an inbox workflow still on a literal `5m` / `10m` / hardcoded
+`*/15 9-18 * * 1-5` cron from before the `{businessHours}` token
+existed).
+
+A detector that returns true authorises a rewrite from the current
+seed. Anything diverged from the fingerprint stays untouched —
+assumed user-customized. To prevent future seed updates from
+clobbering a workflow you've tuned, change at least one field the
+detector inspects (or just rename the file under
+`workflows/<your-custom-name>.json`).
+
 ## Gotchas
 
 - **The transform sandbox is real but not airtight.** It's
@@ -163,9 +195,9 @@ and run id, so the Activity tab shows where each invocation came from.
   not isolated from the Node runtime. Personal-tool threat model: the
   JSON is on the user's disk and they wrote it. Community-authored
   workflows would need a real sandbox (`vm2` / `isolated-vm` / QuickJS).
-- **Run history is in-memory.** Caps at 60 runs; older runs drop.
-  SQLite persistence is a v1.5 follow-up. XState snapshots make this
-  clean when we get there.
+- **Run history persists to SQLite** under `workflow_runs`. A
+  background prune runs hourly: cap of 200 rows per workflow + 30-day
+  age cutoff. See `db.ts:pruneWorkflowRuns`.
 - **Outputs over 100KB are truncated** before being stored on the
   run record. The inspector flags truncated steps inline.
 - **No branching / parallel.** Linear pipelines only in V1 — XState
