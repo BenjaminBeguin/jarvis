@@ -30,6 +30,7 @@ type CategoryFilter =
   | 'integration'
   | 'inbox'
   | 'reminder'
+  | 'workflow'
   | 'dedupe';
 
 const FILTER_KEY = 'jarvis.activity.filter';
@@ -64,7 +65,7 @@ export function Activity() {
       const stored = window.localStorage.getItem(FILTER_KEY);
       if (stored === null) return null;
       const valid: CategoryFilter[] = [
-        'send', 'note', 'meeting', 'integration', 'inbox', 'reminder', 'dedupe',
+        'send', 'note', 'meeting', 'integration', 'inbox', 'reminder', 'workflow', 'dedupe',
       ];
       return (valid as string[]).includes(stored) ? (stored as CategoryFilter) : null;
     } catch {
@@ -165,6 +166,7 @@ export function Activity() {
       integration: 0,
       inbox: 0,
       reminder: 0,
+      workflow: 0,
       dedupe: 0,
     };
     for (const t of tasks) {
@@ -342,6 +344,7 @@ const EVENT_KIND_META: Record<
       | 'integration'
       | 'inbox'
       | 'reminder'
+      | 'workflow'
       | 'dedupe'
       | 'other';
     label: string;
@@ -415,6 +418,25 @@ const EVENT_KIND_META: Record<
   'reminder.snoozed': { category: 'reminder', label: 'reminder · snoozed' },
   'briefing.edited': { category: 'note', label: 'briefing · edited' },
   'briefing.generated': { category: 'integration', label: 'briefing · generated' },
+  // Workflow lifecycle — created/updated/deleted via the editor +
+  // terminal run statuses recorded on the runner's 'run-changed'.
+  'workflow.created': { category: 'workflow', label: 'workflow · created' },
+  'workflow.updated': { category: 'workflow', label: 'workflow · updated' },
+  'workflow.deleted': { category: 'workflow', label: 'workflow · deleted' },
+  'workflow.run': { category: 'workflow', label: 'workflow · run' },
+  'workflow.ran-manually': { category: 'workflow', label: 'workflow · run now' },
+  'workflow.completed': { category: 'workflow', label: 'workflow · completed' },
+  'workflow.errored': { category: 'workflow', label: 'workflow · errored' },
+  'workflow.aborted': { category: 'workflow', label: 'workflow · aborted' },
+  // OAuth integrations — connect / disconnect / test result / paste-creds.
+  'integration.connected': { category: 'integration', label: 'integration · connected' },
+  'integration.disconnected': { category: 'integration', label: 'integration · disconnected' },
+  'integration.test-ok': { category: 'integration', label: 'integration · test ok' },
+  'integration.test-failed': { category: 'integration', label: 'integration · test failed' },
+  'integration.credentials-set': { category: 'integration', label: 'integration · creds set' },
+  'integration.credentials-cleared': { category: 'integration', label: 'integration · creds cleared' },
+  'integration.account-default': { category: 'integration', label: 'integration · default' },
+  'integration.account-meta': { category: 'integration', label: 'integration · meta' },
 };
 
 function EventRow({ event }: { event: ActivityEvent }) {
@@ -576,6 +598,7 @@ const FILTER_CHIPS: Array<{
   { value: 'note', label: 'Notes' },
   { value: 'meeting', label: 'Meetings' },
   { value: 'integration', label: 'Integrations' },
+  { value: 'workflow', label: 'Workflows' },
   { value: 'inbox', label: 'Inbox' },
   { value: 'dedupe', label: 'Dedupe' },
 ];

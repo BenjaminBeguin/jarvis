@@ -314,6 +314,11 @@ export function registerIntegrationsIpc(deps: IntegrationsIpcDeps): void {
               ? payload.clientSecret.trim()
               : undefined,
         });
+        activity.record({
+          kind: 'integration.credentials-set',
+          label: `Credentials set · ${payload.connectorId}`,
+          detail: { connectorId: payload.connectorId },
+        });
         // Trigger a renderer refresh so credentialsConfigured flips.
         integrations.emit('changed');
         return { ok: true };
@@ -385,6 +390,11 @@ export function registerIntegrationsIpc(deps: IntegrationsIpcDeps): void {
           return { ok: false, message: 'Invalid connectorId' };
         }
         await clearConnectorCredentials(payload.connectorId);
+        activity.record({
+          kind: 'integration.credentials-cleared',
+          label: `Credentials cleared · ${payload.connectorId}`,
+          detail: { connectorId: payload.connectorId },
+        });
         integrations.emit('changed');
         return { ok: true };
       } catch (err) {
