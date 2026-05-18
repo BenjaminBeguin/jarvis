@@ -42,6 +42,27 @@ export interface NotificationEvent {
 type Subscriber = (e: NotificationEvent) => void;
 
 /**
+ * Sources that fire automatically (cron tick, calendar proximity,
+ * spend threshold, etc.) — anything the user didn't just initiate.
+ * When Jarvis is globally paused, these are dropped at the notifier
+ * level so they reach neither macOS notifications nor Telegram.
+ *
+ * Task lifecycle events are NOT in this set: they fire for user-driven
+ * palette/voice/Telegram dispatches too, and the user wants to see
+ * those even while paused. Routines/workflows that would auto-spawn
+ * tasks are already gated at the scheduler — if pause is on, they
+ * never produce a task in the first place.
+ */
+const AUTO_SOURCES = new Set<NotificationSource>([
+  'reminder',
+  'scheduled-action',
+  'meeting-heads-up',
+  'inbox-new',
+  'cost-guardrail',
+  'skill-suggestion',
+]);
+
+/**
  * Central fan-out for user-facing notifications. Always fires the macOS
  * native notification, then notifies every subscriber. Subscribers must
  * not throw — they're wrapped in try/catch so one bad sink can't break
@@ -49,8 +70,24 @@ type Subscriber = (e: NotificationEvent) => void;
  */
 class Notifier extends EventEmitter {
   private subs = new Set<Subscriber>();
+  private isPausedFn: (() => boolean) | null = null;
+
+  /**
+   * Wire the global pause predicate so the notifier can silence
+   * automatic sources when the user has paused Jarvis. Called once
+   * at boot from index.ts.
+   */
+  setPausePredicate(fn: () => boolean): void {
+    this.isPausedFn = fn;
+  }
 
   post(e: NotificationEvent): void {
+    if (this.isPausedFn?.() && AUTO_SOURCES.has(e.source)) {
+      // Silently drop. Activity-feed entries can still be recorded at
+      // the source if the caller wants a paper trail (reminders do
+      // this) — we just don't push to OS / Telegram / etc.
+      return;
+    }
     if (!e.skipOsNotification) {
       try {
         const notif = new Notification({

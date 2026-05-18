@@ -289,6 +289,8 @@ runner.setJarvisMcp(
 
 routines.setRunner(runner);
 routines.setPausePredicate(() => loadPaused());
+notifier.setPausePredicate(() => loadPaused());
+inbox.setPausePredicate(() => loadPaused());
 
 let claudeBinaryPath: string | null = null;
 let httpServer: HttpServerHandle | null = null;
@@ -714,6 +716,24 @@ app.whenReady().then(async () => {
   reminders.setFireHandler((reminder) => {
     const preview =
       reminder.body.length > 80 ? `${reminder.body.slice(0, 80)}…` : reminder.body;
+
+    // Pause is a hard silencer for ANY auto-fired reminder — nudge mode
+    // included. Mark fired so it doesn't re-trigger, log the skip, and
+    // do not post a notification (the whole point of pausing is "leave
+    // me alone"). The Activity tab still shows what was supposed to
+    // fire; the user can re-issue manually if it actually mattered.
+    if (loadPaused()) {
+      activity.record({
+        kind: 'reminder.fired',
+        label:
+          reminder.mode === 'reminder'
+            ? `Reminder skipped (Jarvis paused) · ${preview}`
+            : `Scheduled action skipped (Jarvis paused) · ${preview}`,
+        detail: { id: reminder.id, body: reminder.body, paused: true },
+      });
+      reminders.markFired(reminder.id, null);
+      return;
+    }
 
     if (reminder.mode === 'reminder') {
       // Pure nudge — no Claude. Three signals so the user can't miss it:

@@ -43,6 +43,14 @@ export class InboxStore extends EventEmitter {
   private lastRefreshedAt = 0;
   private autoTimer: NodeJS.Timeout | null = null;
   private dismissals = new InboxDismissalStore();
+  private isPaused: (() => boolean) | null = null;
+
+  /** Set the global-pause predicate. When set + true, the auto-refresh
+   *  timer ticks but skips fetching — manual refresh (tab open, Refresh
+   *  button) still works regardless. */
+  setPausePredicate(fn: () => boolean): void {
+    this.isPaused = fn;
+  }
 
   register(source: InboxSource): void {
     const i = this.sources.findIndex((s) => s.name === source.name);
@@ -140,6 +148,10 @@ export class InboxStore extends EventEmitter {
     this.stopAutoRefresh();
     if (intervalMs <= 0 || !Number.isFinite(intervalMs)) return;
     const tick = async () => {
+      // Pause is a hard skip for automatic refreshes. We still keep the
+      // interval running so the moment the user resumes Jarvis, the next
+      // tick fires naturally — no manual re-init needed.
+      if (this.isPaused?.()) return;
       try {
         await this.refresh();
       } catch (err) {
