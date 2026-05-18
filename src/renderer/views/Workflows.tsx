@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { WorkflowDef, WorkflowRun } from '../../shared/types';
+import type { WorkflowDef, WorkflowNodeDef, WorkflowRun } from '../../shared/types';
 import { toast } from './Toaster';
 import { NodeDetail } from './workflows/NodeDetail';
+import { NODE_TEMPLATES, emptyWorkflow } from './workflows/nodePalette';
 import {
   WorkflowPipeline,
   type WorkflowSelection,
@@ -42,6 +43,19 @@ export function Workflows() {
   const [selectedNode, setSelectedNode] = useState<WorkflowSelection | null>(
     null,
   );
+  const [paletteOpen, setPaletteOpen] = useState<boolean>(false);
+  const paletteRef = useRef<HTMLDivElement | null>(null);
+  // Auto-close the palette popover on outside click.
+  useEffect(() => {
+    if (!paletteOpen) return undefined;
+    const onClick = (e: MouseEvent): void => {
+      if (!paletteRef.current) return;
+      if (paletteRef.current.contains(e.target as Node)) return;
+      setPaletteOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [paletteOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,6 +166,67 @@ export function Workflows() {
     await window.jarvis.saveWorkflow(next);
   };
 
+  /**
+   * Append a fresh stub of the requested node type to the selected
+   * workflow's pipeline and persist. The dock auto-switches to JSON
+   * so the user can fine-tune the stub (URLs, args, etc.) — most
+   * templates start with placeholders that the workflow can't run
+   * usefully without editing.
+   */
+  const addNode = async (stub: WorkflowNodeDef): Promise<void> => {
+    if (!selected) return;
+    const next: WorkflowDef = {
+      ...selected,
+      pipeline: [...selected.pipeline, stub],
+    };
+    const result = await window.jarvis.saveWorkflow(next);
+    if (!result.ok) {
+      toast({ kind: 'error', message: result.message ?? 'Add failed' });
+      return;
+    }
+    setPaletteOpen(false);
+    setDraft(JSON.stringify(next, null, 2));
+    setDockOpen(true);
+    setDockTab('json');
+    toast({
+      message: `+ ${stub.type} step appended — edit the params in the JSON dock`,
+    });
+  };
+
+  /**
+   * Create a fresh empty workflow and select it. The user provides a
+   * name, we derive an id from it. The workflow starts disabled with
+   * a manual trigger so it doesn't fire by mistake before being
+   * configured.
+   */
+  const createWorkflow = async (): Promise<void> => {
+    const name = prompt(
+      'New workflow name (used as the title — id is auto-derived):',
+    );
+    if (!name || !name.trim()) return;
+    const slug = name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+    const id = slug || `workflow-${Date.now()}`;
+    if (workflows.some((w) => w.id === id)) {
+      toast({
+        kind: 'error',
+        message: `A workflow with id "${id}" already exists`,
+      });
+      return;
+    }
+    const stub = emptyWorkflow(id, name.trim());
+    const result = await window.jarvis.saveWorkflow(stub as WorkflowDef);
+    if (!result.ok) {
+      toast({ kind: 'error', message: result.message ?? 'Create failed' });
+      return;
+    }
+    setSelectedId(id);
+    toast({ message: `Created ${name}` });
+  };
+
   return (
     <section className="wf-page">
       <header className="wf-toolbar">
@@ -160,11 +235,50 @@ export function Workflows() {
           selectedId={selectedId}
           onSelect={setSelectedId}
         />
+        <button
+          type="button"
+          onClick={() => void createWorkflow()}
+          title="Create a new empty workflow"
+        >
+          + New
+        </button>
         {selected && (
           <div className="wf-toolbar__actions">
             <span className="wf-toolbar__trigger">
               {triggerLabel(selected.trigger)}
             </span>
+            <div className="wf-palette" ref={paletteRef}>
+              <button
+                type="button"
+                onClick={() => setPaletteOpen((v) => !v)}
+                aria-expanded={paletteOpen}
+                title="Append a new step"
+              >
+                + Add node {paletteOpen ? '▾' : '▸'}
+              </button>
+              {paletteOpen && (
+                <div className="wf-palette__menu" role="menu">
+                  {NODE_TEMPLATES.map((tpl) => (
+                    <button
+                      key={tpl.type}
+                      type="button"
+                      className="wf-palette__item"
+                      onClick={() => void addNode(tpl.template())}
+                    >
+                      <span className="wf-palette__item-head">
+                        <strong>{tpl.label}</strong>
+                        <span className="wf-palette__item-group">
+                          {tpl.group}
+                        </span>
+                      </span>
+                      <span className="wf-palette__item-desc">
+                        {tpl.description}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button onClick={() => void toggleEnabled()}>
               {selected.enabled ? 'Disable' : 'Enable'}
             </button>
