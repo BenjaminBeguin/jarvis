@@ -33,7 +33,11 @@ const GRAPHQL = 'https://api.linear.app/graphql';
  */
 export function buildLinearMcp(
   accountId: string,
-  getAccessToken: () => Promise<string | null>,
+  /** Returns the full Authorization header value (`Bearer <token>`
+   *  for OAuth, raw key for personal API keys). Linear treats those
+   *  two formats differently — see linearAuthHeader() in the
+   *  connector. */
+  getAuthHeader: () => Promise<string | null>,
 ): McpSdkServerConfigWithInstance {
   return createSdkMcpServer({
     name: `linear-${accountId}`,
@@ -44,9 +48,9 @@ export function buildLinearMcp(
         'List teams in the workspace. Returns id, key, name.',
         {},
         async () =>
-          callLinear(getAccessToken, async (token) => {
+          callLinear(getAuthHeader, async (authHeader: string) => {
             const data = await gql(
-              token,
+              authHeader,
               `query { teams { nodes { id key name } } }`,
             );
             return json(extract(data, 'teams', 'nodes', []));
@@ -57,10 +61,10 @@ export function buildLinearMcp(
         'List workspace members. Returns id, name, email.',
         { active: z.boolean().optional() },
         async (args) =>
-          callLinear(getAccessToken, async (token) => {
+          callLinear(getAuthHeader, async (authHeader: string) => {
             const filter = args.active === false ? '' : '(filter: { active: { eq: true } })';
             const data = await gql(
-              token,
+              authHeader,
               `query { users${filter} { nodes { id name email } } }`,
             );
             return json(extract(data, 'users', 'nodes', []));
@@ -77,7 +81,7 @@ export function buildLinearMcp(
           first: z.number().int().min(1).max(100).optional(),
         },
         async (args) =>
-          callLinear(getAccessToken, async (token) => {
+          callLinear(getAuthHeader, async (authHeader: string) => {
             const filterParts: string[] = [];
             if (args.teamId) filterParts.push(`team: { id: { eq: "${args.teamId}" } }`);
             if (args.assigneeId) filterParts.push(`assignee: { id: { eq: "${args.assigneeId}" } }`);
@@ -102,7 +106,7 @@ export function buildLinearMcp(
                 }
               }
             }`;
-            const data = await gql(token, query);
+            const data = await gql(authHeader,query);
             return json(extract(data, 'issues', 'nodes', []));
           }),
       ),
@@ -111,7 +115,7 @@ export function buildLinearMcp(
         'Read a single issue by id or identifier (e.g. "ENG-123"). Returns full body + last 20 comments.',
         { idOrIdentifier: z.string().min(1) },
         async (args) =>
-          callLinear(getAccessToken, async (token) => {
+          callLinear(getAuthHeader, async (authHeader: string) => {
             const q = `query Q($id: String!) {
               issue(id: $id) {
                 id identifier title description priority createdAt updatedAt url
@@ -119,7 +123,7 @@ export function buildLinearMcp(
                 comments(last: 20) { nodes { id body createdAt user { id name } } }
               }
             }`;
-            const data = await gql(token, q, { id: args.idOrIdentifier });
+            const data = await gql(authHeader,q, { id: args.idOrIdentifier });
             const issue =
               (data['data'] as Record<string, unknown> | undefined)?.['issue'] ?? null;
             return json(issue);
@@ -138,14 +142,14 @@ export function buildLinearMcp(
           labelIds: z.array(z.string()).optional(),
         },
         async (args) =>
-          callLinear(getAccessToken, async (token) => {
+          callLinear(getAuthHeader, async (authHeader: string) => {
             const q = `mutation M($input: IssueCreateInput!) {
               issueCreate(input: $input) {
                 success
                 issue { id identifier title url }
               }
             }`;
-            const data = await gql(token, q, {
+            const data = await gql(authHeader,q, {
               input: {
                 teamId: args.teamId,
                 title: args.title,
@@ -178,7 +182,7 @@ export function buildLinearMcp(
           labelIds: z.array(z.string()).optional(),
         },
         async (args) =>
-          callLinear(getAccessToken, async (token) => {
+          callLinear(getAuthHeader, async (authHeader: string) => {
             const input: Record<string, unknown> = {};
             if (args.title !== undefined) input['title'] = args.title;
             if (args.description !== undefined) input['description'] = args.description;
@@ -189,7 +193,7 @@ export function buildLinearMcp(
             const q = `mutation M($id: String!, $input: IssueUpdateInput!) {
               issueUpdate(id: $id, input: $input) { success issue { id identifier url } }
             }`;
-            const data = await gql(token, q, { id: args.id, input });
+            const data = await gql(authHeader,q, { id: args.id, input });
             const result = (data['data'] as Record<string, unknown> | undefined)?.[
               'issueUpdate'
             ] as
@@ -207,14 +211,14 @@ export function buildLinearMcp(
           body: z.string().min(1),
         },
         async (args) =>
-          callLinear(getAccessToken, async (token) => {
+          callLinear(getAuthHeader, async (authHeader: string) => {
             const q = `mutation M($input: CommentCreateInput!) {
               commentCreate(input: $input) {
                 success
                 comment { id url issue { identifier } }
               }
             }`;
-            const data = await gql(token, q, {
+            const data = await gql(authHeader,q, {
               input: { issueId: args.issueId, body: args.body },
             });
             const result = (data['data'] as Record<string, unknown> | undefined)?.[
@@ -236,14 +240,14 @@ export function buildLinearMcp(
 }
 
 async function gql(
-  token: string,
+  authHeader: string,
   query: string,
   variables?: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const res = await fetch(GRAPHQL, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: authHeader,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ query, variables }),
@@ -271,17 +275,17 @@ function extract<T>(
 }
 
 async function callLinear(
-  getAccessToken: () => Promise<string | null>,
-  fn: (token: string) => Promise<CallToolResult>,
+  getAuthHeader: () => Promise<string | null>,
+  fn: (authHeader: string) => Promise<CallToolResult>,
 ): Promise<CallToolResult> {
-  const token = await getAccessToken();
-  if (!token) {
+  const authHeader = await getAuthHeader();
+  if (!authHeader) {
     return err(
       'No Linear token. Reconnect from Settings → Integrations.',
     );
   }
   try {
-    return await fn(token);
+    return await fn(authHeader);
   } catch (e) {
     return err(e instanceof Error ? e.message : String(e));
   }

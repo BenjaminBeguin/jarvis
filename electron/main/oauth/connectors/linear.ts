@@ -40,6 +40,20 @@ const TOKEN_URL = 'https://api.linear.app/oauth/token';
 const REVOKE_URL = 'https://api.linear.app/oauth/revoke';
 const VIEWER_QUERY = `query Viewer { viewer { id name email } }`;
 
+/**
+ * Linear's auth quirk: OAuth tokens are sent as `Bearer <token>`,
+ * but personal API keys are sent raw — Linear rejects `Bearer
+ * lin_api_...` with "remove the Bearer prefix from the
+ * Authorization header". Centralized so every Linear caller picks
+ * the right format off the same authMode tag.
+ */
+export function linearAuthHeader(
+  token: string,
+  authMode: 'oauth' | 'apiKey',
+): string {
+  return authMode === 'apiKey' ? token : `Bearer ${token}`;
+}
+
 const SCOPES = ['read', 'write'];
 
 export interface LinearTokenPayload extends ConnectorTokenPayload {
@@ -73,11 +87,11 @@ class LinearConnector implements Connector {
   readonly apiKeyMode: ApiKeyMode = {
     label: 'Personal API Key',
     helpText:
-      'Skip OAuth entirely — paste a personal API key. Generate one in Linear at Settings → Account → API → Personal API keys → Create key. The key is stored in Keychain and sent as a Bearer token directly. No workspace admin needed.',
+      'Skip OAuth entirely — paste a personal API key. Generate one in Linear at Settings → Account → API → Personal API keys → Create key. No workspace admin needed.',
     helpUrl: 'https://linear.app/settings/account/api',
     placeholder: 'lin_api_...',
     connect: async (apiKey, hooks) => {
-      const viewer = await fetchViewer(apiKey);
+      const viewer = await fetchViewer(apiKey, 'apiKey');
       const payload: LinearTokenPayload = {
         accessToken: apiKey,
         // Personal keys don't expire and don't have refresh tokens.
@@ -145,7 +159,7 @@ class LinearConnector implements Connector {
     hooks: ConnectorHooks,
   ): Promise<ConnectorAccount> {
     const tokens = await exchangeCode(code, req.codeVerifier);
-    const viewer = await fetchViewer(tokens.access_token);
+    const viewer = await fetchViewer(tokens.access_token, 'oauth');
     const expiresAt = tokens.expires_in
       ? Date.now() + tokens.expires_in * 1000
       : null;
@@ -213,13 +227,29 @@ class LinearConnector implements Connector {
     let cached = this.mcpCache.get(account.id);
     if (!cached) {
       cached = buildLinearMcp(account.id, () =>
-        this.getValidAccessToken(account.id),
+        this.getValidAuthHeader(account.id),
       );
       this.mcpCache.set(account.id, cached);
     }
     return {
       [`linear-${account.id}`]: { type: 'sdk', instance: cached },
     };
+  }
+
+  /** Wrap the per-call token in the right Linear Authorization-header
+   *  format. OAuth → `Bearer <token>`; personal API key → raw. */
+  private async getValidAuthHeader(accountId: string): Promise<string | null> {
+    const raw = await getConnectorToken('linear', accountId);
+    if (!raw) return null;
+    let payload: LinearTokenPayload;
+    try {
+      payload = JSON.parse(raw) as LinearTokenPayload;
+    } catch {
+      return null;
+    }
+    if (payload.authMode === 'apiKey') return payload.accessToken;
+    const token = await this.getValidAccessToken(accountId);
+    return token ? `Bearer ${token}` : null;
   }
 
   /** Proactive refresh inside the 60 s expiry buffer — same pattern
@@ -353,11 +383,14 @@ interface ViewerInfo {
   email?: string;
 }
 
-async function fetchViewer(token: string): Promise<ViewerInfo> {
+async function fetchViewer(
+  token: string,
+  authMode: 'oauth' | 'apiKey',
+): Promise<ViewerInfo> {
   const res = await fetch('https://api.linear.app/graphql', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: linearAuthHeader(token, authMode),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ query: VIEWER_QUERY }),
