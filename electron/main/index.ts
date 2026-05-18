@@ -5,7 +5,12 @@ import * as path from 'node:path';
 import { join } from 'node:path';
 
 import { IpcChannels } from '@shared/ipc';
-import type { AppStatus, TaskEvent, TaskSummary } from '@shared/types';
+import type {
+  AppStatus,
+  TaskEvent,
+  TaskSummary,
+  WorkflowRun,
+} from '@shared/types';
 
 import {
   detectClaudeBinary,
@@ -796,6 +801,44 @@ app.whenReady().then(async () => {
     notifier,
     runner,
     jarvisRoot: join(homedir(), '.jarvis'),
+  });
+  // Activity feed entries for workflow lifecycle. Fires once per run on
+  // transition to a terminal state — we don't want a feed row for every
+  // step transition, just the run's outcome. The `run-changed` event
+  // emits for every transition; track last-seen status per run id to
+  // dedupe to "the first time we saw terminal."
+  const workflowTerminalLogged = new Set<string>();
+  workflowRunner.on('run-changed', (run: WorkflowRun) => {
+    if (
+      run.status !== 'completed' &&
+      run.status !== 'errored' &&
+      run.status !== 'aborted'
+    ) {
+      return;
+    }
+    if (workflowTerminalLogged.has(run.id)) return;
+    workflowTerminalLogged.add(run.id);
+    const w = workflows.list().find((x) => x.id === run.workflowId);
+    const name = w?.name ?? run.workflowId;
+    const tookMs =
+      run.endedAt && run.startedAt ? run.endedAt - run.startedAt : 0;
+    activity.record({
+      kind: `workflow.${run.status}`,
+      label:
+        run.status === 'completed'
+          ? `Workflow ran · ${name} (${Math.round(tookMs / 100) / 10}s)`
+          : run.status === 'errored'
+            ? `Workflow errored · ${name} · ${run.error ?? 'unknown'}`
+            : `Workflow aborted · ${name}`,
+      detail: {
+        runId: run.id,
+        workflowId: run.workflowId,
+        trigger: run.trigger,
+        status: run.status,
+        durationMs: tookMs,
+        ...(run.error ? { error: run.error } : {}),
+      },
+    });
   });
   workflows.init();
   workflowScheduler.init();
