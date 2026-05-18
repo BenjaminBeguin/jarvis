@@ -14478,6 +14478,10 @@ button:disabled:hover {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
 }
 .workflows__run-meta {
   display: flex;
@@ -14500,6 +14504,77 @@ button:disabled:hover {
 .workflows__run-status--completed { color: var(--good); border-color: rgba(95, 255, 166, 0.32); }
 .workflows__run-status--errored,
 .workflows__run-status--aborted { color: var(--bad); border-color: rgba(255, 85, 119, 0.42); }
+
+/* Run-pane = history strip + selected run's step breakdown */
+
+.wf-run-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.wf-run-history {
+  list-style: none;
+  margin: 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 30%;
+  overflow-y: auto;
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.wf-run-history__row {
+  display: grid;
+  grid-template-columns: 80px 1fr auto auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  cursor: pointer;
+  border-radius: 3px;
+  border: 1px solid transparent;
+}
+
+.wf-run-history__row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.wf-run-history__row--selected {
+  background: rgba(0, 212, 255, 0.06);
+  border-color: rgba(0, 212, 255, 0.2);
+}
+
+.wf-run-history__status {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+}
+
+.wf-run-history__status--completed { color: var(--good); }
+.wf-run-history__status--errored,
+.wf-run-history__status--aborted { color: var(--bad); }
+.wf-run-history__status--running { color: var(--accent); }
+.wf-run-history__status--pending { color: var(--text-faint); }
+
+.wf-run-history__when {
+  color: var(--text);
+}
+
+.wf-run-history__dur {
+  color: var(--text-faint);
+}
+
+.wf-run-history__trigger {
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 10px;
+}
 
 .workflows__steps {
   list-style: none;

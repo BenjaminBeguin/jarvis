@@ -38,7 +38,8 @@ export function Workflows() {
   >([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<string>('');
-  const [recentRun, setRecentRun] = useState<WorkflowRun | null>(null);
+  const [runs, setRuns] = useState<WorkflowRun[]>([]);
+  const [inspectedRunIdx, setInspectedRunIdx] = useState<number>(0);
   const [dockOpen, setDockOpen] = useState<boolean>(true);
   const [dockTab, setDockTab] = useState<DockTab>('json');
   const [selectedNode, setSelectedNode] = useState<WorkflowSelection | null>(
@@ -95,23 +96,33 @@ export function Workflows() {
 
   useEffect(() => {
     if (!selectedId) {
-      setRecentRun(null);
+      setRuns([]);
+      setInspectedRunIdx(0);
       return;
     }
     let cancelled = false;
-    void window.jarvis.listWorkflowRuns(selectedId).then((runs) => {
+    void window.jarvis.listWorkflowRuns(selectedId).then((list) => {
       if (cancelled) return;
-      setRecentRun(runs[0] ?? null);
+      setRuns(list);
+      setInspectedRunIdx(0);
     });
     const off = window.jarvis.onWorkflowRunChanged((run) => {
       if (run.workflowId !== selectedId) return;
-      setRecentRun(run);
+      setRuns((prev) => {
+        const idx = prev.findIndex((r) => r.id === run.id);
+        if (idx === -1) return [run, ...prev];
+        const next = prev.slice();
+        next[idx] = run;
+        return next;
+      });
     });
     return () => {
       cancelled = true;
       off();
     };
   }, [selectedId]);
+
+  const recentRun = runs[inspectedRunIdx] ?? null;
 
   const save = async (): Promise<void> => {
     if (!selected) return;
@@ -425,16 +436,30 @@ export function Workflows() {
                     No runs yet. Hit Run now or wait for the trigger to fire.
                   </div>
                 ) : (
-                  <RunDetail
-                    run={recentRun}
-                    selectedIndex={
-                      selectedNode?.kind === 'step' ? selectedNode.index : null
-                    }
-                    onSelectStep={(i) => {
-                      setSelectedNode({ kind: 'step', index: i });
-                      setDockTab('step');
-                    }}
-                  />
+                  <div className="wf-run-pane">
+                    {runs.length > 1 && (
+                      <RunHistoryList
+                        runs={runs}
+                        selectedIdx={inspectedRunIdx}
+                        onSelect={(i) => {
+                          setInspectedRunIdx(i);
+                          setSelectedNode(null);
+                        }}
+                      />
+                    )}
+                    <RunDetail
+                      run={recentRun}
+                      selectedIndex={
+                        selectedNode?.kind === 'step'
+                          ? selectedNode.index
+                          : null
+                      }
+                      onSelectStep={(i) => {
+                        setSelectedNode({ kind: 'step', index: i });
+                        setDockTab('step');
+                      }}
+                    />
+                  </div>
                 ))}
               {dockTab === 'step' && selectedNode && selected && (
                 selectedNode.kind === 'trigger' ? (
@@ -461,6 +486,60 @@ export function Workflows() {
 function triggerLabel(t: WorkflowDef['trigger']): string {
   if (t.kind === 'cron') return `cron · ${t.every}`;
   return `manual${t.palette ? ' · ' + t.palette : ''}`;
+}
+
+/**
+ * Compact history strip — one row per past run, ordered newest first.
+ * Click a row → the dock's Run-pane shows that run's step breakdown.
+ * Persisted runs come from SQLite (workflow-runner.list() merges live
+ * + DB) so this survives app restarts.
+ */
+function RunHistoryList({
+  runs,
+  selectedIdx,
+  onSelect,
+}: {
+  runs: WorkflowRun[];
+  selectedIdx: number;
+  onSelect: (idx: number) => void;
+}) {
+  return (
+    <ol className="wf-run-history">
+      {runs.map((r, i) => {
+        const dur =
+          r.endedAt != null ? `${r.endedAt - r.startedAt}ms` : '…';
+        return (
+          <li
+            key={r.id}
+            className={`wf-run-history__row wf-run-history__row--${r.status}${
+              i === selectedIdx ? ' wf-run-history__row--selected' : ''
+            }`}
+            onClick={() => onSelect(i)}
+          >
+            <span
+              className={`wf-run-history__status wf-run-history__status--${r.status}`}
+            >
+              {r.status}
+            </span>
+            <span className="wf-run-history__when">
+              {formatRunWhen(r.startedAt)}
+            </span>
+            <span className="wf-run-history__dur">{dur}</span>
+            <span className="wf-run-history__trigger">· {r.trigger}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function formatRunWhen(ts: number): string {
+  const d = new Date(ts);
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return 'just now';
+  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3600_000)}h ago`;
+  return d.toLocaleString();
 }
 
 function RunDetail({
