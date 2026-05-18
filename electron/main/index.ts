@@ -19,6 +19,7 @@ import {
   loadCostPrefs,
   loadNotificationPrefs,
   loadPaused,
+  loadWorkingHours,
   saveAfkMode,
   savePaused,
 } from './auth.js';
@@ -173,6 +174,7 @@ const workflows = new WorkflowStore();
 const workflowRunner = new WorkflowRunner();
 const workflowScheduler = new WorkflowScheduler(workflows, workflowRunner, {
   isPaused: () => loadPaused(),
+  workingHours: () => loadWorkingHours(),
 });
 // "Heads up" notifications when an inbox item with fireAt is within 5
 // min. Calendar events flow naturally through this; reminders are

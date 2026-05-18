@@ -44,12 +44,12 @@ export const SLACK_INBOX_WORKFLOW: WorkflowDef = {
   id: 'slack-inbox-sync',
   name: 'Sync Slack inbox',
   description:
-    'Every 15 minutes during weekday business hours (9am–7pm Mon–Fri), fetch DMs + @mentions waiting on you from Slack. Requires a user token (xoxp-*).',
+    'Every 15 minutes during your working hours, fetch DMs + @mentions waiting on you from Slack. Requires a user token (xoxp-*).',
   enabled: true,
-  // Business hours only — there's no signal worth pulling from
-  // Slack at 3am on a Saturday. Edit to '5m' for 24/7 refresh, or to
-  // any 5-field cron expression for finer control.
-  trigger: { kind: 'cron', every: '*/15 9-18 * * 1-5' },
+  // {businessHours} expands to "<start>-<end> * * <days>" from the
+  // user's working-hours pref (Settings → general). Edit to a literal
+  // 5-field cron or shorthand like '5m' to override per-workflow.
+  trigger: { kind: 'cron', every: '*/15 {businessHours}' },
   pipeline: [
     {
       type: 'http-fetch',

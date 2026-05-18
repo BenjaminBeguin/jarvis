@@ -30,6 +30,15 @@ interface PersistedConfig {
    *  until the user resumes. User-initiated palette/voice/Telegram
    *  dispatches still work; pause is about *unattended* spend. */
   paused?: boolean;
+  /** Working-hours window the user expects to be at their desk.
+   *  Drives the `{businessHours}` placeholder substitution in
+   *  workflow cron expressions — one setting controls every
+   *  inbox feed's schedule. See loadWorkingHours/saveWorkingHours. */
+  workingHours?: {
+    startHour?: number;
+    endHour?: number;
+    daysOfWeek?: string;
+  };
   /** Cost guardrails — single-task and daily totals. When unset, the
    *  defaults below apply. Set 0 or negative to disable a guardrail. */
   costPrefs?: {
@@ -215,6 +224,53 @@ export function loadPaused(): boolean {
 
 export function savePaused(value: boolean): void {
   writeConfig({ ...readConfig(), paused: value });
+}
+
+/**
+ * The user's working-hours window. Used by workflow seeds whose cron
+ * expressions include the `{businessHours}` placeholder — the
+ * scheduler substitutes "<start>-<end> * * <days>" at fire time, so
+ * editing this here updates every workflow that references it.
+ *
+ * Hours are inclusive 24h ("9-18" = the 9am hour through the 18:00
+ * hour, i.e. 9:00 to 18:59). Days are POSIX cron day-of-week (0 or 7
+ * = Sunday; "1-5" = Mon-Fri).
+ */
+export interface WorkingHoursPrefs {
+  startHour: number;
+  endHour: number;
+  daysOfWeek: string;
+}
+
+export const DEFAULT_WORKING_HOURS: WorkingHoursPrefs = {
+  startHour: 9,
+  endHour: 18,
+  daysOfWeek: '1-5',
+};
+
+export function loadWorkingHours(): WorkingHoursPrefs {
+  const cfg = readConfig() as { workingHours?: Partial<WorkingHoursPrefs> };
+  const wh = cfg.workingHours ?? {};
+  return {
+    startHour:
+      typeof wh.startHour === 'number' &&
+      wh.startHour >= 0 &&
+      wh.startHour <= 23
+        ? wh.startHour
+        : DEFAULT_WORKING_HOURS.startHour,
+    endHour:
+      typeof wh.endHour === 'number' && wh.endHour >= 0 && wh.endHour <= 23
+        ? wh.endHour
+        : DEFAULT_WORKING_HOURS.endHour,
+    daysOfWeek:
+      typeof wh.daysOfWeek === 'string' && wh.daysOfWeek.trim()
+        ? wh.daysOfWeek.trim()
+        : DEFAULT_WORKING_HOURS.daysOfWeek,
+  };
+}
+
+export function saveWorkingHours(value: WorkingHoursPrefs): void {
+  writeConfig({ ...readConfig(), workingHours: value });
 }
 
 export interface CostPrefs {

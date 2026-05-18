@@ -26,12 +26,12 @@ export const INBOX_CURATE_WORKFLOW: WorkflowDef = {
   id: 'inbox-curate-sync',
   name: 'Curate Smart inbox',
   description:
-    'Every 15 minutes during weekday business hours (9am–7pm Mon–Fri), re-rank the raw inbox into a Smart section using your priorities.md.',
+    'Every 15 minutes during your working hours, re-rank the raw inbox into a Smart section using your priorities.md.',
   enabled: true,
-  // Business hours only — the Smart inbox is a "what should I work
-  // on next" lens, useless when you're not working. Cuts haiku cost
-  // roughly 5× vs 24/7. Edit to '10m' to refresh round-the-clock.
-  trigger: { kind: 'cron', every: '*/15 9-18 * * 1-5' },
+  // {businessHours} pulls from the user's working-hours pref so a
+  // single setting drives every cron-based inbox feed. Cuts haiku
+  // cost ~5× vs 24/7. Edit to '10m' for round-the-clock refresh.
+  trigger: { kind: 'cron', every: '*/15 {businessHours}' },
   pipeline: [
     {
       type: 'run-skill',

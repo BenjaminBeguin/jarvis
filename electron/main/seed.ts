@@ -53,14 +53,21 @@ const WORKFLOW_STALE_DETECTORS: Record<
       const p = fetch.params ?? {};
       if (typeof p['validate'] !== 'string') return true;
     }
-    return isUntouchedShorthandCron(def, '5m');
+    return (
+      isUntouchedShorthandCron(def, '5m') ||
+      isUntouchedShorthandCron(def, '*/15 9-18 * * 1-5')
+    );
   },
-  // Linear workflow shipped with `every: '5m'` (24/7). Only rewrite
-  // when the on-disk file still has that exact shorthand — anything
-  // else is user-customized.
-  'linear-inbox-sync': (def) => isUntouchedShorthandCron(def, '5m'),
-  // Inbox curate workflow shipped with `every: '10m'` (24/7).
-  'inbox-curate-sync': (def) => isUntouchedShorthandCron(def, '10m'),
+  // Linear workflow shipped with `every: '5m'` (24/7), then
+  // `*/15 9-18 * * 1-5` (hardcoded business hours). Migrate both to
+  // `*/15 {businessHours}` so the user's working-hours pref drives.
+  'linear-inbox-sync': (def) =>
+    isUntouchedShorthandCron(def, '5m') ||
+    isUntouchedShorthandCron(def, '*/15 9-18 * * 1-5'),
+  // Inbox curate shipped `every: '10m'` then `*/15 9-18 * * 1-5`.
+  'inbox-curate-sync': (def) =>
+    isUntouchedShorthandCron(def, '10m') ||
+    isUntouchedShorthandCron(def, '*/15 9-18 * * 1-5'),
 };
 
 /**

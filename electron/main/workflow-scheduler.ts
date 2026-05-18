@@ -26,6 +26,10 @@ import type { WorkflowStore } from './workflow-store.js';
 
 interface SchedulerOptions {
   isPaused?: () => boolean;
+  /** Returns the current working-hours pref. Used by `{businessHours}`
+   *  cron substitution; the seed defaults reference this token so a
+   *  single config change updates every workflow that opts in. */
+  workingHours?: () => { startHour: number; endHour: number; daysOfWeek: string };
 }
 
 interface ActiveJob {
@@ -44,6 +48,26 @@ const SHORTHAND_RE = /^(\d+)\s*(s|sec|m|min|h|hr|d|day)s?$/i;
  *   1h..23h  → hour-step cron
  *   1d..7d   → day-step cron
  */
+/**
+ * Substitute the `{businessHours}` token in a cron `every` string
+ * with the user's working-hours pref. The token expands to the
+ * "<startHour>-<endHour> * * <daysOfWeek>" tail of a 5-field cron,
+ * letting seeds write things like `*\/15 {businessHours}` and have
+ * the user's hours apply everywhere without rewriting each workflow.
+ *
+ * Pure substitution — no validation; `expandEvery` validates the
+ * final string against node-cron.
+ */
+function substituteBusinessHours(
+  every: string,
+  workingHours?: () => { startHour: number; endHour: number; daysOfWeek: string },
+): string {
+  if (!every.includes('{businessHours}')) return every;
+  const wh = workingHours?.() ?? { startHour: 9, endHour: 18, daysOfWeek: '1-5' };
+  const tail = `${wh.startHour}-${wh.endHour} * * ${wh.daysOfWeek}`;
+  return every.replace(/\{businessHours\}/g, tail);
+}
+
 function expandEvery(every: string): string {
   const trimmed = every.trim();
   // Heuristic: cron expressions have 4+ whitespace-separated fields.
@@ -73,6 +97,11 @@ export class WorkflowScheduler {
   private readonly store: WorkflowStore;
   private readonly runner: WorkflowRunner;
   private readonly isPaused?: () => boolean;
+  private readonly workingHours?: () => {
+    startHour: number;
+    endHour: number;
+    daysOfWeek: string;
+  };
   private jobs = new Map<string, ActiveJob>();
 
   constructor(
@@ -83,7 +112,17 @@ export class WorkflowScheduler {
     this.store = store;
     this.runner = runner;
     this.isPaused = opts.isPaused;
+    this.workingHours = opts.workingHours;
     this.store.on('changed', () => this.syncAll());
+  }
+
+  /**
+   * Re-register every cron job. Used when working-hours preferences
+   * change — the substituted cron string is different now, so jobs
+   * have to be torn down + re-built.
+   */
+  resync(): void {
+    this.syncAll();
   }
 
   init(): void {
@@ -133,7 +172,14 @@ export class WorkflowScheduler {
     }
     if (!def.enabled) return;
     if (def.trigger.kind !== 'cron') return; // manual not scheduled here
-    const cronExpr = expandEvery(def.trigger.every);
+    // Resolve {businessHours} → "<start>-<end> * * <days>" first, so
+    // expandEvery sees the final string. Workflows that don't use the
+    // token are unaffected (string.replace is a no-op).
+    const resolved = substituteBusinessHours(
+      def.trigger.every,
+      this.workingHours,
+    );
+    const cronExpr = expandEvery(resolved);
     if (!cron.validate(cronExpr)) {
       console.warn(
         `[workflow-scheduler] invalid cron for ${def.id}: "${def.trigger.every}" → "${cronExpr}"`,
