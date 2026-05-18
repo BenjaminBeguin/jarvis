@@ -13,7 +13,7 @@ import {
   type CatalogField,
   type SetupStep,
 } from './catalog';
-import { IntegrationsDocs } from './IntegrationsDocs';
+import { ConnectedAccounts } from './ConnectedAccounts';
 
 type Status = 'connected' | 'claude-ai-only' | 'missing';
 
@@ -37,7 +37,6 @@ export function Integrations() {
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
   const [configEntry, setConfigEntry] = useState<CatalogEntry | null>(null);
   const [inboxCounts, setInboxCounts] = useState<Record<string, number>>({});
-  const [docsOpen, setDocsOpen] = useState(false);
 
   useEffect(() => {
     void window.jarvis.listMcpServers().then(setLocalServers);
@@ -152,12 +151,6 @@ export function Integrations() {
           >
             {refreshing ? '↻ Refreshing…' : '↻ Refresh'}
           </button>
-          <button
-            onClick={() => setDocsOpen(true)}
-            title="Setup guide — OAuth app registration steps, per-connector quirks, failure modes"
-          >
-            ? Setup guide
-          </button>
           <button onClick={() => setShowFile((v) => !v)}>
             {showFile ? '▾ Hide JSON' : '▸ View JSON'}
           </button>
@@ -177,6 +170,8 @@ export function Integrations() {
           }}
         />
       )}
+
+      <ConnectedAccounts />
 
       <section>
         <h3 className="integrations__section-title">Catalog</h3>
@@ -266,8 +261,6 @@ export function Integrations() {
           onClose={() => setConfigEntry(null)}
         />
       )}
-
-      {docsOpen && <IntegrationsDocs onClose={() => setDocsOpen(false)} />}
     </section>
   );
 }

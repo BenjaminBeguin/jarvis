@@ -1263,6 +1263,21 @@ const RETIRED_INBOX_SKILLS = new Set([
 ]);
 const RETIRED_INBOX_JSON_FILES = ['slack.json', 'linear.json', 'calendar.json'];
 
+/**
+ * Legacy catalog ids for Gmail / Calendar that wrapped per-account
+ * stdio MCP packages with hand-managed OAuth files. Replaced by the
+ * unified Google connector under "Connected accounts" — one OAuth
+ * grant covers Gmail + Calendar in one shot, tokens live in Keychain.
+ * We remove these from ~/.jarvis/mcp.json on first launch so the
+ * Installed list isn't carrying ghosts.
+ */
+const RETIRED_LEGACY_GOOGLE_MCPS = [
+  'gmail-personal',
+  'gmail-work',
+  'calendar-personal',
+  'calendar-work',
+];
+
 function syncAutoInboxRoutines(
   jarvisRoot: string,
   skills: SkillStore,
@@ -1275,6 +1290,11 @@ function syncAutoInboxRoutines(
   // JSON files those routines wrote. Idempotent — running twice is a
   // no-op because the second pass sees `enabled: false`.
   migrateRetiredInboxSkills(jarvisRoot, routines, activity);
+  // Same shape, different target: strip legacy Gmail / Calendar MCP
+  // entries from ~/.jarvis/mcp.json so the Integrations page isn't
+  // stuck showing the four old catalog cards. The unified Google
+  // connector under "Connected accounts" replaces them.
+  migrateRetiredLegacyGoogleMcps(mcp, activity);
 
   const markerPath = path.join(jarvisRoot, 'auto-seeded-routines.json');
   let seeded: Set<string>;
@@ -1373,6 +1393,26 @@ function syncAutoInboxRoutines(
  * Idempotent: second run sees `enabled: false` on the routines and
  * the JSON files already gone, so it does nothing.
  */
+function migrateRetiredLegacyGoogleMcps(
+  mcp: McpConfigStore,
+  activity: ActivityStore,
+): void {
+  for (const id of RETIRED_LEGACY_GOOGLE_MCPS) {
+    if (!mcp.list().some((s) => s.id === id)) continue;
+    const removed = mcp.remove(id);
+    if (!removed) continue;
+    activity.record({
+      kind: 'mcp.migrated',
+      label: `Legacy MCP removed · ${id} replaced by the Google connector`,
+      detail: { id, replacedBy: 'google-connector' },
+    });
+  }
+  // We intentionally leave ~/.jarvis/secrets/google-{personal,work}/
+  // alone — those OAuth credential files might be useful if the user
+  // ever wants to re-run the legacy MCPs manually. They're not
+  // referenced anywhere now; harmless on disk.
+}
+
 function migrateRetiredInboxSkills(
   jarvisRoot: string,
   routines: RoutineStore,

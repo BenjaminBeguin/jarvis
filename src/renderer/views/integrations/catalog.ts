@@ -138,73 +138,15 @@ export const CATALOG: CatalogEntry[] = [
     },
     inboxFiles: ['slack-pulse.json'],
   },
-  {
-    id: 'gmail-personal',
-    name: 'Gmail · personal',
-    description: 'Send + read email from your personal Gmail account',
-    aliases: ['gmail-personal', 'Gmail'],
-    // @gongrzhe/server-gmail-autoauth-mcp respects GMAIL_OAUTH_PATH +
-    // GMAIL_CREDENTIALS_PATH — explicit env vars beat the cd-cwd hack
-    // (the package's defaults point at ~/.gmail-mcp/, which we'd
-    // otherwise leak to instead of our consolidated secrets dir).
-    command: 'sh',
-    args: [
-      '-c',
-      'GMAIL_OAUTH_PATH="$HOME/.jarvis/secrets/google-personal/gcp-oauth.keys.json" GMAIL_CREDENTIALS_PATH="$HOME/.jarvis/secrets/google-personal/credentials.json" exec npx -y @gongrzhe/server-gmail-autoauth-mcp',
-    ],
-    fields: [],
-    setupUrl: 'https://console.cloud.google.com',
-    setupSteps: GOOGLE_SETUP_STEPS('personal', 'gmail'),
-  },
-  {
-    id: 'gmail-work',
-    name: 'Gmail · work',
-    description: 'Same flow as personal, scoped to a different Google account',
-    aliases: ['gmail-work'],
-    command: 'sh',
-    args: [
-      '-c',
-      'GMAIL_OAUTH_PATH="$HOME/.jarvis/secrets/google-work/gcp-oauth.keys.json" GMAIL_CREDENTIALS_PATH="$HOME/.jarvis/secrets/google-work/credentials.json" exec npx -y @gongrzhe/server-gmail-autoauth-mcp',
-    ],
-    fields: [],
-    setupUrl: 'https://console.cloud.google.com',
-    setupSteps: GOOGLE_SETUP_STEPS('work', 'gmail'),
-  },
-  {
-    id: 'calendar-personal',
-    name: 'Calendar · personal',
-    description: 'Read + create events on your personal Google Calendar',
-    aliases: ['calendar-personal', 'google-calendar-personal'],
-    inboxFiles: ['calendar.json'],
-    // @cocal/google-calendar-mcp respects GOOGLE_OAUTH_CREDENTIALS (the
-    // OAuth keys path) + GOOGLE_CALENDAR_MCP_TOKEN_PATH (where the
-    // refresh token gets cached after auth). Pointing both at our
-    // consolidated secrets dir gives us per-identity isolation that
-    // mirrors the Gmail layout.
-    command: 'sh',
-    args: [
-      '-c',
-      'GOOGLE_OAUTH_CREDENTIALS="$HOME/.jarvis/secrets/google-personal/gcp-oauth.keys.json" GOOGLE_CALENDAR_MCP_TOKEN_PATH="$HOME/.jarvis/secrets/google-personal/calendar-tokens.json" exec npx -y @cocal/google-calendar-mcp',
-    ],
-    fields: [],
-    setupUrl: 'https://console.cloud.google.com',
-    setupSteps: GOOGLE_SETUP_STEPS('personal', 'calendar'),
-  },
-  {
-    id: 'calendar-work',
-    name: 'Calendar · work',
-    description: 'Read + create events on your work Google Calendar',
-    aliases: ['calendar-work', 'google-calendar-work'],
-    inboxFiles: ['calendar.json'],
-    command: 'sh',
-    args: [
-      '-c',
-      'GOOGLE_OAUTH_CREDENTIALS="$HOME/.jarvis/secrets/google-work/gcp-oauth.keys.json" GOOGLE_CALENDAR_MCP_TOKEN_PATH="$HOME/.jarvis/secrets/google-work/calendar-tokens.json" exec npx -y @cocal/google-calendar-mcp',
-    ],
-    fields: [],
-    setupUrl: 'https://console.cloud.google.com',
-    setupSteps: GOOGLE_SETUP_STEPS('work', 'calendar'),
-  },
+  // Gmail · personal / Gmail · work / Calendar · personal / Calendar · work
+  // used to live here — each one a separate stdio MCP wrapping
+  // @gongrzhe/server-gmail-autoauth-mcp or @cocal/google-calendar-mcp with
+  // per-account OAuth files under ~/.jarvis/secrets/. They've been
+  // retired in favour of the unified Google connector (Connected
+  // accounts → Google → Add account), which covers Gmail + Calendar
+  // in one OAuth grant per account with tokens in Keychain. The
+  // migration in electron/main/index.ts strips the legacy entries
+  // from ~/.jarvis/mcp.json on first launch.
   {
     id: 'linear',
     name: 'Linear',
@@ -302,69 +244,3 @@ export const CATALOG: CatalogEntry[] = [
       "Requires a community iMessage MCP (search 'modelcontextprotocol imessage' on GitHub) and Full Disk Access granted to the MCP process. Add manually via 'Custom MCP' once you have a server installed.",
   },
 ];
-
-/**
- * Step-by-step walkthrough for any Google service on any account. Shared
- * between Gmail + Calendar entries because the Cloud Console dance is
- * identical — the only thing that varies is the API to enable and the
- * scopes to add. The skill body covers both Gmail + Calendar use cases
- * with one set of credentials.
- */
-function GOOGLE_SETUP_STEPS(
-  identity: 'personal' | 'work',
-  service: 'gmail' | 'calendar',
-): SetupStep[] {
-  const dir = `~/.jarvis/secrets/google-${identity}`;
-  const apiToEnable =
-    service === 'gmail' ? 'Gmail API' : 'Google Calendar API';
-  const scopes =
-    service === 'gmail'
-      ? ['https://mail.google.com/']
-      : [
-          'https://www.googleapis.com/auth/calendar.events',
-          'https://www.googleapis.com/auth/calendar.readonly',
-        ];
-  const mcpPkg =
-    service === 'gmail'
-      ? '@gongrzhe/server-gmail-autoauth-mcp'
-      : '@cocal/google-calendar-mcp';
-  const identityNote =
-    identity === 'work'
-      ? 'Your work Google Workspace admin may need to approve unverified OAuth apps. If the consent screen rejects you, ping IT.'
-      : 'Personal Google account — you have full control, no IT approval needed.';
-
-  return [
-    {
-      title: `Create or open the Google Cloud project for this ${identity} account`,
-      body: `One OAuth app per account covers both Gmail + Calendar (and future Google services). If you already set up Gmail · ${identity}, you can reuse the same app — just enable a new API and add scopes below. ${identityNote}`,
-      url: 'https://console.cloud.google.com',
-      urlLabel: 'Cloud Console',
-    },
-    {
-      title: `Enable the ${apiToEnable}`,
-      body: 'APIs & Services → Library → search by name → Enable. Each API is per-project, not per-app.',
-    },
-    {
-      title: 'Add the scopes to your OAuth consent screen',
-      body: `APIs & Services → OAuth consent screen → Edit App → Scopes → Add or Remove Scopes. Paste each URL below into the filter, check it, save.`,
-      command: scopes.join('\n'),
-    },
-    {
-      title: `Place the OAuth credentials file at ${dir}/gcp-oauth.keys.json`,
-      body: 'Download the OAuth client JSON from Credentials → your OAuth 2.0 Client → ⤓ Download JSON. Move it into the directory below (Jarvis keeps all Google secrets here — one folder per identity).',
-      command: `mkdir -p ${dir} && mv ~/Downloads/client_secret_*.json ${dir}/gcp-oauth.keys.json`,
-    },
-    {
-      title: 'Authenticate the MCP',
-      body: `Runs the OAuth flow in your browser and writes the refresh token next to your OAuth keys. You only do this once per (service, account). The env var tells the package where to read + write.`,
-      command:
-        service === 'gmail'
-          ? `GMAIL_OAUTH_PATH=${dir}/gcp-oauth.keys.json GMAIL_CREDENTIALS_PATH=${dir}/credentials.json npx -y ${mcpPkg} auth`
-          : `GOOGLE_OAUTH_CREDENTIALS=${dir}/gcp-oauth.keys.json GOOGLE_CALENDAR_MCP_TOKEN_PATH=${dir}/calendar-tokens.json npx -y ${mcpPkg} auth`,
-    },
-    {
-      title: 'Register the MCP in Jarvis',
-      body: 'Click Save below. Jarvis adds an entry to ~/.jarvis/mcp.json that points at the directory you just authenticated. The MCP starts on next task launch — verify with `claude mcp list` or by typing a query that uses the tool.',
-    },
-  ];
-}
