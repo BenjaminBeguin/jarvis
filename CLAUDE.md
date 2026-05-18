@@ -30,7 +30,8 @@ The choice lives in `~/.jarvis/config.json` (`{ "authMode": "subscription" | "ap
 - A **Skill** is a saved Task template: `~/.jarvis/skills/<name>/SKILL.md` with frontmatter `name`, `description`, `allowed-tools`, `mcp-servers`, `model`; body is the system prompt. Built-ins are seeded by `seed.ts` and only written if missing.
 - A **Routine** is `(skillId, cron, input?)`, persisted in `~/.jarvis/routines.json`, scheduled with `node-cron`.
 - A **Reminder** is `(body, mode, fireAt)` persisted in `~/.jarvis/reminders.json`, scheduled with `setTimeout`. `mode='reminder'` fires a notify-style Claude turn; `mode='scheduled'` fires an action-style turn that *does* the thing. Both rehydrate on startup; past-due fire immediately.
-- A **Workflow** is `(trigger, pipeline)` persisted in `~/.jarvis/workflows/<id>.json`. Each pipeline step is a typed node (`http-fetch`, `transform`, `osascript`, `shell`, `inbox-write`, `notify`, `run-skill`). Compiled to an XState v5 machine at load time; the user sees flat JSON. Triggers: `cron` (auto-scheduled) or `manual` (palette / `mcp__jarvis__run_workflow` / UI). Workflows that end in `inbox-write` feed the Inbox under their named source — Linear, Slack, and Calendar inbox feeds are all workflows. See [docs/workflows.md](docs/workflows.md).
+- A **Workflow** is `(trigger, pipeline)` persisted in `~/.jarvis/workflows/<id>.json`. Each pipeline step is a typed node (`http-fetch`, `transform`, `osascript`, `shell`, `inbox-write`, `notify`, `run-skill`, `mcp-call`). Compiled to an XState v5 machine at load time; the user sees flat JSON. Triggers: `cron` (auto-scheduled) or `manual` (palette / `mcp__jarvis__run_workflow` / UI). Cron expressions accept the `{businessHours}` token that resolves at fire time from `config.json.workingHours` so a single setting drives every inbox feed's schedule. Workflows that end in `inbox-write` feed the Inbox under their named source — Linear, Slack, Calendar, and the smart-curate loop all run as workflows. Persisted run history is capped at 200 rows per workflow + 30 days via a periodic prune. See [docs/workflows.md](docs/workflows.md).
+- The **Inbox** aggregates source feeds (PRs, reminders, failed routines, calendar) plus workflow-written sources (slack/linear). On top of those, the `inbox-curate` skill (haiku, cron-fired during working hours) reads the raw feeds + `~/.jarvis/inbox-priorities.md` and writes `~/.jarvis/inbox/smart.json` with the top items annotated by a `why` field. The renderer pins the `'smart'` section above all others. A discoverable nudge points the user at `/inbox-calibrate` while priorities.md still has placeholder bullets.
 - The palette goes through `parseIntent()` → either a `task` (run now) or a `reminder` (queue for later). Skill-pinned dispatches bypass routing.
 
 ### 2. Modules (extensions)
@@ -130,10 +131,13 @@ If a new feature breaks either primitive, push back before implementing.
   meetings/<project>/<ts>-…       # meeting-recorder when scoped
   projects/<name>/memory/*.md     # per-project agent memory (growing scratchpad)
   routines.json                   # array of routine defs, schema in routines.ts
+  workflows/<id>.json             # workflow defs (XState pipelines); chokidar-watched
+  inbox/*.json                    # inbox feeds — smart.json (curated), user-authored
+  inbox-priorities.md             # smart-inbox calibration (people / projects / topics / mutes)
   integrations.json               # OAuth account metadata (no tokens — those live in Keychain)
   intent-cache.json               # sha1→awaiting-classification cache (intent-classifier.ts)
-  config.json                     # authMode, disabledModules, moduleSettings.<id>, afkMode
-  jarvis.sqlite                   # tasks + task_events
+  config.json                     # authMode, disabledModules, moduleSettings.<id>, afkMode, paused, workingHours
+  jarvis.sqlite                   # tasks + task_events + activity_events + workflow_runs
 ```
 
 **Secrets** live in macOS Keychain (service `app.jarvis`), not config.json.
@@ -186,6 +190,9 @@ Day-to-day:
 - **New OAuth connector** (Slack/Google/Notion/Linear-style click-to-connect): add `electron/main/oauth/connectors/<name>.ts` implementing the `Connector` interface from `electron/main/oauth/types.ts`, then register it in `electron/main/index.ts` next to `googleConnector`. The orchestrator, loopback callback (`/oauth/callback/<name>` on port 4747), Keychain (`connector-<name>-<accountId>`), token refresher, and Integrations UI all pick it up automatically. Dev-side OAuth app registration steps (Google Cloud Console, Slack app, Notion integration, Linear app) and distribution caveats (Google verification, Slack App Directory) live in [docs/integrations.md](docs/integrations.md) — keep that doc current when you add a provider.
 - **New workflow node type**: drop a `fromPromise` actor under `electron/main/workflow-nodes/<type>.ts`, register it in `workflow-nodes/index.ts`, add the type literal to `WorkflowNodeType` in `src/shared/types.ts`, and (optionally) extend the Step inspector's `NodeDetail.tsx` to render the params nicely. The compiled XState machine forwards `AbortSignal` into your actor automatically. See [docs/workflows.md](docs/workflows.md).
 - **Every new action gets palette + MCP coverage.** If a feature is worth running, it should be reachable from the palette (a `/<prefix>` intent on a module) AND from the Jarvis MCP server (`mcp__jarvis__<tool>`). Workflows are the canonical example — `/wf <id>`, `mcp__jarvis__run_workflow({ id })`, and the UI "Run now" button all land at the same `workflowRunner.run()`.
+- **Pause is a hard silencer.** Anything that fires automatically (cron, scheduled actions, calendar proximity, inbox auto-refresh, reminder fires, the notifier itself for auto sources) consults `loadPaused()` and skips. User-driven palette/voice/Telegram dispatches still work — pause is about *unattended* work. New auto sources MUST gate on pause.
+- **Long-lived state needs housekeeping.** The TaskRunner sweeps orphaned `status='running'` tasks every 5 min (30-min idle cutoff); workflow run history prunes hourly to 200/workflow + 30 days. When adding a new long-lived registry, plan the eviction up front — see `task-runner.ts:sweepOrphans` and `db.ts:pruneWorkflowRuns` for templates.
+- **Internal worker sessions stay off the Observatory.** Anything that calls `query()` directly (the intent classifier today; future workers) must register its `system/init` session id via `runner.registerInternalSessionId(id)` so claude-code-watch's `isOwnedSessionId()` filter skips the resulting `~/.claude/projects/` jsonl. Otherwise every worker turn appears as a "jarvis · session XXX" row.
 
 ## Phases
 
@@ -198,6 +205,7 @@ We follow `~/.claude/plans/hey-i-would-love-staged-dewdrop.md`:
 - Phase 3 ✅ meeting recorder + auto-debrief skill, Answer HUD, intent router (reminders / scheduled actions), Dashboard view, /status + /next, command history, inline schedule preview.
 - Phase 3.5 ✅ Telegram bot module (pilot from phone) + AFK mode + notifier singleton + `ctx.routePrompt` / `awaitTurnResult` / `sendMessageToTask` / `abortTask` capabilities + `secret` settings field type. See [docs/telegram.md](docs/telegram.md).
 - Phase 4 ✅ Workflows — XState-backed JSON pipelines (`http-fetch` → `transform` → `inbox-write` etc.), graph-first UI with React Flow, palette `/wf` + `mcp__jarvis__run_workflow` access surfaces. Linear / Slack / Calendar inbox feeds run as workflows. See [docs/workflows.md](docs/workflows.md).
+- Phase 4.5 ✅ Smart inbox — `inbox-curate` skill on haiku reads raw feeds + `inbox-priorities.md` calibration and writes a ranked + annotated Smart section to the Inbox. `/inbox-calibrate` refines priorities conversationally; nudge surfaces the loop on first run. Working-hours preference (`config.json.workingHours` + `{businessHours}` cron token) drives every inbox feed's cadence. Task-runner orphan sweep + workflow-run history pruning keep long-lived state bounded.
 - Phase 5 — next: skill-to-skill chaining, branching/parallel in workflows, calendar-aware briefings, whisper.cpp swap, external/community modules, mobile PWA dashboard over Tailscale (the natural extension to remote control beyond chat).
 
 ## What's _not_ in here
