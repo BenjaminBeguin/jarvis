@@ -1,17 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { WorkflowDef } from '../../../shared/types';
+import type { WorkflowDef, WorkflowRun } from '../../../shared/types';
 
 /**
  * Floating dropdown for picking the active workflow on the
  * Workflows page. Lives in the top toolbar — replaces the old
  * left-rail list so the canvas can take the full width.
+ *
+ * Each menu item renders a tiny sparkline of the last ~10 runs
+ * (green / red / amber blocks) so the user spots quietly-broken
+ * workflows at a glance.
  */
 
 interface Props {
   workflows: WorkflowDef[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** Map of workflowId → up to 10 most-recent runs (newest first).
+   *  Drives the per-row sparkline in the dropdown. */
+  recentByWorkflow?: Map<string, WorkflowRun[]>;
 }
 
 function triggerLabel(t: WorkflowDef['trigger']): string {
@@ -19,7 +26,45 @@ function triggerLabel(t: WorkflowDef['trigger']): string {
   return `manual${t.palette ? ' · /' + t.palette : ''}`;
 }
 
-export function WorkflowSelector({ workflows, selectedId, onSelect }: Props) {
+function statusClass(status: WorkflowRun['status']): string {
+  if (status === 'completed') return 'wf-selector__spark-cell--ok';
+  if (status === 'errored') return 'wf-selector__spark-cell--err';
+  if (status === 'aborted') return 'wf-selector__spark-cell--abort';
+  return 'wf-selector__spark-cell--running';
+}
+
+/**
+ * Tiny strip of colored cells, oldest-left → newest-right. We get
+ * runs newest-first from the runner; reverse so reading direction
+ * matches reading order.
+ */
+function HealthSparkline({ runs }: { runs: WorkflowRun[] }) {
+  if (runs.length === 0) return null;
+  const cells = [...runs].reverse();
+  const ok = runs.filter((r) => r.status === 'completed').length;
+  const total = runs.length;
+  return (
+    <span
+      className="wf-selector__spark"
+      title={`${ok}/${total} successful · last ${total} run${total === 1 ? '' : 's'}`}
+      aria-label={`Recent run health: ${ok}/${total} successful`}
+    >
+      {cells.map((r) => (
+        <span
+          key={r.id}
+          className={`wf-selector__spark-cell ${statusClass(r.status)}`}
+        />
+      ))}
+    </span>
+  );
+}
+
+export function WorkflowSelector({
+  workflows,
+  selectedId,
+  onSelect,
+  recentByWorkflow,
+}: Props) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
@@ -101,6 +146,11 @@ export function WorkflowSelector({ workflows, selectedId, onSelect }: Props) {
                       {w.pipeline.length === 1 ? '' : 's'}
                     </span>
                   </span>
+                  {recentByWorkflow && (
+                    <HealthSparkline
+                      runs={recentByWorkflow.get(w.id) ?? []}
+                    />
+                  )}
                 </button>
               </li>
             );

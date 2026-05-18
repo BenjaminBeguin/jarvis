@@ -124,6 +124,41 @@ export function Workflows() {
 
   const recentRun = runs[inspectedRunIdx] ?? null;
 
+  // Recent runs across ALL workflows — fed into the selector for the
+  // per-row health sparkline. Refreshes on every workflowRunChanged
+  // (one shared subscription so a fire on a non-selected workflow
+  // still updates that row's sparkline).
+  const [allRuns, setAllRuns] = useState<WorkflowRun[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void window.jarvis.listWorkflowRuns().then((list) => {
+      if (!cancelled) setAllRuns(list);
+    });
+    const off = window.jarvis.onWorkflowRunChanged((run) => {
+      setAllRuns((prev) => {
+        const idx = prev.findIndex((r) => r.id === run.id);
+        if (idx === -1) return [run, ...prev].slice(0, 400);
+        const next = prev.slice();
+        next[idx] = run;
+        return next;
+      });
+    });
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
+
+  const recentByWorkflow = useMemo(() => {
+    const map = new Map<string, WorkflowRun[]>();
+    for (const r of allRuns) {
+      const arr = map.get(r.workflowId) ?? [];
+      if (arr.length < 10) arr.push(r);
+      map.set(r.workflowId, arr);
+    }
+    return map;
+  }, [allRuns]);
+
   const save = async (): Promise<void> => {
     if (!selected) return;
     let parsed: WorkflowDef;
@@ -293,6 +328,7 @@ export function Workflows() {
             workflows={workflows}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            recentByWorkflow={recentByWorkflow}
           />
           <button
             type="button"

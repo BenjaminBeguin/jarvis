@@ -15274,6 +15274,7 @@ button:disabled:hover {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1;
 }
 
 .wf-selector__item-name {
@@ -15284,6 +15285,49 @@ button:disabled:hover {
 .wf-selector__item-meta {
   font-size: 11px;
   color: var(--text-faint);
+}
+
+/* Per-row health sparkline — last ~10 runs, oldest-left.
+   Tiny dots in the dropdown so a quietly-broken workflow visibly
+   diverges from a steady-green one. */
+.wf-selector__spark {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding-left: 8px;
+  flex-shrink: 0;
+}
+
+.wf-selector__spark-cell {
+  display: inline-block;
+  width: 4px;
+  height: 12px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.wf-selector__spark-cell--ok {
+  background: var(--good);
+  opacity: 0.85;
+}
+
+.wf-selector__spark-cell--err {
+  background: var(--bad);
+}
+
+.wf-selector__spark-cell--abort {
+  background: #ffb870;
+}
+
+.wf-selector__spark-cell--running {
+  background: var(--accent);
+  animation: wf-spark-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes wf-spark-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 
 /* Errors banner (parse failures from workflow-store) */
