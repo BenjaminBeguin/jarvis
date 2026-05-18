@@ -44,14 +44,36 @@ const WORKFLOW_STALE_DETECTORS: Record<
   },
   // Old slack workflow had no `validate` clause on the http-fetch,
   // so { ok: false } responses went silently through and zero items
-  // got written. New seed includes the validate expression.
+  // got written. New seed includes the validate expression — also
+  // matches the previous `'5m'` cron-shorthand default (now bumped
+  // to business hours). Either fingerprint authorises a rewrite.
   'slack-inbox-sync': (def) => {
     const fetch = def.pipeline.find((n) => n.type === 'http-fetch');
-    if (!fetch) return false;
-    const p = fetch.params ?? {};
-    return typeof p['validate'] !== 'string';
+    if (fetch) {
+      const p = fetch.params ?? {};
+      if (typeof p['validate'] !== 'string') return true;
+    }
+    return isUntouchedShorthandCron(def, '5m');
   },
+  // Linear workflow shipped with `every: '5m'` (24/7). Only rewrite
+  // when the on-disk file still has that exact shorthand — anything
+  // else is user-customized.
+  'linear-inbox-sync': (def) => isUntouchedShorthandCron(def, '5m'),
+  // Inbox curate workflow shipped with `every: '10m'` (24/7).
+  'inbox-curate-sync': (def) => isUntouchedShorthandCron(def, '10m'),
 };
+
+/**
+ * True when the on-disk workflow's cron `every` exactly matches the
+ * given shorthand — meaning the user hasn't touched the schedule
+ * since first launch and we can confidently bump it to the latest
+ * seeded default.
+ */
+function isUntouchedShorthandCron(def: WorkflowDef, shorthand: string): boolean {
+  return (
+    def.trigger.kind === 'cron' && def.trigger.every.trim() === shorthand
+  );
+}
 
 /**
  * Replace `<workflowsRoot>/<id>.json` with the latest seed body when

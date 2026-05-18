@@ -70,9 +70,11 @@ export const LINEAR_INBOX_WORKFLOW: WorkflowDef = {
   id: 'linear-inbox-sync',
   name: 'Sync Linear inbox',
   description:
-    'Every 5 minutes, fetch issues assigned to you from Linear and surface them in the Inbox.',
+    'Every 15 minutes during weekday business hours (9am–7pm Mon–Fri), fetch issues assigned to you from Linear and surface them in the Inbox.',
   enabled: true,
-  trigger: { kind: 'cron', every: '5m' },
+  // Business hours only — Linear tickets rarely need 24/7 polling.
+  // Edit to '5m' for 24/7, or any 5-field cron expression.
+  trigger: { kind: 'cron', every: '*/15 9-18 * * 1-5' },
   pipeline: [
     {
       type: 'http-fetch',
