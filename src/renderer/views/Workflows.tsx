@@ -28,7 +28,7 @@ import { WorkflowSelector } from './workflows/WorkflowSelector';
  * the toolbar and the (optional) bottom dock.
  */
 
-type DockTab = 'json' | 'run' | 'step';
+type DockTab = 'json' | 'run' | 'step' | 'chat';
 
 export function Workflows() {
   const [workflows, setWorkflows] = useState<WorkflowDef[]>([]);
@@ -45,6 +45,9 @@ export function Workflows() {
   );
   const [paletteOpen, setPaletteOpen] = useState<boolean>(false);
   const paletteRef = useRef<HTMLDivElement | null>(null);
+  const [chatPrompt, setChatPrompt] = useState<string>('');
+  const [chatBusy, setChatBusy] = useState<boolean>(false);
+  const [chatRunId, setChatRunId] = useState<string | null>(null);
   // Auto-close the palette popover on outside click.
   useEffect(() => {
     if (!paletteOpen) return undefined;
@@ -191,6 +194,37 @@ export function Workflows() {
     toast({
       message: `+ ${stub.type} step appended — edit the params in the JSON dock`,
     });
+  };
+
+  /**
+   * Send a natural-language instruction to the workflow-author skill.
+   * The skill reads the selected workflow's JSON file (if any), edits
+   * or composes a new one, and writes it back. The file watcher picks
+   * up the change → workflow list refreshes and the editor reloads.
+   */
+  const sendChat = async (): Promise<void> => {
+    const prompt = chatPrompt.trim();
+    if (!prompt) return;
+    setChatBusy(true);
+    setChatRunId(null);
+    try {
+      const sel = selected?.id ?? '';
+      const framed = sel
+        ? `SELECTED_WORKFLOW_ID: ${sel}\n\nUser request:\n${prompt}`
+        : `No workflow currently selected.\n\nUser request:\n${prompt}`;
+      const task = await window.jarvis.launchTask({
+        prompt: framed,
+        skillId: 'workflow-author',
+        origin: 'palette',
+      });
+      setChatRunId(task.id);
+      setChatPrompt('');
+      toast({
+        message: 'Workflow-author started — watch the dock for the result',
+      });
+    } finally {
+      setChatBusy(false);
+    }
   };
 
   /**
@@ -384,6 +418,14 @@ export function Workflows() {
                   )}
                 </button>
               )}
+              <button
+                type="button"
+                className={`wf-dock__tab${dockTab === 'chat' ? ' wf-dock__tab--active' : ''}`}
+                onClick={() => setDockTab('chat')}
+                title="Describe a workflow in natural language; the agent edits the JSON for you"
+              >
+                Chat ✦
+              </button>
               <div className="wf-dock__spacer" />
               {dockTab === 'json' && (
                 <button
@@ -437,6 +479,56 @@ export function Workflows() {
                     index={selectedNode.index}
                   />
                 )
+              )}
+              {dockTab === 'chat' && (
+                <div className="wf-dock__chat">
+                  <p className="wf-dock__chat-hint">
+                    Describe what you want this workflow to do (or how to
+                    change the current one) and the agent will edit the JSON
+                    for you. The file watcher reloads the editor when it
+                    finishes.
+                  </p>
+                  <textarea
+                    className="wf-dock__chat-input"
+                    value={chatPrompt}
+                    onChange={(e) => setChatPrompt(e.target.value)}
+                    onKeyDown={(e) => {
+                      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        void sendChat();
+                      }
+                    }}
+                    placeholder={
+                      selected
+                        ? `e.g. “add a cron every 15m and a notify step at the end”`
+                        : `e.g. “build a workflow that fetches my GitHub notifications every 10m and writes them to the inbox”`
+                    }
+                    spellCheck={false}
+                    rows={4}
+                    disabled={chatBusy}
+                  />
+                  <div className="wf-dock__chat-bar">
+                    <span className="wf-dock__chat-meta">
+                      {selected
+                        ? `Editing ${selected.id}`
+                        : 'No workflow selected — agent will create a new one'}
+                    </span>
+                    <div className="wf-dock__spacer" />
+                    {chatRunId && (
+                      <span className="wf-dock__chat-run">
+                        Task: <code>{chatRunId.slice(0, 8)}</code>
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="wf-dock__chat-send"
+                      onClick={() => void sendChat()}
+                      disabled={chatBusy || chatPrompt.trim().length === 0}
+                    >
+                      {chatBusy ? 'Launching…' : 'Send (⌘↩)'}
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
