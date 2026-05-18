@@ -366,6 +366,9 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
 
       {error && <div className="inbox__error">{error}</div>}
 
+      <SmartInboxNudge />
+
+
       {items.length === 0 && refreshing && (
         <div className="inbox__empty">Looking around…</div>
       )}
@@ -1045,6 +1048,89 @@ function InboxSettingsPopover({
         Wider Inbox prefs (per-source toggles, calendar window) live in
         Settings → Inbox.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Discoverability nudge for the Smart inbox curation loop. Surfaces a
+ * one-time callout when `~/.jarvis/inbox-priorities.md` still matches
+ * the seeded placeholder — i.e. the user hasn't told the curator
+ * what matters to them yet, so the Smart section is running on weak
+ * heuristics. Click "Calibrate now" fires the inbox-calibrate skill.
+ *
+ * Hidden as soon as the file diverges from the placeholder (no
+ * second-guessing the user's prefs).
+ */
+function SmartInboxNudge() {
+  const [needsCalibration, setNeedsCalibration] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.jarvis
+      .readJarvisFile('inbox-priorities.md')
+      .then((contents) => {
+        if (cancelled) return;
+        // The seeded scaffold uses these literal placeholder bullets
+        // — they only stay in the file if the user hasn't edited it.
+        const isPlaceholder =
+          contents.includes('(e.g. "Manager') ||
+          contents.includes('(e.g. "ship-q4');
+        setNeedsCalibration(isPlaceholder);
+      })
+      .catch(() => {
+        // File missing (pre-seed install): suggest calibration too.
+        if (!cancelled) setNeedsCalibration(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!needsCalibration) return null;
+
+  const runCalibrate = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      await window.jarvis.launchTask({
+        skillId: 'inbox-calibrate',
+        prompt:
+          'Walk me through calibrating the Smart inbox. Read my recent items + priorities and ask 3-5 focused questions.',
+        origin: 'palette',
+      });
+    } finally {
+      setBusy(false);
+      // Re-check the file after the calibrator runs (the skill
+      // appends; if anything landed the nudge auto-hides).
+      void window.jarvis
+        .readJarvisFile('inbox-priorities.md')
+        .then((c) => {
+          const stillPlaceholder = c.includes('(e.g. "Manager');
+          setNeedsCalibration(stillPlaceholder);
+        })
+        .catch(() => undefined);
+    }
+  };
+
+  return (
+    <div className="inbox__nudge">
+      <div className="inbox__nudge-body">
+        <strong>Smart inbox needs calibration.</strong>
+        <p>
+          The curator is running on weak defaults until you tell it who +
+          what matters to you. Run <code>/inbox-calibrate</code> (3-5 quick
+          questions) and the Smart section sharpens up on the next 15-min
+          tick.
+        </p>
+      </div>
+      <button
+        className="inbox__nudge-cta"
+        onClick={() => void runCalibrate()}
+        disabled={busy}
+      >
+        {busy ? 'Launching…' : 'Calibrate now →'}
+      </button>
     </div>
   );
 }
