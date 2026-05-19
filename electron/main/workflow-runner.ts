@@ -100,11 +100,17 @@ export class WorkflowRunner extends EventEmitter {
     if (!this.nodeCtx) {
       throw new Error('WorkflowRunner: setNodeContext() must be called first');
     }
-    // Thread the workflow id onto a per-run ctx so nodes can resolve
-    // per-scenario state (autopilot feedback file path, draft-output
-    // id prefix). Compile-time only — the original shared ctx isn't
-    // mutated.
-    const runCtx: WorkflowNodeContext = { ...this.nodeCtx, workflowId: def.id };
+    // Thread the workflow id + initial seed onto a per-run ctx so
+    // nodes can resolve per-scenario state (autopilot feedback file
+    // path, draft-output id prefix) AND reference the original
+    // trigger payload from later steps (prompt-output's context
+    // field references {seed.field}). Compile-time only — the
+    // original shared ctx isn't mutated.
+    const runCtx: WorkflowNodeContext = {
+      ...this.nodeCtx,
+      workflowId: def.id,
+      seed,
+    };
     const compile = compileWorkflow(def, runCtx, seed);
     if (compile.unknownTypes.length) {
       // Don't even spawn — surface the misconfig as an errored run.

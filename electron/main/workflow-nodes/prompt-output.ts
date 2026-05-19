@@ -30,7 +30,16 @@ import type { NodeHandlerInput } from './types.js';
  *     context?: string;       // read-only context (thread, PR diff,
  *                             //   etc.) shown alongside the draft
  *     onAccept?: 'prev' | 'feedback'; // default 'prev'
+ *     skipPattern?: string;   // regex source; if `prev` matches,
+ *                             //   short-circuit without opening
+ *                             //   the HUD. Default '^\\(skip\\)$'.
  *   }
+ *
+ * Templating: title / summary / body / context all support
+ * `{prev}`, `{prev.field}`, and `{seed.field}` substitution. Use
+ * `{seed.…}` to surface the original trigger payload (e.g. the
+ * Slack item that fired an inbox-changed scenario) alongside the
+ * draft so the user has context for their decision.
  *
  * Output: `prev` (or the user's edit if `onAccept: 'feedback'`).
  * Throws on reject; the run ends with status `errored`.
@@ -42,7 +51,10 @@ interface PromptOutputParams {
   body?: string;
   context?: string;
   onAccept?: 'prev' | 'feedback';
+  skipPattern?: string;
 }
+
+const DEFAULT_SKIP_PATTERN = '^\\(skip\\)$';
 
 export const promptOutputNode = fromPromise<
   unknown,
@@ -53,7 +65,32 @@ export const promptOutputNode = fromPromise<
     throw new Error('prompt-output: params.title is required');
   }
   const workflowId = ctx.workflowId ?? 'autopilot';
-  const body = params.body ?? stringify(prev);
+  const seed = ctx.seed;
+
+  // Skip short-circuit. If `prev` matches the skip pattern (default
+  // "(skip)" — what the slack-dm-ack skill emits when it doesn't
+  // want to draft) we end the run as a clean error without
+  // bothering the user. The feedback file records it so the agent
+  // sees its prior skips on the next run.
+  const skipRe = new RegExp(params.skipPattern ?? DEFAULT_SKIP_PATTERN);
+  if (typeof prev === 'string' && skipRe.test(prev.trim())) {
+    appendFeedback(workflowId, {
+      decision: 'REJECTED',
+      context: 'agent declined to draft',
+      drafted: prev,
+      feedback: 'auto-skipped (matched skipPattern)',
+    });
+    throw new Error('prompt-output: skipped (agent declined to draft)');
+  }
+
+  const body = substitute(params.body ?? stringify(prev), prev, seed);
+  const title = substitute(params.title, prev, seed);
+  const summary = params.summary
+    ? substitute(params.summary, prev, seed)
+    : undefined;
+  const context = params.context
+    ? substitute(params.context, prev, seed)
+    : undefined;
 
   // Fire a notification so the user notices the prompt even if the
   // Jarvis window isn't focused. NOT in AUTO_SOURCES; this fires
@@ -62,8 +99,8 @@ export const promptOutputNode = fromPromise<
   // broadcast triggered by approvalBridge.await().
   notifier.post({
     source: 'autopilot-prompt',
-    title: params.title,
-    body: params.summary ?? body.slice(0, 160),
+    title,
+    body: summary ?? body.slice(0, 160),
   });
 
   // Surface mid-pipeline cancellation. `signal` is threaded into the
@@ -72,10 +109,10 @@ export const promptOutputNode = fromPromise<
   // around when the user hits Stop.
   const decision = await approvalBridge.await(
     {
-      title: params.title,
-      summary: params.summary,
+      title,
+      summary,
       body,
-      context: params.context,
+      context,
       workflowId,
     },
     signal,
@@ -84,7 +121,7 @@ export const promptOutputNode = fromPromise<
   if (decision.decision === 'accept') {
     appendFeedback(workflowId, {
       decision: 'ACCEPTED',
-      context: params.summary,
+      context: summary,
       drafted: body,
       ...(decision.editedBody && decision.editedBody !== body
         ? { feedback: `User edited before accepting: "${decision.editedBody}"` }
@@ -99,7 +136,7 @@ export const promptOutputNode = fromPromise<
   // Reject path — append the note + throw.
   appendFeedback(workflowId, {
     decision: 'REJECTED',
-    context: params.summary,
+    context: summary,
     drafted: body,
     feedback: decision.feedback ?? '(no note)',
   });
@@ -116,4 +153,37 @@ function stringify(v: unknown): string {
   } catch {
     return String(v);
   }
+}
+
+/**
+ * Resolve `{prev}`, `{prev.<path>}`, and `{seed.<path>}` tokens in
+ * one of prompt-output's text params. Mirror of the substitution
+ * helpers in run-skill and draft-output — kept inline so each node
+ * can evolve independently without coupling on a shared module
+ * that'd grow unbounded.
+ */
+function substitute(template: string, prev: unknown, seed: unknown): string {
+  let out = template.replace(
+    /\{(prev|seed)(?:\.([\w.]+))?\}/g,
+    (_match, kind, path) => {
+      const source = kind === 'seed' ? seed : prev;
+      if (!path) return stringify(source);
+      const segments = String(path).split('.');
+      let cur: unknown = source;
+      for (const seg of segments) {
+        if (
+          cur &&
+          typeof cur === 'object' &&
+          seg in (cur as Record<string, unknown>)
+        ) {
+          cur = (cur as Record<string, unknown>)[seg];
+        } else {
+          return `{${kind}.${path}}`;
+        }
+      }
+      if (typeof cur === 'string') return cur;
+      return stringify(cur);
+    },
+  );
+  return out;
 }

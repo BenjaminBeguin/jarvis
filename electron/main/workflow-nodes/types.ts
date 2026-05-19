@@ -32,6 +32,13 @@ export interface WorkflowNodeContext {
    *  workflow runner before each run; undefined when a node is being
    *  exercised outside a workflow run (rare). */
   workflowId?: string;
+  /** Initial input passed to the first node (the "trigger payload").
+   *  For autopilot inbox-changed scenarios, this is `{ kind:
+   *  'inbox-changed', item }`. Threaded through so later nodes —
+   *  notably prompt-output — can reference the original trigger
+   *  context (the Slack thread, the PR data) via `{seed.field}`
+   *  substitution. Cron/manual triggers have `seed === undefined`. */
+  seed?: unknown;
 }
 
 /**

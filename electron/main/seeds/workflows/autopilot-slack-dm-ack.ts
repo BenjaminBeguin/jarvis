@@ -74,8 +74,13 @@ export const AUTOPILOT_SLACK_DM_ACK_WORKFLOW: WorkflowDef = {
     {
       type: 'prompt-output',
       params: {
-        title: 'Send this Slack reply?',
-        summary: 'Autopilot drafted a short acknowledgement.',
+        title: 'Save this Slack reply draft?',
+        summary:
+          'Autopilot drafted an acknowledgement. Accept saves it as positive feedback (no message is sent — the workflow ends at the draft).',
+        // {seed.item.title} = the channel/sender line ("#migrations · @luca").
+        // {seed.item.subtitle} = age + meta. Together they give the user
+        // enough to decide whether the draft fits.
+        context: '{seed.item.title}\n\n{seed.item.subtitle}',
         onAccept: 'feedback',
       },
     },
