@@ -66,28 +66,20 @@ export const promptOutputNode = fromPromise<
     body: params.summary ?? body.slice(0, 160),
   });
 
-  // Surface mid-pipeline cancellation. If the workflow is aborted
-  // (Stop button, app quit) the pending approval is dropped and the
-  // node throws.
-  const aborted = new Promise<never>((_resolve, reject) => {
-    if (signal.aborted) reject(new Error('prompt-output: aborted before dispatch'));
-    signal.addEventListener(
-      'abort',
-      () => reject(new Error('prompt-output: aborted by caller')),
-      { once: true },
-    );
-  });
-
-  const decision = await Promise.race([
-    approvalBridge.await({
+  // Surface mid-pipeline cancellation. `signal` is threaded into the
+  // bridge so an aborted workflow run drops the pending entry +
+  // rejects this promise cleanly — no stale bridge entries left
+  // around when the user hits Stop.
+  const decision = await approvalBridge.await(
+    {
       title: params.title,
       summary: params.summary,
       body,
       context: params.context,
       workflowId,
-    }),
-    aborted,
-  ]);
+    },
+    signal,
+  );
 
   if (decision.decision === 'accept') {
     appendFeedback(workflowId, {
