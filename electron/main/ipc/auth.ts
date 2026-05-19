@@ -1,13 +1,15 @@
 import { ipcMain } from 'electron';
 
 import { IpcChannels } from '@shared/ipc';
-import type { AuthMode } from '@shared/types';
+import type { AppMode, AuthMode } from '@shared/types';
 
 import {
   clearAuthMode,
   loadAfkMode,
+  loadAppMode,
   loadPaused,
   saveAfkMode,
+  saveAppMode,
   saveAuthMode,
   savePaused,
 } from '../auth.js';
@@ -93,15 +95,36 @@ export function registerAuthIpc({ auth, activity, modules }: IpcDeps): void {
 
   ipcMain.handle(IpcChannels.setPaused, (_e, value: unknown) => {
     const next = value === true;
-    savePaused(next);
-    broadcast(IpcChannels.pausedChanged, next);
+    // Mirror onto the canonical appMode setter — fires the unified
+    // event below.
+    setMode(next ? 'paused' : 'running');
+  });
+
+  ipcMain.handle(IpcChannels.getAppMode, () => loadAppMode());
+
+  ipcMain.handle(IpcChannels.setAppMode, (_e, value: unknown) => {
+    if (value !== 'paused' && value !== 'running' && value !== 'autopilot') {
+      throw new Error(`setAppMode: invalid mode "${String(value)}"`);
+    }
+    setMode(value);
+  });
+
+  function setMode(next: AppMode): void {
+    const prev = loadAppMode();
+    if (prev === next) return;
+    saveAppMode(next);
+    // Fire BOTH events so legacy consumers (renderer Shell's
+    // onPausedChanged subscription) keep working alongside the new
+    // appMode-aware ones.
+    broadcast(IpcChannels.appModeChanged, next);
+    broadcast(IpcChannels.pausedChanged, next === 'paused');
     refreshTrayMenu();
     activity.record({
-      kind: 'paused.toggled',
-      label: `Jarvis ${next ? 'paused' : 'resumed'} — routines + scheduled actions ${next ? 'skipping' : 'active'}`,
-      detail: { paused: next },
+      kind: 'mode.changed',
+      label: `Jarvis ${prev} → ${next}`,
+      detail: { from: prev, to: next, source: 'ipc' },
     });
-  });
+  }
 
   ipcMain.handle(IpcChannels.setTelegramBotToken, async (_e, value: string) => {
     if (typeof value !== 'string' || value.trim().length === 0) {

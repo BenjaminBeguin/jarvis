@@ -3419,35 +3419,60 @@ button:disabled:hover {
   color: var(--text-dim);
 }
 
-/* ----- Pause toggle in the Shell header ------------------------------- */
+/* ----- Tri-state mode segmented control in the Shell header ----------- */
 
-.shell__pause-btn {
+.shell__mode {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  overflow: hidden;
+  height: 26px;
+}
+
+.shell__mode-seg {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 26px;
-  padding: 0;
+  width: 26px;
   background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  color: var(--text-dim);
+  border: none;
+  border-right: 1px solid var(--border-strong);
+  color: var(--text-faint);
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  padding: 0;
+  font-size: 12px;
+  transition: background 120ms ease, color 120ms ease;
 }
-.shell__pause-btn:hover {
-  border-color: var(--accent);
+
+.shell__mode-seg:last-child {
+  border-right: none;
+}
+
+.shell__mode-seg:hover {
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text);
 }
-.shell__pause-btn--on {
+
+.shell__mode-seg--on {
   background: rgba(255, 153, 0, 0.12);
-  border-color: var(--accent);
   color: var(--accent);
-  box-shadow: var(--accent-glow-soft);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
-.shell__pause-btn--on:hover {
-  background: rgba(255, 153, 0, 0.2);
+
+.shell__mode-seg--on:hover {
+  background: rgba(255, 153, 0, 0.18);
   color: var(--accent);
+}
+
+.shell__mode-seg--autopilot.shell__mode-seg--on {
+  background: rgba(122, 220, 255, 0.14);
+  color: #7adcff;
+  box-shadow: inset 0 -2px 0 #7adcff;
+}
+
+.shell__mode-seg--autopilot.shell__mode-seg--on:hover {
+  background: rgba(122, 220, 255, 0.22);
 }
 
 /* ----- AFK toggle in the Shell header --------------------------------- */
@@ -4788,6 +4813,15 @@ button:disabled:hover {
   display: flex;
   align-items: center;
   gap: 7px;
+  min-width: 0;
+}
+
+.briefings__kind-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .briefings__kind-on-dot {
@@ -9683,6 +9717,163 @@ button:disabled:hover {
   line-height: 1.55;
 }
 
+/* ----- Column drawer ----------------------------------------------------
+   Unified collapsed-history affordance used by both Notes (Done +
+   Archived) and Reminders (Done + Cancelled). One drawer per column so
+   terminal-state rows never crowd the active list. */
+.column-drawer {
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.column-drawer__head-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.column-drawer__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 2px;
+}
+
+.column-drawer__head:hover {
+  color: var(--accent);
+  background: rgba(0, 212, 255, 0.04);
+}
+
+.column-drawer__caret {
+  color: var(--text-faint);
+}
+
+.column-drawer__label {
+  color: inherit;
+}
+
+.column-drawer__count {
+  background: rgba(95, 255, 166, 0.1);
+  color: var(--good);
+  padding: 2px 7px;
+  border-radius: 2px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.column-drawer__breakdown {
+  margin-left: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--text-faint);
+}
+
+.column-drawer__bulk-clear {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.column-drawer__bulk-clear:hover {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.column-drawer__body {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.column-drawer__empty {
+  margin-top: 10px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px dashed var(--border);
+  border-radius: 2px;
+  line-height: 1.55;
+}
+
+.column-drawer__subgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.column-drawer__subgroup-label {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.column-drawer__subgroup-count {
+  background: rgba(95, 255, 166, 0.08);
+  color: var(--good);
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+}
+
+.column-drawer__subgroup-count--warn {
+  background: rgba(255, 180, 84, 0.08);
+  color: var(--warn);
+}
+
+/* When the reminders primary section is empty, this expands the hint
+   so the user reads "Nothing to do" instead of two tiny stacked empties. */
+.reminders-page__empty--primary {
+  padding: 18px 16px;
+  border: 1px dashed var(--border);
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.2);
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+.reminders-page__empty--primary code {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  background: rgba(0, 212, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+
 .note-card__entry {
   border-left: 2px solid var(--border-strong);
   padding-left: 12px;
@@ -10280,6 +10471,88 @@ button:disabled:hover {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--text-faint);
+}
+
+.routines__rail-search {
+  position: relative;
+  margin: 6px 0 4px;
+}
+
+.routines__rail-search-input {
+  width: 100%;
+  background: rgba(4, 7, 11, 0.6);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  padding: 6px 26px 6px 10px;
+  border-radius: 2px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.routines__rail-search-input::placeholder {
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+
+.routines__rail-search-input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
+}
+
+.routines__rail-search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: 0;
+  color: var(--text-faint);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 6px;
+  line-height: 1;
+}
+
+.routines__rail-search-clear:hover {
+  color: var(--bad);
+}
+
+/* Category badge on each rail card. Tiny pill so a glance at the
+   sidebar tells you which routines are briefings vs. inbox sources
+   vs. plain freeform. The colors mirror the existing purpose dot
+   palette used in the routine detail header. */
+.routines__rail-tag {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 2px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+
+.routines__rail-tag--briefing {
+  color: var(--accent);
+  border-color: rgba(0, 212, 255, 0.4);
+  background: rgba(0, 212, 255, 0.06);
+}
+
+.routines__rail-tag--inbox {
+  color: var(--good);
+  border-color: rgba(95, 255, 166, 0.4);
+  background: rgba(95, 255, 166, 0.06);
+}
+
+.routines__rail-tag--freeform {
+  color: var(--text-dim);
+  border-color: var(--border);
 }
 
 .routines__rail-card--off {
@@ -13405,6 +13678,76 @@ button:disabled:hover {
   z-index: 200;
   padding: 32px;
 }
+
+/* Global TaskOverlay — see src/renderer/views/TaskOverlay.tsx. Shares
+   visual idiom with module-settings-modal but is larger (transcript
+   needs room) and z-indexed higher so it sits over module settings if
+   both happen to be open. */
+.task-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 8, 16, 0.78);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  z-index: 220;
+  padding: 24px;
+  animation: task-overlay-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.task-overlay {
+  position: relative;
+  width: min(1080px, 100%);
+  max-height: calc(100vh - 48px);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  box-shadow:
+    0 0 32px rgba(0, 212, 255, 0.18),
+    0 8px 32px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--mono);
+}
+/* Inner <TaskDetail> flexes to fill the modal — same view as the
+   sidebar, just in a wider container. */
+.task-overlay > .detail {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.task-overlay__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border-strong);
+  width: 28px;
+  height: 28px;
+  border-radius: 2px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+  z-index: 1;
+}
+.task-overlay__close:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.task-overlay__empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+@keyframes task-overlay-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .module-settings-modal {
   width: min(720px, 100%);
   max-height: 88vh;
@@ -13931,14 +14274,22 @@ button:disabled:hover {
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(520px, 92vw);
+  width: min(640px, 92vw);
   background: var(--bg-elev);
   border-left: 1px solid var(--border-strong);
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
   pointer-events: auto;
+  overflow: hidden;
   animation: session-slide 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* Inner <TaskDetail> flexes to fill the panel — sized by the parent's
+   width/height, same component as the overlay just in a narrower
+   container. */
+.session-sidebar > .detail {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 @keyframes session-fade {
   from { opacity: 0; }
@@ -13948,52 +14299,14 @@ button:disabled:hover {
   from { transform: translateX(20px); opacity: 0; }
   to   { transform: translateX(0);     opacity: 1; }
 }
-.session-sidebar__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 18px 10px;
-  border-bottom: 1px solid var(--border);
-}
-.session-sidebar__head-text { min-width: 0; flex: 1 1 auto; }
-.session-sidebar__head h3 {
-  margin: 0 0 6px;
-  font-family: var(--mono);
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.session-sidebar__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-dim);
-}
-.session-sidebar__status {
-  padding: 1px 7px;
-  border: 1px solid var(--border-strong);
-  border-radius: 2px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.session-sidebar__status--running { color: var(--accent); border-color: rgba(0, 212, 255, 0.4); }
-.session-sidebar__status--awaiting { color: var(--warn); border-color: rgba(255, 153, 0, 0.4); }
-.session-sidebar__status--completed { color: var(--good); border-color: rgba(95, 255, 166, 0.32); }
-.session-sidebar__status--errored,
-.session-sidebar__status--aborted { color: var(--bad); border-color: rgba(255, 85, 119, 0.42); }
-.session-sidebar__chip {
-  padding: 1px 7px;
-  background: rgba(0, 212, 255, 0.06);
-  border-radius: 2px;
-  color: var(--text-dim);
-}
+/* Internal transcript is rendered by the shared <TaskDetail> component
+   — all the chat/reply/resume CSS lives under `.detail` already. The
+   sidebar only ships its frame (slide-in container, backdrop, close
+   button, loading state). */
 .session-sidebar__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
   background: transparent;
   border: 1px solid var(--border-strong);
   color: var(--text-dim);
@@ -14003,119 +14316,17 @@ button:disabled:hover {
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
-  flex-shrink: 0;
+  z-index: 1;
 }
 .session-sidebar__close:hover {
   color: var(--accent);
   border-color: var(--accent);
 }
-.session-sidebar__body {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  padding: 14px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
 .session-sidebar__empty {
+  padding: 32px 18px;
   color: var(--text-dim);
   font-style: italic;
   font-size: 12px;
-}
-.session-sidebar__turn { display: flex; flex-direction: column; gap: 4px; }
-.session-sidebar__role {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-.session-sidebar__turn--user .session-sidebar__role { color: var(--warn); }
-.session-sidebar__turn--assistant .session-sidebar__role { color: var(--accent); }
-.session-sidebar__text {
-  font-size: 12.5px;
-  line-height: 1.6;
-  color: var(--text);
-  white-space: pre-wrap;
-}
-.session-sidebar__tools {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-dim);
-  padding: 4px 8px;
-  background: rgba(0, 212, 255, 0.04);
-  border-left: 2px solid var(--border-strong);
-}
-.session-sidebar__footer {
-  border-top: 1px solid var(--border);
-  padding: 10px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.session-sidebar__reply {
-  display: flex;
-  gap: 6px;
-  align-items: stretch;
-}
-.session-sidebar__reply-input {
-  flex: 1 1 auto;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--border-strong);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 12px;
-  padding: 8px 10px;
-  border-radius: 2px;
-  resize: none;
-  line-height: 1.4;
-}
-.session-sidebar__reply-input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.session-sidebar__reply-input:disabled {
-  opacity: 0.5;
-  cursor: wait;
-}
-.session-sidebar__reply-send {
-  background: transparent;
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  padding: 0 14px;
-  border-radius: 2px;
-  cursor: pointer;
-  align-self: stretch;
-}
-.session-sidebar__reply-send:hover:not(:disabled) {
-  background: rgba(0, 212, 255, 0.08);
-}
-.session-sidebar__reply-send:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-.session-sidebar__actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.session-sidebar__action {
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  color: var(--text-dim);
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  padding: 5px 12px;
-  border-radius: 2px;
-  cursor: pointer;
-}
-.session-sidebar__action:hover {
-  color: var(--accent);
-  border-color: var(--accent);
 }
 
 /* ── Spend dashboard ───────────────────────────────────────────────── */

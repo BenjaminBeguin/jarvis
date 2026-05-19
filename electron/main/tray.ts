@@ -4,11 +4,13 @@ import { fileURLToPath } from 'node:url';
 
 import { IpcChannels } from '@shared/ipc';
 
+import type { AppMode } from '@shared/types';
+
 import {
   loadAfkMode,
-  loadPaused,
+  loadAppMode,
   saveAfkMode,
-  savePaused,
+  saveAppMode,
 } from './auth.js';
 import { broadcast, openObservatory, openPalette, sendWhenReady, showAnswerHud } from './windows.js';
 
@@ -91,20 +93,8 @@ function rebuildMenu(): void {
         rebuildMenu();
       },
     },
-    {
-      label: 'Pause Jarvis (skip routines + scheduled actions)',
-      type: 'checkbox',
-      checked: loadPaused(),
-      click: (menuItem) => {
-        const next = menuItem.checked;
-        savePaused(next);
-        broadcast(IpcChannels.pausedChanged, next);
-        rebuildMenu();
-        // Also refresh the tray icon — paused state could later
-        // gain visual treatment (dim icon, ⏸ tooltip badge).
-        rebuildToolTip();
-      },
-    },
+    { type: 'separator' },
+    ...buildModeRadios(),
   );
   if (runningTasks > 0 && abortAllHandler) {
     items.push(
@@ -122,10 +112,42 @@ export function refreshTrayMenu(): void {
   rebuildMenu();
 }
 
+/**
+ * Three-radio submenu for the tri-state appMode. Selecting an item
+ * writes the new mode, broadcasts both `appModeChanged` and the
+ * legacy `pausedChanged`, then rebuilds the tray + tooltip.
+ */
+function buildModeRadios(): Electron.MenuItemConstructorOptions[] {
+  const current = loadAppMode();
+  const item = (
+    mode: AppMode,
+    label: string,
+  ): Electron.MenuItemConstructorOptions => ({
+    label,
+    type: 'radio',
+    checked: current === mode,
+    click: () => {
+      if (loadAppMode() === mode) return;
+      saveAppMode(mode);
+      broadcast(IpcChannels.appModeChanged, mode);
+      broadcast(IpcChannels.pausedChanged, mode === 'paused');
+      rebuildMenu();
+      rebuildToolTip();
+    },
+  });
+  return [
+    item('paused', '⏸ Paused — silence routines + scheduled actions'),
+    item('running', '▶ Running'),
+    item('autopilot', '⚡ Autopilot — act on incoming asks'),
+  ];
+}
+
 function rebuildToolTip(): void {
   if (!tray) return;
   const bits: string[] = [];
-  if (loadPaused()) bits.push('⏸ paused');
+  const mode = loadAppMode();
+  if (mode === 'paused') bits.push('⏸ paused');
+  else if (mode === 'autopilot') bits.push('⚡ autopilot');
   if (runningTasks > 0) bits.push(`${runningTasks} running`);
   if (awaitingReplies > 0) bits.push(`${awaitingReplies} awaiting`);
   if (pendingReminders > 0) bits.push(`${pendingReminders} scheduled`);

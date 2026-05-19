@@ -861,6 +861,23 @@ export interface TranscribeProgress {
 
 export type AuthMode = 'subscription' | 'api-key';
 
+/**
+ * Top-level operating state. Replaces the older `paused: boolean` —
+ * three exclusive modes:
+ *
+ *   - paused    silences automatic notifications, skips routine /
+ *               workflow cron ticks. Existing paused semantics.
+ *   - running   default. Everything fires normally; confirms still
+ *               apply (meeting prompt, reminder fire-now, etc.).
+ *   - autopilot less-friction (auto-confirm prompts) AND lets Jarvis
+ *               act on incoming asks via opt-in scenario workflows
+ *               (trigger.kind === 'autopilot').
+ *
+ * Tray + header expose a 3-radio control; only one mode is active at
+ * a time. State lives in `~/.jarvis/config.json` as `appMode`.
+ */
+export type AppMode = 'paused' | 'running' | 'autopilot';
+
 export interface AppStatus {
   authMode: AuthMode | null;
   hasApiKey: boolean;

@@ -7,6 +7,7 @@ import {
   DEFAULT_INBOX_PREFS,
   DEFAULT_NOTIFICATION_PREFS,
   DEFAULT_WORKING_HOURS_PREFS,
+  type AppMode,
   type AuthMode,
   type InboxPrefs,
   type ModuleSettingsValues,
@@ -27,10 +28,12 @@ interface PersistedConfig {
    *  (via the Telegram module) so the user can act on them from afar.
    *  Cross-cutting state, not module-scoped. */
   afkMode?: boolean;
-  /** Global pause. When true, routines + scheduled-action reminders
-   *  don't fire — anything that would auto-spawn a Claude turn skips
-   *  until the user resumes. User-initiated palette/voice/Telegram
-   *  dispatches still work; pause is about *unattended* spend. */
+  /** Tri-state operating mode (paused / running / autopilot). Replaces
+   *  the legacy `paused: boolean` — see `loadAppMode` for the one-shot
+   *  migration. `paused` is still tolerated on read for forward-from-
+   *  old-config compatibility and gets stripped on the next write. */
+  appMode?: AppMode;
+  /** Legacy. Migrated to `appMode` on load and dropped on next write. */
   paused?: boolean;
   /** Working-hours window the user expects to be at their desk.
    *  Drives the `{businessHours}` placeholder substitution in
@@ -220,12 +223,45 @@ export function saveAfkMode(value: boolean): void {
   writeConfig({ ...readConfig(), afkMode: value });
 }
 
-export function loadPaused(): boolean {
-  return readConfig().paused === true;
+/**
+ * Read the tri-state app mode. Performs the one-shot migration from
+ * the legacy `paused: boolean` shape: `paused: true → 'paused'`,
+ * `paused: false | undefined → 'running'`. The `paused` field is
+ * dropped on the next write (see saveAppMode).
+ */
+export function loadAppMode(): AppMode {
+  const cfg = readConfig();
+  if (cfg.appMode === 'paused' || cfg.appMode === 'running' || cfg.appMode === 'autopilot') {
+    return cfg.appMode;
+  }
+  // Legacy migration path.
+  return cfg.paused === true ? 'paused' : 'running';
 }
 
+export function saveAppMode(mode: AppMode): void {
+  const cfg = readConfig();
+  const next = { ...cfg, appMode: mode };
+  // One-shot strip of the legacy field once we've written the canonical
+  // `appMode`. Idempotent — second save just sees no `paused`.
+  delete (next as { paused?: boolean }).paused;
+  writeConfig(next);
+}
+
+/**
+ * Back-compat shim. Existing callsites in notifier / routines /
+ * reminders read this. Now resolves through `appMode`.
+ */
+export function loadPaused(): boolean {
+  return loadAppMode() === 'paused';
+}
+
+/**
+ * Back-compat shim. Maps boolean to the new tri-state: `true →
+ * 'paused'`, `false → 'running'`. Anything that wants explicit
+ * autopilot should call `saveAppMode` directly.
+ */
 export function savePaused(value: boolean): void {
-  writeConfig({ ...readConfig(), paused: value });
+  saveAppMode(value ? 'paused' : 'running');
 }
 
 export function loadWorkingHours(): WorkingHoursPrefs {

@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannels } from '@shared/ipc';
 import type {
   ActivityEvent,
+  AppMode,
   AppStatus,
   AuthMode,
   ClaudeMcpEntry,
@@ -81,6 +82,14 @@ const api = {
     ipcRenderer.invoke(IpcChannels.setPaused, value),
   onPausedChanged: (listener: Listener<boolean>): Unsubscribe =>
     subscribe(IpcChannels.pausedChanged, listener),
+
+  // Tri-state operating mode.
+  getAppMode: (): Promise<AppMode> =>
+    ipcRenderer.invoke(IpcChannels.getAppMode),
+  setAppMode: (mode: AppMode): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.setAppMode, mode),
+  onAppModeChanged: (listener: Listener<AppMode>): Unsubscribe =>
+    subscribe(IpcChannels.appModeChanged, listener),
 
   setTelegramBotToken: (value: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.setTelegramBotToken, value),

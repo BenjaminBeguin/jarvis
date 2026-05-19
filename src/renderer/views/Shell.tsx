@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { AppStatus, ModuleSummary, ProjectDef } from '../../shared/types';
+import type { AppMode, AppStatus, ModuleSummary, ProjectDef } from '../../shared/types';
 import { getModulePage } from '../modules/registry';
 import { Inbox } from './Inbox';
 import { Logo } from './Logo';
@@ -21,6 +21,7 @@ import { toast } from './Toaster';
 import { Toaster } from './Toaster';
 import { Observatory } from './Observatory';
 import { Routines } from './Routines';
+import { TaskOverlay } from './TaskOverlay';
 
 type Tab =
   | 'dashboard'
@@ -341,26 +342,26 @@ export function Shell({ status }: Props) {
     void window.jarvis.setAfk(next);
   };
 
-  // Global pause flag — same value the tray menu and Telegram bot
-  // toggle. Routines + scheduled-action reminders skip while true;
-  // user-initiated palette/voice dispatches still run so the user
-  // can resume from inside the app.
-  const [paused, setPausedState] = useState(false);
+  // Tri-state operating mode (paused / running / autopilot). Same
+  // value the tray and Telegram bot toggle. Routines + scheduled
+  // actions respect `paused`; autopilot-triggered workflows fire
+  // only when `autopilot`. User-initiated palette/voice always runs.
+  const [appMode, setAppModeState] = useState<AppMode>('running');
   useEffect(() => {
     let cancelled = false;
-    void window.jarvis.getPaused().then((v) => {
-      if (!cancelled) setPausedState(v);
+    void window.jarvis.getAppMode().then((v) => {
+      if (!cancelled) setAppModeState(v);
     });
-    const off = window.jarvis.onPausedChanged((v) => setPausedState(v));
+    const off = window.jarvis.onAppModeChanged((v) => setAppModeState(v));
     return () => {
       cancelled = true;
       off();
     };
   }, []);
-  const togglePaused = (): void => {
-    const next = !paused;
-    setPausedState(next);
-    void window.jarvis.setPaused(next);
+  const setMode = (next: AppMode): void => {
+    if (next === appMode) return;
+    setAppModeState(next);
+    void window.jarvis.setAppMode(next);
   };
 
   // Whether AFK has anywhere to mirror events. Today the only subscriber
@@ -584,30 +585,42 @@ export function Shell({ status }: Props) {
               />
             </svg>
           </button>
-          <button
-            className={`shell__pause-btn${paused ? ' shell__pause-btn--on' : ''}`}
-            onClick={togglePaused}
-            title={
-              paused
-                ? 'Jarvis is paused — routines + scheduled actions skip firing. Click to resume.'
-                : 'Pause Jarvis — routines + scheduled actions stop firing until resumed. User-initiated palette/voice still works.'
-            }
-            aria-label={paused ? 'Resume Jarvis' : 'Pause Jarvis'}
+          <div
+            className="shell__mode"
+            role="radiogroup"
+            aria-label="Operating mode"
           >
-            <svg viewBox="0 0 16 16" aria-hidden width="14" height="14">
-              {paused ? (
-                <path
-                  d="M5 4 L12 8 L5 12 Z"
-                  fill="currentColor"
-                />
-              ) : (
-                <>
-                  <rect x="4.5" y="3.5" width="2.5" height="9" fill="currentColor" rx="0.4" />
-                  <rect x="9" y="3.5" width="2.5" height="9" fill="currentColor" rx="0.4" />
-                </>
-              )}
-            </svg>
-          </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={appMode === 'paused'}
+              className={`shell__mode-seg${appMode === 'paused' ? ' shell__mode-seg--on' : ''}`}
+              onClick={() => setMode('paused')}
+              title="Paused — silence routines + scheduled actions"
+            >
+              ⏸
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={appMode === 'running'}
+              className={`shell__mode-seg${appMode === 'running' ? ' shell__mode-seg--on' : ''}`}
+              onClick={() => setMode('running')}
+              title="Running — normal behavior"
+            >
+              ▶
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={appMode === 'autopilot'}
+              className={`shell__mode-seg shell__mode-seg--autopilot${appMode === 'autopilot' ? ' shell__mode-seg--on' : ''}`}
+              onClick={() => setMode('autopilot')}
+              title="Autopilot — act on incoming asks (Slack DMs, PR reviews) with approval prompts"
+            >
+              ⚡
+            </button>
+          </div>
           {telegramReady && (
             <button
               className={`shell__afk-btn${afk ? ' shell__afk-btn--on' : ''}`}
@@ -749,6 +762,7 @@ export function Shell({ status }: Props) {
         initialName={newProjectInitial}
       />
       <Toaster />
+      <TaskOverlay />
     </div>
   );
 }

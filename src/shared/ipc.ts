@@ -13,10 +13,26 @@ export const IpcChannels = {
   afkChanged: 'app:afkChanged',
 
   // Global pause: when true, routines + scheduled-action reminders
-  // skip firing. Read/write/event triple.
+  // skip firing. Read/write/event triple. Legacy — still used by
+  // existing callsites; mirrors appMode under the hood.
   getPaused: 'app:getPaused',
   setPaused: 'app:setPaused',
   pausedChanged: 'app:pausedChanged',
+
+  // Tri-state operating mode (paused / running / autopilot). Canonical
+  // source of truth. Setting the mode also fires the legacy
+  // pausedChanged event for back-compat.
+  getAppMode: 'app:getAppMode',
+  setAppMode: 'app:setAppMode',
+  appModeChanged: 'app:appModeChanged',
+
+  // Autopilot approval flow (prompt-output workflow node). The main
+  // process opens the approval HUD with a payload; the renderer
+  // settles it via approve/reject.
+  autopilotApprovalRequested: 'autopilot:approvalRequested',
+  autopilotApprove: 'autopilot:approve',
+  autopilotReject: 'autopilot:reject',
+  autopilotFeedback: 'autopilot:feedback',
 
   // Telegram module bot-token management (Keychain-backed; the renderer
   // sends a token in to be persisted, but never reads it back).
