@@ -1214,6 +1214,12 @@ app.whenReady().then(async () => {
   // -2741 "Expected ',' but found class name." The replacement
   // emits ISO 8601 by hand and is portable.
   migrateLegacyCalendarOsascript(workflows, activity);
+  // Rename shell-node `command` → `cmd` on any workflow that
+  // carries the wrong key (the shell node accepts `cmd`; some
+  // autopilot seed scenarios shipped with `command` and need
+  // rewriting in place). Idempotent — second run finds no
+  // `command` keys left.
+  migrateShellCommandKey(workflows, activity);
 
   // ─── change → broadcast event fan-out ──────────────────────────────────────
 
@@ -1721,6 +1727,37 @@ function isBrokenCalendarScript(script: string): boolean {
   if (script.includes('«class isot»')) return true;
   if (script.includes('pad2(month of d as integer)')) return true;
   return false;
+}
+
+/**
+ * Rename `params.command` → `params.cmd` on any `shell` node still
+ * carrying the wrong key. Shipped on first cut of the autopilot
+ * seed scenarios; runtime rejects it with "shell: params.cmd is
+ * required." Idempotent on the corrected shape.
+ */
+function migrateShellCommandKey(
+  workflows: WorkflowStore,
+  activity: ActivityStore,
+): void {
+  for (const wf of workflows.list()) {
+    let touched = false;
+    const nextPipeline = wf.pipeline.map((step) => {
+      if (step.type !== 'shell') return step;
+      const params = step.params as Record<string, unknown> | undefined;
+      if (!params || typeof params['command'] !== 'string') return step;
+      if (typeof params['cmd'] === 'string') return step; // already has cmd
+      touched = true;
+      const { command, ...rest } = params as { command: string } & Record<string, unknown>;
+      return { ...step, params: { cmd: command, ...rest } };
+    });
+    if (!touched) continue;
+    workflows.save({ ...wf, pipeline: nextPipeline });
+    activity.record({
+      kind: 'workflow.migrated',
+      label: `Workflow shell node param fixed · ${wf.id} (command → cmd)`,
+      detail: { workflowId: wf.id },
+    });
+  }
 }
 
 function migrateLegacyCalendarOsascript(

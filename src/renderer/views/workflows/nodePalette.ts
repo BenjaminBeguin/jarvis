@@ -122,7 +122,7 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     template: () => ({
       type: 'shell',
       params: {
-        command: 'gh',
+        cmd: 'gh',
         args: ['pr', 'list', '--state', 'open', '--limit', '10'],
       },
     }),

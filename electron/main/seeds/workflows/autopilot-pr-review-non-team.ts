@@ -67,7 +67,7 @@ export const AUTOPILOT_PR_REVIEW_NON_TEAM_WORKFLOW: WorkflowDef = {
     {
       type: 'shell',
       params: {
-        command: 'gh',
+        cmd: 'gh',
         args: [
           'search',
           'prs',

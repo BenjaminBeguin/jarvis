@@ -54,7 +54,7 @@ export const AUTOPILOT_PR_COMMENTS_WORKFLOW: WorkflowDef = {
     {
       type: 'shell',
       params: {
-        command: 'gh',
+        cmd: 'gh',
         args: [
           'search',
           'prs',
