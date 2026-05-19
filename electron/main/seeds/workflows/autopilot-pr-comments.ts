@@ -20,13 +20,16 @@ import type { WorkflowDef } from '@shared/types';
 
 const FILTER_FN = `(() => {
   const items = Array.isArray($) ? $ : [];
-  // PRs I authored that have unresolved comments. gh search doesn't
-  // expose "unresolved comments" directly, so we keep PRs with any
-  // pending review state and let the agent decide.
-  const mine = items.filter((pr) => pr.reviewDecision !== 'APPROVED' && pr.state === 'OPEN');
-  if (mine.length === 0) return null;
-  mine.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
-  return mine[0];
+  // PRs I authored. gh search doesn't expose reviewDecision or
+  // "unresolved comments" — the --state open arg on the shell step
+  // already filters to open PRs, so we just pick the most-recently-
+  // updated one and let the agent decide which comments need
+  // addressing.
+  if (items.length === 0) return null;
+  const sorted = items.slice().sort((a, b) =>
+    Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
+  );
+  return sorted[0];
 })()`;
 
 const AGENT_PROMPT = `Address the unresolved review comments on this PR. Read the diff + comments; decide what to change. Output a single markdown block with:
@@ -63,7 +66,9 @@ export const AUTOPILOT_PR_COMMENTS_WORKFLOW: WorkflowDef = {
           '--state',
           'open',
           '--json',
-          'number,title,url,repository,reviewDecision,state,updatedAt',
+          // reviewDecision is NOT exposed by `gh search prs` (only
+          // `gh pr list` has it). Stick to the search-supported set.
+          'number,title,url,repository,updatedAt',
           '--limit',
           '20',
         ],

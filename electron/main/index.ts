@@ -1220,6 +1220,11 @@ app.whenReady().then(async () => {
   // rewriting in place). Idempotent — second run finds no
   // `command` keys left.
   migrateShellCommandKey(workflows, activity);
+  // Drop `reviewDecision` from the gh-search-prs --json field list
+  // on the autopilot-pr-comments seed. The field isn't returned by
+  // `gh search prs` (only `gh pr list`), so the original seed
+  // errored at runtime. Strip + simplify the filter.
+  migrateGhSearchPrsFields(workflows, activity);
 
   // ─── change → broadcast event fan-out ──────────────────────────────────────
 
@@ -1727,6 +1732,53 @@ function isBrokenCalendarScript(script: string): boolean {
   if (script.includes('«class isot»')) return true;
   if (script.includes('pad2(month of d as integer)')) return true;
   return false;
+}
+
+/**
+ * Strip `reviewDecision` (and the matching `state` filter that
+ * depended on it) from shell-node args of any workflow that
+ * shipped with the gh-search-prs invocation referencing it. The
+ * field isn't supported by `gh search prs` so the call errored
+ * with "Unknown JSON field: reviewDecision". Idempotent.
+ */
+function migrateGhSearchPrsFields(
+  workflows: WorkflowStore,
+  activity: ActivityStore,
+): void {
+  for (const wf of workflows.list()) {
+    let touched = false;
+    const nextPipeline = wf.pipeline.map((step) => {
+      if (step.type !== 'shell') return step;
+      const params = step.params as Record<string, unknown> | undefined;
+      const args = params?.['args'];
+      if (!Array.isArray(args)) return step;
+      const jsonIdx = args.indexOf('--json');
+      if (jsonIdx === -1 || jsonIdx + 1 >= args.length) return step;
+      const fields = args[jsonIdx + 1];
+      if (typeof fields !== 'string') return step;
+      if (!/reviewDecision/.test(fields)) return step;
+      // Sanitize: split on comma, drop reviewDecision, rejoin.
+      const cleaned = fields
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s && s !== 'reviewDecision')
+        .join(',');
+      const nextArgs = args.slice();
+      nextArgs[jsonIdx + 1] = cleaned;
+      touched = true;
+      return {
+        ...step,
+        params: { ...(params ?? {}), args: nextArgs },
+      };
+    });
+    if (!touched) continue;
+    workflows.save({ ...wf, pipeline: nextPipeline });
+    activity.record({
+      kind: 'workflow.migrated',
+      label: `Workflow shell args fixed · ${wf.id} (gh search prs reviewDecision dropped)`,
+      detail: { workflowId: wf.id },
+    });
+  }
 }
 
 /**
