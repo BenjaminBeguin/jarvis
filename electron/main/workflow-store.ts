@@ -166,13 +166,49 @@ export class WorkflowStore extends EventEmitter {
       this.loadErrors.push({ filename, message: 'pipeline must be an array' });
       return null;
     }
-    const trigger = raw.trigger as { kind?: unknown };
-    if (trigger.kind !== 'cron' && trigger.kind !== 'manual') {
+    const trigger = raw.trigger as {
+      kind?: unknown;
+      when?: unknown;
+      every?: unknown;
+      sources?: unknown;
+    };
+    if (
+      trigger.kind !== 'cron' &&
+      trigger.kind !== 'manual' &&
+      trigger.kind !== 'autopilot'
+    ) {
       this.loadErrors.push({
         filename,
-        message: `trigger.kind must be cron or manual, got ${String(trigger.kind)}`,
+        message: `trigger.kind must be cron, manual, or autopilot — got ${String(trigger.kind)}`,
       });
       return null;
+    }
+    if (trigger.kind === 'autopilot') {
+      if (trigger.when !== 'cron' && trigger.when !== 'inbox-changed') {
+        this.loadErrors.push({
+          filename,
+          message: `autopilot trigger.when must be 'cron' or 'inbox-changed', got ${String(trigger.when)}`,
+        });
+        return null;
+      }
+      if (trigger.when === 'cron' && typeof trigger.every !== 'string') {
+        this.loadErrors.push({
+          filename,
+          message: `autopilot trigger.when='cron' requires a string 'every' field (e.g. "15m")`,
+        });
+        return null;
+      }
+      if (
+        trigger.when === 'inbox-changed' &&
+        trigger.sources !== undefined &&
+        !Array.isArray(trigger.sources)
+      ) {
+        this.loadErrors.push({
+          filename,
+          message: `autopilot trigger.sources must be an array of source ids when present`,
+        });
+        return null;
+      }
     }
     // Pipeline node-shape check is light: require .type to be a string.
     const pipeline: WorkflowDef['pipeline'] = (
