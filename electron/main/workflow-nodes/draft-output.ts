@@ -46,7 +46,12 @@ export const draftOutputNode = fromPromise<
     throw new Error('draft-output: params.title is required');
   }
   const source = params.source ?? DEFAULT_SOURCE;
-  const body = stringifyForBody(prev);
+  // Fall back to a placeholder when the agent step emitted no text —
+  // we always want SOMETHING in body so the Inbox row's "Show
+  // content" toggle renders. An empty body would be a dead-end UI.
+  const body =
+    stringifyForBody(prev) ||
+    '(The previous step produced no text. Open the run in the Latest run dock to inspect the step outputs.)';
   const title = substitute(params.title, prev);
   const subtitle = params.subtitle
     ? substitute(params.subtitle, prev)

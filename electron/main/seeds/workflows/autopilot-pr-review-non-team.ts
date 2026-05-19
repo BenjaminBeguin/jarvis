@@ -46,15 +46,29 @@ const FILTER_FN = `(() => {
   return external[0];
 })()`;
 
-const AGENT_PROMPT = `Review this pull request as a senior engineer would. Output a draft review (one paragraph summary + bullet-list of inline concerns). Cite specific files and line ranges. Aim for accurate over comprehensive.
+const AGENT_PROMPT = `Review this pull request as a senior engineer would. Draft (don't post) a review.
 
-PR data:
+**Do NOT use gh pr review, gh pr comment, or any other gh write
+command.** The user reviews your draft in the Jarvis Inbox and
+posts manually if they want. Read-only gh commands (gh pr view,
+gh pr diff) are fine for gathering context.
+
+Output a single markdown block:
+  - One-paragraph summary of the change.
+  - Bullet list of inline concerns, each citing file:line.
+
+Be accurate over comprehensive — a confident "looks good" beats a
+manufactured nit. If nothing actually breaks, say so.
+
+PR to review:
 {prev}
 
-Past feedback the user has given you on this scenario — match this tone / style:
+Past feedback the user has given you on this scenario — match
+this tone / style:
 {feedback}
 
-Output ONLY the review markdown. Do not address the user. The user will read your output verbatim and decide whether to post it.`;
+Output ONLY the review markdown. No greeting, no signoff, no
+explanation to the user — they read your output verbatim.`;
 
 export const AUTOPILOT_PR_REVIEW_NON_TEAM_WORKFLOW: WorkflowDef = {
   id: 'autopilot-pr-review-non-team',
@@ -101,6 +115,9 @@ export const AUTOPILOT_PR_REVIEW_NON_TEAM_WORKFLOW: WorkflowDef = {
       type: 'draft-output',
       params: {
         title: 'Autopilot · PR review draft',
+        // Snippet of the draft inline so the user gets a preview
+        // without having to expand every row.
+        subtitle: '{prev}',
         source: 'autopilot-drafts',
       },
     },
