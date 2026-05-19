@@ -1,5 +1,6 @@
 import type { NodeHandler } from './types.js';
 
+import { draftOutputNode } from './draft-output.js';
 import { httpFetchNode } from './http-fetch.js';
 import { inboxWriteNode } from './inbox-write.js';
 import { mcpCallNode } from './mcp-call.js';
@@ -28,6 +29,7 @@ export const NODE_REGISTRY: Record<string, NodeHandler> = {
   notify: notifyNode as unknown as NodeHandler,
   'run-skill': runSkillNode as unknown as NodeHandler,
   'mcp-call': mcpCallNode as unknown as NodeHandler,
+  'draft-output': draftOutputNode as unknown as NodeHandler,
 };
 
 export type { NodeHandler, NodeHandlerInput, WorkflowNodeContext } from './types.js';

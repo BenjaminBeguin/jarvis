@@ -746,6 +746,13 @@ export interface InboxItem {
   title: string;
   /** Optional secondary line (repo · author · age · etc.). */
   subtitle?: string;
+  /**
+   * Long-form content that belongs to the item itself (vs the brief
+   * subtitle). Used by autopilot `draft-output` so the user can read
+   * the full drafted reply / review without leaving the Inbox.
+   * Markdown is fine; the renderer treats it as plain text for now.
+   */
+  body?: string;
   /** Project alias if this item is scoped to one — used for filtering. */
   project?: string;
   /** External link (gh URL, Linear ticket, etc.) — opens in browser. */

@@ -25,6 +25,13 @@ export interface WorkflowNodeContext {
   runner: TaskRunner;
   /** Used by `osascript` / `shell` and any node that writes to disk. */
   jarvisRoot: string;
+  /** Id of the workflow currently being executed. Threaded through so
+   *  autopilot nodes (draft-output, prompt-output, run-skill with
+   *  {feedback} substitution) can resolve per-scenario state — the
+   *  feedback file path, the Inbox draft id prefix, etc. Set by the
+   *  workflow runner before each run; undefined when a node is being
+   *  exercised outside a workflow run (rare). */
+  workflowId?: string;
 }
 
 /**

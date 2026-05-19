@@ -141,6 +141,22 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
       },
     }),
   },
+  {
+    type: 'draft-output',
+    label: 'Draft Output',
+    description:
+      'Autopilot terminal step (silent). Writes the previous step\'s text into the Autopilot drafts Inbox for the user to review later.',
+    group: 'I/O',
+    template: () => ({
+      type: 'draft-output',
+      params: {
+        title: 'Autopilot draft · {prev}',
+        // 'autopilot-drafts' is the default — set explicitly so the
+        // user sees where the row lands without reading docs.
+        source: 'autopilot-drafts',
+      },
+    }),
+  },
 ];
 
 /**

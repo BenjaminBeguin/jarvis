@@ -43,13 +43,16 @@ const INBOX_DIR = join(homedir(), '.jarvis', 'inbox');
 
 /**
  * Source names owned by built-in workflows (linear-inbox-sync,
- * slack-inbox-sync, calendar-today-sync). Their inbox-write nodes feed
- * InboxStore.setExternalItems() directly. If a JSON file with one of
- * these source names lands here — stale from a prior install, or a
- * user who manually wrote one — we skip it so it can't shadow the
- * canonical workflow-owned section.
+ * slack-inbox-sync, calendar-today-sync) and by autopilot-internal
+ * node types (draft-output writes to 'autopilot-drafts' and any
+ * 'autopilot-*' bucket the user picks). Their inbox-write /
+ * draft-output nodes feed InboxStore.setExternalItems() directly.
+ * If a JSON file lands here with one of these source names — stale
+ * from a prior install, or a user who manually wrote one — we skip
+ * it so it can't shadow the canonical workflow/autopilot section.
  */
 const RESERVED_SOURCES = new Set(['linear', 'slack', 'calendar']);
+const RESERVED_PREFIXES = ['autopilot-'];
 let loggedReserved = false;
 
 interface InboxFileWrapper {
@@ -100,7 +103,10 @@ export const userInboxSource: InboxSource = {
       const sourceFromName = entry.name.replace(/\.json$/, '');
       // Defense-in-depth: even if the migration's delete step failed,
       // never let a JSON file shadow a built-in JS source.
-      if (RESERVED_SOURCES.has(sourceFromName)) {
+      const reservedPrefix = RESERVED_PREFIXES.some((p) =>
+        sourceFromName.startsWith(p),
+      );
+      if (RESERVED_SOURCES.has(sourceFromName) || reservedPrefix) {
         if (!loggedReserved) {
           console.warn(
             `[inbox/user] ignoring ${entry.name} — '${sourceFromName}' is now a built-in JS source. Delete the file to silence this.`,
