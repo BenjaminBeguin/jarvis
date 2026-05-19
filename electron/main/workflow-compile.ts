@@ -52,6 +52,7 @@ export interface CompileResult {
 export function compileWorkflow(
   def: WorkflowDef,
   ctx: WorkflowNodeContext,
+  initialPrev?: unknown,
 ): CompileResult {
   const unknownTypes: string[] = [];
   for (const node of def.pipeline) {
@@ -123,7 +124,10 @@ export function compileWorkflow(
         src: `node_${i}`,
         input: ({ context }: { context: unknown }) => ({
           params: node.params ?? {},
-          prev: i === 0 ? undefined : (context as WorkflowMachineContext).outputs[i - 1],
+          prev:
+            i === 0
+              ? initialPrev
+              : (context as WorkflowMachineContext).outputs[i - 1],
           ctx,
         }),
         onDone: {

@@ -61,6 +61,8 @@ import {
   getConnectorToken,
   setConnectorToken,
 } from './secrets.js';
+import { InboxEventBridge } from './autopilot/inbox-event-bridge.js';
+import { approvalBridge } from './autopilot/approval-bridge.js';
 import { InboxProximityWatcher } from './inbox-proximity.js';
 import { MeetingActivityWatcher } from './meeting-activity-watcher.js';
 import { BUILTIN_BRIEFING_KINDS } from './seeds/briefing-kinds.js';
@@ -186,6 +188,15 @@ const workflowScheduler = new WorkflowScheduler(workflows, workflowRunner, {
   isPaused: () => loadPaused(),
   isAutopilot: () => loadAppMode() === 'autopilot',
   workingHours: () => loadWorkingHours(),
+});
+// Dispatches autopilot/`when: 'inbox-changed'` workflows on InboxStore
+// emissions. Started + stopped alongside other scheduler-style
+// services in app lifecycle hooks below.
+const inboxEventBridge = new InboxEventBridge({
+  inbox,
+  workflows,
+  runner: workflowRunner,
+  isAutopilot: () => loadAppMode() === 'autopilot',
 });
 // "Heads up" notifications when an inbox item with fireAt is within 5
 // min. Calendar events flow naturally through this; reminders are
@@ -1304,6 +1315,10 @@ app.whenReady().then(async () => {
   // Watch every minute for fireAt items in the next 5 min so the user
   // gets a "starting soon" popup. Click → opens the meeting URL.
   inboxProximity.start();
+  // Autopilot inbox-event bridge — dispatches workflows whose trigger
+  // is `{ kind: 'autopilot', when: 'inbox-changed' }` on new inbox
+  // items. No-op when appMode !== 'autopilot'.
+  inboxEventBridge.start();
   // Ad-hoc meeting detection via macOS Core Audio / CMIO log stream.
   meetingActivity.start();
   // Reap tasks whose terminal SDK event got dropped. Without this,
@@ -1473,6 +1488,8 @@ app.on('before-quit', () => {
   preferences.close();
   inbox.stopAutoRefresh();
   inboxProximity.stop();
+  inboxEventBridge.close();
+  approvalBridge.closeAll('app shutdown');
   tokenRefresher.stop();
   meetingActivity.stop();
   briefings.close();

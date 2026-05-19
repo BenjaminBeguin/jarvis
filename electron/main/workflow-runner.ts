@@ -83,6 +83,20 @@ export class WorkflowRunner extends EventEmitter {
     def: WorkflowDef,
     trigger: 'cron' | 'manual' | 'autopilot' | 'inbox-event',
   ): WorkflowRun {
+    return this.runWithSeed(def, trigger, undefined);
+  }
+
+  /**
+   * Like `run()` but seeds the first node's `prev` input with the
+   * provided value. Used by InboxEventBridge to hand the matched
+   * InboxItem to the pipeline; manual / cron triggers start from
+   * `undefined`.
+   */
+  runWithSeed(
+    def: WorkflowDef,
+    trigger: 'cron' | 'manual' | 'autopilot' | 'inbox-event',
+    seed: unknown,
+  ): WorkflowRun {
     if (!this.nodeCtx) {
       throw new Error('WorkflowRunner: setNodeContext() must be called first');
     }
@@ -91,7 +105,7 @@ export class WorkflowRunner extends EventEmitter {
     // id prefix). Compile-time only — the original shared ctx isn't
     // mutated.
     const runCtx: WorkflowNodeContext = { ...this.nodeCtx, workflowId: def.id };
-    const compile = compileWorkflow(def, runCtx);
+    const compile = compileWorkflow(def, runCtx, seed);
     if (compile.unknownTypes.length) {
       // Don't even spawn — surface the misconfig as an errored run.
       const failed: WorkflowRun = {
