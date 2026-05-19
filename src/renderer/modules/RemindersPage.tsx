@@ -1,28 +1,43 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { Reminder } from '../../shared/types';
+import type { AppMode, Reminder } from '../../shared/types';
 import { toast } from '../views/Toaster';
 
 /**
- * Single-pane view of every reminder + scheduled action the user has set.
- * Three buckets — Upcoming · Fired · Cancelled — newest first within each.
- * Each row has the body, the fire time (relative + absolute), and the
- * status-appropriate action set:
+ * Reminders pane. Two layers:
  *
- *   Upcoming: [ ▶ Fire now ] [ ✕ Cancel ]
- *   Fired:    [ ✕ Remove ]   (and a link to the task if scheduled mode
- *                              spawned one)
- *   Cancelled: [ ✕ Remove ]
+ *   Primary (always visible):
+ *     - Upcoming
+ *     - Fired (awaiting done)
  *
- * Powered by the existing reminders IPC — no new plumbing.
+ *   History (collapsed drawer):
+ *     - Done · Cancelled
+ *
+ * Terminal states pile up forever, so keeping them folded under one
+ * drawer with a "Clear history" affordance is what makes this scale.
  */
 export function RemindersPage({ compact = false }: { compact?: boolean } = {}) {
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  // Autopilot mode skips the "Fire this reminder right now?" confirm —
+  // user already signed up for less-friction by flipping the mode on.
+  const [appMode, setAppMode] = useState<AppMode>('running');
 
   useEffect(() => {
     void window.jarvis.listReminders().then(setReminders);
     const off = window.jarvis.onRemindersChanged(setReminders);
     return off;
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.jarvis.getAppMode().then((m) => {
+      if (!cancelled) setAppMode(m);
+    });
+    const off = window.jarvis.onAppModeChanged((m) => setAppMode(m));
+    return () => {
+      cancelled = true;
+      off();
+    };
   }, []);
 
   const groups = useMemo(() => groupByStatus(reminders), [reminders]);
@@ -40,7 +55,9 @@ export function RemindersPage({ compact = false }: { compact?: boolean } = {}) {
   };
 
   const fireNow = async (id: string) => {
-    if (!confirm('Fire this reminder right now?')) return;
+    if (appMode !== 'autopilot' && !confirm('Fire this reminder right now?')) {
+      return;
+    }
     try {
       await window.jarvis.fireReminderNow(id);
       toast({ message: 'Fired' });
@@ -65,6 +82,92 @@ export function RemindersPage({ compact = false }: { compact?: boolean } = {}) {
     }
   };
 
+  const removeSilently = async (id: string) => {
+    try {
+      await window.jarvis.removeReminder(id);
+    } catch {
+      // Swallow — bulk loop aggregates via toast at the end.
+    }
+  };
+
+  const clearHistory = async () => {
+    const ids = [...groups.done.map((r) => r.id), ...groups.cancelled.map((r) => r.id)];
+    if (ids.length === 0) return;
+    if (!confirm(`Remove all ${ids.length} reminder${ids.length === 1 ? '' : 's'} from history?\n\nThis can't be undone.`)) return;
+    await Promise.all(ids.map((id) => removeSilently(id)));
+    toast({ message: `Cleared ${ids.length} reminder${ids.length === 1 ? '' : 's'}` });
+  };
+
+  const markDone = async (id: string) => {
+    try {
+      await window.jarvis.markReminderDone(id);
+      toast({ message: 'Marked done' });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
+  const renderUpcomingActions = (r: Reminder) => (
+    <>
+      <button onClick={() => void fireNow(r.id)} title="Fire now">
+        ▶ Fire now
+      </button>
+      <button
+        onClick={() => void cancel(r.id)}
+        className="reminders-page__btn--danger"
+        title="Cancel and stop tracking"
+      >
+        ✕ Cancel
+      </button>
+    </>
+  );
+
+  const renderFiredActions = (r: Reminder) => (
+    <>
+      <button
+        onClick={() => void markDone(r.id)}
+        title="I did this — drop it from the inbox"
+      >
+        ✓ Done
+      </button>
+      {r.firedTaskId && (
+        <button
+          onClick={() => {
+            window.dispatchEvent(
+              new CustomEvent('jarvis:open-session', {
+                detail: { taskId: r.firedTaskId },
+              }),
+            );
+          }}
+          title="Peek at the task that ran when this fired"
+        >
+          ↗ Peek
+        </button>
+      )}
+      <button
+        onClick={() => void remove(r.id)}
+        className="reminders-page__btn--danger"
+      >
+        ✕ Remove
+      </button>
+    </>
+  );
+
+  const renderHistoryActions = (r: Reminder) => (
+    <button
+      onClick={() => void remove(r.id)}
+      className="reminders-page__btn--danger"
+    >
+      ✕ Remove
+    </button>
+  );
+
+  const primaryEmpty =
+    groups.upcoming.length === 0 && groups.fired.length === 0;
+
   return (
     <section className={`reminders-page${compact ? ' reminders-page--compact' : ''}`}>
       {!compact && (
@@ -79,106 +182,39 @@ export function RemindersPage({ compact = false }: { compact?: boolean } = {}) {
           </p>
         </div>
         <div className="reminders-page__count">
-          {reminders.length} {reminders.length === 1 ? 'total' : 'total'}
+          {reminders.length} total
         </div>
       </header>
       )}
 
-      <ReminderGroup
-        label="Upcoming"
-        rows={groups.upcoming}
-        emptyHint="No reminders pending."
-        renderActions={(r) => (
-          <>
-            <button onClick={() => void fireNow(r.id)} title="Fire now">
-              ▶ Fire now
-            </button>
-            <button
-              onClick={() => void cancel(r.id)}
-              className="reminders-page__btn--danger"
-              title="Cancel and stop tracking"
-            >
-              ✕ Cancel
-            </button>
-          </>
-        )}
-      />
+      {primaryEmpty ? (
+        <div className="reminders-page__empty reminders-page__empty--primary">
+          Nothing to do. Set one from the palette: <code>remind me in 2h …</code>.
+        </div>
+      ) : (
+        <>
+          {groups.upcoming.length > 0 && (
+            <ReminderGroup
+              label="Upcoming"
+              rows={groups.upcoming}
+              renderActions={renderUpcomingActions}
+            />
+          )}
+          {groups.fired.length > 0 && (
+            <ReminderGroup
+              label="Fired (awaiting done)"
+              rows={groups.fired}
+              renderActions={renderFiredActions}
+            />
+          )}
+        </>
+      )}
 
-      <ReminderGroup
-        label="Fired (awaiting done)"
-        rows={groups.fired}
-        emptyHint="Nothing fired and unhandled."
-        renderActions={(r) => (
-          <>
-            <button
-              onClick={async () => {
-                try {
-                  await window.jarvis.markReminderDone(r.id);
-                  toast({ message: 'Marked done' });
-                } catch (e) {
-                  toast({
-                    kind: 'error',
-                    message: e instanceof Error ? e.message : String(e),
-                  });
-                }
-              }}
-              title="I did this — drop it from the inbox"
-            >
-              ✓ Done
-            </button>
-            {r.firedTaskId && (
-              <button
-                onClick={() => {
-                  // Peek into the in-window sidebar — triage flow,
-                  // the user wants to glance at what the reminder
-                  // actually did, not leave the page.
-                  window.dispatchEvent(
-                    new CustomEvent('jarvis:open-session', {
-                      detail: { taskId: r.firedTaskId },
-                    }),
-                  );
-                }}
-                title="Peek at the task that ran when this fired"
-              >
-                ↗ Peek
-              </button>
-            )}
-            <button
-              onClick={() => void remove(r.id)}
-              className="reminders-page__btn--danger"
-            >
-              ✕ Remove
-            </button>
-          </>
-        )}
-      />
-
-      <ReminderGroup
-        label="Done"
-        rows={groups.done}
-        emptyHint="No reminders marked done yet."
-        renderActions={(r) => (
-          <button
-            onClick={() => void remove(r.id)}
-            className="reminders-page__btn--danger"
-          >
-            ✕ Remove
-          </button>
-        )}
-      />
-
-      <ReminderGroup
-        label="Cancelled"
-        rows={groups.cancelled}
-        emptyHint="No cancelled reminders."
-        renderActions={(r) => (
-          <button
-            onClick={() => void remove(r.id)}
-            className="reminders-page__btn--danger"
-          >
-            ✕ Remove
-          </button>
-        )}
+      <HistoryDrawer
+        done={groups.done}
+        cancelled={groups.cancelled}
+        onClear={() => void clearHistory()}
+        renderActions={renderHistoryActions}
       />
     </section>
   );
@@ -187,12 +223,10 @@ export function RemindersPage({ compact = false }: { compact?: boolean } = {}) {
 function ReminderGroup({
   label,
   rows,
-  emptyHint,
   renderActions,
 }: {
   label: string;
   rows: Reminder[];
-  emptyHint: string;
   renderActions: (r: Reminder) => React.ReactNode;
 }) {
   return (
@@ -200,40 +234,120 @@ function ReminderGroup({
       <h3 className="reminders-page__group-label">
         {label} <span className="reminders-page__group-count">{rows.length}</span>
       </h3>
-      {rows.length === 0 ? (
-        <div className="reminders-page__empty">{emptyHint}</div>
-      ) : (
-        <ul className="reminders-page__list">
-          {rows.map((r) => (
-            <li key={r.id} className="reminders-page__row">
-              <span
-                className={`reminders-page__mode reminders-page__mode--${r.mode}`}
-                title={
-                  r.mode === 'reminder'
-                    ? 'Fires a notification only — no agent run.'
-                    : 'Spawns a Claude task to carry it out.'
-                }
-              >
-                {r.mode === 'reminder' ? 'nudge' : 'action'}
-              </span>
-              {r.cron && (
-                <span
-                  className="reminders-page__mode reminders-page__mode--recurring"
-                  title={`Recurring · ${r.cron}`}
-                >
-                  🔁 {humanizeCron(r.cron)}
-                </span>
-              )}
-              <div className="reminders-page__body">
-                <div className="reminders-page__body-text">{r.body}</div>
-                <div className="reminders-page__body-meta">
-                  {formatWhen(r)}
-                </div>
+      <ReminderList rows={rows} renderActions={renderActions} />
+    </section>
+  );
+}
+
+function ReminderList({
+  rows,
+  renderActions,
+}: {
+  rows: Reminder[];
+  renderActions: (r: Reminder) => React.ReactNode;
+}) {
+  return (
+    <ul className="reminders-page__list">
+      {rows.map((r) => (
+        <li key={r.id} className="reminders-page__row">
+          <span
+            className={`reminders-page__mode reminders-page__mode--${r.mode}`}
+            title={
+              r.mode === 'reminder'
+                ? 'Fires a notification only — no agent run.'
+                : 'Spawns a Claude task to carry it out.'
+            }
+          >
+            {r.mode === 'reminder' ? 'nudge' : 'action'}
+          </span>
+          {r.cron && (
+            <span
+              className="reminders-page__mode reminders-page__mode--recurring"
+              title={`Recurring · ${r.cron}`}
+            >
+              🔁 {humanizeCron(r.cron)}
+            </span>
+          )}
+          <div className="reminders-page__body">
+            <div className="reminders-page__body-text">{r.body}</div>
+            <div className="reminders-page__body-meta">{formatWhen(r)}</div>
+          </div>
+          <div className="reminders-page__actions">{renderActions(r)}</div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function HistoryDrawer({
+  done,
+  cancelled,
+  onClear,
+  renderActions,
+}: {
+  done: Reminder[];
+  cancelled: Reminder[];
+  onClear: () => void;
+  renderActions: (r: Reminder) => React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const total = done.length + cancelled.length;
+
+  return (
+    <section className="column-drawer">
+      <div className="column-drawer__head-row">
+        <button
+          className="column-drawer__head"
+          onClick={() => setOpen((v) => !v)}
+          title={open ? 'Collapse history' : 'Expand history'}
+        >
+          <span className="column-drawer__caret">{open ? '▾' : '▸'}</span>
+          <span className="column-drawer__label">History</span>
+          <span className="column-drawer__count">{total}</span>
+          {open && total > 0 && (
+            <span className="column-drawer__breakdown">
+              Done {done.length} · Cancelled {cancelled.length}
+            </span>
+          )}
+        </button>
+        {open && total > 0 && (
+          <button
+            className="column-drawer__bulk-clear"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClear();
+            }}
+            title="Permanently remove all done + cancelled reminders"
+          >
+            Clear history
+          </button>
+        )}
+      </div>
+      {open && (
+        total === 0 ? (
+          <div className="column-drawer__empty">
+            Reminders you mark done or cancel land here.
+          </div>
+        ) : (
+          <div className="column-drawer__body">
+            {done.length > 0 && (
+              <div className="column-drawer__subgroup">
+                <h4 className="column-drawer__subgroup-label">
+                  Done <span className="column-drawer__subgroup-count">{done.length}</span>
+                </h4>
+                <ReminderList rows={done} renderActions={renderActions} />
               </div>
-              <div className="reminders-page__actions">{renderActions(r)}</div>
-            </li>
-          ))}
-        </ul>
+            )}
+            {cancelled.length > 0 && (
+              <div className="column-drawer__subgroup">
+                <h4 className="column-drawer__subgroup-label">
+                  Cancelled <span className="column-drawer__subgroup-count">{cancelled.length}</span>
+                </h4>
+                <ReminderList rows={cancelled} renderActions={renderActions} />
+              </div>
+            )}
+          </div>
+        )
       )}
     </section>
   );
@@ -294,12 +408,6 @@ function formatRel(ms: number): string {
 
 const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-/**
- * Render a cron expression as a one-liner the user can scan. Covers
- * the shapes the recurrence parser produces today; falls back to
- * the raw expression for anything else so the user can still see
- * what they typed even if it doesn't humanize cleanly.
- */
 function humanizeCron(cron: string): string {
   const parts = cron.trim().split(/\s+/);
   if (parts.length !== 5) return cron;
@@ -309,7 +417,6 @@ function humanizeCron(cron: string): string {
   if (dow === '*') return `daily at ${time}`;
   if (dow === '1-5') return `weekdays at ${time}`;
   if (dow === '0,6' || dow === '6,0') return `weekends at ${time}`;
-  // Single day (0..6) or comma list.
   const days = dow
     .split(',')
     .map((d) => parseInt(d, 10))

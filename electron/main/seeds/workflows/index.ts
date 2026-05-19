@@ -1,5 +1,8 @@
 import type { WorkflowDef } from '@shared/types';
 
+import { AUTOPILOT_PR_COMMENTS_WORKFLOW } from './autopilot-pr-comments.js';
+import { AUTOPILOT_PR_REVIEW_NON_TEAM_WORKFLOW } from './autopilot-pr-review-non-team.js';
+import { AUTOPILOT_SLACK_DM_ACK_WORKFLOW } from './autopilot-slack-dm-ack.js';
 import { CALENDAR_TODAY_WORKFLOW } from './calendar-today.js';
 import { INBOX_CURATE_WORKFLOW } from './inbox-curate.js';
 import { LINEAR_INBOX_WORKFLOW } from './linear-inbox.js';
@@ -17,4 +20,9 @@ export const BUILTIN_WORKFLOWS: WorkflowDef[] = [
   SLACK_INBOX_WORKFLOW,
   CALENDAR_TODAY_WORKFLOW,
   INBOX_CURATE_WORKFLOW,
+  // Autopilot scenarios — all default `enabled: false`. Users opt in
+  // per-scenario from Settings → Workflows (or directly in the JSON).
+  AUTOPILOT_PR_REVIEW_NON_TEAM_WORKFLOW,
+  AUTOPILOT_PR_COMMENTS_WORKFLOW,
+  AUTOPILOT_SLACK_DM_ACK_WORKFLOW,
 ];

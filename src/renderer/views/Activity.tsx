@@ -438,6 +438,11 @@ const EVENT_KIND_META: Record<
   'integration.credentials-cleared': { category: 'integration', label: 'integration · creds cleared' },
   'integration.account-default': { category: 'integration', label: 'integration · default' },
   'integration.account-meta': { category: 'integration', label: 'integration · meta' },
+  // Autopilot tri-state mode + approval flow.
+  'mode.changed': { category: 'integration', label: 'mode · changed' },
+  'autopilot.approved': { category: 'workflow', label: 'autopilot · approved' },
+  'autopilot.rejected': { category: 'workflow', label: 'autopilot · rejected' },
+  'autopilot.feedback-cleared': { category: 'workflow', label: 'autopilot · feedback cleared' },
 };
 
 function EventRow({ event }: { event: ActivityEvent }) {
