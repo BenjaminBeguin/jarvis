@@ -15,6 +15,7 @@ import type {
 import {
   detectClaudeBinary,
   loadAfkMode,
+  loadAppMode,
   loadAuthMode,
   loadCostPrefs,
   loadNotificationPrefs,
@@ -32,6 +33,7 @@ import {
   getCostBreakdown,
   getCostSummary,
   initDatabase,
+  reapZombieRunningTasks,
   listRecentTasks,
   pruneWorkflowRuns,
 } from './db.js';
@@ -106,7 +108,7 @@ import { WorkflowScheduler } from './workflow-scheduler.js';
 import { WorkflowStore } from './workflow-store.js';
 import { SkillStore } from './skill-store.js';
 import { SkillSuggestionStore } from './skill-suggestions.js';
-import { asTaskOrigin, TaskRunner } from './task-runner.js';
+import { asTaskOrigin, lastAssistantText, TaskRunner } from './task-runner.js';
 import { setProgressEmitter } from './transcribe.js';
 import {
   activeProjectProfileProvider,
@@ -133,6 +135,14 @@ import {
   sendWhenReady,
   showAnswerHud,
 } from './windows.js';
+
+// The Agent SDK attaches a `process.on('exit', …)` cleanup hook per
+// query() invocation. Each Task = one query(), so with a dozen
+// concurrent tasks we trip Node's default cap of 10 and log a
+// MaxListenersExceededWarning. Raise the ceiling once at startup —
+// 50 leaves clear headroom while still catching a genuine leak that
+// would push past that.
+process.setMaxListeners(50);
 
 // ─── stores (Electron-free; pure domain logic) ───────────────────────────────
 
@@ -174,6 +184,7 @@ const workflows = new WorkflowStore();
 const workflowRunner = new WorkflowRunner();
 const workflowScheduler = new WorkflowScheduler(workflows, workflowRunner, {
   isPaused: () => loadPaused(),
+  isAutopilot: () => loadAppMode() === 'autopilot',
   workingHours: () => loadWorkingHours(),
 });
 // "Heads up" notifications when an inbox item with fireAt is within 5
@@ -326,6 +337,7 @@ runner.setJarvisMcp(
     getCostBreakdown,
     workflows,
     workflowRunner,
+    inbox,
   }),
 );
 
@@ -604,11 +616,16 @@ function wireRunnerEvents(): void {
         if (askLevel === 'open') {
           focusTaskInObservatory();
         }
+        // Body is the agent's actual question, not the user's original
+        // prompt. Echoing the prompt back was not actionable — the user
+        // would see "Walk me through calibrating…" (what they sent) and
+        // have nothing to Approve/Edit/Cancel against. Falling back to
+        // the title only covers the no-assistant-text case.
+        const agentText = lastAssistantText(runner.getEvents(summary.id));
+        const rawBody = agentText ?? summary.title;
+        const preview =
+          rawBody.length > 280 ? `${rawBody.slice(0, 280)}…` : rawBody;
         if (askLevel !== 'silent') {
-          const preview =
-            summary.title.length > 80
-              ? `${summary.title.slice(0, 80)}…`
-              : summary.title;
           notifier.post({
             source: 'task-awaiting',
             title: 'Jarvis · ready for your reply',
@@ -619,10 +636,6 @@ function wireRunnerEvents(): void {
         } else {
           // Subscribers (e.g. Telegram in AFK mode) still need to hear
           // about awaiting-input even when the local OS toast is silenced.
-          const preview =
-            summary.title.length > 80
-              ? `${summary.title.slice(0, 80)}…`
-              : summary.title;
           notifier.post({
             source: 'task-awaiting',
             title: 'Jarvis · ready for your reply',
@@ -763,6 +776,14 @@ app.whenReady().then(async () => {
   if (process.platform === 'darwin' && app.dock) void app.dock.show();
 
   initDatabase();
+  // Boot-time zombie reap: any task row stuck on status='running' from
+  // a previous process can't possibly still be live — the runner just
+  // started fresh and has nothing in memory. Mark them errored so the
+  // AI Agent UI doesn't show ghost "live" cards forever.
+  const zombies = reapZombieRunningTasks();
+  if (zombies > 0) {
+    console.info(`[boot] reaped ${zombies} zombie running task(s) from previous session`);
+  }
   await refreshAuth();
   seedDefaultsIfEmpty();
   skills.init();

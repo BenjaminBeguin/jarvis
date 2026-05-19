@@ -23,6 +23,11 @@ interface Props {
 
 function triggerLabel(t: WorkflowDef['trigger']): string {
   if (t.kind === 'cron') return `every ${t.every}`;
+  if (t.kind === 'autopilot') {
+    return t.when === 'cron'
+      ? `autopilot · every ${t.every ?? '?'}`
+      : `autopilot · on ${(t.sources ?? []).join(', ') || 'inbox'}`;
+  }
   return `manual${t.palette ? ' · /' + t.palette : ''}`;
 }
 

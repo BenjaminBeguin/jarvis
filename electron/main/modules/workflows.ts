@@ -34,10 +34,16 @@ export const workflowsModule: Module = {
             return 'No workflows yet. Drop a JSON file under ~/.jarvis/workflows/.';
           }
           const lines = list.map((w) => {
-            const tag =
-              w.trigger.kind === 'cron'
-                ? `cron · ${w.trigger.every}`
-                : `manual${w.trigger.palette ? ' · /' + w.trigger.palette : ''}`;
+            let tag = 'manual';
+            if (w.trigger.kind === 'cron') {
+              tag = `cron · ${w.trigger.every}`;
+            } else if (w.trigger.kind === 'manual') {
+              tag = `manual${w.trigger.palette ? ' · /' + w.trigger.palette : ''}`;
+            } else if (w.trigger.kind === 'autopilot') {
+              tag = w.trigger.when === 'cron'
+                ? `autopilot · cron ${w.trigger.every ?? '?'}`
+                : `autopilot · on ${(w.trigger.sources ?? []).join(',')}`;
+            }
             const off = w.enabled ? '' : ' · disabled';
             return `· ${w.id} — ${tag}${off}`;
           });

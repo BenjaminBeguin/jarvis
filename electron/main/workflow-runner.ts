@@ -81,7 +81,7 @@ export class WorkflowRunner extends EventEmitter {
    */
   run(
     def: WorkflowDef,
-    trigger: 'cron' | 'manual',
+    trigger: 'cron' | 'manual' | 'autopilot' | 'inbox-event',
   ): WorkflowRun {
     if (!this.nodeCtx) {
       throw new Error('WorkflowRunner: setNodeContext() must be called first');

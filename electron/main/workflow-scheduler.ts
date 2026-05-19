@@ -26,6 +26,12 @@ import type { WorkflowStore } from './workflow-store.js';
 
 interface SchedulerOptions {
   isPaused?: () => boolean;
+  /** True when appMode === 'autopilot'. Gates the new autopilot
+   *  trigger kind — workflows with `trigger.kind === 'autopilot'`
+   *  only fire when this returns true. Inbox-changed-triggered ones
+   *  are dispatched by the InboxEventBridge instead of cron, so
+   *  they skip the cron path entirely. */
+  isAutopilot?: () => boolean;
   /** Returns the current working-hours pref. Used by `{businessHours}`
    *  cron substitution; the seed defaults reference this token so a
    *  single config change updates every workflow that opts in. */
@@ -97,6 +103,7 @@ export class WorkflowScheduler {
   private readonly store: WorkflowStore;
   private readonly runner: WorkflowRunner;
   private readonly isPaused?: () => boolean;
+  private readonly isAutopilot?: () => boolean;
   private readonly workingHours?: () => {
     startHour: number;
     endHour: number;
@@ -112,6 +119,7 @@ export class WorkflowScheduler {
     this.store = store;
     this.runner = runner;
     this.isPaused = opts.isPaused;
+    this.isAutopilot = opts.isAutopilot;
     this.workingHours = opts.workingHours;
     this.store.on('changed', () => this.syncAll());
   }
@@ -171,24 +179,42 @@ export class WorkflowScheduler {
       this.jobs.delete(def.id);
     }
     if (!def.enabled) return;
-    if (def.trigger.kind !== 'cron') return; // manual not scheduled here
-    // Resolve {businessHours} → "<start>-<end> * * <days>" first, so
-    // expandEvery sees the final string. Workflows that don't use the
-    // token are unaffected (string.replace is a no-op).
-    const resolved = substituteBusinessHours(
-      def.trigger.every,
-      this.workingHours,
-    );
+    // Extract the cron `every` string this trigger needs scheduling
+    // for — cron triggers always; autopilot triggers only when
+    // `when === 'cron'`. inbox-changed-triggered ones don't schedule
+    // here at all (InboxEventBridge dispatches them).
+    let every: string | null = null;
+    if (def.trigger.kind === 'cron') {
+      every = def.trigger.every;
+    } else if (def.trigger.kind === 'autopilot') {
+      if (def.trigger.when !== 'cron') return;
+      if (!def.trigger.every) {
+        console.warn(
+          `[workflow-scheduler] ${def.id} autopilot/cron trigger missing 'every' — skipping`,
+        );
+        return;
+      }
+      every = def.trigger.every;
+    } else {
+      // 'manual' — runs via "Run now", palette, or MCP tool.
+      return;
+    }
+    const resolved = substituteBusinessHours(every, this.workingHours);
     const cronExpr = expandEvery(resolved);
     if (!cron.validate(cronExpr)) {
       console.warn(
-        `[workflow-scheduler] invalid cron for ${def.id}: "${def.trigger.every}" → "${cronExpr}"`,
+        `[workflow-scheduler] invalid cron for ${def.id}: "${every}" → "${cronExpr}"`,
       );
       return;
     }
+    const isAutopilotTrigger = def.trigger.kind === 'autopilot';
     const scheduled = cron.schedule(cronExpr, () => {
       if (this.isPaused?.()) {
         console.log(`[workflow-scheduler] ${def.id} paused — skipping fire`);
+        return;
+      }
+      if (isAutopilotTrigger && !this.isAutopilot?.()) {
+        // Trigger only fires when the app is in autopilot mode.
         return;
       }
       // Re-fetch the latest def on each tick so an edit between
@@ -196,7 +222,7 @@ export class WorkflowScheduler {
       const fresh = this.store.get(def.id);
       if (!fresh || !fresh.enabled) return;
       try {
-        this.runner.run(fresh, 'cron');
+        this.runner.run(fresh, isAutopilotTrigger ? 'autopilot' : 'cron');
       } catch (err) {
         console.warn(`[workflow-scheduler] ${def.id} fire failed:`, err);
       }

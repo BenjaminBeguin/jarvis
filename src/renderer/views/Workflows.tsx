@@ -612,6 +612,11 @@ export function Workflows() {
 
 function triggerLabel(t: WorkflowDef['trigger']): string {
   if (t.kind === 'cron') return `cron · ${t.every}`;
+  if (t.kind === 'autopilot') {
+    return t.when === 'cron'
+      ? `⚡ autopilot · cron ${t.every ?? '?'}`
+      : `⚡ autopilot · on ${(t.sources ?? []).join(', ') || 'inbox'}`;
+  }
   return `manual${t.palette ? ' · ' + t.palette : ''}`;
 }
 

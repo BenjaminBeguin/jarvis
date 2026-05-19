@@ -949,7 +949,24 @@ export interface WorkflowDef {
  */
 export type WorkflowTrigger =
   | { kind: 'cron'; every: string }
-  | { kind: 'manual'; palette?: string };
+  | { kind: 'manual'; palette?: string }
+  /**
+   * Autopilot-scoped scenario. The workflow scheduler only fires
+   * these when `appMode === 'autopilot'`. Two firing patterns:
+   *   - `when: 'cron'` + `every`: same as a normal cron trigger,
+   *     but gated by autopilot mode.
+   *   - `when: 'inbox-changed'` + optional `sources` filter:
+   *     dispatched by InboxEventBridge whenever a new item lands
+   *     under one of the listed source ids. Per-(workflowId, itemId)
+   *     dedupe + `minIntervalMs` rate-limit prevent runaway fires.
+   */
+  | {
+      kind: 'autopilot';
+      when: 'cron' | 'inbox-changed';
+      every?: string;
+      sources?: string[];
+      minIntervalMs?: number;
+    };
 
 /** Known node `type`s as of V1. Treated as opaque strings on the
  *  wire so adding new node types later doesn't require a type bump.
@@ -962,7 +979,9 @@ export type WorkflowNodeType =
   | 'inbox-write'
   | 'notify'
   | 'run-skill'
-  | 'mcp-call';
+  | 'mcp-call'
+  | 'draft-output'
+  | 'prompt-output';
 
 export interface WorkflowNodeDef {
   type: string;
@@ -998,7 +1017,7 @@ export interface WorkflowRunStep {
 export interface WorkflowRun {
   id: string;
   workflowId: string;
-  trigger: 'cron' | 'manual';
+  trigger: 'cron' | 'manual' | 'autopilot' | 'inbox-event';
   startedAt: number;
   endedAt: number | null;
   status: WorkflowRunStatus;
