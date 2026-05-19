@@ -17405,3 +17405,279 @@ button:disabled:hover {
 .autopilot-hud__btn--reject:hover:not(:disabled) {
   background: rgba(255, 100, 100, 0.22);
 }
+
+/* ── Settings → Autopilot panel ─────────────────────────────────────── */
+
+.autopilot-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.autopilot-panel__head h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.autopilot-panel__desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.55;
+  max-width: 560px;
+}
+
+.autopilot-panel__modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.autopilot-panel__mode {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: var(--text);
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.autopilot-panel__mode:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.autopilot-panel__mode--paused.autopilot-panel__mode--on {
+  background: rgba(255, 153, 0, 0.1);
+  border-color: rgba(255, 153, 0, 0.45);
+}
+
+.autopilot-panel__mode--running.autopilot-panel__mode--on {
+  background: rgba(95, 255, 166, 0.08);
+  border-color: rgba(95, 255, 166, 0.4);
+}
+
+.autopilot-panel__mode--autopilot.autopilot-panel__mode--on {
+  background: rgba(122, 220, 255, 0.1);
+  border-color: rgba(122, 220, 255, 0.45);
+}
+
+.autopilot-panel__mode-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.autopilot-panel__mode-blurb {
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
+.autopilot-panel__sub {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.autopilot-panel__empty {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.55;
+}
+
+.autopilot-panel__scenarios {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.autopilot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+}
+
+.autopilot-card--on {
+  background: rgba(122, 220, 255, 0.04);
+  border-color: rgba(122, 220, 255, 0.15);
+}
+
+.autopilot-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.autopilot-card__title-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.autopilot-card__name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.autopilot-card__meta {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-family: var(--font-mono), monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.autopilot-card__toggle {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-faint);
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.autopilot-card__toggle--on {
+  background: rgba(95, 255, 166, 0.12);
+  border-color: rgba(95, 255, 166, 0.4);
+  color: #5fffa6;
+}
+
+.autopilot-card__desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
+.autopilot-card__stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.autopilot-card__stat {
+  flex: 1;
+}
+
+.autopilot-card__feedback-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 11px;
+  font-family: inherit;
+  padding: 2px 4px;
+}
+
+.autopilot-card__feedback-btn:hover {
+  color: var(--text);
+}
+
+.autopilot-card__feedback {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.autopilot-card__feedback-empty {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.autopilot-card__feedback-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.autopilot-card__feedback-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 11px;
+}
+
+.autopilot-card__feedback-row--accepted {
+  border-left: 2px solid rgba(95, 255, 166, 0.5);
+}
+
+.autopilot-card__feedback-row--rejected {
+  border-left: 2px solid rgba(255, 100, 100, 0.5);
+}
+
+.autopilot-card__feedback-decision {
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.autopilot-card__feedback-row--accepted .autopilot-card__feedback-decision {
+  color: #5fffa6;
+}
+
+.autopilot-card__feedback-row--rejected .autopilot-card__feedback-decision {
+  color: #ff8585;
+}
+
+.autopilot-card__feedback-ts {
+  color: var(--text-faint);
+  font-family: var(--font-mono), monospace;
+}
+
+.autopilot-card__feedback-note {
+  grid-column: 1 / -1;
+  color: var(--text);
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.autopilot-card__feedback-clear {
+  align-self: flex-end;
+  background: transparent;
+  border: 1px solid rgba(255, 100, 100, 0.3);
+  color: rgba(255, 100, 100, 0.85);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.autopilot-card__feedback-clear:hover {
+  background: rgba(255, 100, 100, 0.08);
+  color: #ff8585;
+}

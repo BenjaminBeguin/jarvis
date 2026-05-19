@@ -11,6 +11,7 @@ import type {
   SkillSummary,
 } from '../../shared/types';
 import { DEFAULT_INBOX_PREFS } from '../../shared/types';
+import { AutopilotPanel } from './autopilot/AutopilotPanel';
 import { Integrations } from './integrations/Integrations';
 import { BuilderPanel } from './BuilderPanel';
 import { ModulesPage } from './ModulesPage';
@@ -22,6 +23,7 @@ type Section =
   | 'preferences'
   | 'notifications'
   | 'inbox'
+  | 'autopilot'
   | 'modules'
   | 'integrations'
   | 'api'
@@ -81,6 +83,9 @@ export function Settings({
         <SectionTab name="inbox" active={section} onClick={setSection}>
           Inbox
         </SectionTab>
+        <SectionTab name="autopilot" active={section} onClick={setSection}>
+          Autopilot
+        </SectionTab>
         <SectionTab name="modules" active={section} onClick={setSection}>
           Modules
         </SectionTab>
@@ -102,6 +107,7 @@ export function Settings({
         {section === 'preferences' && <PreferencesPanel />}
         {section === 'notifications' && <NotificationsPanel />}
         {section === 'inbox' && <InboxPanel />}
+        {section === 'autopilot' && <AutopilotPanel />}
         {section === 'modules' && <ModulesPage onOpenPage={onOpenModulePage} />}
         {section === 'integrations' && <Integrations />}
         {section === 'api' && <ApiPanel />}
