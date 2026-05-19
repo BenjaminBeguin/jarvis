@@ -7,6 +7,7 @@ import type {
   TaskSummary,
 } from '../../shared/types';
 import { DEFAULT_INBOX_PREFS } from '../../shared/types';
+import { openTaskOverlay } from '../task-overlay-store';
 import { TaskBindingBadge } from './TaskBindingBadge';
 import { toast } from './Toaster';
 import { useTaskBinding, type TaskBindingState } from './useTaskBinding';
@@ -525,6 +526,10 @@ function InboxRow({
 }) {
   const [acting, setActing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Expandable body for items that ship long-form content (autopilot
+  // drafts, anything else that sets InboxItem.body). Toggled by the
+  // affordance under the row.
+  const [bodyOpen, setBodyOpen] = useState(false);
   // "Starting soon" — fireAt within 10 min (matches the proximity
   // notification, ±some buffer for the eye). Re-evaluated on every
   // render which is fine; the Inbox view doesn't re-render every
@@ -665,6 +670,25 @@ function InboxRow({
         </div>
         {item.subtitle && <div className="inbox__row-sub">{item.subtitle}</div>}
         {item.why && <div className="inbox__row-why">{item.why}</div>}
+        {item.body && (
+          <>
+            <button
+              type="button"
+              className="inbox__row-body-toggle"
+              onClick={(e) => {
+                e.stopPropagation();
+                setBodyOpen((v) => !v);
+              }}
+              aria-expanded={bodyOpen}
+              title={bodyOpen ? 'Collapse content' : 'Expand content'}
+            >
+              {bodyOpen ? '▾ Hide content' : '▸ Show content'}
+            </button>
+            {bodyOpen && (
+              <pre className="inbox__row-body">{item.body}</pre>
+            )}
+          </>
+        )}
       </div>
       <div className="inbox__row-meta">
         {item.fireAt != null && (
@@ -1093,12 +1117,20 @@ function SmartInboxNudge() {
   const runCalibrate = async (): Promise<void> => {
     setBusy(true);
     try {
-      await window.jarvis.launchTask({
+      const summary = await window.jarvis.launchTask({
         skillId: 'inbox-calibrate',
         prompt:
           'Walk me through calibrating the Smart inbox. Read my recent items + priorities and ask 3-5 focused questions.',
         origin: 'palette',
       });
+      // Calibration is a multi-turn conversation. The Answer HUD
+      // ships a tiny top-right card that's easy to miss on a big
+      // screen — and history shows users rage-click the nudge
+      // multiple times because they don't notice it. Pop the global
+      // TaskOverlay (full transcript, big reply box, can't be missed)
+      // over the current view; HUD stays as a secondary surface.
+      void window.jarvis.showAnswerHud(summary.id);
+      openTaskOverlay(summary.id);
     } finally {
       setBusy(false);
       // Re-check the file after the calibrator runs (the skill

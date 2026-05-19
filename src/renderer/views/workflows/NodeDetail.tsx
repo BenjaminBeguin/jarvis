@@ -40,9 +40,67 @@ export function NodeDetail({ node }: Props) {
       return <RunSkillDetail p={p} />;
     case 'mcp-call':
       return <McpCallDetail p={p} />;
+    case 'draft-output':
+      return <DraftOutputDetail p={p} />;
+    case 'prompt-output':
+      return <PromptOutputDetail p={p} />;
     default:
       return <GenericDetail p={p} />;
   }
+}
+
+function DraftOutputDetail({ p }: { p: Record<string, unknown> }) {
+  const source =
+    typeof p['source'] === 'string' ? (p['source'] as string) : 'autopilot-drafts';
+  return (
+    <div className="wf-detail">
+      <Field
+        label="Title"
+        value={typeof p['title'] === 'string' ? (p['title'] as string) : '?'}
+      />
+      {typeof p['subtitle'] === 'string' && (
+        <Field label="Subtitle" value={p['subtitle'] as string} />
+      )}
+      <Field label="Source" value={<code>{source}</code>} mono />
+      <div className="wf-detail__hint">
+        Silent autopilot terminal. Lands as an Inbox row under{' '}
+        <code>{source}</code> for later review. The previous step's full
+        output goes into <code>InboxItem.body</code>.{' '}
+        <code>{'{prev}'}</code> and <code>{'{prev.field}'}</code> substitute
+        in <code>title</code> / <code>subtitle</code>.
+      </div>
+    </div>
+  );
+}
+
+function PromptOutputDetail({ p }: { p: Record<string, unknown> }) {
+  const onAccept =
+    typeof p['onAccept'] === 'string' ? (p['onAccept'] as string) : 'prev';
+  return (
+    <div className="wf-detail">
+      <Field
+        label="Title"
+        value={typeof p['title'] === 'string' ? (p['title'] as string) : '?'}
+      />
+      {typeof p['summary'] === 'string' && (
+        <Field label="Summary" value={p['summary'] as string} />
+      )}
+      {typeof p['body'] === 'string' && (
+        <Field label="Body override" value={p['body'] as string} />
+      )}
+      <Field label="On accept" value={<code>{onAccept}</code>} mono />
+      <div className="wf-detail__hint">
+        Blocks the pipeline. Fires a notification + opens the approval
+        HUD with the previous step's output. <strong>Accept</strong> →
+        pipeline continues; <strong>Reject + note</strong> appends to{' '}
+        <code>~/.jarvis/autopilot/feedback/&lt;id&gt;.md</code> so the
+        agent improves next run.{' '}
+        {onAccept === 'feedback'
+          ? 'Edited body becomes the next step\'s input.'
+          : 'Pipeline continues with the original prev (edits are kept as positive feedback only).'}
+      </div>
+    </div>
+  );
 }
 
 function McpCallDetail({ p }: { p: Record<string, unknown> }) {

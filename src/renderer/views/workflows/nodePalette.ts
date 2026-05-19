@@ -157,6 +157,20 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
       },
     }),
   },
+  {
+    type: 'prompt-output',
+    label: 'Prompt Output',
+    description:
+      'Autopilot interrupt step. Opens an approval HUD with the previous step\'s text; the pipeline blocks until you Accept / Reject. Rejections + notes feed back into the next run via {feedback}.',
+    group: 'I/O',
+    template: () => ({
+      type: 'prompt-output',
+      params: {
+        title: 'Approve this action?',
+        summary: 'Autopilot drafted a result for your review.',
+      },
+    }),
+  },
 ];
 
 /**

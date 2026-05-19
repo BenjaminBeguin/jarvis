@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 
 import type { WorkflowDef, WorkflowRun } from '../../../shared/types';
 
@@ -121,45 +121,70 @@ export function WorkflowSelector({
           {workflows.length === 0 && (
             <li className="wf-selector__empty">No workflows yet.</li>
           )}
-          {workflows.map((w) => {
-            const isActive = w.id === selectedId;
-            return (
-              <li key={w.id}>
-                <button
-                  type="button"
-                  className={`wf-selector__item${isActive ? ' wf-selector__item--active' : ''}`}
-                  role="option"
-                  aria-selected={isActive}
-                  onClick={() => {
-                    onSelect(w.id);
-                    setOpen(false);
-                  }}
-                >
-                  <span
-                    className="wf-selector__item-dot"
-                    style={{
-                      background: w.enabled
-                        ? 'var(--good)'
-                        : 'var(--text-faint)',
-                    }}
-                    aria-hidden
-                  />
-                  <span className="wf-selector__item-body">
-                    <span className="wf-selector__item-name">{w.name}</span>
-                    <span className="wf-selector__item-meta">
-                      {triggerLabel(w.trigger)} · {w.pipeline.length} node
-                      {w.pipeline.length === 1 ? '' : 's'}
-                    </span>
-                  </span>
-                  {recentByWorkflow && (
-                    <HealthSparkline
-                      runs={recentByWorkflow.get(w.id) ?? []}
-                    />
-                  )}
-                </button>
-              </li>
+          {(() => {
+            const standard = workflows.filter(
+              (w) => w.trigger.kind !== 'autopilot',
             );
-          })}
+            const autopilot = workflows.filter(
+              (w) => w.trigger.kind === 'autopilot',
+            );
+            const renderRow = (w: WorkflowDef): ReactElement => {
+              const isActive = w.id === selectedId;
+              return (
+                <li key={w.id}>
+                  <button
+                    type="button"
+                    className={`wf-selector__item${isActive ? ' wf-selector__item--active' : ''}`}
+                    role="option"
+                    aria-selected={isActive}
+                    onClick={() => {
+                      onSelect(w.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <span
+                      className="wf-selector__item-dot"
+                      style={{
+                        background: w.enabled
+                          ? 'var(--good)'
+                          : 'var(--text-faint)',
+                      }}
+                      aria-hidden
+                    />
+                    <span className="wf-selector__item-body">
+                      <span className="wf-selector__item-name">{w.name}</span>
+                      <span className="wf-selector__item-meta">
+                        {triggerLabel(w.trigger)} · {w.pipeline.length} node
+                        {w.pipeline.length === 1 ? '' : 's'}
+                      </span>
+                    </span>
+                    {recentByWorkflow && (
+                      <HealthSparkline
+                        runs={recentByWorkflow.get(w.id) ?? []}
+                      />
+                    )}
+                  </button>
+                </li>
+              );
+            };
+            return (
+              <>
+                {standard.map(renderRow)}
+                {autopilot.length > 0 && (
+                  <>
+                    <li
+                      className="wf-selector__subheader"
+                      role="presentation"
+                      aria-hidden
+                    >
+                      ⚡ Autopilot scenarios
+                    </li>
+                    {autopilot.map(renderRow)}
+                  </>
+                )}
+              </>
+            );
+          })()}
         </ul>
       )}
     </div>
