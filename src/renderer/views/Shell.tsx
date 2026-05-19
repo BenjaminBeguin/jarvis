@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { AppMode, AppStatus, ModuleSummary, ProjectDef } from '../../shared/types';
 import { getModulePage } from '../modules/registry';
+import { ApprovalHud } from './autopilot/ApprovalHud';
 import { Inbox } from './Inbox';
 import { Logo } from './Logo';
 import { MeetingOverlay } from './MeetingOverlay';
@@ -754,6 +755,7 @@ export function Shell({ status }: Props) {
       </div>
       <MeetingOverlay />
       <MeetingPrompt />
+      <ApprovalHud />
       <SessionSidebar />
       <NewProjectDialog
         open={newProjectOpen}

@@ -6,6 +6,7 @@ import { inboxWriteNode } from './inbox-write.js';
 import { mcpCallNode } from './mcp-call.js';
 import { notifyNode } from './notify.js';
 import { osascriptNode } from './osascript.js';
+import { promptOutputNode } from './prompt-output.js';
 import { runSkillNode } from './run-skill.js';
 import { shellNode } from './shell.js';
 import { transformNode } from './transform.js';
@@ -30,6 +31,7 @@ export const NODE_REGISTRY: Record<string, NodeHandler> = {
   'run-skill': runSkillNode as unknown as NodeHandler,
   'mcp-call': mcpCallNode as unknown as NodeHandler,
   'draft-output': draftOutputNode as unknown as NodeHandler,
+  'prompt-output': promptOutputNode as unknown as NodeHandler,
 };
 
 export type { NodeHandler, NodeHandlerInput, WorkflowNodeContext } from './types.js';

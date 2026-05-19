@@ -20,6 +20,7 @@ export type NotificationSource =
   | 'cost-guardrail'      // task crossed cost threshold
   | 'inbox-new'           // new items in inbox
   | 'skill-suggestion'    // new skill ideas batch
+  | 'autopilot-prompt'    // autopilot prompt-output node awaiting approval
   | 'other';
 
 export interface NotificationEvent {

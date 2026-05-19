@@ -91,6 +91,39 @@ const api = {
   onAppModeChanged: (listener: Listener<AppMode>): Unsubscribe =>
     subscribe(IpcChannels.appModeChanged, listener),
 
+  // Autopilot approval flow (prompt-output node).
+  onAutopilotApprovalRequested: (
+    listener: Listener<{
+      requestId: string;
+      workflowId: string;
+      title: string;
+      summary?: string;
+      body?: string;
+      context?: string;
+    }>,
+  ): Unsubscribe => subscribe(IpcChannels.autopilotApprovalRequested, listener),
+  autopilotApprove: (
+    requestId: string,
+    editedBody?: string,
+  ): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IpcChannels.autopilotApprove, {
+      requestId,
+      editedBody,
+    }),
+  autopilotReject: (
+    requestId: string,
+    feedback?: string,
+  ): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IpcChannels.autopilotReject, {
+      requestId,
+      feedback,
+    }),
+  autopilotFeedback: (
+    action: 'list' | 'read' | 'clear',
+    workflowId: string,
+  ): Promise<unknown> =>
+    ipcRenderer.invoke(IpcChannels.autopilotFeedback, { action, workflowId }),
+
   setTelegramBotToken: (value: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.setTelegramBotToken, value),
   clearTelegramBotToken: (): Promise<void> =>

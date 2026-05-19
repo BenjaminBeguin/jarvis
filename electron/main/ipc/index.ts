@@ -1,5 +1,6 @@
 import { registerActivityIpc } from './activity.js';
 import { registerAuthIpc } from './auth.js';
+import { registerAutopilotIpc } from './autopilot.js';
 import { registerBriefingsIpc } from './briefings.js';
 import { registerDashboardIpc } from './dashboard.js';
 import { registerInboxIpc } from './inbox.js';
@@ -29,6 +30,7 @@ export type { IpcDeps } from './types.js';
 export function registerAllIpc(deps: IpcDeps): void {
   registerActivityIpc(deps);
   registerAuthIpc(deps);
+  registerAutopilotIpc({ activity: deps.activity });
   registerBriefingsIpc(deps);
   registerDashboardIpc(deps);
   registerInboxIpc(deps);
