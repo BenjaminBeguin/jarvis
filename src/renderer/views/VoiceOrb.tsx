@@ -34,13 +34,25 @@ export function VoiceOrb() {
   const captureRef = useRef<AudioCapture | null>(null);
   const levelTimerRef = useRef<number | null>(null);
 
-  // Receive the shortcut toggle. The first press is what brought
-  // the window up — start listening. The next press stops.
+  // Receive the shortcut toggle. The first press brings the
+  // window up; we start listening. The next press (while
+  // listening) stops + dispatches. After a terminal state
+  // ('done', 'errored', 'cancelled') the orb may have been
+  // re-shown by the shortcut handler — restart capture fresh.
+  // Mid-transcribe / mid-dispatch toggles are ignored.
   useEffect(() => {
     const off = window.jarvis.onVoiceOrbToggle(() => {
-      if (phase === 'idle') void start();
-      else if (phase === 'listening') void stopAndDispatch();
-      // ignore toggles while transcribing/dispatching
+      if (
+        phase === 'idle' ||
+        phase === 'done' ||
+        phase === 'errored' ||
+        phase === 'cancelled'
+      ) {
+        void start();
+      } else if (phase === 'listening') {
+        void stopAndDispatch();
+      }
+      // transcribing / dispatching — drop the toggle.
     });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -106,39 +118,51 @@ export function VoiceOrb() {
     };
   }, [phase]);
 
+  const startingRef = useRef(false);
   const start = async (): Promise<void> => {
+    // Guard against the mount-effect + toggle-event race — both
+    // can fire close together when the window is freshly spawned.
+    if (startingRef.current || captureRef.current) return;
+    startingRef.current = true;
     setError(null);
     setTranscript('');
+    setPhase('idle');
     try {
-      const perm = await window.jarvis.requestMicAccess();
-      if (!perm.granted) {
+      try {
+        const perm = await window.jarvis.requestMicAccess();
+        if (!perm.granted) {
+          setError(
+            perm.status === 'denied'
+              ? 'Mic denied. Enable in System Settings → Privacy → Microphone.'
+              : `Mic unavailable (${perm.status})`,
+          );
+          setPhase('errored');
+          return;
+        }
+      } catch {
+        // permission probe failed; fall through to capture which
+        // gives a clearer error
+      }
+      // Suppress meeting-recorder BEFORE opening the mic — otherwise
+      // coreaudiod's first "Input/Capture" log line wins the race
+      // and prompts the user to record their own dictation.
+      await window.jarvis.noteSelfMicStart();
+      const capture = new AudioCapture();
+      try {
+        await capture.start();
+      } catch (e) {
+        void window.jarvis.noteSelfMicStop();
         setError(
-          perm.status === 'denied'
-            ? 'Mic denied. Enable in System Settings → Privacy → Microphone.'
-            : `Mic unavailable (${perm.status})`,
+          `Mic open failed: ${e instanceof Error ? e.message : String(e)}`,
         );
         setPhase('errored');
         return;
       }
-    } catch {
-      // permission probe failed; fall through to capture which
-      // gives a clearer error
+      captureRef.current = capture;
+      setPhase('listening');
+    } finally {
+      startingRef.current = false;
     }
-    // Suppress meeting-recorder BEFORE opening the mic — otherwise
-    // coreaudiod's first "Input/Capture" log line wins the race
-    // and prompts the user to record their own dictation.
-    await window.jarvis.noteSelfMicStart();
-    const capture = new AudioCapture();
-    try {
-      await capture.start();
-    } catch (e) {
-      void window.jarvis.noteSelfMicStop();
-      setError(`Mic open failed: ${e instanceof Error ? e.message : String(e)}`);
-      setPhase('errored');
-      return;
-    }
-    captureRef.current = capture;
-    setPhase('listening');
   };
 
   const stopAndDispatch = async (): Promise<void> => {
