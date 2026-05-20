@@ -262,6 +262,17 @@ export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
         {visible.map((item) => (
           <ChatItemRow key={item.key} item={item} mode={mode} />
         ))}
+        {/* While the agent is processing (running, not waiting on
+          * us), show a small heartbeat so the user knows their
+          * reply was received and the model is working. Without
+          * this the transcript just sits silent and the user
+          * wonders if the send did anything. */}
+        {task.status === 'running' && !task.awaitingInput && (
+          <div className="detail__thinking">
+            <span className="detail__thinking-dot" aria-hidden />
+            <span>Agent is working…</span>
+          </div>
+        )}
       </div>
 
       {isAwaiting && task.origin === 'external' && (

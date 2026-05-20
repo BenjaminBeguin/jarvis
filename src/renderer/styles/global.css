@@ -7736,6 +7736,29 @@ button:disabled:hover {
   letter-spacing: 0;
 }
 
+/* Inline "agent is working" heartbeat — drops at the bottom of
+   the transcript while a turn is mid-flight so the user sees
+   their reply was acknowledged and the model is processing. */
+.detail__thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px 2px;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.detail__thinking-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.55);
+  animation: wf-spark-pulse 1.4s ease-in-out infinite;
+}
+
 .detail__reply-dock {
   border-top: 1px solid var(--border-strong);
   background: rgba(4, 7, 11, 0.85);
