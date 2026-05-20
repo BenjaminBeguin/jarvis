@@ -15746,6 +15746,52 @@ button:disabled:hover {
   position: relative;
 }
 
+/* Floating variant: anchored to the bottom-right of the graph
+   canvas. The popover still uses .wf-palette__menu styles below
+   but flips upward via the .wf-palette--floating descendant rule. */
+.wf-palette--floating {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 30;
+}
+
+.wf-palette__fab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px 0 14px;
+  background: rgba(0, 212, 255, 0.14);
+  border: 1px solid rgba(0, 212, 255, 0.5);
+  color: #7ce0ff;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+
+.wf-palette__fab:hover {
+  background: rgba(0, 212, 255, 0.22);
+  border-color: rgba(0, 212, 255, 0.7);
+  transform: translateY(-1px);
+}
+
+.wf-palette__fab-glyph {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.wf-palette--floating .wf-palette__menu {
+  top: auto;
+  left: auto;
+  right: 0;
+  bottom: calc(100% + 8px);
+}
+
 .wf-palette__menu {
   position: absolute;
   top: calc(100% + 4px);
@@ -15853,6 +15899,56 @@ button:disabled:hover {
 
 .wf-toolbar__spacer {
   flex: 1;
+}
+
+/* Kebab overflow menu — collapses Enable/Duplicate/Delete into a
+   single ⋯ button on the toolbar. */
+
+.wf-overflow {
+  position: relative;
+  display: inline-block;
+}
+
+.wf-overflow__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  min-width: 180px;
+  background: rgba(12, 18, 26, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wf-overflow__item {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.wf-overflow__item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.wf-overflow__item--danger {
+  color: #ff8585;
+}
+
+.wf-overflow__item--danger:hover {
+  background: rgba(255, 100, 100, 0.1);
 }
 
 /* Floating workflow selector */

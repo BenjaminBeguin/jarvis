@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WorkflowDef, WorkflowNodeDef, WorkflowRun } from '../../shared/types';
 import { toast } from './Toaster';
 import { NodeDetail } from './workflows/NodeDetail';
-import { NODE_TEMPLATES, emptyWorkflow } from './workflows/nodePalette';
+import { NODE_TEMPLATES } from './workflows/nodePalette';
 import { WorkflowChat } from './workflows/WorkflowChat';
 import {
   WorkflowPipeline,
@@ -40,7 +40,9 @@ export function Workflows() {
   const [draft, setDraft] = useState<string>('');
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [inspectedRunIdx, setInspectedRunIdx] = useState<number>(0);
-  const [dockOpen, setDockOpen] = useState<boolean>(true);
+  /** Kebab overflow menu for Enable / Duplicate / Delete. */
+  const [overflowOpen, setOverflowOpen] = useState<boolean>(false);
+  const overflowRef = useRef<HTMLDivElement | null>(null);
   const [dockTab, setDockTab] = useState<DockTab>('json');
   const [selectedNode, setSelectedNode] = useState<WorkflowSelection | null>(
     null,
@@ -58,6 +60,18 @@ export function Workflows() {
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, [paletteOpen]);
+
+  // Same outside-click pattern for the toolbar kebab overflow menu.
+  useEffect(() => {
+    if (!overflowOpen) return undefined;
+    const onClick = (e: MouseEvent): void => {
+      if (!overflowRef.current) return;
+      if (overflowRef.current.contains(e.target as Node)) return;
+      setOverflowOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [overflowOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -279,45 +293,10 @@ export function Workflows() {
     }
     setPaletteOpen(false);
     setDraft(JSON.stringify(next, null, 2));
-    setDockOpen(true);
     setDockTab('json');
     toast({
       message: `+ ${stub.type} step appended — edit the params in the JSON dock`,
     });
-  };
-
-  /**
-   * Create a fresh empty workflow and select it. The user provides a
-   * name, we derive an id from it. The workflow starts disabled with
-   * a manual trigger so it doesn't fire by mistake before being
-   * configured.
-   */
-  const createWorkflow = async (): Promise<void> => {
-    const name = prompt(
-      'New workflow name (used as the title — id is auto-derived):',
-    );
-    if (!name || !name.trim()) return;
-    const slug = name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '');
-    const id = slug || `workflow-${Date.now()}`;
-    if (workflows.some((w) => w.id === id)) {
-      toast({
-        kind: 'error',
-        message: `A workflow with id "${id}" already exists`,
-      });
-      return;
-    }
-    const stub = emptyWorkflow(id, name.trim());
-    const result = await window.jarvis.saveWorkflow(stub as WorkflowDef);
-    if (!result.ok) {
-      toast({ kind: 'error', message: result.message ?? 'Create failed' });
-      return;
-    }
-    setSelectedId(id);
-    toast({ message: `Created ${name}` });
   };
 
   return (
@@ -330,14 +309,6 @@ export function Workflows() {
             onSelect={setSelectedId}
             recentByWorkflow={recentByWorkflow}
           />
-          <button
-            type="button"
-            className="wf-btn"
-            onClick={() => void createWorkflow()}
-            title="Create a new empty workflow"
-          >
-            <span className="wf-btn__glyph">+</span> New
-          </button>
         </div>
         {selected && (
           <>
@@ -357,16 +328,110 @@ export function Workflows() {
                 />
                 {triggerLabel(selected.trigger)}
               </span>
-              <div className="wf-palette" ref={paletteRef}>
+              <button
+                type="button"
+                className="wf-btn wf-btn--primary"
+                onClick={() => void runNow()}
+                title="Trigger this workflow immediately"
+              >
+                ▶ Run now
+              </button>
+              <div className="wf-overflow" ref={overflowRef}>
                 <button
                   type="button"
-                  className="wf-btn"
+                  className="wf-btn wf-btn--icon"
+                  onClick={() => setOverflowOpen((v) => !v)}
+                  aria-expanded={overflowOpen}
+                  aria-label="More actions"
+                  title="More actions"
+                >
+                  ⋯
+                </button>
+                {overflowOpen && (
+                  <div className="wf-overflow__menu" role="menu">
+                    <button
+                      type="button"
+                      className="wf-overflow__item"
+                      onClick={() => {
+                        setOverflowOpen(false);
+                        void toggleEnabled();
+                      }}
+                    >
+                      {selected.enabled ? 'Disable trigger' : 'Enable trigger'}
+                    </button>
+                    <button
+                      type="button"
+                      className="wf-overflow__item"
+                      onClick={() => {
+                        setOverflowOpen(false);
+                        void duplicate();
+                      }}
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      className="wf-overflow__item wf-overflow__item--danger"
+                      onClick={() => {
+                        setOverflowOpen(false);
+                        void remove();
+                      }}
+                    >
+                      Delete workflow
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+        <div className="wf-toolbar__spacer" />
+      </header>
+
+      {errors.length > 0 && (
+        <div className="wf-banner">
+          {errors.map((e) => (
+            <div key={e.filename} className="wf-banner__item">
+              <strong>{e.filename}</strong>
+              <span>{e.message}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="wf-body">
+        <div className="wf-graph">
+          {!selected ? (
+            <div className="wf-graph__empty">
+              Pick a workflow above. Built-ins live in{' '}
+              <code>~/.jarvis/workflows/</code>; drop a new JSON file there and
+              it shows up here.
+            </div>
+          ) : (
+            <>
+              <WorkflowPipeline
+                workflow={selected}
+                run={recentRun}
+                selected={selectedNode}
+                onSelect={(sel) => {
+                  setSelectedNode(sel);
+                  setDockTab('step');
+                }}
+              />
+              {/* Floating add-node palette pinned to the canvas. The
+                  whole popover (button + dropdown) is one element so
+                  the outside-click handler defined in the existing
+                  paletteRef effect still works without changes. */}
+              <div className="wf-palette wf-palette--floating" ref={paletteRef}>
+                <button
+                  type="button"
+                  className="wf-palette__fab"
                   onClick={() => setPaletteOpen((v) => !v)}
                   aria-expanded={paletteOpen}
                   title="Append a new step"
                 >
-                  <span className="wf-btn__glyph">+</span> Add node
-                  <span className="wf-btn__caret">{paletteOpen ? '▾' : '▸'}</span>
+                  <span className="wf-palette__fab-glyph">+</span>
+                  Add node
                 </button>
                 {paletteOpen && (
                   <div className="wf-palette__menu" role="menu">
@@ -391,93 +456,11 @@ export function Workflows() {
                   </div>
                 )}
               </div>
-              <button
-                type="button"
-                className="wf-btn wf-btn--primary"
-                onClick={() => void runNow()}
-                title="Trigger this workflow immediately"
-              >
-                ▶ Run now
-              </button>
-              <button
-                type="button"
-                className="wf-btn"
-                onClick={() => void toggleEnabled()}
-                title={
-                  selected.enabled
-                    ? 'Pause the trigger; you can still Run now'
-                    : 'Resume the trigger'
-                }
-              >
-                {selected.enabled ? 'Disable' : 'Enable'}
-              </button>
-              <button
-                type="button"
-                className="wf-btn"
-                onClick={() => void duplicate()}
-                title="Fork this workflow into a user-owned copy (built-in seed migration won't touch the copy)"
-              >
-                Duplicate
-              </button>
-              <button
-                type="button"
-                className="wf-btn wf-btn--icon wf-btn--danger"
-                onClick={() => void remove()}
-                title="Delete this workflow (removes the JSON file)"
-                aria-label="Delete workflow"
-              >
-                ×
-              </button>
-            </div>
-          </>
-        )}
-        <div className="wf-toolbar__spacer" />
-        <button
-          type="button"
-          className="wf-btn wf-btn--ghost"
-          onClick={() => setDockOpen((v) => !v)}
-          aria-pressed={dockOpen}
-          title={dockOpen ? 'Hide the dock' : 'Show the dock'}
-        >
-          {dockOpen ? 'Hide details' : 'Show details'}
-          <span className="wf-btn__caret">{dockOpen ? '▾' : '▴'}</span>
-        </button>
-      </header>
-
-      {errors.length > 0 && (
-        <div className="wf-banner">
-          {errors.map((e) => (
-            <div key={e.filename} className="wf-banner__item">
-              <strong>{e.filename}</strong>
-              <span>{e.message}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className={`wf-body${dockOpen ? '' : ' wf-body--dock-closed'}`}>
-        <div className="wf-graph">
-          {!selected ? (
-            <div className="wf-graph__empty">
-              Pick a workflow above. Built-ins live in{' '}
-              <code>~/.jarvis/workflows/</code>; drop a new JSON file there and
-              it shows up here.
-            </div>
-          ) : (
-            <WorkflowPipeline
-              workflow={selected}
-              run={recentRun}
-              selected={selectedNode}
-              onSelect={(sel) => {
-                setSelectedNode(sel);
-                setDockOpen(true);
-                setDockTab('step');
-              }}
-            />
+            </>
           )}
         </div>
 
-        {selected && dockOpen && (
+        {selected && (
           <div className="wf-dock">
             <div className="wf-dock__tabs">
               <button
