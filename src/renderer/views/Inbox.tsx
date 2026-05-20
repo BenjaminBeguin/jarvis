@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import type {
+  AppMode,
   InboxItem,
   InboxPrefs,
   MeetingDetectionStatus,
@@ -60,7 +61,17 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [appMode, setAppMode] = useState<AppMode>('running');
   const bindings = useTaskBinding('inbox');
+
+  // Mirror the tri-state appMode so we can disable AI-firing
+  // controls when the app is paused. Without this the Refresh
+  // button looks broken — it doesn't surface why nothing happens.
+  useEffect(() => {
+    void window.jarvis.getAppMode().then(setAppMode);
+    return window.jarvis.onAppModeChanged(setAppMode);
+  }, []);
+  const paused = appMode === 'paused';
 
   // Drop bindings for items that are no longer in the inbox.
   // The accuracy filter (PR replied to / resolved) makes items vanish
@@ -318,8 +329,12 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
           <button
             className="inbox__refresh"
             onClick={() => void doHardRefresh()}
-            disabled={refreshing}
-            title="Re-fire every inbox source skill, then re-read · ⌥-click for a soft re-read"
+            disabled={refreshing || paused}
+            title={
+              paused
+                ? 'Paused — flip the mode to Running to re-fire source skills'
+                : 'Re-fire every inbox source skill, then re-read · ⌥-click for a soft re-read'
+            }
             onAuxClick={(e) => {
               // Middle-click → soft refresh (re-read disk only). Hidden
               // power-user escape hatch for when you don't want to
@@ -330,7 +345,7 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
               }
             }}
           >
-            {refreshing ? 'Refreshing…' : 'Refresh'}
+            {refreshing ? 'Refreshing…' : paused ? '⏸ Refresh' : 'Refresh'}
           </button>
           {!compact && (
             <button
@@ -420,6 +435,7 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
                 binding={bindings.get(item.id)}
                 onBind={(taskId) => bindings.bind(item.id, taskId)}
                 onForget={() => bindings.clear(item.id)}
+                paused={paused}
               />
             ))}
           </ul>
@@ -518,11 +534,16 @@ function InboxRow({
   binding,
   onBind,
   onForget,
+  paused,
 }: {
   item: InboxItem;
   binding: TaskBindingState | undefined;
   onBind: (taskId: string) => void;
   onForget: () => void;
+  /** When the app is paused, AI-firing actions are disabled and the
+   *  button shows a "paused" hint instead. Open-url actions stay
+   *  enabled since they don't run any agent work. */
+  paused: boolean;
 }) {
   const [acting, setActing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -737,24 +758,35 @@ function InboxRow({
             ✓ Done
           </button>
         )}
-        {item.action && !binding && (
-          <button
-            className={`inbox__row-primary${item.action.kind === 'open-url' ? ' inbox__row-primary--link' : ''}`}
-            onClick={() => void act()}
-            disabled={acting && item.action.kind !== 'open-url'}
-            title={
-              item.action.kind === 'open-url'
-                ? `Opens ${item.action.url ?? item.url ?? 'a link'}`
-                : item.action.skillId
+        {item.action && !binding && (() => {
+          // Open-url is pure navigation; the agent never runs, so it
+          // stays enabled even when paused. Anything else fires a
+          // task and is gated by pause.
+          const isNavOnly = item.action.kind === 'open-url';
+          const disabled =
+            (acting && !isNavOnly) || (paused && !isNavOnly);
+          const title = paused && !isNavOnly
+            ? 'Paused — flip the mode to Running to launch this'
+            : isNavOnly
+              ? `Opens ${item.action.url ?? item.url ?? 'a link'}`
+              : item.action.skillId
                 ? `Launches ${item.action.skillId}`
-                : item.action.prompt ?? item.action.label
-            }
-          >
-            {item.action.kind !== 'open-url' && acting
-              ? 'Launching…'
-              : item.action.label}
-          </button>
-        )}
+                : item.action.prompt ?? item.action.label;
+          return (
+            <button
+              className={`inbox__row-primary${isNavOnly ? ' inbox__row-primary--link' : ''}`}
+              onClick={() => void act()}
+              disabled={disabled}
+              title={title}
+            >
+              {!isNavOnly && acting
+                ? 'Launching…'
+                : paused && !isNavOnly
+                  ? `⏸ ${item.action.label}`
+                  : item.action.label}
+            </button>
+          );
+        })()}
         {binding && (
           <TaskBindingBadge
             binding={binding}
