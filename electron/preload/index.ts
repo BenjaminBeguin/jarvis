@@ -47,6 +47,7 @@ import type {
   TaskEvent,
   TaskSummary,
   TranscribeProgress,
+  TrayMenuState,
 } from '@shared/types';
 
 type Listener<T> = (payload: T) => void;
@@ -234,6 +235,18 @@ const api = {
     ipcRenderer.invoke(IpcChannels.setAnswerHudInteractive, interactive),
   onAnswerHudTrack: (listener: Listener<string>): Unsubscribe =>
     subscribe(IpcChannels.answerHudTrack, listener),
+
+  /** Custom tray menu: read state, subscribe to changes, dismiss. */
+  trayMenuRead: (): Promise<TrayMenuState> =>
+    ipcRenderer.invoke(IpcChannels.trayMenuRead),
+  onTrayMenuStateChanged: (
+    listener: Listener<TrayMenuState>,
+  ): Unsubscribe => subscribe(IpcChannels.trayMenuStateChanged, listener),
+  hideTrayMenu: (): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.trayMenuHide),
+  resizeTrayMenu: (height: number): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.trayMenuResize, height),
+  quitApp: (): Promise<void> => ipcRenderer.invoke(IpcChannels.trayMenuQuit),
 
   listSkills: (): Promise<SkillSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listSkills),

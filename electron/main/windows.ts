@@ -26,6 +26,13 @@ let answerHudWindow: BrowserWindow | null = null;
  *  doing in another app. */
 const chatPopupWindows = new Map<string, BrowserWindow>();
 
+/** Custom tray menu — frameless transparent popover anchored under
+ *  the tray icon. Replaces the native context menu for the
+ *  Jarvis-aesthetic look (mono font + accent glow). The native
+ *  menu still wires up for right-click as an accessibility
+ *  fallback. */
+let trayMenuWindow: BrowserWindow | null = null;
+
 /** Read-only access to the main window so callers can branch on
  *  its visibility / focus without forcing it forward. Returns null
  *  if the window doesn't exist yet (cold launch / closed). */
@@ -278,6 +285,98 @@ export function getAnswerHudWindow(): BrowserWindow | null {
 const CHAT_POPUP_WIDTH = 460;
 const CHAT_POPUP_HEIGHT = 640;
 const CHAT_POPUP_MARGIN = 16;
+
+const TRAY_MENU_WIDTH = 300;
+const TRAY_MENU_HEIGHT = 480;
+
+/**
+ * Show the custom tray menu under a tray icon's bounds. Reuses
+ * the singleton window across opens — Electron's BrowserWindow is
+ * expensive to spawn so we just toggle visibility + reposition.
+ */
+export function showTrayMenu(trayBounds: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}): void {
+  if (!trayMenuWindow || trayMenuWindow.isDestroyed()) {
+    trayMenuWindow = new BrowserWindow({
+      width: TRAY_MENU_WIDTH,
+      height: TRAY_MENU_HEIGHT,
+      frame: false,
+      transparent: true,
+      backgroundColor: '#00000000',
+      hasShadow: false,
+      alwaysOnTop: true,
+      resizable: false,
+      movable: false,
+      skipTaskbar: true,
+      focusable: true,
+      show: false,
+      webPreferences: {
+        preload: preloadPath,
+        sandbox: false,
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+    trayMenuWindow.setVisibleOnAllWorkspaces(true, {
+      visibleOnFullScreen: true,
+    });
+    // Auto-hide when the user clicks anywhere outside (incl. another
+    // app). The renderer also dismisses on Escape + after an action.
+    trayMenuWindow.on('blur', () => {
+      if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
+        trayMenuWindow.hide();
+      }
+    });
+    trayMenuWindow.on('closed', () => {
+      trayMenuWindow = null;
+    });
+    loadRoute(trayMenuWindow, '/tray-menu');
+  }
+  // Center under the tray icon, clamped to the work area.
+  const display = screen.getDisplayNearestPoint({
+    x: trayBounds.x,
+    y: trayBounds.y,
+  });
+  const area = display.workArea;
+  let x = Math.round(trayBounds.x + trayBounds.width / 2 - TRAY_MENU_WIDTH / 2);
+  let y = Math.round(trayBounds.y + trayBounds.height + 4);
+  x = Math.max(area.x + 4, Math.min(area.x + area.width - TRAY_MENU_WIDTH - 4, x));
+  y = Math.max(area.y + 4, Math.min(area.y + area.height - TRAY_MENU_HEIGHT - 4, y));
+  trayMenuWindow.setBounds({
+    x,
+    y,
+    width: TRAY_MENU_WIDTH,
+    height: TRAY_MENU_HEIGHT,
+  });
+  trayMenuWindow.show();
+  trayMenuWindow.focus();
+}
+
+export function hideTrayMenu(): void {
+  if (trayMenuWindow && !trayMenuWindow.isDestroyed()) {
+    trayMenuWindow.hide();
+  }
+}
+
+/** Resize the tray menu to fit its content. Called by the renderer
+ *  after the menu paints so we don't render a fixed-height
+ *  shell with empty space below. */
+export function resizeTrayMenu(targetHeight: number): void {
+  if (!trayMenuWindow || trayMenuWindow.isDestroyed()) return;
+  const clamped = Math.max(120, Math.min(800, Math.round(targetHeight)));
+  const [w] = trayMenuWindow.getSize();
+  const bounds = trayMenuWindow.getBounds();
+  trayMenuWindow.setBounds({
+    x: bounds.x,
+    y: bounds.y,
+    width: w,
+    height: clamped,
+  });
+}
 
 /**
  * Floating window that renders a single conversation. Surfaces

@@ -937,6 +937,27 @@ export interface BatchDecision {
  */
 export type AppMode = 'paused' | 'running' | 'autopilot';
 
+/**
+ * Snapshot of everything the custom tray menu renders. Pushed
+ * from main on open + on state change so the popover stays live
+ * without each open re-fetching from a dozen sources.
+ */
+export interface TrayMenuState {
+  appMode: AppMode;
+  afk: boolean;
+  runningTasks: number;
+  awaitingReplies: number;
+  pendingReminders: number;
+  reducedConversations: number;
+  todaySpendUsd: number;
+  pinned: Array<{
+    taskId: string;
+    title: string;
+    status: TaskStatus;
+    reduced: boolean;
+  }>;
+}
+
 export interface AppStatus {
   authMode: AuthMode | null;
   hasApiKey: boolean;

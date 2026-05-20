@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { IpcChannels } from '@shared/ipc';
 
-import type { AppMode, TaskStatus } from '@shared/types';
+import type { AppMode, TaskStatus, TrayMenuState } from '@shared/types';
 
 import {
   loadAfkMode,
@@ -14,9 +14,11 @@ import {
 } from './auth.js';
 import {
   broadcast,
+  hideTrayMenu,
   openObservatory,
   openPalette,
   sendWhenReady,
+  showTrayMenu,
   surfaceConversation,
 } from './windows.js';
 
@@ -171,6 +173,7 @@ function rebuildMenu(): void {
  *  Telegram /afk command) can re-render the checkbox. */
 export function refreshTrayMenu(): void {
   rebuildMenu();
+  broadcastTrayState();
 }
 
 /**
@@ -248,10 +251,38 @@ export function initTray(): Tray {
   rebuildTitle();
   rebuildToolTip();
   rebuildMenu();
-  // No click handler — left-clicking the tray on macOS shows the
-  // context menu by default. We don't want to also yank the main
-  // window forward; the user picks an action from the menu.
+  // Left-click → custom Jarvis-styled popover. The native context
+  // menu is still wired for right-click as an accessibility
+  // fallback (VoiceOver / arrow-key nav).
+  tray.on('click', (_event, bounds) => {
+    showTrayMenu({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+    });
+  });
   return tray;
+}
+
+/** Snapshot the bits the custom tray menu needs. Single source of
+ *  truth for both the initial `trayMenuRead` IPC and broadcast
+ *  pushes on change. */
+export function getTrayMenuState(): TrayMenuState {
+  return {
+    appMode: loadAppMode(),
+    afk: loadAfkMode(),
+    runningTasks,
+    awaitingReplies,
+    pendingReminders,
+    reducedConversations,
+    todaySpendUsd,
+    pinned: [...pinnedConversations],
+  };
+}
+
+function broadcastTrayState(): void {
+  broadcast(IpcChannels.trayMenuStateChanged, getTrayMenuState());
 }
 
 export function setRunningTasksCount(n: number): void {
@@ -261,12 +292,14 @@ export function setRunningTasksCount(n: number): void {
   rebuildTitle();
   rebuildToolTip();
   rebuildMenu();
+  broadcastTrayState();
 }
 
 export function setPendingRemindersCount(n: number): void {
   pendingReminders = Math.max(0, n);
   rebuildToolTip();
   rebuildMenu();
+  broadcastTrayState();
 }
 
 /** Update the today-spend bit shown in the tray tooltip. Called from
@@ -274,6 +307,7 @@ export function setPendingRemindersCount(n: number): void {
 export function setTodaySpend(usd: number): void {
   todaySpendUsd = Math.max(0, usd);
   rebuildToolTip();
+  broadcastTrayState();
 }
 
 export function setAwaitingRepliesCount(n: number): void {
@@ -282,6 +316,7 @@ export function setAwaitingRepliesCount(n: number): void {
   tray.setImage(buildIcon(runningTasks > 0 || awaitingReplies > 0));
   rebuildToolTip();
   rebuildMenu();
+  broadcastTrayState();
 }
 
 /**
@@ -292,6 +327,7 @@ export function setAwaitingRepliesCount(n: number): void {
 export function setReducedConversationsCount(n: number): void {
   reducedConversations = Math.max(0, n);
   rebuildToolTip();
+  broadcastTrayState();
 }
 
 /**
@@ -307,6 +343,7 @@ export function setPinnedConversations(
   rebuildTitle();
   rebuildToolTip();
   rebuildMenu();
+  broadcastTrayState();
 }
 
 export function getRunningTasksCount(): number {

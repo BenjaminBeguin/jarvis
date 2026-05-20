@@ -176,6 +176,16 @@ export const IpcChannels = {
   speak: 'audio:speak',
   stopSpeaking: 'audio:stopSpeak',
 
+  /** Custom tray menu IPC. Read the current state once on open
+   *  (mode, counts, pinned list) + subscribe to live updates so
+   *  the menu reflects e.g. a fresh task starting while open.
+   *  Other handlers are action shims (hide, resize). */
+  trayMenuRead: 'tray:read',
+  trayMenuStateChanged: 'tray:stateChanged',
+  trayMenuHide: 'tray:hide',
+  trayMenuResize: 'tray:resize',
+  trayMenuQuit: 'tray:quit',
+
   meetingStart: 'meeting:start',
   meetingStopRequest: 'meeting:stop-request',
   meetingFinish: 'meeting:finish',

@@ -1,20 +1,24 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import { ipcMain, shell } from 'electron';
+import { app, ipcMain, shell } from 'electron';
 
 import { IpcChannels } from '@shared/ipc';
 
+import { getTrayMenuState } from '../tray.js';
 import {
   hideAnswerHud,
+  hideTrayMenu,
   openObservatory,
   openPalette,
   resizeAnswerHud,
   resizePalette,
+  resizeTrayMenu,
   sendWhenReady,
   setAnswerHudInteractive,
 } from '../windows.js';
 import type { IpcDeps } from './types.js';
+import type { TrayMenuState } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
 
@@ -64,6 +68,25 @@ export function registerWindowIpc(_deps: IpcDeps): void {
       setAnswerHudInteractive(!!interactive);
     },
   );
+
+  ipcMain.handle(
+    IpcChannels.trayMenuRead,
+    (): TrayMenuState => getTrayMenuState(),
+  );
+
+  ipcMain.handle(IpcChannels.trayMenuHide, () => {
+    hideTrayMenu();
+  });
+
+  ipcMain.handle(IpcChannels.trayMenuResize, (_e, height: number) => {
+    if (typeof height === 'number' && Number.isFinite(height)) {
+      resizeTrayMenu(height);
+    }
+  });
+
+  ipcMain.handle(IpcChannels.trayMenuQuit, () => {
+    app.quit();
+  });
 
   ipcMain.handle(IpcChannels.openExternal, async (_e, url: string) => {
     // Only allow http/https. mailto + other schemes are easy XSS vectors when

@@ -7,6 +7,7 @@ import { ChatPopup } from './views/ChatPopup';
 import { CommandPalette } from './views/CommandPalette';
 import { Setup } from './views/Setup';
 import { Shell } from './views/Shell';
+import { TrayMenu } from './views/TrayMenu';
 
 function getRoute(): string {
   const hash = window.location.hash.replace(/^#/, '');
@@ -40,7 +41,10 @@ export function App() {
   // Add a body class for transparent frameless windows so the shell's
   // scanline overlay (which would render on top of them) is suppressed.
   useEffect(() => {
-    const transparent = route === '/palette' || route === '/answer-hud';
+    const transparent =
+      route === '/palette' ||
+      route === '/answer-hud' ||
+      route === '/tray-menu';
     if (transparent) document.body.classList.add('palette-body');
     else document.body.classList.remove('palette-body');
   }, [route]);
@@ -73,6 +77,9 @@ export function App() {
   if (route === '/chat-popup') {
     if (!status || !isReady(status)) return null;
     return <ChatPopup />;
+  }
+  if (route === '/tray-menu') {
+    return <TrayMenu />;
   }
 
   // Main window: render the Shell behind the overlay so the underlying
