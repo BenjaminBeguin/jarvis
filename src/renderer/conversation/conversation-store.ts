@@ -200,10 +200,12 @@ export const conversationStore = {
     });
   },
 
-  /** Hide the sidebar without dismissing anything. Pinned tabs
-   *  refuse to close (the sidebar stays visible). */
+  /** Hide the sidebar without dismissing anything. Tabs (pinned or
+   *  not) survive — they're just hidden until the user re-opens the
+   *  sidebar via a chip, ⌘\\, or a new launch. Pin only matters for
+   *  future auto-hide paths (tab navigation, click-outside); a
+   *  user-initiated close always wins. */
   hideSidebar(): void {
-    if (state.open.some((e) => e.pinned)) return;
     setState({ ...state, sidebarVisible: false });
   },
 
