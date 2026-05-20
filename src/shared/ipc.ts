@@ -29,6 +29,12 @@ export const IpcChannels = {
   // Conversation surface — renderer pushes the reduced-chip count
   // so the tray tooltip + (later) macOS dock badge can surface it.
   conversationsSetReducedCount: 'convo:setReducedCount',
+  // Pinned conversations → menu bar. Renderer pushes the current
+  // pinned list whenever the user pins / unpins. Tray rebuilds its
+  // menu with a "Pinned" section; clicking an item broadcasts
+  // `conversationFocus` so the renderer brings that tab forward.
+  conversationsSetPinned: 'convo:setPinned',
+  conversationFocus: 'convo:focus',
 
   // Autopilot approval flow (prompt-output workflow node). The main
   // process opens the approval HUD with a payload; the renderer

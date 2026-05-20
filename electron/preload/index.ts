@@ -147,6 +147,27 @@ const api = {
   setReducedConversationsCount: (count: number): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IpcChannels.conversationsSetReducedCount, { count }),
 
+  /** Push the current set of pinned conversations so the tray menu
+   *  surfaces them. Renderer calls this whenever the pin set
+   *  changes; main replaces the list wholesale. */
+  setPinnedConversations: (
+    entries: Array<{
+      taskId: string;
+      title: string;
+      status: TaskSummary['status'];
+      reduced: boolean;
+    }>,
+  ): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IpcChannels.conversationsSetPinned, { entries }),
+
+  /** Tray menu clicked → focus this conversation. Fired with a
+   *  `{ taskId }` payload; the renderer should bump+focus that tab
+   *  in the sidebar. */
+  onConversationFocus: (
+    listener: Listener<{ taskId: string }>,
+  ): Unsubscribe =>
+    subscribe(IpcChannels.conversationFocus, listener),
+
   setTelegramBotToken: (value: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.setTelegramBotToken, value),
   clearTelegramBotToken: (): Promise<void> =>

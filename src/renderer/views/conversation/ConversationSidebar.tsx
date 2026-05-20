@@ -107,6 +107,31 @@ export function ConversationSidebar() {
     };
   }, []);
 
+  // Push the pinned conversations to the tray menu so the user can
+  // jump to them from the macOS menu bar. Fires whenever the pin
+  // set OR any status changes (so the glyph in the menu stays
+  // current).
+  useEffect(() => {
+    const pinned = [...state.open, ...state.reduced]
+      .filter((e) => e.pinned)
+      .map((e) => ({
+        taskId: e.taskId,
+        title: e.title,
+        status: e.status,
+        reduced: !e.active,
+      }));
+    void window.jarvis.setPinnedConversations(pinned);
+  }, [state.open, state.reduced]);
+
+  // Tray menu clicked a pinned entry → bump it into the sidebar
+  // (if it was reduced) and foreground the tab.
+  useEffect(() => {
+    return window.jarvis.onConversationFocus(({ taskId }) => {
+      conversationStore.bump(taskId);
+      conversationStore.focus(taskId);
+    });
+  }, []);
+
   if (!state.sidebarVisible) return null;
 
   const active = state.open.find((e) => e.taskId === state.activeTaskId)
@@ -166,7 +191,11 @@ export function ConversationSidebar() {
                 type="button"
                 className={`convo-sidebar__pin${active.pinned ? ' convo-sidebar__pin--on' : ''}`}
                 onClick={() => conversationStore.pin(active.taskId)}
-                title={active.pinned ? 'Unpin tab' : 'Pin tab open'}
+                title={
+                  active.pinned
+                    ? 'Unpin · remove from the menu bar'
+                    : 'Pin · keep tab open and surface in the menu bar'
+                }
                 aria-pressed={active.pinned}
               >
                 {active.pinned ? '📌' : '📍'}

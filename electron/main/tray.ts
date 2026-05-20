@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { IpcChannels } from '@shared/ipc';
 
-import type { AppMode } from '@shared/types';
+import type { AppMode, TaskStatus } from '@shared/types';
 
 import {
   loadAfkMode,
@@ -13,6 +13,18 @@ import {
   saveAppMode,
 } from './auth.js';
 import { broadcast, openObservatory, openPalette, sendWhenReady, showAnswerHud } from './windows.js';
+
+/** Lightweight shape pushed from the renderer for each pinned tab.
+ *  Mirrors the renderer's ConvoEntry but only the fields the tray
+ *  needs — keeps the wire format small. */
+export interface PinnedConversationEntry {
+  taskId: string;
+  title: string;
+  status: TaskStatus;
+  /** True when the conversation is currently reduced to a chip
+   *  rather than visible in the sidebar. Drives the menu glyph. */
+  reduced: boolean;
+}
 
 type AbortHandler = () => void;
 let abortAllHandler: AbortHandler | null = null;
@@ -32,6 +44,10 @@ let awaitingReplies = 0;
  *  showing "$0.00 today" 23 hours of the day. */
 let todaySpendUsd = 0;
 let reducedConversations = 0;
+/** Pinned conversations pushed from the renderer. The tray surfaces
+ *  these as a submenu so the user can jump back to anything they
+ *  pinned without having to bring Jarvis forward first. */
+let pinnedConversations: PinnedConversationEntry[] = [];
 
 function buildIcon(active: boolean): Electron.NativeImage {
   // Use template image so macOS handles dark/light. Falls back to a generated
@@ -55,6 +71,27 @@ function buildIcon(active: boolean): Electron.NativeImage {
   return dot;
 }
 
+function statusGlyph(status: TaskStatus): string {
+  switch (status) {
+    case 'running':
+      return '●'; // active
+    case 'queued':
+      return '◔';
+    case 'completed':
+      return '✓';
+    case 'aborted':
+      return '⊘';
+    case 'errored':
+      return '⚠';
+  }
+}
+
+function focusConversation(taskId: string): void {
+  const win = openObservatory();
+  win.focus();
+  sendWhenReady(win, IpcChannels.conversationFocus, { taskId });
+}
+
 function rebuildMenu(): void {
   if (!tray) return;
   const items: Electron.MenuItemConstructorOptions[] = [];
@@ -68,6 +105,24 @@ function rebuildMenu(): void {
     items.push({ label: `⏰ ${pendingReminders} scheduled`, enabled: false });
   }
   if (items.length > 0) items.push({ type: 'separator' });
+
+  if (pinnedConversations.length > 0) {
+    items.push({
+      label: `📌 Pinned · ${pinnedConversations.length}`,
+      enabled: false,
+    });
+    for (const p of pinnedConversations) {
+      const glyph = statusGlyph(p.status);
+      const trail = p.reduced ? '  ▸ chip' : '';
+      // Truncate long titles so the menu stays narrow.
+      const title = p.title.length > 48 ? p.title.slice(0, 47) + '…' : p.title;
+      items.push({
+        label: `${glyph}  ${title}${trail}`,
+        click: () => focusConversation(p.taskId),
+      });
+    }
+    items.push({ type: 'separator' });
+  }
   // Tab shortcuts — broadcast shellNavigate so the renderer switches tab
   // after openObservatory brings the window forward.
   const openWithTab = (tab: 'observatory' | 'inbox' | 'routines') => {
@@ -209,6 +264,19 @@ export function setAwaitingRepliesCount(n: number): void {
 export function setReducedConversationsCount(n: number): void {
   reducedConversations = Math.max(0, n);
   rebuildToolTip();
+}
+
+/**
+ * Replace the list of pinned conversations surfaced in the tray
+ * menu. Pushed from the renderer's conversation-store whenever the
+ * pin set changes. The list is small so we always replace it
+ * wholesale rather than diff.
+ */
+export function setPinnedConversations(
+  entries: PinnedConversationEntry[],
+): void {
+  pinnedConversations = entries;
+  rebuildMenu();
 }
 
 export function getRunningTasksCount(): number {
