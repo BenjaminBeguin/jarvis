@@ -4,6 +4,22 @@ import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { join } from 'node:path';
 
+// Surface any uncaught errors so silent native crashes (ONNX
+// Runtime / transformers.js segfaults, …) show up in the dev
+// console instead of just exiting the process. macOS will still
+// fire on SIGSEGV — these handlers only catch JS-level throws —
+// but at least we get something visible when the JS layer is the
+// one going down.
+process.on('uncaughtException', (err) => {
+  console.error('[main:uncaughtException]', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[main:unhandledRejection]', reason);
+});
+process.on('exit', (code) => {
+  console.error(`[main:exit] code=${code}`);
+});
+
 import { IpcChannels } from '@shared/ipc';
 import type {
   AppStatus,

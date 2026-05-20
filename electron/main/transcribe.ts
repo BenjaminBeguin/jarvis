@@ -44,14 +44,14 @@ async function load(): Promise<Transcriber> {
   loading = (async () => {
     const cacheDir = join(homedir(), '.jarvis', 'models');
     mkdirSync(cacheDir, { recursive: true });
-    // Dynamic import keeps transformers.js out of cold-startup. It's a heavy
-    // package and we don't need to pay the cost until the user first holds
-    // the mic.
+    console.log('[transcribe] load: importing @huggingface/transformers');
     const { pipeline, env } = await import('@huggingface/transformers');
+    console.log('[transcribe] load: import done');
     env.cacheDir = cacheDir;
     env.allowLocalModels = true;
 
     const seenFiles = new Set<string>();
+    console.log(`[transcribe] load: creating pipeline (${MODEL_NAME}, q8)`);
     const p = (await pipeline('automatic-speech-recognition', MODEL_NAME, {
       dtype: 'q8',
       progress_callback: (data: unknown) => {
@@ -77,19 +77,12 @@ async function load(): Promise<Transcriber> {
         }
       },
     })) as unknown as Transcriber;
-    // Pre-set task='transcribe' on the model so the pipeline doesn't try
-    // to translate. Language is intentionally left UNSET — the multilingual
-    // model auto-detects per chunk, which is what we want for meetings
-    // that mix languages (English / French / etc.). If a chunk has no
-    // language signal (silence, noise), Whisper falls back gracefully and
-    // our cleanChunkText filter drops the typical hallucinations.
+    console.log('[transcribe] load: pipeline ready');
     const inner = p as unknown as {
       model?: { generation_config?: Record<string, unknown> };
     };
     if (inner.model?.generation_config) {
       inner.model.generation_config['task'] = TASK;
-      // Explicitly clear any stale language default the model card may
-      // have shipped with, so detection actually runs.
       delete inner.model.generation_config['language'];
       delete inner.model.generation_config['forced_decoder_ids'];
     }
@@ -98,24 +91,32 @@ async function load(): Promise<Transcriber> {
     return p;
   })().catch((err) => {
     loading = null;
+    console.error('[transcribe] load failed', err);
     throw err;
   });
   return loading;
 }
 
 export async function transcribePcm(pcm: Float32Array): Promise<string> {
+  console.log(
+    `[transcribe] pcm received samples=${pcm.length} (~${(pcm.length / 16000).toFixed(1)}s)`,
+  );
   emitProgress({ status: 'transcribing' });
   const w = await load();
-  // Whisper expects 16kHz mono PCM as a Float32Array. The renderer is
-  // already resampling, but the pipeline doesn't enforce — caller's responsibility.
-  // No `language` here — Whisper auto-detects per call. `task: transcribe`
-  // is still passed explicitly because some transformers.js versions need
-  // it on the call options even when set in generation_config.
-  const result = await w(pcm, {
-    sampling_rate: TARGET_SAMPLE_RATE,
-    chunk_length_s: 30,
-    task: TASK,
-  } as unknown as Parameters<Transcriber>[1]);
+  console.log('[transcribe] running inference…');
+  let result: { text: string } | { text: string }[];
+  try {
+    result = await w(pcm, {
+      sampling_rate: TARGET_SAMPLE_RATE,
+      chunk_length_s: 30,
+      task: TASK,
+    } as unknown as Parameters<Transcriber>[1]);
+  } catch (err) {
+    console.error('[transcribe] inference threw', err);
+    emitProgress({ status: 'done' });
+    throw err;
+  }
+  console.log('[transcribe] inference done');
   emitProgress({ status: 'done' });
   const text = Array.isArray(result)
     ? result.map((r) => r.text).join(' ')
