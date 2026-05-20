@@ -128,7 +128,7 @@ import { WorkflowStore } from './workflow-store.js';
 import { SkillStore } from './skill-store.js';
 import { SkillSuggestionStore } from './skill-suggestions.js';
 import { asTaskOrigin, lastAssistantText, TaskRunner } from './task-runner.js';
-import { setProgressEmitter } from './transcribe.js';
+import { setProgressEmitter, warmUp as warmUpTranscribe } from './transcribe.js';
 import {
   activeProjectProfileProvider,
   activeProjectProvider,
@@ -1488,6 +1488,14 @@ app.whenReady().then(async () => {
   setProgressEmitter((event) =>
     broadcast(IpcChannels.transcribeProgress, event),
   );
+
+  // Eager-warm the Whisper worker in the background so the first
+  // ⌘⇧Space dictation isn't paying for "spawn child process + load
+  // 290MB ONNX model" from cold. Fire-and-forget — failures are
+  // logged inside warmUp() and won't block app startup.
+  setTimeout(() => {
+    void warmUpTranscribe();
+  }, 2_000);
 
   registerAllIpc({
     skills,
