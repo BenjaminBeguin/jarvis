@@ -712,6 +712,9 @@ export class TaskRunner extends EventEmitter {
       ...(req.unattended ? { unattended: true } : {}),
     };
     this.records.set(id, record);
+    // Insert the task row FIRST so the task_events FK constraint
+    // is satisfied when we record the launching prompt below.
+    insertTask(summary);
     // Record the launching prompt as a user event so the
     // transcript reads "user said X, assistant responded" the way
     // a chat does. The SDK doesn't echo the first input back, so
@@ -722,7 +725,6 @@ export class TaskRunner extends EventEmitter {
       type: 'user',
       message: { role: 'user', content: [{ type: 'text', text: req.prompt }] },
     } as unknown as SDKMessage);
-    insertTask(summary);
     this.emit('status', summary);
 
     // Fire-and-forget; never block main loop.
