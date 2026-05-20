@@ -17,8 +17,10 @@ import type { WorkflowDef } from '@shared/types';
  * round-trip needed.
  */
 
-// noise-v2: drops bot senders entirely + caps age at 14 days so the
-// inbox doesn't get clogged with month-old DMs and GitHub bot summaries.
+// noise-v3: tightens the upstream Slack search to (to:me OR mentions:me)
+// — the previous "is:mention" wasn't filtering server-side, so channel
+// chatter where someone mentioned a teammate (not me) was landing in
+// the inbox. v2 dropped bots + capped age; v3 fixes the query.
 const SLACK_TRANSFORM = `((() => {
   const MAX_AGE_MS = 14 * 86400000;
   const now = Date.now();
@@ -75,7 +77,12 @@ export const SLACK_INBOX_WORKFLOW: WorkflowDef = {
         auth: { connector: 'slack', field: 'userAccessToken', scheme: 'bearer' },
         bodyEncoding: 'form',
         body: {
-          query: '(to:me OR is:mention) -from:me',
+          // "is:mention" wasn't filtering — it matched messages that
+          // contained ANY mention, including channel chatter where a
+          // teammate was @'d. "mentions:me" is the actual modifier
+          // that scopes to mentions of the calling user, paired with
+          // "to:me" for DMs.
+          query: '(to:me OR mentions:me) -from:me',
           count: '40',
           sort: 'timestamp',
           sort_dir: 'desc',

@@ -44,13 +44,16 @@ const WORKFLOW_STALE_DETECTORS: Record<
   'calendar-today-sync': (def) => {
     return def.pipeline.some((n) => n.type === 'osascript');
   },
-  // Slack workflow has gone through three shapes:
+  // Slack workflow has gone through several shapes:
   //   1. cron '5m', no validate clause                  → migrate
   //   2. cron '*/15 9-18 * * 1-5', validate present    → migrate
-  //   3. transform without the noise-v2 filter (drops
+  //   3. transform without the noise-v2 marker (drops
   //      bots + caps age at 14 days)                    → migrate
-  // Any of the above authorise a rewrite. The noise-v2 marker in
-  // the new transform body acts as the version sentinel.
+  //   4. transform without the noise-v3 marker (tightens
+  //      the search query — "is:mention" was matching
+  //      channel chatter, swapped for "mentions:me")    → migrate
+  // Any of the above authorise a rewrite. The latest noise marker
+  // in the transform body is the version sentinel.
   'slack-inbox-sync': (def) => {
     const fetch = def.pipeline.find((n) => n.type === 'http-fetch');
     if (fetch) {
@@ -60,7 +63,7 @@ const WORKFLOW_STALE_DETECTORS: Record<
     const transform = def.pipeline.find((n) => n.type === 'transform');
     if (transform) {
       const fn = (transform.params as { fn?: string })?.fn;
-      if (typeof fn === 'string' && !fn.includes('noise-v2')) return true;
+      if (typeof fn === 'string' && !fn.includes('noise-v3')) return true;
     }
     return (
       isUntouchedShorthandCron(def, '5m') ||
