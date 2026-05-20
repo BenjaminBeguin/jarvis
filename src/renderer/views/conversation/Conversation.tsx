@@ -3,9 +3,19 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TaskEvent, TaskSummary } from '../../../shared/types';
 import { buildItems } from '../../conversation/buildItems';
 import type { ChatItem, ConversationMode } from '../../conversation/types';
+import { AudioCapture } from '../../voice/AudioCapture';
 import { MarkdownText } from '../MarkdownText';
 import { formatRelative } from '../TaskList';
 import { toast } from '../Toaster';
+
+interface AttachedImage {
+  mediaType: string;
+  base64: string;
+  /** data:URL kept on the client for the thumbnail preview. */
+  dataUrl: string;
+  /** Stable id for React keys — generated client-side. */
+  id: string;
+}
 
 /**
  * Unified task-conversation surface. One component renders every
@@ -295,7 +305,19 @@ function ChatItemRow({
       <div className="chat-row chat-row--user">
         <span className="chat-row__chip">you</span>
         <div className="chat-row__body">
-          <MarkdownText>{item.text}</MarkdownText>
+          {item.images && item.images.length > 0 && (
+            <div className="chat-row__images">
+              {item.images.map((img, i) => (
+                <img
+                  key={i}
+                  src={img.dataUrl}
+                  alt="Attachment"
+                  className="chat-row__image"
+                />
+              ))}
+            </div>
+          )}
+          {item.text && <MarkdownText>{item.text}</MarkdownText>}
         </div>
         <div
           className="chat-row__time"
@@ -466,9 +488,14 @@ function SendReply({
   resuming: boolean;
 }) {
   const [text, setText] = useState('');
+  const [images, setImages] = useState<AttachedImage[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [listening, setListening] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const captureRef = useRef<AudioCapture | null>(null);
 
   useEffect(() => {
     taRef.current?.focus();
@@ -476,24 +503,27 @@ function SendReply({
 
   useEffect(() => {
     setText('');
+    setImages([]);
     setError(null);
   }, [task.id]);
 
   const send = async () => {
     const value = text.trim();
-    if (!value) return;
+    if (!value && images.length === 0) return;
     setSending(true);
     setError(null);
     try {
-      // The runner's sendMessage handles both paths — live queue
-      // append or resume-then-fresh-turn — so the renderer just
-      // calls one IPC.
-      const ok = await window.jarvis.sendTaskMessage(task.id, value);
+      const payload = images.map((i) => ({
+        mediaType: i.mediaType,
+        base64: i.base64,
+      }));
+      const ok = await window.jarvis.sendTaskMessage(task.id, value, payload);
       if (!ok) {
         setError("Couldn't send — task isn't accepting input anymore.");
         return;
       }
       setText('');
+      setImages([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -501,19 +531,161 @@ function SendReply({
     }
   };
 
+  const onPickImages = (): void => {
+    fileInputRef.current?.click();
+  };
+
+  const ingestFiles = async (files: FileList | File[] | null): Promise<void> => {
+    if (!files) return;
+    const list: File[] = Array.from(files).filter((f) =>
+      f.type.startsWith('image/'),
+    );
+    if (list.length === 0) return;
+    const added: AttachedImage[] = [];
+    for (const file of list.slice(0, 8 - images.length)) {
+      try {
+        const base64 = await fileToBase64(file);
+        added.push({
+          id:
+            typeof crypto !== 'undefined' && 'randomUUID' in crypto
+              ? crypto.randomUUID()
+              : String(Math.random()).slice(2),
+          mediaType: file.type || 'image/png',
+          base64,
+          dataUrl: `data:${file.type || 'image/png'};base64,${base64}`,
+        });
+      } catch (e) {
+        toast({
+          kind: 'error',
+          message: `Couldn't read ${file.name}: ${e instanceof Error ? e.message : String(e)}`,
+        });
+      }
+    }
+    if (added.length > 0) {
+      setImages((prev) => [...prev, ...added]);
+    }
+  };
+
+  const onPaste = async (
+    e: React.ClipboardEvent<HTMLTextAreaElement>,
+  ): Promise<void> => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it && it.kind === 'file' && it.type.startsWith('image/')) {
+        const f = it.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length > 0) {
+      e.preventDefault();
+      await ingestFiles(files);
+    }
+  };
+
+  const onDrop = async (
+    e: React.DragEvent<HTMLDivElement>,
+  ): Promise<void> => {
+    e.preventDefault();
+    await ingestFiles(e.dataTransfer.files);
+  };
+
+  /** Hold-to-talk: press starts the recorder, release stops + transcribes
+   *  and appends to the textarea. Mirrors the palette's voice path. */
+  const startListening = async (): Promise<void> => {
+    if (listening || transcribing) return;
+    const capture = new AudioCapture();
+    try {
+      await capture.start();
+      captureRef.current = capture;
+      setListening(true);
+    } catch (e) {
+      setError(
+        `Mic access failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  };
+
+  const stopListening = async (): Promise<void> => {
+    const capture = captureRef.current;
+    if (!capture) return;
+    captureRef.current = null;
+    setListening(false);
+    setTranscribing(true);
+    try {
+      const result = await capture.stop();
+      if (result.pcm.length < 16_000 * 0.3) {
+        setError("Didn't hear anything — hold the mic while speaking.");
+        return;
+      }
+      const raw = await window.jarvis.transcribe(
+        result.pcm.buffer as ArrayBuffer,
+      );
+      const transcript = (raw ?? '').trim();
+      if (!transcript) {
+        setError(
+          "Couldn't make out the audio. Try again with less background noise.",
+        );
+        return;
+      }
+      setText((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    } catch (e) {
+      setError(
+        `Transcribe failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
+  const removeImage = (id: string): void => {
+    setImages((prev) => prev.filter((i) => i.id !== id));
+  };
+
+  const canSend = !sending && (text.trim().length > 0 || images.length > 0);
+
   return (
-    <div className="detail__reply-dock detail__reply-dock--open">
+    <div
+      className="detail__reply-dock detail__reply-dock--open"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => void onDrop(e)}
+    >
+      {images.length > 0 && (
+        <div className="detail__reply-attachments">
+          {images.map((img) => (
+            <div key={img.id} className="detail__reply-attachment">
+              <img src={img.dataUrl} alt="Attached" />
+              <button
+                type="button"
+                className="detail__reply-attachment-remove"
+                onClick={() => removeImage(img.id)}
+                aria-label="Remove attachment"
+                title="Remove"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <textarea
         ref={taRef}
         value={text}
         rows={3}
         placeholder={
-          resuming
-            ? 'Continue this conversation. ↵ to send, ⇧↵ for newline.'
-            : 'Reply to keep the conversation going. ↵ to send, ⇧↵ for newline.'
+          listening
+            ? 'Listening… release the mic to transcribe.'
+            : transcribing
+              ? 'Transcribing…'
+              : resuming
+                ? 'Continue this conversation. ↵ to send, ⇧↵ for newline. Paste or drop images to attach.'
+                : 'Reply to keep the conversation going. ↵ to send, ⇧↵ for newline. Paste or drop images to attach.'
         }
-        disabled={sending}
+        disabled={sending || transcribing}
         onChange={(e) => setText(e.target.value)}
+        onPaste={(e) => void onPaste(e)}
         onKeyDown={(e) => {
           if (
             e.key === 'Enter' &&
@@ -525,6 +697,18 @@ function SendReply({
             e.preventDefault();
             void send();
           }
+        }}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          void ingestFiles(e.target.files);
+          // Reset so picking the same file twice in a row still fires onChange.
+          e.target.value = '';
         }}
       />
       {resuming && !error && (
@@ -539,12 +723,59 @@ function SendReply({
         </div>
       )}
       <div className="detail__reply-actions">
-        <button onClick={() => void send()} disabled={sending || !text.trim()}>
+        <button
+          type="button"
+          className="detail__reply-icon"
+          onClick={onPickImages}
+          disabled={sending || images.length >= 8}
+          title={
+            images.length >= 8
+              ? '8-image cap reached'
+              : 'Attach images (also: paste or drop)'
+          }
+          aria-label="Attach images"
+        >
+          📎
+        </button>
+        <button
+          type="button"
+          className={`detail__reply-icon${listening ? ' detail__reply-icon--listening' : ''}`}
+          onPointerDown={() => void startListening()}
+          onPointerUp={() => void stopListening()}
+          onPointerLeave={() => {
+            if (listening) void stopListening();
+          }}
+          disabled={sending || transcribing}
+          title="Hold to talk — releases transcribes and inserts the text"
+          aria-label="Hold to record voice"
+        >
+          🎙
+        </button>
+        <div className="detail__reply-spacer" />
+        <button onClick={() => void send()} disabled={!canSend}>
           {sending ? 'Sending…' : resuming ? 'Continue' : 'Send'}
         </button>
       </div>
     </div>
   );
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== 'string') {
+        reject(new Error('FileReader returned non-string result'));
+        return;
+      }
+      // result is "data:image/png;base64,XXXX" — strip the prefix.
+      const comma = result.indexOf(',');
+      resolve(comma === -1 ? result : result.slice(comma + 1));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'));
+    reader.readAsDataURL(file);
+  });
 }
 
 /**

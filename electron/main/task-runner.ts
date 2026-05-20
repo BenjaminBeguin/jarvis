@@ -127,13 +127,40 @@ function normalizeAwaiting(summary: TaskSummary): TaskSummary {
   return summary;
 }
 
-function userMessage(text: string, sessionId: string): SDKUserMessage {
+/**
+ * Pasted / dragged / picker-attached image, in the shape the
+ * Anthropic API expects under a user message's `content` array.
+ * Renderer encodes the file as base64 + media type before
+ * sending; we just pass it through.
+ */
+export interface UserImageAttachment {
+  mediaType: string;
+  base64: string;
+}
+
+function userMessage(
+  text: string,
+  sessionId: string,
+  images: UserImageAttachment[] = [],
+): SDKUserMessage {
+  const content: Array<Record<string, unknown>> = [];
+  for (const img of images) {
+    content.push({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: img.mediaType,
+        data: img.base64,
+      },
+    });
+  }
+  // Trailing text comes after images so the model reads image →
+  // caption, matching how multimodal prompts are usually written.
+  if (text) content.push({ type: 'text', text });
+  if (content.length === 0) content.push({ type: 'text', text: '' });
   return {
     type: 'user',
-    message: {
-      role: 'user',
-      content: [{ type: 'text', text }],
-    },
+    message: { role: 'user', content },
     parent_tool_use_id: null,
     session_id: sessionId,
   };
@@ -456,9 +483,30 @@ export class TaskRunner extends EventEmitter {
    * Returns false only for unknown/external tasks or owned tasks that
    * never got a session id (e.g. died before init).
    */
-  sendMessage(taskId: string, text: string): boolean {
+  sendMessage(
+    taskId: string,
+    text: string,
+    images: UserImageAttachment[] = [],
+  ): boolean {
     const rec = this.records.get(taskId);
     if (!rec || rec.external) return false;
+    // Build the user event once — same shape on both queueAlive and
+    // resume paths, with image blocks ahead of the text block.
+    const buildContent = (): Array<Record<string, unknown>> => {
+      const c: Array<Record<string, unknown>> = [];
+      for (const img of images) {
+        c.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: img.mediaType,
+            data: img.base64,
+          },
+        });
+      }
+      if (text) c.push({ type: 'text', text });
+      return c;
+    };
 
     const queueAlive =
       rec.summary.status === 'running' &&
@@ -466,10 +514,10 @@ export class TaskRunner extends EventEmitter {
       !rec.inputs.isClosed();
 
     if (queueAlive) {
-      rec.inputs!.push(userMessage(text, rec.summary.id));
+      rec.inputs!.push(userMessage(text, rec.summary.id, images));
       this.recordEvent(rec, {
         type: 'user',
-        message: { role: 'user', content: [{ type: 'text', text }] },
+        message: { role: 'user', content: buildContent() },
       } as unknown as SDKMessage);
       this.emit('status', { ...rec.summary, awaitingInput: false });
       rec.summary = { ...rec.summary, awaitingInput: false };
@@ -484,7 +532,7 @@ export class TaskRunner extends EventEmitter {
       : null;
     // Fresh queue + AbortController for the new turn.
     rec.inputs = new AsyncMessageQueue();
-    rec.inputs.push(userMessage(text, rec.summary.id));
+    rec.inputs.push(userMessage(text, rec.summary.id, images));
     rec.abort = new AbortController();
     rec.summary = {
       ...rec.summary,
@@ -494,7 +542,7 @@ export class TaskRunner extends EventEmitter {
     };
     this.recordEvent(rec, {
       type: 'user',
-      message: { role: 'user', content: [{ type: 'text', text }] },
+      message: { role: 'user', content: buildContent() },
     } as unknown as SDKMessage);
     this.emit('status', rec.summary);
     // Resume the previous session id without forking — claude appends to

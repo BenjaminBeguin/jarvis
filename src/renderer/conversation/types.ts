@@ -38,9 +38,21 @@ export type ConversationMode = 'cozy' | 'full';
  * matching tool_result so we can render the pair as a single
  * collapsible row instead of two unrelated blocks.
  */
+export interface ChatItemImage {
+  /** `data:image/png;base64,…` so the renderer can drop it
+   *  straight into <img src>. */
+  dataUrl: string;
+}
+
 export type ChatItem =
   | { kind: 'assistant'; key: string; ts: number; text: string }
-  | { kind: 'user'; key: string; ts: number; text: string }
+  | {
+      kind: 'user';
+      key: string;
+      ts: number;
+      text: string;
+      images?: ChatItemImage[];
+    }
   | {
       kind: 'tool';
       key: string;

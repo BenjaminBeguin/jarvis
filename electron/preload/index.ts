@@ -594,8 +594,16 @@ const api = {
     ipcRenderer.invoke(IpcChannels.launchShell, cmd),
   abortTask: (taskId: string): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.abortTask, taskId),
-  sendTaskMessage: (taskId: string, text: string): Promise<boolean> =>
-    ipcRenderer.invoke(IpcChannels.sendTaskMessage, { taskId, text }),
+  sendTaskMessage: (
+    taskId: string,
+    text: string,
+    images?: Array<{ mediaType: string; base64: string }>,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.sendTaskMessage, {
+      taskId,
+      text,
+      ...(images && images.length > 0 ? { images } : {}),
+    }),
   listTasks: (): Promise<TaskSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listTasks),
   getTaskHistory: (taskId: string): Promise<TaskEvent[]> =>

@@ -63,8 +63,32 @@ export function registerTasksIpc({
 
   ipcMain.handle(
     IpcChannels.sendTaskMessage,
-    (_e, { taskId, text }: { taskId: string; text: string }) =>
-      runner.sendMessage(taskId, text),
+    (
+      _e,
+      {
+        taskId,
+        text,
+        images,
+      }: {
+        taskId: string;
+        text: string;
+        images?: Array<{ mediaType: string; base64: string }>;
+      },
+    ) => {
+      const safeImages = Array.isArray(images)
+        ? images
+            .filter(
+              (i): i is { mediaType: string; base64: string } =>
+                !!i &&
+                typeof i.mediaType === 'string' &&
+                typeof i.base64 === 'string',
+            )
+            // Cap at 8 attachments per message — anything more is
+            // almost certainly accidental (drag-drop of a folder).
+            .slice(0, 8)
+        : [];
+      return runner.sendMessage(taskId, text, safeImages);
+    },
   );
 
   ipcMain.handle(IpcChannels.listTasks, () => {

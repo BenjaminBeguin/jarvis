@@ -103,20 +103,39 @@ export function buildItems(events: TaskEvent[]): ChatItem[] {
           }
         }
         if (consumedAsResult) continue;
-        // Plain user text.
-        const text = (content as Array<Record<string, unknown>>)
+        // Plain user text + any image blocks attached.
+        const blocks = content as Array<Record<string, unknown>>;
+        const text = blocks
           .filter(
             (b) => b['type'] === 'text' && typeof b['text'] === 'string',
           )
           .map((b) => b['text'] as string)
           .join('')
           .trim();
-        if (text) {
+        const images = blocks
+          .filter((b) => b['type'] === 'image')
+          .map((b) => {
+            const src = b['source'] as
+              | { type?: string; media_type?: string; data?: string }
+              | undefined;
+            if (
+              !src ||
+              src.type !== 'base64' ||
+              typeof src.media_type !== 'string' ||
+              typeof src.data !== 'string'
+            ) {
+              return null;
+            }
+            return { dataUrl: `data:${src.media_type};base64,${src.data}` };
+          })
+          .filter((x): x is { dataUrl: string } => x !== null);
+        if (text || images.length > 0) {
           items.push({
             kind: 'user',
             key: `${event.seq}-u`,
             ts,
             text,
+            ...(images.length > 0 ? { images } : {}),
           });
         }
         continue;
