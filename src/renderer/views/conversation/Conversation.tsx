@@ -665,6 +665,7 @@ function SendReply({
       await capture.start();
       captureRef.current = capture;
       setListening(true);
+      void window.jarvis.noteSelfMicStart();
     } catch (e) {
       setError(
         `Mic access failed: ${e instanceof Error ? e.message : String(e)}`,
@@ -677,6 +678,7 @@ function SendReply({
     if (!capture) return;
     captureRef.current = null;
     setListening(false);
+    void window.jarvis.noteSelfMicStop();
     setTranscribing(true);
     try {
       const result = await capture.stop();

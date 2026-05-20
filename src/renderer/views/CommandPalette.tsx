@@ -578,6 +578,8 @@ export function CommandPalette() {
     }
     captureRef.current = capture;
     setListening(true);
+    // Tell main this is our mic, not a meeting starting.
+    void window.jarvis.noteSelfMicStart();
   };
 
   const stopVoice = async () => {
@@ -585,6 +587,7 @@ export function CommandPalette() {
     if (!capture) return;
     captureRef.current = null;
     setListening(false);
+    void window.jarvis.noteSelfMicStop();
     let result;
     try {
       result = await capture.stop();

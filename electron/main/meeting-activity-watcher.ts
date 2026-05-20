@@ -87,6 +87,16 @@ export class MeetingActivityWatcher extends EventEmitter {
   private eventsSeen = 0;
   private inputEventsSeen = 0;
   private fault: string | null = null;
+  /** True while WE have the mic open (palette voice / composer
+   *  mic / meeting recorder). Suppresses the auto-detect prompt
+   *  so we don't try to record ourselves. Set via
+   *  noteSelfMicStart/Stop — callers pair them around their
+   *  capture lifecycle. Reference-counted so overlapping captures
+   *  don't drop the flag prematurely. */
+  private selfMicCount = 0;
+  private get selfMicActive(): boolean {
+    return this.selfMicCount > 0;
+  }
 
   constructor(private prompt: MeetingActivityCallback) {
     super();
@@ -218,6 +228,16 @@ export class MeetingActivityWatcher extends EventEmitter {
           `[meeting-activity] input event #${this.inputEventsSeen}, wasIdle=${wasIdle}, msg="${msg.slice(0, 120)}"`,
         );
       }
+      // Self-suppress: when WE are recording (palette voice
+      // shortcut, conversation composer mic, intentional meeting
+      // capture), the coreaudiod input events are ours. Don't
+      // self-prompt for a meeting on our own mic. The lastInputAt
+      // bookkeeping still updates so the status panel reflects
+      // the live mic state.
+      if (this.selfMicActive) {
+        this.emitStatus();
+        return;
+      }
       if (wasIdle) this.tryFire('mic');
       this.emitStatus();
       return;
@@ -240,6 +260,17 @@ export class MeetingActivityWatcher extends EventEmitter {
    * "watcher is quiet" vs. "actively seeing audio events." Read-only
    * computed from the internal counters.
    */
+  /** Mark the start of a Jarvis-owned mic capture (palette voice,
+   *  composer mic, meeting recorder). Suppresses the auto-detect
+   *  prompt for the duration. Pair with noteSelfMicStop(). */
+  noteSelfMicStart(): void {
+    this.selfMicCount++;
+  }
+
+  noteSelfMicStop(): void {
+    if (this.selfMicCount > 0) this.selfMicCount--;
+  }
+
   status(): MeetingDetectionStatus {
     return {
       running: !!this.child,

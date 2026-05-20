@@ -175,6 +175,12 @@ export const IpcChannels = {
   /** Text-to-speech via macOS `say`. */
   speak: 'audio:speak',
   stopSpeaking: 'audio:stopSpeak',
+  /** Suppress the meeting-recorder auto-prompt while a Jarvis-
+   *  owned mic capture is active (palette voice / composer mic).
+   *  Reference-counted on the main side so overlapping captures
+   *  don't drop the suppression prematurely. */
+  noteSelfMicStart: 'audio:selfMicStart',
+  noteSelfMicStop: 'audio:selfMicStop',
 
   /** Custom tray menu IPC. Read the current state once on open
    *  (mode, counts, pinned list) + subscribe to live updates so

@@ -538,6 +538,14 @@ const api = {
   stopSpeaking: (): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IpcChannels.stopSpeaking),
 
+  /** Tell main the renderer is opening / closing its own mic.
+   *  Pairs to suppress the meeting-recorder auto-prompt while we
+   *  are the ones using the mic. */
+  noteSelfMicStart: (): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.noteSelfMicStart),
+  noteSelfMicStop: (): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.noteSelfMicStop),
+
   meetingFinish: (payload: {
     title: string;
     project?: string | null;

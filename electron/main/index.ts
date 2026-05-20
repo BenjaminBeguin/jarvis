@@ -265,6 +265,16 @@ ipcMain.handle(IpcChannels.suppressMeetingPrompt, (_e, id: string) => {
 // the Now view mounts and wants to show "auto-detect quiet → record
 // manually" instead of pretending it's working).
 ipcMain.handle(IpcChannels.meetingDetectionStatus, () => meetingActivity.status());
+
+// Self-mic suppression — palette voice + composer mic flip this on
+// during their capture so the meeting auto-detect doesn't prompt
+// the user to record their own ⌘⇧Space.
+ipcMain.handle(IpcChannels.noteSelfMicStart, () => {
+  meetingActivity.noteSelfMicStart();
+});
+ipcMain.handle(IpcChannels.noteSelfMicStop, () => {
+  meetingActivity.noteSelfMicStop();
+});
 // Broadcast on every status change so a permanently-mounted status
 // pill in the Shell can react without polling.
 meetingActivity.on('status', (status) => {
