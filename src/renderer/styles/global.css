@@ -18027,6 +18027,260 @@ button:disabled:hover {
   cursor: pointer;
 }
 
+/* ── Unified <Conversation> renderer (cozy + full modes) ───────────── */
+
+.convo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  overflow-y: auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.convo__empty {
+  margin: auto;
+  padding: 24px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.convo__row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.convo__row--user {
+  align-items: flex-end;
+}
+
+.convo__row--assistant {
+  align-items: flex-start;
+}
+
+.convo__bubble {
+  max-width: 78%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.convo__bubble--user {
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid rgba(0, 212, 255, 0.18);
+  color: var(--text);
+  border-bottom-right-radius: 2px;
+}
+
+.convo__bubble--assistant {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border-bottom-left-radius: 2px;
+  max-width: 92%;
+}
+
+/* Tool row — collapsed one-liner; expand on click. */
+
+.convo__row--tool {
+  align-items: stretch;
+}
+
+.convo__tool-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  color: var(--text-faint);
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.convo__tool-head:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+}
+
+.convo__tool-glyph {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.convo__row--tool-error .convo__tool-glyph {
+  color: #ff8585;
+}
+
+.convo__tool-name {
+  color: rgba(122, 220, 255, 0.85);
+}
+
+.convo__row--tool-error .convo__tool-name {
+  color: #ff8585;
+}
+
+.convo__tool-summary {
+  flex: 1;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.convo__tool-chev {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 10px;
+}
+
+.convo__tool-detail {
+  margin-top: 4px;
+  padding-left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.convo__tool-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.convo__tool-block {
+  margin: 0;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.78);
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.convo__tool-block--error {
+  border-color: rgba(255, 100, 100, 0.3);
+  color: rgba(255, 160, 160, 0.95);
+}
+
+/* Thinking / system row — dim single-line, expandable. Mostly hidden
+   in cozy mode unless the user wants the detail. */
+
+.convo__row--thinking {
+  align-items: stretch;
+}
+
+.convo__thinking-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 8px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.25);
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.convo__thinking-head:hover {
+  color: var(--text-faint);
+}
+
+.convo__thinking-glyph {
+  color: rgba(122, 220, 255, 0.4);
+}
+
+.convo__thinking-label {
+  flex: 1;
+  font-style: italic;
+}
+
+.convo__thinking-chev {
+  font-size: 9px;
+}
+
+.convo__thinking-body {
+  margin: 4px 0 0 14px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.55);
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* In cozy mode, fold the thinking row to extra-tight spacing so a
+   sequence of thinking turns reads as a hum, not noise. */
+
+.convo--cozy .convo__row--thinking + .convo__row--thinking {
+  margin-top: -6px;
+}
+
+/* Result pill — appears at the end of a completed task. */
+
+.convo__row--result {
+  align-items: center;
+}
+
+.convo__result {
+  background: rgba(95, 255, 166, 0.08);
+  border: 1px solid rgba(95, 255, 166, 0.25);
+  color: #5fffa6;
+  padding: 2px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-family: var(--font-mono), monospace;
+}
+
+/* Error row — terminal jarvis_error. */
+
+.convo__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 100, 100, 0.08);
+  border: 1px solid rgba(255, 100, 100, 0.3);
+  border-radius: 6px;
+  width: 100%;
+}
+
+.convo__error-glyph {
+  color: #ff8585;
+  font-weight: 600;
+}
+
+.convo__error-body {
+  margin: 0;
+  flex: 1;
+  color: rgba(255, 160, 160, 0.95);
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
 .autopilot-card__feedback-clear:hover {
   background: rgba(255, 100, 100, 0.08);
   color: #ff8585;
