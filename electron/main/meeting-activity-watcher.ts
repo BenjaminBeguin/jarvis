@@ -75,6 +75,12 @@ const STARTUP_GRACE_MS = 4000;
  *  record nudge. macOS 15+ frequently produces zero events. */
 const QUIET_THRESHOLD_MS = 60_000;
 
+/** Grace window after noteSelfMicStop where we still suppress the
+ *  auto-prompt. coreaudiod often emits a trailing "Input/Capture"
+ *  log line a tick after the mic actually closes; without the
+ *  grace, that single late event would prompt the user. */
+const SELF_MIC_GRACE_MS = 3_000;
+
 export class MeetingActivityWatcher extends EventEmitter {
   private child: ChildProcessByStdio<null, Readable, Readable> | null = null;
   private buffer = '';
@@ -87,15 +93,19 @@ export class MeetingActivityWatcher extends EventEmitter {
   private eventsSeen = 0;
   private inputEventsSeen = 0;
   private fault: string | null = null;
-  /** True while WE have the mic open (palette voice / composer
-   *  mic / meeting recorder). Suppresses the auto-detect prompt
-   *  so we don't try to record ourselves. Set via
-   *  noteSelfMicStart/Stop — callers pair them around their
-   *  capture lifecycle. Reference-counted so overlapping captures
-   *  don't drop the flag prematurely. */
+  /** Reference-counted "we own the mic" flag set via
+   *  noteSelfMicStart/Stop. Suppresses the auto-detect prompt
+   *  while a Jarvis capture is live. */
   private selfMicCount = 0;
+  /** Wall-clock of the most recent noteSelfMicStop. coreaudiod
+   *  often emits one or two trailing log lines AFTER our mic
+   *  closes — we keep suppressing during a short grace window so
+   *  those don't slip through and prompt the user. */
+  private selfMicStoppedAt = 0;
   private get selfMicActive(): boolean {
-    return this.selfMicCount > 0;
+    if (this.selfMicCount > 0) return true;
+    if (this.selfMicStoppedAt === 0) return false;
+    return Date.now() - this.selfMicStoppedAt < SELF_MIC_GRACE_MS;
   }
 
   constructor(private prompt: MeetingActivityCallback) {
@@ -261,14 +271,25 @@ export class MeetingActivityWatcher extends EventEmitter {
    * computed from the internal counters.
    */
   /** Mark the start of a Jarvis-owned mic capture (palette voice,
-   *  composer mic, meeting recorder). Suppresses the auto-detect
-   *  prompt for the duration. Pair with noteSelfMicStop(). */
+   *  composer mic, voice orb, meeting recorder). Suppresses the
+   *  auto-detect prompt for the duration. Pair with noteSelfMicStop().
+   *
+   *  Also stamps lastInputAt so any prior idle gap doesn't make the
+   *  next coreaudiod event re-trigger the "wasIdle → prompt" path
+   *  if the flag was racy on entry. */
   noteSelfMicStart(): void {
     this.selfMicCount++;
+    // Stamp so the wasIdle calc in handleEntry never thinks the
+    // mic was just-idle when we transitioned out of self-active.
+    this.lastInputAt = Date.now();
   }
 
   noteSelfMicStop(): void {
     if (this.selfMicCount > 0) this.selfMicCount--;
+    if (this.selfMicCount === 0) {
+      this.selfMicStoppedAt = Date.now();
+      this.lastInputAt = this.selfMicStoppedAt;
+    }
   }
 
   status(): MeetingDetectionStatus {

@@ -569,17 +569,20 @@ export function CommandPalette() {
       console.warn('mic permission probe failed', e);
     }
 
+    // Suppress meeting-recorder BEFORE opening the mic — coreaudiod's
+    // first "Input/Capture" log line otherwise wins the race and we
+    // get prompted to record our own dictation.
+    await window.jarvis.noteSelfMicStart();
     const capture = new AudioCapture();
     try {
       await capture.start();
     } catch (e) {
+      void window.jarvis.noteSelfMicStop();
       setError(`Mic open failed: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
     captureRef.current = capture;
     setListening(true);
-    // Tell main this is our mic, not a meeting starting.
-    void window.jarvis.noteSelfMicStart();
   };
 
   const stopVoice = async () => {

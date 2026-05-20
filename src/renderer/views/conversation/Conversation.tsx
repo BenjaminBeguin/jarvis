@@ -660,13 +660,16 @@ function SendReply({
    *  and appends to the textarea. Mirrors the palette's voice path. */
   const startListening = async (): Promise<void> => {
     if (listening || transcribing) return;
+    // Suppress meeting-recorder BEFORE opening the mic — otherwise
+    // coreaudiod's first "Input/Capture" log wins the race.
+    await window.jarvis.noteSelfMicStart();
     const capture = new AudioCapture();
     try {
       await capture.start();
       captureRef.current = capture;
       setListening(true);
-      void window.jarvis.noteSelfMicStart();
     } catch (e) {
+      void window.jarvis.noteSelfMicStop();
       setError(
         `Mic access failed: ${e instanceof Error ? e.message : String(e)}`,
       );

@@ -124,16 +124,20 @@ export function VoiceOrb() {
       // permission probe failed; fall through to capture which
       // gives a clearer error
     }
+    // Suppress meeting-recorder BEFORE opening the mic — otherwise
+    // coreaudiod's first "Input/Capture" log line wins the race
+    // and prompts the user to record their own dictation.
+    await window.jarvis.noteSelfMicStart();
     const capture = new AudioCapture();
     try {
       await capture.start();
     } catch (e) {
+      void window.jarvis.noteSelfMicStop();
       setError(`Mic open failed: ${e instanceof Error ? e.message : String(e)}`);
       setPhase('errored');
       return;
     }
     captureRef.current = capture;
-    void window.jarvis.noteSelfMicStart();
     setPhase('listening');
   };
 
