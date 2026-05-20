@@ -44,24 +44,23 @@ const WORKFLOW_STALE_DETECTORS: Record<
   'calendar-today-sync': (def) => {
     return def.pipeline.some((n) => n.type === 'osascript');
   },
-  // Slack workflow has gone through several shapes:
-  //   1. cron '5m', no validate clause                  → migrate
-  //   2. cron '*/15 9-18 * * 1-5', validate present    → migrate
-  //   3. transform without the noise-v2 marker (drops
-  //      bots + caps age at 14 days)                    → migrate
-  //   4. transform without the noise-v3 marker (tightens
-  //      the search query — "is:mention" was matching
-  //      channel chatter, swapped for "mentions:me")    → migrate
-  //   5. transform without the noise-v4 marker (adds
-  //      "in:#jarvis" branch so the dedicated tracking
-  //      channel surfaces even without an @)            → migrate
-  // Any of the above authorise a rewrite. The latest noise marker
-  // in the transform body is the version sentinel. NOTE: this
-  // overwrites user-customized search queries — if a user has
-  // hand-edited the query body to add extra channels, those will
-  // be reset on next launch. Acceptable for v4 (most installs
-  // haven't customized yet) but worth revisiting when we
-  // introduce per-user channel configuration.
+  // Slack workflow versions:
+  //   v1: cron '5m', no validate clause                  → migrate
+  //   v2: cron '*/15 9-18 * * 1-5', validate present    → migrate
+  //   v3: noise-v2 marker (drops bots + caps age)       → migrate if older
+  //   v4: noise-v3 marker (mentions:me search modifier) → migrate if older
+  //   v5: noise-v4 marker (had a hardcoded in:#jarvis
+  //       default — rolled back, "Jarvis" is a sidebar
+  //       section name, not a channel, and Slack's
+  //       public API can't enumerate section members)
+  //   v6: noise-v5 marker (default query is DMs +
+  //       mentions only; users add channel branches
+  //       manually).
+  // Latest sentinel is noise-v5. NOTE: the rewrite overwrites
+  // user-edited query bodies — if the user appended OR-branches
+  // for tracked channels, those get wiped on the next launch.
+  // Acceptable for now; longer-term we want a per-user "tracked
+  // channels" list separate from the seed.
   'slack-inbox-sync': (def) => {
     const fetch = def.pipeline.find((n) => n.type === 'http-fetch');
     if (fetch) {
@@ -71,7 +70,7 @@ const WORKFLOW_STALE_DETECTORS: Record<
     const transform = def.pipeline.find((n) => n.type === 'transform');
     if (transform) {
       const fn = (transform.params as { fn?: string })?.fn;
-      if (typeof fn === 'string' && !fn.includes('noise-v4')) return true;
+      if (typeof fn === 'string' && !fn.includes('noise-v5')) return true;
     }
     return (
       isUntouchedShorthandCron(def, '5m') ||
