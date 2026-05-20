@@ -144,7 +144,7 @@ function userMessage(text: string, sessionId: string): SDKUserMessage {
  * tool_use blocks, thinking blocks, and other non-text content.
  * Returns null if the stream had no assistant text at all.
  */
-function lastAssistantText(events: TaskEvent[]): string | null {
+export function lastAssistantText(events: TaskEvent[]): string | null {
   for (let i = events.length - 1; i >= 0; i--) {
     const msg = events[i]?.msg as
       | { type?: string; message?: { content?: unknown } }
@@ -664,6 +664,16 @@ export class TaskRunner extends EventEmitter {
       ...(req.unattended ? { unattended: true } : {}),
     };
     this.records.set(id, record);
+    // Record the launching prompt as a user event so the
+    // transcript reads "user said X, assistant responded" the way
+    // a chat does. The SDK doesn't echo the first input back, so
+    // without this the conversation appeared to start with the
+    // agent's reply out of nowhere. (sendMessage already records
+    // follow-up user messages; same shape applies.)
+    this.recordEvent(record, {
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'text', text: req.prompt }] },
+    } as unknown as SDKMessage);
     insertTask(summary);
     this.emit('status', summary);
 

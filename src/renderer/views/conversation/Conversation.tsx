@@ -57,6 +57,24 @@ function formatCwd(cwd: string): string {
   return cwd;
 }
 
+/**
+ * Strip the trailing prompt off task.title so the header reads as
+ * a conversation name. deriveTitle in the runner builds the title
+ * as "<skillName> · <first line of prompt>" — once the full
+ * prompt also lands in the transcript as the first user message,
+ * the trailing half just bloats the header. Show the prefix
+ * (typically the skill name) and fall back to a 40-char clip
+ * when there's no separator.
+ */
+function shortConversationName(task: TaskSummary): string {
+  const t = task.title.trim();
+  // Skip the resume-fork glyph if present.
+  const stripped = t.startsWith('↪ ') ? t.slice(2) : t;
+  const dot = stripped.indexOf(' · ');
+  if (dot > 0) return stripped.slice(0, dot);
+  return stripped.length > 40 ? stripped.slice(0, 39) + '…' : stripped;
+}
+
 export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
   const [task, setTask] = useState<TaskSummary | null>(null);
   const [events, setEvents] = useState<TaskEvent[]>([]);
@@ -172,7 +190,11 @@ export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
     <section className="detail">
       <header className="detail__header">
         <div className="detail__title">
-          <h2 title={task.title}>{task.title}</h2>
+          {/* Header shows the conversation name (skill / short
+            * label). The full launching prompt now lands as the
+            * first user message in the transcript, so duplicating
+            * it here would just bloat the header. */}
+          <h2 title={task.title}>{shortConversationName(task)}</h2>
           <div
             className="meta"
             title={new Date(task.startedAt).toLocaleString()}
