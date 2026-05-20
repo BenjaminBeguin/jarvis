@@ -52,8 +52,16 @@ const WORKFLOW_STALE_DETECTORS: Record<
   //   4. transform without the noise-v3 marker (tightens
   //      the search query — "is:mention" was matching
   //      channel chatter, swapped for "mentions:me")    → migrate
+  //   5. transform without the noise-v4 marker (adds
+  //      "in:#jarvis" branch so the dedicated tracking
+  //      channel surfaces even without an @)            → migrate
   // Any of the above authorise a rewrite. The latest noise marker
-  // in the transform body is the version sentinel.
+  // in the transform body is the version sentinel. NOTE: this
+  // overwrites user-customized search queries — if a user has
+  // hand-edited the query body to add extra channels, those will
+  // be reset on next launch. Acceptable for v4 (most installs
+  // haven't customized yet) but worth revisiting when we
+  // introduce per-user channel configuration.
   'slack-inbox-sync': (def) => {
     const fetch = def.pipeline.find((n) => n.type === 'http-fetch');
     if (fetch) {
@@ -63,7 +71,7 @@ const WORKFLOW_STALE_DETECTORS: Record<
     const transform = def.pipeline.find((n) => n.type === 'transform');
     if (transform) {
       const fn = (transform.params as { fn?: string })?.fn;
-      if (typeof fn === 'string' && !fn.includes('noise-v3')) return true;
+      if (typeof fn === 'string' && !fn.includes('noise-v4')) return true;
     }
     return (
       isUntouchedShorthandCron(def, '5m') ||

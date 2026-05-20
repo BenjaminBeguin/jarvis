@@ -17,10 +17,11 @@ import type { WorkflowDef } from '@shared/types';
  * round-trip needed.
  */
 
-// noise-v3: tightens the upstream Slack search to (to:me OR mentions:me)
-// — the previous "is:mention" wasn't filtering server-side, so channel
-// chatter where someone mentioned a teammate (not me) was landing in
-// the inbox. v2 dropped bots + capped age; v3 fixes the query.
+// noise-v4: keeps v3's mentions:me + bot/age filters and adds an
+// in:#jarvis branch so messages in the dedicated tracking channel
+// surface even when the user isn't @'d. Users with a different
+// channel name can edit the workflow's http-fetch query body in
+// ~/.jarvis/workflows/slack-inbox-sync.json to swap the channel.
 const SLACK_TRANSFORM = `((() => {
   const MAX_AGE_MS = 14 * 86400000;
   const now = Date.now();
@@ -62,7 +63,7 @@ export const SLACK_INBOX_WORKFLOW: WorkflowDef = {
   id: 'slack-inbox-sync',
   name: 'Sync Slack inbox',
   description:
-    'Every 15 minutes during your working hours, fetch DMs + @mentions waiting on you from Slack. Requires a user token (xoxp-*).',
+    'Every 15 minutes during your working hours, fetch DMs + @mentions of you + everything in #jarvis from Slack. Requires a user token (xoxp-*). Edit the search query in the workflow JSON to add more tracked channels.',
   enabled: true,
   // {businessHours} expands to "<start>-<end> * * <days>" from the
   // user's working-hours pref (Settings → general). Edit to a literal
@@ -77,12 +78,17 @@ export const SLACK_INBOX_WORKFLOW: WorkflowDef = {
         auth: { connector: 'slack', field: 'userAccessToken', scheme: 'bearer' },
         bodyEncoding: 'form',
         body: {
-          // "is:mention" wasn't filtering — it matched messages that
-          // contained ANY mention, including channel chatter where a
-          // teammate was @'d. "mentions:me" is the actual modifier
-          // that scopes to mentions of the calling user, paired with
-          // "to:me" for DMs.
-          query: '(to:me OR mentions:me) -from:me',
+          // Three branches, OR'd together:
+          //   - to:me        → DMs to you
+          //   - mentions:me  → messages explicitly @'ing you anywhere
+          //   - in:#jarvis   → every message in the dedicated tracking
+          //                    channel (you don't need to be @'d there;
+          //                    the channel itself is the signal that you
+          //                    want it surfaced)
+          // To track more channels, edit this query in
+          // ~/.jarvis/workflows/slack-inbox-sync.json — e.g. append
+          // " OR in:#team-foo".
+          query: '(to:me OR mentions:me OR in:#jarvis) -from:me',
           count: '40',
           sort: 'timestamp',
           sort_dir: 'desc',
