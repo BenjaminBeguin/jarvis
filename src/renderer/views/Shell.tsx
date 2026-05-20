@@ -10,7 +10,6 @@ import { Inbox } from './Inbox';
 import { Logo } from './Logo';
 import { MeetingOverlay } from './MeetingOverlay';
 import { MeetingPrompt } from './MeetingPrompt';
-import { SessionSidebar } from './SessionSidebar';
 import { NewProjectDialog } from './projects/NewProjectDialog';
 import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
@@ -25,7 +24,6 @@ import { toast } from './Toaster';
 import { Toaster } from './Toaster';
 import { Observatory } from './Observatory';
 import { Routines } from './Routines';
-import { TaskOverlay } from './TaskOverlay';
 
 type Tab =
   | 'dashboard'
@@ -762,7 +760,6 @@ export function Shell({ status }: Props) {
       <BatchApprovalHud />
       <ConversationSidebar />
       <ConversationChips />
-      <SessionSidebar />
       <NewProjectDialog
         open={newProjectOpen}
         onClose={() => setNewProjectOpen(false)}
@@ -770,7 +767,6 @@ export function Shell({ status }: Props) {
         initialName={newProjectInitial}
       />
       <Toaster />
-      <TaskOverlay />
     </div>
   );
 }
