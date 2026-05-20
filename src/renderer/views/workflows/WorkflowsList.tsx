@@ -18,6 +18,12 @@ export interface WorkflowsListProps {
   recentByWorkflow?: Map<string, WorkflowRun[]>;
   onSelect: (id: string) => void;
   onToggle: (workflow: WorkflowDef, next: boolean) => void;
+  /** Fire the workflow immediately without drilling in. Skip when
+   *  the page can't currently dispatch (e.g. app is paused). */
+  onRunNow?: (workflow: WorkflowDef) => void;
+  /** When true, the per-row run buttons are disabled and labelled
+   *  with a pause hint instead. */
+  paused?: boolean;
 }
 
 export function WorkflowsList({
@@ -25,6 +31,8 @@ export function WorkflowsList({
   recentByWorkflow,
   onSelect,
   onToggle,
+  onRunNow,
+  paused = false,
 }: WorkflowsListProps) {
   if (workflows.length === 0) {
     return (
@@ -50,6 +58,8 @@ export function WorkflowsList({
             recentRuns={recentByWorkflow?.get(w.id) ?? []}
             onSelect={() => onSelect(w.id)}
             onToggle={(next) => onToggle(w, next)}
+            onRunNow={onRunNow ? () => onRunNow(w) : undefined}
+            paused={paused}
           />
         ))}
       </div>
@@ -64,6 +74,8 @@ export function WorkflowsList({
                 recentRuns={recentByWorkflow?.get(w.id) ?? []}
                 onSelect={() => onSelect(w.id)}
                 onToggle={(next) => onToggle(w, next)}
+                onRunNow={onRunNow ? () => onRunNow(w) : undefined}
+                paused={paused}
               />
             ))}
           </div>
@@ -78,11 +90,15 @@ function WorkflowRow({
   recentRuns,
   onSelect,
   onToggle,
+  onRunNow,
+  paused,
 }: {
   workflow: WorkflowDef;
   recentRuns: WorkflowRun[];
   onSelect: () => void;
   onToggle: (next: boolean) => void;
+  onRunNow?: () => void;
+  paused: boolean;
 }) {
   const trigger = triggerLabel(w.trigger);
   const ok = recentRuns.filter((r) => r.status === 'completed').length;
@@ -132,6 +148,25 @@ function WorkflowRow({
         className="wf-list__actions"
         onClick={(e) => e.stopPropagation()}
       >
+        {onRunNow && (
+          <button
+            type="button"
+            className="wf-list__run"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!paused) onRunNow();
+            }}
+            disabled={paused}
+            title={
+              paused
+                ? 'Paused — flip the mode to Running to fire this workflow'
+                : 'Run this workflow now'
+            }
+            aria-label="Run now"
+          >
+            ▶
+          </button>
+        )}
         <label
           className="toggle"
           title={w.enabled ? 'Disable trigger' : 'Enable trigger'}

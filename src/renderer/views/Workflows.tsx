@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { WorkflowDef, WorkflowNodeDef, WorkflowRun } from '../../shared/types';
+import type {
+  AppMode,
+  WorkflowDef,
+  WorkflowNodeDef,
+  WorkflowRun,
+} from '../../shared/types';
 import { toast } from './Toaster';
 import { NodeDetail } from './workflows/NodeDetail';
 import { NODE_TEMPLATES } from './workflows/nodePalette';
@@ -49,6 +54,12 @@ export function Workflows() {
   );
   const [paletteOpen, setPaletteOpen] = useState<boolean>(false);
   const paletteRef = useRef<HTMLDivElement | null>(null);
+  const [appMode, setAppMode] = useState<AppMode>('running');
+  useEffect(() => {
+    void window.jarvis.getAppMode().then(setAppMode);
+    return window.jarvis.onAppModeChanged(setAppMode);
+  }, []);
+  const paused = appMode === 'paused';
   // Auto-close the palette popover on outside click.
   useEffect(() => {
     if (!paletteOpen) return undefined;
@@ -201,11 +212,17 @@ export function Workflows() {
 
   const runNow = async (): Promise<void> => {
     if (!selected) return;
-    const r = await window.jarvis.runWorkflow(selected.id);
+    await runWorkflowNow(selected);
+  };
+
+  /** Inline run-now used by both the detail-view button and the
+   *  per-row button on the index page. */
+  const runWorkflowNow = async (def: WorkflowDef): Promise<void> => {
+    const r = await window.jarvis.runWorkflow(def.id);
     if (!r.ok) {
       toast({ kind: 'error', message: r.message ?? 'Run failed' });
     } else {
-      toast({ message: `Running · ${selected.name}` });
+      toast({ message: `Running · ${def.name}` });
     }
   };
 
@@ -443,6 +460,8 @@ export function Workflows() {
               recentByWorkflow={recentByWorkflow}
               onSelect={setSelectedId}
               onToggle={(def, next) => void toggleWorkflowEnabled(def, next)}
+              onRunNow={(def) => void runWorkflowNow(def)}
+              paused={paused}
             />
           ) : (
             <>

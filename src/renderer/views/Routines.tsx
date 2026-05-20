@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
+  AppMode,
   DashboardConfig,
   DashboardItem,
   RoutineDef,
@@ -118,6 +119,12 @@ export function Routines() {
   const [error, setError] = useState<string | null>(null);
   const [presetsOpen, setPresetsOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [appMode, setAppMode] = useState<AppMode>('running');
+  useEffect(() => {
+    void window.jarvis.getAppMode().then(setAppMode);
+    return window.jarvis.onAppModeChanged(setAppMode);
+  }, []);
+  const paused = appMode === 'paused';
   /** Task ids currently in 'running'/'queued' state — used to flash a
    * "running" dot on each affected routine. Maintained by subscribing
    * to onTaskStatus on the live task feed. */
@@ -448,7 +455,9 @@ export function Routines() {
             search={search}
             onSelect={setActiveId}
             onToggle={(def, next) => void toggleEnabled(def, next)}
+            onRunNow={(r) => runNow(r)}
             hasSkills={skills.length > 0}
+            paused={paused}
           />
         ) : (
           <main className="rt-detail">

@@ -35,10 +35,17 @@ export interface RoutinesListProps {
   search: string;
   onSelect: (id: string) => void;
   onToggle: (routine: RoutineDef, next: boolean) => void;
+  /** Fire the routine immediately. Surfaced as a ▶ button on each
+   *  row so the user doesn't have to drill in just to dispatch. */
+  onRunNow?: (routine: RoutineDef) => void;
   /** Whether any skills are loaded. We block the empty-state hint
    *  "create your first routine" when there are no skills yet
    *  because the editor can't open. */
   hasSkills: boolean;
+  /** Greyed out + tooltipped when true. AI-firing actions (run-now)
+   *  silent-skip in pause mode anyway; this just makes that
+   *  visible. */
+  paused?: boolean;
 }
 
 export function RoutinesList({
@@ -50,7 +57,9 @@ export function RoutinesList({
   search,
   onSelect,
   onToggle,
+  onRunNow,
   hasSkills,
+  paused = false,
 }: RoutinesListProps) {
   if (!hasSkills) {
     return (
@@ -128,6 +137,8 @@ export function RoutinesList({
                 recent={recentByRoutine.get(r.id) ?? []}
                 onSelect={() => onSelect(r.id)}
                 onToggle={(next) => onToggle(r, next)}
+                onRunNow={onRunNow ? () => onRunNow(r) : undefined}
+                paused={paused}
               />
             ))}
           </div>
@@ -145,6 +156,8 @@ function RoutineRow({
   recent,
   onSelect,
   onToggle,
+  onRunNow,
+  paused,
 }: {
   routine: RoutineDef;
   skill: SkillSummary | undefined;
@@ -153,6 +166,8 @@ function RoutineRow({
   recent: TaskSummary[];
   onSelect: () => void;
   onToggle: (next: boolean) => void;
+  onRunNow?: () => void;
+  paused: boolean;
 }) {
   const purpose = derivePurpose(r);
   const ok = recent.filter((t) => t.status === 'completed').length;
@@ -217,6 +232,25 @@ function RoutineRow({
         className="wf-list__actions"
         onClick={(e) => e.stopPropagation()}
       >
+        {onRunNow && (
+          <button
+            type="button"
+            className="wf-list__run"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!paused) onRunNow();
+            }}
+            disabled={paused}
+            title={
+              paused
+                ? 'Paused — flip the mode to Running to fire this routine'
+                : 'Run this routine now'
+            }
+            aria-label="Run now"
+          >
+            ▶
+          </button>
+        )}
         <label
           className="toggle"
           title={r.enabled ? 'Disable schedule' : 'Enable schedule'}

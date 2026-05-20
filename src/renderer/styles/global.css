@@ -16445,6 +16445,37 @@ button:disabled:hover {
   transition: transform 140ms ease, color 140ms ease;
 }
 
+.wf-list__run {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  width: 26px;
+  height: 26px;
+  line-height: 1;
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background 140ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wf-list__run:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(0, 212, 255, 0.06);
+}
+
+.wf-list__run:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .wf-list__row:hover .wf-list__chev {
   color: var(--accent);
   transform: translateX(2px);
