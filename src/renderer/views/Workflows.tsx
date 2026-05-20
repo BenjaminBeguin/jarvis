@@ -60,6 +60,24 @@ export function Workflows() {
     return window.jarvis.onAppModeChanged(setAppMode);
   }, []);
   const paused = appMode === 'paused';
+
+  /** Selecting a workflow pushes a history entry so the browser
+   *  back button returns to the index view (and forward redrills).
+   *  popstate flips the selection back to whatever was active in
+   *  the entry being restored. */
+  const selectWorkflow = (id: string | null): void => {
+    if (id === selectedId) return;
+    history.pushState({ wfId: id }, '');
+    setSelectedId(id);
+  };
+  useEffect(() => {
+    const onPop = (e: PopStateEvent): void => {
+      const next = (e.state as { wfId?: string | null } | null)?.wfId ?? null;
+      setSelectedId(next);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   // Auto-close the palette popover on outside click.
   useEffect(() => {
     if (!paletteOpen) return undefined;
@@ -347,7 +365,7 @@ export function Workflows() {
             <button
               type="button"
               className="wf-btn wf-btn--ghost"
-              onClick={() => setSelectedId(null)}
+              onClick={() => selectWorkflow(null)}
               title="Back to all workflows"
             >
               ← All workflows
@@ -458,7 +476,7 @@ export function Workflows() {
             <WorkflowsList
               workflows={workflows}
               recentByWorkflow={recentByWorkflow}
-              onSelect={setSelectedId}
+              onSelect={selectWorkflow}
               onToggle={(def, next) => void toggleWorkflowEnabled(def, next)}
               onRunNow={(def) => void runWorkflowNow(def)}
               paused={paused}

@@ -125,6 +125,23 @@ export function Routines() {
     return window.jarvis.onAppModeChanged(setAppMode);
   }, []);
   const paused = appMode === 'paused';
+
+  /** Selecting a routine pushes a history entry so the browser
+   *  back button returns to the index view. popstate restores
+   *  whichever selection was active in the entry being unwound. */
+  const selectRoutine = (id: string | null): void => {
+    if (id === activeId) return;
+    history.pushState({ rtId: id }, '');
+    setActiveId(id);
+  };
+  useEffect(() => {
+    const onPop = (e: PopStateEvent): void => {
+      const next = (e.state as { rtId?: string | null } | null)?.rtId ?? null;
+      setActiveId(next);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   /** Task ids currently in 'running'/'queued' state — used to flash a
    * "running" dot on each affected routine. Maintained by subscribing
    * to onTaskStatus on the live task feed. */
@@ -372,7 +389,7 @@ export function Routines() {
             <button
               type="button"
               className="wf-btn wf-btn--ghost"
-              onClick={() => setActiveId(null)}
+              onClick={() => selectRoutine(null)}
               title="Back to all routines"
             >
               ← All routines
@@ -453,7 +470,7 @@ export function Routines() {
             routineCost={routineCost}
             recentByRoutine={recentByRoutine}
             search={search}
-            onSelect={setActiveId}
+            onSelect={selectRoutine}
             onToggle={(def, next) => void toggleEnabled(def, next)}
             onRunNow={(r) => runNow(r)}
             hasSkills={skills.length > 0}
