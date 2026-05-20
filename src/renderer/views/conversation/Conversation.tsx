@@ -177,8 +177,12 @@ export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
             className="meta"
             title={new Date(task.startedAt).toLocaleString()}
           >
-            {task.status === 'running' && task.awaitingInput
-              ? 'awaiting'
+            {/* Match the wording used in TaskBindingBadge + the
+              * Inbox awaiting strip so the same conversational
+              * state reads the same everywhere. */}
+            {(task.status === 'running' && task.awaitingInput) ||
+            canResumeReply
+              ? 'awaiting reply'
               : task.status}{' '}
             · {task.origin} · started {formatRelative(task.startedAt)}
             {task.costUsd > 0 && ` · $${task.costUsd.toFixed(4)}`}
@@ -295,6 +299,10 @@ function ChatItemRow({
   }
 
   if (item.kind === 'result') {
+    // Cozy view (sidebar / chat popup) hides turn boundaries — the
+    // chat reads as one continuous thread the way chat apps do.
+    // Full mode keeps them visible for cost / duration tracking.
+    if (mode === 'cozy') return null;
     const dur =
       item.durationMs >= 60_000
         ? `${(item.durationMs / 1000 / 60).toFixed(1)}m`
@@ -304,7 +312,7 @@ function ChatItemRow({
     const cost = item.costUsd > 0 ? ` · $${item.costUsd.toFixed(4)}` : '';
     return (
       <div className="chat-row chat-row--result">
-        turn complete · {dur}
+        ↪ turn · {dur}
         {cost}
       </div>
     );
