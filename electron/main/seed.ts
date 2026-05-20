@@ -144,6 +144,50 @@ function writeSkill(skillsRoot: string, name: string, body: string): void {
   }
 }
 
+/**
+ * Per-skill frontmatter patch table. Each entry: a skill id → list of
+ * (key, value) pairs to inject into the YAML frontmatter if missing.
+ * Body is preserved verbatim. Used for surgical migrations — e.g.
+ * adding `model: claude-haiku-4-5` to /status to speed up the
+ * read-only digest path — without overwriting whatever the user has
+ * tweaked in the prompt body.
+ */
+const SKILL_FRONTMATTER_PATCHES: Record<
+  string,
+  Array<{ key: string; value: string }>
+> = {
+  // Status digest is read-only; Haiku is ~2-3× faster than Sonnet
+  // for this kind of summarization and quality is indistinguishable
+  // for the shape of output the skill produces.
+  status: [{ key: 'model', value: 'claude-haiku-4-5-20251001' }],
+};
+
+function patchSkillFrontmatter(skillsRoot: string, skillId: string): void {
+  const patches = SKILL_FRONTMATTER_PATCHES[skillId];
+  if (!patches || patches.length === 0) return;
+  const path = join(skillsRoot, skillId, 'SKILL.md');
+  if (!existsSync(path)) return;
+  const raw = readFileSync(path, 'utf8');
+  let parsed: ReturnType<typeof matter>;
+  try {
+    parsed = matter(raw);
+  } catch {
+    return; // bad frontmatter; writeSkill's fallback handles this
+  }
+  const fm = parsed.data as Record<string, unknown>;
+  let changed = false;
+  for (const { key, value } of patches) {
+    if (!(key in fm)) {
+      fm[key] = value;
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  const next = matter.stringify(parsed.content, fm);
+  writeFileSync(path, next, 'utf8');
+  console.info(`[seed] patched ${skillId} frontmatter: ${patches.map((p) => p.key).join(', ')}`);
+}
+
 export function seedDefaultsIfEmpty(): void {
   const root = join(homedir(), '.jarvis');
   const skillsRoot = join(root, 'skills');
@@ -163,6 +207,13 @@ export function seedDefaultsIfEmpty(): void {
   // versions show up automatically; user-authored skills are never touched.
   for (const { name, body } of BUILTIN_SKILLS) {
     writeSkill(skillsRoot, name, body);
+  }
+
+  // Surgical frontmatter patches for existing user files. Lets us
+  // ship a "switch /status to Haiku" without overwriting whatever
+  // the user has changed in the body.
+  for (const skillId of Object.keys(SKILL_FRONTMATTER_PATCHES)) {
+    patchSkillFrontmatter(skillsRoot, skillId);
   }
 
   // Same model for workflows: seed if the file is missing; never

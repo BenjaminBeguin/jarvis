@@ -226,6 +226,35 @@ function extractBody(input: string, phrase: TimePhrase): string {
   return body;
 }
 
+/**
+ * Pattern-based map from a natural-language prompt to a built-in
+ * skill id, so common phrasing skips a free-form launch (no skill,
+ * full MCP set, Sonnet) in favour of a pooled skill session (often
+ * Haiku, scoped tools). Lowest-cost win for "Hey what's my update
+ * today" → `/status`.
+ *
+ * Each entry tests against the lowercased trimmed prompt. The first
+ * match wins; nothing matches → caller falls through to the normal
+ * free-form task launch.
+ */
+const SKILL_INTENT_PATTERNS: Array<{ re: RegExp; skillId: string }> = [
+  {
+    // "what's my update", "what is happening", "where am I", "status",
+    // "give me a status", "any update", "what's going on", "what's new"
+    re: /\b(?:what(?:'?s| is)?\s+(?:my\s+)?(?:update|status|going on|new|happening)|where\s+am\s+i|give\s+me\s+(?:a\s+)?(?:status|update)|any\s+(?:status\s+)?update|status\s+(?:check|report|please)?)\b/i,
+    skillId: 'status',
+  },
+];
+
+export function matchSkillIntent(input: string): string | null {
+  const text = input.trim();
+  if (!text) return null;
+  for (const entry of SKILL_INTENT_PATTERNS) {
+    if (entry.re.test(text)) return entry.skillId;
+  }
+  return null;
+}
+
 export function parseIntent(input: string, now: Date = new Date()): ParsedIntent {
   const trimmed = input.trim();
   if (!trimmed) return { kind: 'task', body: trimmed };

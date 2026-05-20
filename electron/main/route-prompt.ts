@@ -1,6 +1,6 @@
 import type { AuthMode, RoutePromptResult, SessionConfig, TaskOrigin } from '@shared/types';
 
-import { parseIntent } from './intent-router.js';
+import { matchSkillIntent, parseIntent } from './intent-router.js';
 import type { ModuleRegistry } from './module-registry.js';
 import type { ReminderStore } from './reminders.js';
 import type { Reminder } from '@shared/types';
@@ -83,9 +83,16 @@ export async function routePrompt(
       'Claude Code CLI not found. Run `claude login` or switch to API-key mode.',
     );
   }
+  // Skill auto-pick: phrases like "what's my update today" bind to
+  // /status (Haiku + pooled session) instead of a free-form launch.
+  // Big latency win — pooled skills skip the cold-start + tool
+  // inventory bootstrap.
+  const skillId = matchSkillIntent(intent.body);
+
   const task = deps.runner.launch({
     prompt: intent.body,
     origin: asTaskOrigin(opts.origin),
+    ...(skillId ? { skillId } : {}),
     ...(opts.sessionConfig ?? {}),
     ...(opts.projectName !== undefined ? { projectName: opts.projectName } : {}),
   });
