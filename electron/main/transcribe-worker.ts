@@ -28,7 +28,12 @@ type Transcriber = (
   options?: unknown,
 ) => Promise<{ text: string } | { text: string }[]>;
 
-const MODEL_NAME = 'Xenova/whisper-small';
+// Smaller multilingual Whisper (~75MB). Switched from whisper-small
+// + q8 because that combo crashes ONNX Runtime on Apple Silicon
+// with SIGTRAP — likely a SIMD path in the q8 kernels. fp32 +
+// tiny is the most-tested combo across transformers.js installs
+// and runs comfortably on any modern Mac.
+const MODEL_NAME = 'Xenova/whisper-tiny';
 const TARGET_SAMPLE_RATE = 16_000;
 const TASK = 'transcribe';
 
@@ -62,11 +67,18 @@ async function load(): Promise<Transcriber> {
     env.cacheDir = cacheDir;
     env.allowLocalModels = true;
     const p = (await pipeline('automatic-speech-recognition', MODEL_NAME, {
-      dtype: 'q8',
+      // fp32 (default) for stability — q8 / q4 quant paths
+      // segfault on Apple Silicon. Tiny is small enough that
+      // unquantized fp32 weights still fit comfortably (~150MB).
+      dtype: 'fp32',
+      // Force CPU execution provider. CoreML / WebGPU paths can
+      // SIGTRAP on macOS when the model isn't ANE-compatible;
+      // CPU is slower but bulletproof.
+      device: 'cpu',
       progress_callback: (data: unknown) => {
         send({ type: 'progress', data });
       },
-    })) as unknown as Transcriber;
+    } as unknown as Parameters<typeof pipeline>[2])) as unknown as Transcriber;
     const inner = p as unknown as {
       model?: { generation_config?: Record<string, unknown> };
     };
