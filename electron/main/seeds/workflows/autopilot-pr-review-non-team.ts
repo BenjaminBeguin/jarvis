@@ -1,80 +1,89 @@
 import type { WorkflowDef } from '@shared/types';
 
 /**
- * Autopilot scenario — first-pass review for PRs that request your
- * review from outside your team.
+ * Autopilot scenario — draft first-pass reviews for PRs requesting
+ * the user's review where the author isn't on their team.
  *
- *   trigger:  autopilot · cron 15m  (gated by appMode === 'autopilot')
- *   pipeline: shell(gh) → transform → run-skill → draft-output
+ *   trigger:  autopilot · cron 15m (gated by appMode === 'autopilot')
+ *   pipeline: shell(gh search prs --review-requested @me)
+ *             → transform (parse + filter by authorAssociation)
+ *             → run-skill (pr-review-queue returns JSON array)
+ *             → batch-prompt-output (table HUD)
  *
- * Why a cron + filter shape:
- *   - gh search is cheap; the agent only spins up when there's
- *     actually a non-team PR review pending. Saves Claude turns.
- *   - The agent gets {prev} as the matched PR list AND {feedback}
- *     pulled from ~/.jarvis/autopilot/feedback/autopilot-pr-review-
- *     non-team.md — so its tone calibrates over time as the user
- *     accepts / edits / rejects past drafts.
+ * The user sees a table — one row per PR — with:
+ *   - title + repo + author cells
+ *   - the agent's draft review summary
+ *   - the proposed verdict chip (approve / comment / request-changes)
+ *   - expandable context with the inline comments the agent would
+ *     attach if posting
  *
- * The output is a *draft* — it lands in the Autopilot drafts Inbox
- * section. To make this auto-post the review, replace the last
- * `draft-output` node with a `prompt-output → shell (gh pr review
- * --body …)` chain. Seed ships in draft mode so users opt in to
- * sending explicitly.
+ * Accept saves positive feedback to the per-workflow memory file;
+ * the review is NOT auto-posted. The user opens the PR and decides
+ * whether to mirror the draft. Future iteration adds an opt-in
+ * mcp-call to gh pr review on accepted rows.
  *
- * Customization:
- *   - Edit the transform `fn` to set what counts as "your team". The
- *     default filter is `authorAssociation` ∈ { CONTRIBUTOR, FIRST_TIME_
- *     CONTRIBUTOR, NONE } — i.e. not OWNER/MEMBER. Swap to a hardcoded
- *     team-handle check if you want sharper boundaries.
- *   - `enabled: false` by default. Flip to true from Settings →
- *     Workflows once you've verified the connector lookup works.
+ * Default `enabled: false`.
  */
 
 const FILTER_FN = `(() => {
   const items = Array.isArray($) ? $ : [];
-  // Keep only PRs where the author is not an OWNER/MEMBER of the
-  // repo. Adjust to your team's actual GitHub-team handle if you
-  // want a sharper boundary.
-  const external = items.filter((pr) => {
-    const assoc = (pr.authorAssociation || '').toUpperCase();
+  // Keep PRs where the author is NOT an OWNER / MEMBER / COLLABORATOR
+  // of the repo — i.e. external or non-team contributors. Edit the
+  // allowlist if your team's GitHub-association shape differs.
+  return items.filter(pr => {
+    const assoc = String(pr.authorAssociation || '').toUpperCase();
     return assoc !== 'OWNER' && assoc !== 'MEMBER' && assoc !== 'COLLABORATOR';
-  });
-  if (external.length === 0) return null;
-  // Pick the oldest unreviewed — agent works through the queue one
-  // PR per tick. Subsequent ticks pick up the next one.
-  external.sort((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt));
-  return external[0];
+  }).slice(0, 10);
 })()`;
 
-const AGENT_PROMPT = `Review this pull request as a senior engineer would. Draft (don't post) a review.
+const AGENT_PROMPT = `You're given an array of pull requests requesting the user's review. For each one, draft a first-pass review WITHOUT posting it.
 
-**Do NOT use gh pr review, gh pr comment, or any other gh write
-command.** The user reviews your draft in the Jarvis Inbox and
-posts manually if they want. Read-only gh commands (gh pr view,
-gh pr diff) are fine for gathering context.
+**Do NOT use \`gh pr review\`, \`gh pr comment\`, or any other gh write command.** Read-only gh commands (gh pr view, gh pr diff) are fine for gathering context. The user reviews your output and decides whether to mirror it.
 
-Output a single markdown block:
-  - One-paragraph summary of the change.
-  - Bullet list of inline concerns, each citing file:line.
+For each input PR, produce one output row with:
+  - id: stable id (e.g. owner/repo#number)
+  - title: PR title
+  - url: PR url
+  - repo: owner/repo string
+  - author: PR author handle
+  - verdict: exactly one of "approve" | "comment" | "request-changes"
+  - summary: 1-2 sentence overall take
+  - comments: array of inline notes, each { file, line, body }. Empty array if just approving.
 
-Be accurate over comprehensive — a confident "looks good" beats a
-manufactured nit. If nothing actually breaks, say so.
-
-PR to review:
+Input PRs:
+\`\`\`json
 {prev}
+\`\`\`
 
-Past feedback the user has given you on this scenario — match
-this tone / style:
+Past feedback the user has given you on this scenario (match this tone / depth):
 {feedback}
 
-Output ONLY the review markdown. No greeting, no signoff, no
-explanation to the user — they read your output verbatim.`;
+Be confident — "looks good" beats a manufactured nit. If nothing breaks, verdict is "approve" and comments is empty.
+
+Output ONLY a JSON array. No prose, no markdown code fences.`;
+
+const ROWS_FN = `(Array.isArray($) ? $ : []).filter(r => r && r.id).map(r => {
+  const commentsText = Array.isArray(r.comments) && r.comments.length > 0
+    ? r.comments.map(c => '  ' + (c.file || '?') + ':' + (c.line || '?') + ' — ' + (c.body || '').slice(0, 200)).join('\\n')
+    : '(no inline comments)';
+  return {
+    id: r.id,
+    preview: [
+      { label: 'PR',     value: String(r.id || '?') },
+      { label: 'Title',  value: String(r.title || '').slice(0, 80) },
+      { label: 'Author', value: String(r.author || '?') },
+    ],
+    draft: String(r.summary || ''),
+    verdict: String(r.verdict || 'comment'),
+    context: 'Inline comments the agent would attach:\\n' + commentsText + '\\n\\nURL: ' + (r.url || '?'),
+  };
+})`;
 
 export const AUTOPILOT_PR_REVIEW_NON_TEAM_WORKFLOW: WorkflowDef = {
   id: 'autopilot-pr-review-non-team',
   name: 'Autopilot · PR review (non-team)',
   description:
-    'Every 15 min in autopilot mode, find a PR awaiting your review whose author is outside your team, draft a first-pass review, and drop it in the Autopilot drafts inbox.',
+    'Every 15 min in autopilot mode, find PRs awaiting your review whose author is outside your team, draft a first-pass review per PR with verdict, and surface as a table for per-row approval.',
   enabled: false,
   trigger: { kind: 'autopilot', when: 'cron', every: '15m' },
   pipeline: [
@@ -112,13 +121,19 @@ export const AUTOPILOT_PR_REVIEW_NON_TEAM_WORKFLOW: WorkflowDef = {
       params: { skillId: 'pr-review-queue', prompt: AGENT_PROMPT },
     },
     {
-      type: 'draft-output',
+      type: 'transform',
       params: {
-        title: 'Autopilot · PR review draft',
-        // Snippet of the draft inline so the user gets a preview
-        // without having to expand every row.
-        subtitle: '{prev}',
-        source: 'autopilot-drafts',
+        fn: `(() => { try { return JSON.parse(typeof $ === 'string' ? $ : '[]'); } catch { return []; } })()`,
+      },
+    },
+    {
+      type: 'batch-prompt-output',
+      params: {
+        title: 'PRs awaiting your review',
+        summary:
+          'Autopilot drafted a review per non-team PR. Accept = positive feedback (review is NOT auto-posted). Reject + note teaches the agent.',
+        rowsFn: ROWS_FN,
+        onEmpty: 'skip',
       },
     },
   ],

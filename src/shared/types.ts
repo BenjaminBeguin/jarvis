@@ -753,6 +753,14 @@ export interface InboxItem {
    * Markdown is fine; the renderer treats it as plain text for now.
    */
   body?: string;
+  /**
+   * True when the source flagged this item as bot-originated (e.g.
+   * Slack bot messages, GitHub-bot Slack pings). Autopilot scenarios
+   * filter on this so a notification bot doesn't get treated like a
+   * human conversation. Not surfaced in the UI today; the inbox row
+   * looks the same regardless.
+   */
+  isBotSender?: boolean;
   /** Project alias if this item is scoped to one — used for filtering. */
   project?: string;
   /** External link (gh URL, Linear ticket, etc.) — opens in browser. */

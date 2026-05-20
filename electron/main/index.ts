@@ -66,6 +66,7 @@ import { approvalBridge } from './autopilot/approval-bridge.js';
 import { InboxProximityWatcher } from './inbox-proximity.js';
 import { MeetingActivityWatcher } from './meeting-activity-watcher.js';
 import { BUILTIN_BRIEFING_KINDS } from './seeds/briefing-kinds.js';
+import { BUILTIN_WORKFLOWS } from './seeds/workflows/index.js';
 import {
   failedRoutinesInboxSource,
   prAddressCommentsInboxSource,
@@ -1225,6 +1226,11 @@ app.whenReady().then(async () => {
   // `gh search prs` (only `gh pr list`), so the original seed
   // errored at runtime. Strip + simplify the filter.
   migrateGhSearchPrsFields(workflows, activity);
+  // Rewrite the three autopilot seed scenarios from the single-item
+  // prompt-output shape to the new batch-prompt-output shape.
+  // Detects "still on the old shape" by id + terminal step type.
+  // Idempotent — re-runs find batch-prompt-output and skip.
+  migrateAutopilotToBatchOutput(workflows, activity);
 
   // ─── change → broadcast event fan-out ──────────────────────────────────────
 
@@ -1741,6 +1747,51 @@ function isBrokenCalendarScript(script: string): boolean {
  * field isn't supported by `gh search prs` so the call errored
  * with "Unknown JSON field: reviewDecision". Idempotent.
  */
+/**
+ * Replace the three autopilot seed scenarios with the current
+ * batch-prompt-output shape whenever the on-disk pipeline still
+ * ends in single-item `prompt-output`. Sweeping rewrite (the agent
+ * prompts, the transforms, and the terminal node all changed at
+ * once), so we overwrite the whole pipeline + description from the
+ * seed catalog rather than surgical patching. Idempotent — the
+ * check fires only when the terminal node is still prompt-output.
+ *
+ * User customizations to these workflows that already moved past
+ * the old shape (terminal != 'prompt-output') are preserved.
+ */
+function migrateAutopilotToBatchOutput(
+  workflows: WorkflowStore,
+  activity: ActivityStore,
+): void {
+  const AUTOPILOT_IDS = new Set([
+    'autopilot-slack-dm-ack',
+    'autopilot-pr-review-non-team',
+    'autopilot-pr-comments-on-mine',
+  ]);
+  const seedById = new Map(
+    BUILTIN_WORKFLOWS.filter((w) => AUTOPILOT_IDS.has(w.id)).map(
+      (w) => [w.id, w] as const,
+    ),
+  );
+  for (const wf of workflows.list()) {
+    if (!AUTOPILOT_IDS.has(wf.id)) continue;
+    const last = wf.pipeline[wf.pipeline.length - 1];
+    if (!last || last.type !== 'prompt-output') continue;
+    const seed = seedById.get(wf.id);
+    if (!seed) continue;
+    workflows.save({
+      ...wf,
+      description: seed.description,
+      pipeline: seed.pipeline,
+    });
+    activity.record({
+      kind: 'workflow.migrated',
+      label: `Autopilot scenario rewritten · ${wf.id} (batch HUD)`,
+      detail: { workflowId: wf.id },
+    });
+  }
+}
+
 function migrateGhSearchPrsFields(
   workflows: WorkflowStore,
   activity: ActivityStore,

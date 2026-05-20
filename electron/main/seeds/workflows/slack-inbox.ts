@@ -30,6 +30,12 @@ const SLACK_TRANSFORM = `(($.messages?.matches ?? []).filter(m => m && m.ts && m
   else if (diff < 86400000) age = Math.floor(diff / 3600000) + 'h';
   else age = Math.floor(diff / 86400000) + 'd';
   const chan = m.channel.name ? '#' + m.channel.name : m.channel.id;
+  // Bot detection: Slack sets bot_id / subtype:bot_message on app-
+  // emitted messages. Also catch known bot usernames (github,
+  // github-bot, etc.) as a belt-and-suspenders for installs where
+  // bot_id isn't returned by search.messages.
+  const isBot = !!m.bot_id || m.subtype === 'bot_message' ||
+    /^(github|github-bot|githubapp)$/i.test(String(m.username || ''));
   return {
     id: 'slack-' + m.channel.id + '-' + m.ts,
     source: 'slack',
@@ -37,6 +43,7 @@ const SLACK_TRANSFORM = `(($.messages?.matches ?? []).filter(m => m && m.ts && m
     subtitle: chan + ' · ' + age,
     ...(m.permalink ? { url: m.permalink } : {}),
     createdAt: ts,
+    isBotSender: isBot,
   };
 }).slice(0, 40))`;
 

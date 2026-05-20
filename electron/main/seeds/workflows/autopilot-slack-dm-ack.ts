@@ -1,87 +1,153 @@
 import type { WorkflowDef } from '@shared/types';
 
 /**
- * Autopilot scenario — draft an acknowledgement when someone DMs
- * you (or @-mentions you) on Slack.
+ * Autopilot scenario — draft short replies to unread, recent Slack
+ * DMs / @-mentions.
  *
- *   trigger:  autopilot · on slack inbox  (event-driven; no cron)
- *   pipeline: transform (validate) → run-skill → prompt-output
+ *   trigger:  autopilot · cron 5m (gated by appMode === 'autopilot')
+ *   pipeline: mcp-call(search.messages is:unread)
+ *             → transform (filter bots + recency)
+ *             → run-skill (slack-dm-ack returns JSON array)
+ *             → batch-prompt-output (table HUD, per-row Accept/Reject)
  *
- * The InboxEventBridge dispatches this workflow whenever a new
- * `source: 'slack'` InboxItem lands. The matched item arrives as
- * `prev`. The agent reads the message + thread context and drafts a
- * brief reply ("on it · EOD", "noted · will look tomorrow", etc).
+ * Filter logic:
+ *   - Slack search modifier `is:unread` does the unread gate
+ *     server-side. No need for conversations.history scopes.
+ *   - `bot_id` or `subtype: 'bot_message'` filters out the GitHub
+ *     Slack bot + any other app-emitted notifications (those are PR
+ *     signals; the PR-review scenario handles them via gh polling).
+ *   - 30-minute recency window (RECENT_MS) keeps the workflow from
+ *     pinging the user about stale messages.
  *
- * The pipeline ENDS with prompt-output by design — NEVER auto-posts
- * to a human teammate. The user approves (or edits + approves) the
- * draft in the HUD. To make the workflow send on accept, append a
- * `mcp-call slack chat.postMessage` step after the prompt; that
- * remains an explicit per-scenario opt-in.
- *
- * Rejections + freeform feedback append to the per-workflow
- * feedback file; the agent's tone calibrates over time.
+ * The pipeline ENDS at batch-prompt-output by design. Accept saves
+ * the draft as positive feedback to the per-workflow memory file —
+ * the message is NOT posted. The user reads + sends manually (or
+ * appends a `mcp-call slack send_message` step that fans the
+ * accepted rows out, if they want to flip this scenario to auto-
+ * send later).
  *
  * Default `enabled: false`.
  */
 
-const VALIDATE_FN = `(() => {
-  // InboxEventBridge seeds prev as { kind: 'inbox-changed', item }.
-  // Unwrap and validate it's a slack DM/mention from the last 5min.
-  if (!$ || !$.item) return null;
-  const item = $.item;
-  if (item.source !== 'slack') return null;
-  const age = Date.now() - (item.createdAt || 0);
-  if (age > 5 * 60_000) return null; // stale
-  return {
-    title: item.title || '',
-    subtitle: item.subtitle || '',
-    url: item.url,
-    threadPreview: item.body || item.subtitle || item.title,
-  };
+const RECENT_MS = 30 * 60 * 1000;
+
+const FILTER_FN = `(() => {
+  const matches = (typeof $ === 'object' && $ && Array.isArray($.messages?.matches)) ? $.messages.matches : [];
+  const cutoff = Date.now() - ${RECENT_MS};
+  return matches.filter(m => {
+    if (!m || !m.ts || !m.channel?.id) return false;
+    // Bot senders go to the PR flows (which poll GitHub directly);
+    // we don't reply to them as if they were teammates.
+    if (m.bot_id || m.subtype === 'bot_message') return false;
+    const username = String(m.username || '').toLowerCase();
+    if (/^(github|github-bot|githubapp)$/.test(username)) return false;
+    // Recency gate. Slack's is:unread already filters most stale
+    // items, but a long-forgotten unread thread could still match;
+    // 30 min keeps things current.
+    const seconds = parseFloat(m.ts);
+    const ts = Number.isFinite(seconds) ? Math.round(seconds * 1000) : 0;
+    if (ts < cutoff) return false;
+    return true;
+  }).slice(0, 10).map(m => {
+    const who = m.username || m.user || 'someone';
+    const chan = m.channel.name ? '#' + m.channel.name : String(m.channel.id);
+    const text = (m.text || '').trim();
+    return {
+      id: 'slack-' + m.channel.id + '-' + m.ts,
+      from: who,
+      channel: chan,
+      message: text,
+      url: m.permalink || null,
+      ts: m.ts,
+    };
+  });
 })()`;
 
-const AGENT_PROMPT = `Draft a short Slack reply acknowledging this message. Tone: terse, peer-to-peer, no formal greeting. Aim for 1-2 sentences max.
+const AGENT_PROMPT = `You're given an array of unread Slack messages. For each one, draft a brief acknowledgement reply.
 
-Incoming message context:
+For each input row, produce one output row with the same id and these fields:
+  - id: same as input
+  - from: same as input
+  - channel: same as input
+  - message: same as input (so the user sees what's being responded to)
+  - draft: 1-2 sentences, peer-to-peer tone. No greeting, no signoff. Output the literal string "(skip)" if the message is hostile, automated, or needs context you don't have.
+
+Input messages:
+\`\`\`json
 {prev}
+\`\`\`
 
-Past feedback the user has given you for this scenario (match this tone):
+Past feedback the user has given you on this scenario:
 {feedback}
 
-Output ONLY the reply text. No quotes, no markdown, no "Reply:" prefix.`;
+Output ONLY a JSON array. No prose around it, no markdown code fences. Example:
+[{"id":"slack-CXXX-1.2","from":"luca","channel":"#migrations","message":"redis PR look ok?","draft":"on it, EOD"}]`;
+
+const ROWS_FN = `(Array.isArray($) ? $ : []).filter(r => r && r.id && r.draft && r.draft !== '(skip)').map(r => ({
+  id: r.id,
+  preview: [
+    { label: 'From', value: String(r.from || '?') },
+    { label: 'In',   value: String(r.channel || '?') },
+    { label: 'Said', value: String(r.message || '').slice(0, 200) },
+  ],
+  draft: String(r.draft),
+}))`;
 
 export const AUTOPILOT_SLACK_DM_ACK_WORKFLOW: WorkflowDef = {
   id: 'autopilot-slack-dm-ack',
   name: 'Autopilot · Ack Slack DMs',
   description:
-    'When a Slack DM or mention lands in your inbox and you\'re in autopilot mode, draft a short acknowledgement reply. Always asks before posting — never auto-sends to a teammate.',
+    'Every 5 min in autopilot mode, poll Slack for unread, recent DMs + @-mentions and draft short acknowledgement replies. Reviewed as a table; never auto-sent.',
   enabled: false,
-  trigger: {
-    kind: 'autopilot',
-    when: 'inbox-changed',
-    sources: ['slack'],
-    minIntervalMs: 60_000,
-  },
+  trigger: { kind: 'autopilot', when: 'cron', every: '5m' },
   pipeline: [
     {
+      type: 'mcp-call',
+      params: {
+        mcp: 'slack',
+        tool: 'search_messages',
+        args: {
+          query: '(to:me OR is:mention) is:unread -from:me',
+          count: 30,
+        },
+        parse: 'json',
+      },
+    },
+    {
+      // mcp-call returns an array (one element per text content
+      // block) when parse:'json'. Unwrap to the first block then
+      // run the recency + bot filter.
       type: 'transform',
-      params: { fn: VALIDATE_FN },
+      params: {
+        fn: `(Array.isArray($) ? $[0] : $)`,
+      },
+    },
+    {
+      type: 'transform',
+      params: { fn: FILTER_FN },
     },
     {
       type: 'run-skill',
-      params: { skillId: 'slack-dm-ack', prompt: AGENT_PROMPT },
+      params: {
+        skillId: 'slack-dm-ack',
+        prompt: AGENT_PROMPT,
+        // The skill returns a JSON string — the next node parses it.
+      },
     },
     {
-      type: 'prompt-output',
+      type: 'transform',
       params: {
-        title: 'Save this Slack reply draft?',
+        fn: `(() => { try { return JSON.parse(typeof $ === 'string' ? $ : '[]'); } catch { return []; } })()`,
+      },
+    },
+    {
+      type: 'batch-prompt-output',
+      params: {
+        title: 'Ack unread Slack messages',
         summary:
-          'Autopilot drafted an acknowledgement. Accept saves it as positive feedback (no message is sent — the workflow ends at the draft).',
-        // {seed.item.title} = the channel/sender line ("#migrations · @luca").
-        // {seed.item.subtitle} = age + meta. Together they give the user
-        // enough to decide whether the draft fits.
-        context: '{seed.item.title}\n\n{seed.item.subtitle}',
-        onAccept: 'feedback',
+          'Autopilot drafted acknowledgements for your unread messages. Accept = positive feedback (no message is sent). Reject + note teaches the agent for next time.',
+        rowsFn: ROWS_FN,
+        onEmpty: 'skip',
       },
     },
   ],

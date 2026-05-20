@@ -1,56 +1,86 @@
 import type { WorkflowDef } from '@shared/types';
 
 /**
- * Autopilot scenario — address unresolved comments on PRs you
- * authored, drafting the fix + reply for review.
+ * Autopilot scenario — for each unaddressed review comment on the
+ * user's open PRs, draft a per-comment plan, judgment, and reply.
  *
- *   trigger:  autopilot · cron 15m  (gated by appMode === 'autopilot')
- *   pipeline: shell(gh search) → transform → run-skill → prompt-output
+ *   trigger:  autopilot · cron 15m
+ *   pipeline: shell(gh search prs --author @me)
+ *             → transform (parse + pick most-recently-updated PR)
+ *             → run-skill (pr-address-comments returns JSON array,
+ *                          one row per comment)
+ *             → batch-prompt-output (table HUD, per-comment Accept)
  *
- * The prompt-output node BLOCKS for user approval before any code
- * change leaves the local working tree. On accept, the pipeline ends
- * (the next git push step is left out by default — opt-in by editing
- * the JSON and appending `{ type: 'shell', command: 'git', args:
- * ['push'] }`). On reject + feedback, the agent's drafting style
- * shifts on the next run via the {feedback} substitution.
+ * The user sees a row per individual review comment:
+ *   - file:line + reviewer cells
+ *   - the agent's plan (1-2 sentences) as the draft body
+ *   - verdict chip: should-do vs ignore — agent's judgment on whether
+ *     the comment is worth acting on
+ *   - expandable context with the original comment text + the
+ *     proposed reply
  *
- * Default `enabled: false`. Flip from Settings → Workflows once
- * you've verified the gh CLI is authed and your PRs surface.
+ * Accept saves positive feedback. Code changes / replies are NOT
+ * auto-applied. The user manually pushes a fix + replies on GitHub.
+ *
+ * Default `enabled: false`.
  */
 
 const FILTER_FN = `(() => {
   const items = Array.isArray($) ? $ : [];
-  // PRs I authored. gh search doesn't expose reviewDecision or
-  // "unresolved comments" — the --state open arg on the shell step
-  // already filters to open PRs, so we just pick the most-recently-
-  // updated one and let the agent decide which comments need
-  // addressing.
   if (items.length === 0) return null;
+  // Pick the most-recently-updated open PR. The agent fetches the
+  // comments via gh api itself.
   const sorted = items.slice().sort((a, b) =>
     Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
   );
   return sorted[0];
 })()`;
 
-const AGENT_PROMPT = `Address the unresolved review comments on this PR. Read the diff + comments; decide what to change. Output a single markdown block with:
+const AGENT_PROMPT = `You're given ONE pull request the user authored. Look at the unaddressed review comments and produce one row per comment with a plan, judgment, and reply draft.
 
-  1. **Fix plan** — a short bullet list of the edits you'd make
-  2. **Reply** — the comment text you'd post to the reviewer
-  3. **Diff** — a unified diff of the file changes (apply-ready)
+**Do NOT push code, post comments, or use any gh write command.** Use gh api to read inline comments (gh api repos/<owner>/<repo>/pulls/<num>/comments). Use gh pr diff to see the changes if you need context. Output only.
 
-PR data:
+For each unaddressed comment, produce one object with:
+  - id: stable id (use the comment id from gh api, e.g. "comment-12345")
+  - pr: short PR ref (owner/repo#num)
+  - file: path
+  - line: number (the comment's anchor line)
+  - by: reviewer handle
+  - comment: the comment text (verbatim, truncated to ~200 chars)
+  - verdict: "should-do" | "ignore"
+  - plan: 1-2 sentences describing the change you'd make if "should-do" (or empty if ignore)
+  - reply: the reply text you'd post on GitHub (1-2 sentences)
+
+Input PR:
+\`\`\`json
 {prev}
+\`\`\`
 
 Past feedback the user has given you on this scenario:
 {feedback}
 
-Output ONLY the markdown. The user will review and decide whether to apply + push.`;
+Be selective. Style nits the user has previously waved off → "ignore" with an empty plan. Real bugs / behavior changes → "should-do".
+
+Output ONLY a JSON array of comment rows. No prose, no markdown code fences.`;
+
+const ROWS_FN = `(Array.isArray($) ? $ : []).filter(r => r && r.id).map(r => ({
+  id: String(r.id),
+  preview: [
+    { label: 'PR',      value: String(r.pr || '?') },
+    { label: 'File',    value: String(r.file || '?') + ':' + String(r.line || '?') },
+    { label: 'By',      value: String(r.by || '?') },
+    { label: 'Comment', value: String(r.comment || '').slice(0, 160) },
+  ],
+  draft: String(r.plan || '(ignore — no code change planned)'),
+  verdict: r.verdict === 'should-do' ? 'should-do' : 'ignore',
+  context: 'Original comment:\\n' + String(r.comment || '') + '\\n\\nDraft reply:\\n' + String(r.reply || ''),
+}))`;
 
 export const AUTOPILOT_PR_COMMENTS_WORKFLOW: WorkflowDef = {
   id: 'autopilot-pr-comments-on-mine',
   name: 'Autopilot · Address comments on my PRs',
   description:
-    'Every 15 min in autopilot mode, find one of your open PRs with unresolved comments and draft a fix + reply. Blocks for approval before anything leaves your machine.',
+    'Every 15 min in autopilot mode, find your most recently-updated open PR and produce one row per unaddressed review comment: plan, verdict, reply. Reviewed as a table; nothing is posted or pushed.',
   enabled: false,
   trigger: { kind: 'autopilot', when: 'cron', every: '15m' },
   pipeline: [
@@ -66,8 +96,6 @@ export const AUTOPILOT_PR_COMMENTS_WORKFLOW: WorkflowDef = {
           '--state',
           'open',
           '--json',
-          // reviewDecision is NOT exposed by `gh search prs` (only
-          // `gh pr list` has it). Stick to the search-supported set.
           'number,title,url,repository,updatedAt',
           '--limit',
           '20',
@@ -90,10 +118,19 @@ export const AUTOPILOT_PR_COMMENTS_WORKFLOW: WorkflowDef = {
       params: { skillId: 'pr-address-comments', prompt: AGENT_PROMPT },
     },
     {
-      type: 'prompt-output',
+      type: 'transform',
       params: {
-        title: 'Apply this PR fix?',
-        summary: 'Autopilot drafted a code change + reply for one of your open PRs.',
+        fn: `(() => { try { return JSON.parse(typeof $ === 'string' ? $ : '[]'); } catch { return []; } })()`,
+      },
+    },
+    {
+      type: 'batch-prompt-output',
+      params: {
+        title: 'Address PR comments',
+        summary:
+          'Autopilot grouped your PR\'s review comments. Accept = positive feedback (no code is pushed; no reply posted). Reject + note teaches the agent.',
+        rowsFn: ROWS_FN,
+        onEmpty: 'skip',
       },
     },
   ],
