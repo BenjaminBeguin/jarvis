@@ -2,6 +2,8 @@ import { BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { IpcChannels } from '@shared/ipc';
+
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const preloadPath = join(__dirname, '../preload/index.cjs');
 const rendererDevUrl = process.env['ELECTRON_RENDERER_URL'];
@@ -30,6 +32,28 @@ const chatPopupWindows = new Map<string, BrowserWindow>();
 export function getObservatoryWindow(): BrowserWindow | null {
   if (!observatoryWindow || observatoryWindow.isDestroyed()) return null;
   return observatoryWindow;
+}
+
+/**
+ * Surface a conversation. Single entry point for "show this task
+ * to the user" — used by the tray pinned-click, the legacy
+ * answer-hud bridge, and anywhere else main wants to push a task
+ * into the UI.
+ *
+ *   - Main window is focused → tell the sidebar to open the tab.
+ *     No focus theft, the user is already there.
+ *   - Otherwise → spawn a small alwaysOnTop chat-popup so the
+ *     user can read / reply without us yanking their cursor out
+ *     of whatever app they're in.
+ */
+export function surfaceConversation(taskId: string): void {
+  if (!taskId) return;
+  const main = getObservatoryWindow();
+  if (main && main.isVisible() && main.isFocused()) {
+    sendWhenReady(main, IpcChannels.conversationFocus, { taskId });
+    return;
+  }
+  openChatPopup(taskId);
 }
 
 export function openObservatory(): BrowserWindow {

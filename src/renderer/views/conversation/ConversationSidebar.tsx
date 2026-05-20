@@ -123,12 +123,45 @@ export function ConversationSidebar() {
     void window.jarvis.setPinnedConversations(pinned);
   }, [state.open, state.reduced]);
 
-  // Tray menu clicked a pinned entry → bump it into the sidebar
-  // (if it was reduced) and foreground the tab.
+  // Main sent a "surface this conversation" event — either the
+  // tray menu was clicked or a fresh task was launched while the
+  // main window was focused. If the entry is already in the
+  // store, bump + focus; otherwise fetch the task summary and
+  // open it from scratch so the sidebar tab materializes.
   useEffect(() => {
-    return window.jarvis.onConversationFocus(({ taskId }) => {
-      conversationStore.bump(taskId);
-      conversationStore.focus(taskId);
+    return window.jarvis.onConversationFocus(async ({ taskId }) => {
+      const state = conversationStore.getSnapshot();
+      const known =
+        state.open.some((e) => e.taskId === taskId) ||
+        state.reduced.some((e) => e.taskId === taskId);
+      if (known) {
+        conversationStore.bump(taskId);
+        conversationStore.focus(taskId);
+        return;
+      }
+      try {
+        const tasks = await window.jarvis.listTasks();
+        const task = tasks.find((t) => t.id === taskId);
+        const title =
+          task?.title ||
+          task?.inputPreview?.slice(0, 60) ||
+          task?.skillId ||
+          taskId;
+        conversationStore.open({
+          taskId,
+          title,
+          origin: 'user-click',
+        });
+      } catch {
+        // Even on lookup failure, register the conversation so the
+        // sidebar at least pops with a generic label — better than
+        // a silent no-op.
+        conversationStore.open({
+          taskId,
+          title: taskId,
+          origin: 'user-click',
+        });
+      }
     });
   }, []);
 

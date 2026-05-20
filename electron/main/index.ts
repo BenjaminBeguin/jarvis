@@ -132,11 +132,10 @@ import {
 } from './tray.js';
 import {
   broadcast,
-  getAnswerHudWindow,
   openObservatory,
   openPalette,
   sendWhenReady,
-  showAnswerHud,
+  surfaceConversation,
 } from './windows.js';
 
 // The Agent SDK attaches a `process.on('exit', …)` cleanup hook per
@@ -415,18 +414,23 @@ async function broadcastStatus(): Promise<AppStatus> {
  * so manual-open users stay in sync. Toast (default): pop the HUD as
  * before.
  */
+/**
+ * "Surface this task in the UI." Used by:
+ *   - the launch HUD bridge (palette + Inbox + module dispatches),
+ *   - the meeting recorder when auto-debrief opens,
+ *   - anywhere main wants to push a task into view.
+ *
+ * Routing is unified through surfaceConversation: focused main
+ * window → sidebar tab; otherwise → floating chat-popup so we
+ * don't steal focus from whatever the user is currently using.
+ *
+ * The 'silent' notification preference suppresses the surface
+ * entirely — task still runs, but the UI doesn't pop.
+ */
 function pushTaskToHud(taskId: string): void {
   const launchLevel = loadNotificationPrefs().onLaunch;
-  let hud: ReturnType<typeof getAnswerHudWindow>;
-  if (launchLevel === 'silent') {
-    hud = getAnswerHudWindow();
-    if (!hud) return;
-  } else {
-    showAnswerHud();
-    hud = getAnswerHudWindow();
-    if (!hud) return;
-  }
-  sendWhenReady(hud, IpcChannels.answerHudTrack, taskId);
+  if (launchLevel === 'silent') return;
+  surfaceConversation(taskId);
 }
 
 // ─── runner event → broadcast + completion notifications ─────────────────────

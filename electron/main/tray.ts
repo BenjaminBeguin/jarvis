@@ -14,12 +14,10 @@ import {
 } from './auth.js';
 import {
   broadcast,
-  getObservatoryWindow,
-  openChatPopup,
   openObservatory,
   openPalette,
   sendWhenReady,
-  showAnswerHud,
+  surfaceConversation,
 } from './windows.js';
 
 /** Lightweight shape pushed from the renderer for each pinned tab.
@@ -94,21 +92,10 @@ function statusGlyph(status: TaskStatus): string {
   }
 }
 
-/**
- * Route a tray-menu conversation click. If the main app window is
- * currently focused (the user is already looking at Jarvis), open
- * the conversation in the existing sidebar — no focus stealing,
- * no extra window. Otherwise pop a small standalone chat window
- * so the user can read / reply without us yanking their cursor
- * out of whatever app they're working in.
- */
+/** Route a tray-menu conversation click — see surfaceConversation
+ *  in windows.ts for the focused-vs-popup branching. */
 function focusConversation(taskId: string): void {
-  const main = getObservatoryWindow();
-  if (main && main.isVisible() && main.isFocused()) {
-    sendWhenReady(main, IpcChannels.conversationFocus, { taskId });
-    return;
-  }
-  openChatPopup(taskId);
+  surfaceConversation(taskId);
 }
 
 function rebuildMenu(): void {
@@ -155,7 +142,6 @@ function rebuildMenu(): void {
     { label: 'Open Routines', click: () => openWithTab('routines') },
     { type: 'separator' },
     { label: 'Open Palette  ⌘⇧J', click: () => openPalette() },
-    { label: 'Show Answer HUD', click: () => showAnswerHud() },
     { type: 'separator' },
     {
       label: 'AFK mode (mirror to phone)',
