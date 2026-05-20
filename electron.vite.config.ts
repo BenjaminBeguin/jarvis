@@ -12,7 +12,19 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        input: resolve(__dirname, 'electron/main/index.ts'),
+        // Two entries: the main process bundle + a standalone
+        // transcribe-worker we fork() for Whisper inference. The
+        // worker has to run out-of-process because ONNX Runtime
+        // segfaults on some setups (Apple Silicon + q8 model)
+        // would otherwise take the whole app down — a process
+        // boundary is the only thing native crashes respect.
+        input: {
+          index: resolve(__dirname, 'electron/main/index.ts'),
+          'transcribe-worker': resolve(
+            __dirname,
+            'electron/main/transcribe-worker.ts',
+          ),
+        },
         output: {
           format: 'es',
           entryFileNames: '[name].js',
