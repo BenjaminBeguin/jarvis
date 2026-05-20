@@ -191,6 +191,12 @@ export const IpcChannels = {
    *  reaching for the mic button. */
   paletteToggleVoice: 'palette:toggleVoice',
 
+  /** Bring the main window forward and switch to a specific tab.
+   *  Used by the tray menu so its nav rows actually land on the
+   *  named tab (Observatory / Inbox / Routines / …) instead of
+   *  the hardcoded ai-agent override that openObservatory uses. */
+  openTab: 'shell:openTab',
+
   meetingStart: 'meeting:start',
   meetingStopRequest: 'meeting:stop-request',
   meetingFinish: 'meeting:finish',

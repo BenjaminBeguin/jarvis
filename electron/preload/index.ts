@@ -248,6 +248,10 @@ const api = {
     ipcRenderer.invoke(IpcChannels.trayMenuResize, height),
   quitApp: (): Promise<void> => ipcRenderer.invoke(IpcChannels.trayMenuQuit),
 
+  /** Bring the main window forward and switch to the given tab. */
+  openTab: (tab: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.openTab, tab),
+
   /** Subscribe to the global voice-shortcut toggle. Fires once per
    *  shortcut press; consumer decides whether to start or stop
    *  based on its own listening state. */

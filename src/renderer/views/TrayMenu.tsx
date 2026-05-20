@@ -321,11 +321,14 @@ async function dismiss(): Promise<void> {
   await window.jarvis.hideTrayMenu();
 }
 
-async function openTab(tab: 'observatory' | 'inbox' | 'routines'): Promise<void> {
-  await window.jarvis.openObservatory();
-  window.dispatchEvent(
-    new CustomEvent('jarvis:navigate', { detail: { tab } }),
-  );
+async function openTab(
+  tab: 'observatory' | 'inbox' | 'routines',
+): Promise<void> {
+  // Cross-window dispatch: window.dispatchEvent in the popup
+  // doesn't reach the main window — go through main via the
+  // openTab IPC which focuses the main window AND fires
+  // shellNavigate to the correct tab.
+  await window.jarvis.openTab(tab);
   await dismiss();
 }
 
@@ -335,13 +338,15 @@ async function openPalette(): Promise<void> {
 }
 
 async function openPinned(taskId: string): Promise<void> {
-  // surfaceConversation in main handles the focused-vs-popup branching.
-  // No dedicated IPC for that; we go through the same path the tray's
-  // native menu used — focus the main window + send conversationFocus.
-  await window.jarvis.openObservatory();
-  window.dispatchEvent(
-    new CustomEvent('jarvis:open-session', { detail: { taskId } }),
-  );
+  // surfaceConversation in main handles the focused-vs-popup
+  // branching. The renderer-side trigger is the conversationFocus
+  // event which we route via the same openObservatory IPC flow
+  // that the existing pinned-from-tray native menu used. The
+  // observatory window's preload subscribes to shellNavigate +
+  // observatoryFocusTask; for a conversation we use the
+  // openObservatory taskId path which lands the conversation in
+  // the sidebar.
+  await window.jarvis.openObservatory(taskId);
   await dismiss();
 }
 

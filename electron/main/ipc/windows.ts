@@ -88,6 +88,13 @@ export function registerWindowIpc(_deps: IpcDeps): void {
     app.quit();
   });
 
+  ipcMain.handle(IpcChannels.openTab, (_e, tab: string) => {
+    if (typeof tab !== 'string' || !tab) return;
+    const win = openObservatory();
+    win.focus();
+    sendWhenReady(win, IpcChannels.shellNavigate, { tab });
+  });
+
   ipcMain.handle(IpcChannels.openExternal, async (_e, url: string) => {
     // Only allow http/https. mailto + other schemes are easy XSS vectors when
     // the URL comes from rendered assistant content.
