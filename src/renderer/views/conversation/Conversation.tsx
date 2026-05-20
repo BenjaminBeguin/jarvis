@@ -172,7 +172,7 @@ export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
     <section className="detail">
       <header className="detail__header">
         <div className="detail__title">
-          <h2>{task.title}</h2>
+          <h2 title={task.title}>{task.title}</h2>
           <div
             className="meta"
             title={new Date(task.startedAt).toLocaleString()}

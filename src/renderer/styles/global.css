@@ -14683,7 +14683,10 @@ button:disabled:hover {
 
 /* Standalone floating chat window opened from the tray when the
    main app isn't focused. Fills its own BrowserWindow; the
-   <Conversation> inside provides all the chrome. */
+   <Conversation> inside provides the chrome — but the popup
+   tightens the header so a long task title doesn't wrap into a
+   wall of caps, and the top strip is draggable so the user can
+   move the window. */
 .chat-popup {
   position: fixed;
   inset: 0;
@@ -14696,6 +14699,59 @@ button:disabled:hover {
 .chat-popup > .detail {
   flex: 1 1 auto;
   min-height: 0;
+}
+
+/* Draggable header strip — pads enough on the left to clear the
+   macOS traffic-light buttons (hiddenInset places them at the
+   top-left). Interactive children opt back out via .no-drag. */
+.chat-popup .detail__header {
+  -webkit-app-region: drag;
+  padding: 10px 14px 10px 80px;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.chat-popup .detail__title {
+  min-width: 0;
+  flex: 1;
+}
+
+/* Quieter title in the popup: single line, sentence-case, smaller
+   so the whole row fits in 460px without wrapping. Full title is
+   revealed on hover via the title attribute. */
+.chat-popup .detail__title h2 {
+  text-transform: none;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.chat-popup .detail__title .meta {
+  text-transform: none;
+  font-size: 10.5px;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-popup .detail__cwd,
+.chat-popup .detail__session-row {
+  text-transform: none;
+}
+
+/* Anything clickable inside the dragged header has to opt out, or
+   macOS swallows the click as a window drag. */
+.chat-popup .detail__header button,
+.chat-popup .detail__header input,
+.chat-popup .detail__header label,
+.chat-popup .detail__session-row,
+.chat-popup .detail__session-row * {
+  -webkit-app-region: no-drag;
 }
 
 .chat-popup--empty {
