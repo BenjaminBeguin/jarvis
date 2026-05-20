@@ -21,10 +21,35 @@ const KIND_PREFIX_TO_MODULE: Array<[string, string | null]> = [
   ['dedupe.', 'quick-note'],
   ['meeting.', 'meeting-recorder'],
   ['reminder.', 'reminders'],
+  ['pr.', 'pr-workflows'],
+  ['skill-suggester.', 'skill-suggester'],
+  ['skill-suggestion.', 'skill-suggester'],
+  ['send.', 'send'],
+  ['shell.', 'shell'],
+  ['status.', 'status'],
+  // Autopilot scenarios are workflows under the hood — their
+  // approval / drafted / rejected events surface in the workflows
+  // module's history alongside the explicit workflow.* rows.
+  ['workflow.', 'workflows'],
+  ['autopilot.', 'workflows'],
+  ['telegram.', 'telegram-bot'],
   // Cross-cutting — not owned by a single module:
   ['mcp.', null],
   ['inbox.', null],
   ['project.', null],
+  ['integration.', null],
+  ['auth.', null],
+  ['mode.', null],
+  ['paused.', null],
+  ['afk.', null],
+  ['routine.', null],
+  ['preferences.', null],
+  ['notification-prefs.', null],
+  ['inbox-prefs.', null],
+  ['housekeeping.', null],
+  ['briefing.', null],
+  ['jarvis-file.', null],
+  ['task.', null],
 ];
 
 /**
