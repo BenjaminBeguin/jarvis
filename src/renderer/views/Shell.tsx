@@ -4,6 +4,8 @@ import type { AppMode, AppStatus, ModuleSummary, ProjectDef } from '../../shared
 import { getModulePage } from '../modules/registry';
 import { ApprovalHud } from './autopilot/ApprovalHud';
 import { BatchApprovalHud } from './autopilot/BatchApprovalHud';
+import { ConversationChips } from './conversation/ConversationChips';
+import { ConversationSidebar } from './conversation/ConversationSidebar';
 import { Inbox } from './Inbox';
 import { Logo } from './Logo';
 import { MeetingOverlay } from './MeetingOverlay';
@@ -758,6 +760,8 @@ export function Shell({ status }: Props) {
       <MeetingPrompt />
       <ApprovalHud />
       <BatchApprovalHud />
+      <ConversationSidebar />
+      <ConversationChips />
       <SessionSidebar />
       <NewProjectDialog
         open={newProjectOpen}

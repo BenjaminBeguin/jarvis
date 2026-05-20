@@ -31,6 +31,7 @@ let awaitingReplies = 0;
  *  without forcing the renderer to do it. Hidden when 0 — no point
  *  showing "$0.00 today" 23 hours of the day. */
 let todaySpendUsd = 0;
+let reducedConversations = 0;
 
 function buildIcon(active: boolean): Electron.NativeImage {
   // Use template image so macOS handles dark/light. Falls back to a generated
@@ -151,6 +152,9 @@ function rebuildToolTip(): void {
   if (runningTasks > 0) bits.push(`${runningTasks} running`);
   if (awaitingReplies > 0) bits.push(`${awaitingReplies} awaiting`);
   if (pendingReminders > 0) bits.push(`${pendingReminders} scheduled`);
+  if (reducedConversations > 0) {
+    bits.push(`💬 ${reducedConversations} reduced`);
+  }
   if (todaySpendUsd > 0) {
     bits.push(
       `$${todaySpendUsd >= 0.01 ? todaySpendUsd.toFixed(2) : todaySpendUsd.toFixed(4)} today`,
@@ -195,6 +199,16 @@ export function setAwaitingRepliesCount(n: number): void {
   tray.setImage(buildIcon(runningTasks > 0 || awaitingReplies > 0));
   rebuildToolTip();
   rebuildMenu();
+}
+
+/**
+ * Number of reduced-to-chip conversations. Pushed from the renderer
+ * via IPC so the tray tooltip surfaces "💬 N reduced" when the user
+ * has things waiting in the chip strip but Jarvis isn't focused.
+ */
+export function setReducedConversationsCount(n: number): void {
+  reducedConversations = Math.max(0, n);
+  rebuildToolTip();
 }
 
 export function getRunningTasksCount(): number {

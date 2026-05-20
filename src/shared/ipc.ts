@@ -26,6 +26,10 @@ export const IpcChannels = {
   setAppMode: 'app:setAppMode',
   appModeChanged: 'app:appModeChanged',
 
+  // Conversation surface — renderer pushes the reduced-chip count
+  // so the tray tooltip + (later) macOS dock badge can surface it.
+  conversationsSetReducedCount: 'convo:setReducedCount',
+
   // Autopilot approval flow (prompt-output workflow node). The main
   // process opens the approval HUD with a payload; the renderer
   // settles it via approve/reject. Batch flow (batch-prompt-output)

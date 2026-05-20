@@ -1,6 +1,7 @@
 import { registerActivityIpc } from './activity.js';
 import { registerAuthIpc } from './auth.js';
 import { registerAutopilotIpc } from './autopilot.js';
+import { registerConversationIpc } from './conversation.js';
 import { registerBriefingsIpc } from './briefings.js';
 import { registerDashboardIpc } from './dashboard.js';
 import { registerInboxIpc } from './inbox.js';
@@ -31,6 +32,7 @@ export function registerAllIpc(deps: IpcDeps): void {
   registerActivityIpc(deps);
   registerAuthIpc(deps);
   registerAutopilotIpc({ activity: deps.activity });
+  registerConversationIpc();
   registerBriefingsIpc(deps);
   registerDashboardIpc(deps);
   registerInboxIpc(deps);

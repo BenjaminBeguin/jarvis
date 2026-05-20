@@ -14365,6 +14365,307 @@ button:disabled:hover {
   font-size: 12px;
 }
 
+/* ── Unified conversation sidebar (slide-in, tabs, body) ──────────── */
+
+.convo-sidebar-host {
+  position: fixed;
+  inset: 0;
+  z-index: 230;
+  pointer-events: none;
+}
+
+.convo-sidebar-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 8, 16, 0.4);
+  backdrop-filter: blur(2px);
+  pointer-events: auto;
+  animation: convo-fade 140ms ease-out;
+}
+
+.convo-sidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(560px, 92vw);
+  background: var(--bg-elev);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  overflow: hidden;
+  animation: convo-slide 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes convo-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes convo-slide {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+
+.convo-sidebar__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.02);
+  min-height: 40px;
+}
+
+.convo-sidebar__tabs {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.convo-sidebar__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: var(--text-faint);
+  font-family: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 220px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.convo-sidebar__tab:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+}
+
+.convo-sidebar__tab--active {
+  background: rgba(0, 212, 255, 0.08);
+  border-color: rgba(0, 212, 255, 0.35);
+  color: var(--text);
+}
+
+.convo-sidebar__tab--pinned {
+  border-color: rgba(255, 200, 0, 0.4);
+}
+
+.convo-sidebar__tab-status {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-faint);
+}
+
+.convo-sidebar__tab-status--running {
+  background: #5fffa6;
+  box-shadow: 0 0 6px rgba(95, 255, 166, 0.5);
+}
+
+.convo-sidebar__tab-status--errored,
+.convo-sidebar__tab-status--aborted {
+  background: #ff8585;
+}
+
+.convo-sidebar__tab-status--completed {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.convo-sidebar__tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.convo-sidebar__tab-reduce {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.convo-sidebar__tab-reduce:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.convo-sidebar__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.convo-sidebar__pin,
+.convo-sidebar__close {
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: var(--text-faint);
+  font-size: 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.convo-sidebar__pin:hover,
+.convo-sidebar__close:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.convo-sidebar__pin--on {
+  background: rgba(255, 200, 0, 0.12);
+  border-color: rgba(255, 200, 0, 0.4);
+}
+
+.convo-sidebar__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.convo-sidebar__body .convo {
+  flex: 1;
+  min-height: 0;
+}
+
+.convo-sidebar__empty {
+  padding: 32px 18px;
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ── Reduced conversation chips (bottom-right strip) ───────────────── */
+
+.convo-chips {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+  gap: 6px;
+  z-index: 200;
+  pointer-events: none;
+  max-width: 60vw;
+  justify-content: flex-end;
+}
+
+.convo-chip {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 12px;
+  background: rgba(20, 28, 38, 0.96);
+  border: 1px solid rgba(122, 220, 255, 0.3);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 11.5px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  max-width: 240px;
+  animation: convo-chip-pop 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes convo-chip-pop {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+
+.convo-chip:hover {
+  background: rgba(28, 38, 50, 0.98);
+  border-color: rgba(122, 220, 255, 0.55);
+}
+
+.convo-chip--errored,
+.convo-chip--aborted {
+  border-color: rgba(255, 100, 100, 0.45);
+}
+
+.convo-chip--completed {
+  border-color: rgba(95, 255, 166, 0.3);
+}
+
+.convo-chip__status {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-faint);
+}
+
+.convo-chip__status--running {
+  background: #5fffa6;
+  box-shadow: 0 0 6px rgba(95, 255, 166, 0.5);
+  animation: convo-chip-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes convo-chip-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
+.convo-chip__status--errored,
+.convo-chip__status--aborted {
+  background: #ff8585;
+}
+
+.convo-chip__status--completed {
+  background: rgba(95, 255, 166, 0.7);
+}
+
+.convo-chip__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+.convo-chip__dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.convo-chip__dismiss:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
 /* ── Spend dashboard ───────────────────────────────────────────────── */
 .spend-panel {
   gap: 18px;

@@ -143,6 +143,10 @@ const api = {
   ): Promise<unknown> =>
     ipcRenderer.invoke(IpcChannels.autopilotFeedback, { action, workflowId }),
 
+  // Conversation sidebar — push reduced-chip count to the tray.
+  setReducedConversationsCount: (count: number): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IpcChannels.conversationsSetReducedCount, { count }),
+
   setTelegramBotToken: (value: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.setTelegramBotToken, value),
   clearTelegramBotToken: (): Promise<void> =>
