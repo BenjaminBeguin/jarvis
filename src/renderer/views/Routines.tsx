@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
   DashboardConfig,
@@ -8,6 +8,7 @@ import type {
   TaskSummary,
 } from '../../shared/types';
 import { MarkdownDoc } from './MarkdownText';
+import { RoutinesList } from './routines/RoutinesList';
 import { TaskAnswerPreview } from './TaskAnswerPreview';
 import { toast } from './Toaster';
 
@@ -116,6 +117,7 @@ export function Routines() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [presetsOpen, setPresetsOpen] = useState(false);
+  const [search, setSearch] = useState('');
   /** Task ids currently in 'running'/'queued' state — used to flash a
    * "running" dot on each affected routine. Maintained by subscribing
    * to onTaskStatus on the live task feed. */
@@ -196,15 +198,45 @@ export function Routines() {
     };
   }, []);
 
-  // Auto-pick a routine when the list loads if nothing's selected.
+  // If the selected routine vanishes (deleted) drop the selection so we
+  // fall back to the index. Never auto-select on initial load — the user
+  // lands on the list and picks intentionally.
   useEffect(() => {
-    if (!activeId && routines.length > 0) {
-      setActiveId(routines[0]!.id);
-    }
     if (activeId && !routines.some((r) => r.id === activeId)) {
-      setActiveId(routines[0]?.id ?? null);
+      setActiveId(null);
     }
   }, [routines, activeId]);
+
+  /** Recent TaskSummary[] per routine id, newest-first. Drives the
+   *  per-row health sparkline on the index page. */
+  const [recentByRoutine, setRecentByRoutine] = useState<
+    Map<string, TaskSummary[]>
+  >(() => new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      const all = await window.jarvis.listTasks();
+      if (cancelled) return;
+      const byId = new Map<string, TaskSummary>();
+      for (const t of all) byId.set(t.id, t);
+      const next = new Map<string, TaskSummary[]>();
+      for (const r of routines) {
+        const ids = r.recentTaskIds ?? [];
+        const summaries = ids
+          .map((id) => byId.get(id))
+          .filter((t): t is TaskSummary => !!t);
+        next.set(r.id, summaries);
+      }
+      setRecentByRoutine(next);
+    };
+    void refresh();
+    const off = window.jarvis.onTaskStatus(() => void refresh());
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [routines]);
 
   const skillsById = useMemo(
     () => new Map(skills.map((s) => [s.id, s])),
@@ -309,144 +341,131 @@ export function Routines() {
     }
   };
 
+  const toggleEnabled = async (r: RoutineDef, next: boolean): Promise<void> => {
+    try {
+      await window.jarvis.saveRoutine({ ...r, enabled: next });
+      toast({ message: `${skillsById.get(r.skillId)?.name ?? r.id} · ${next ? 'enabled' : 'disabled'}` });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: `Could not ${next ? 'enable' : 'disable'} · ${e instanceof Error ? e.message : String(e)}`,
+      });
+    }
+  };
+
+  const activeSkillName = active
+    ? (skillsById.get(active.skillId)?.name ?? active.skillId)
+    : '';
+
   return (
-    <section className="briefings">
-      <aside className="briefings__rail">
-        <h2 className="briefings__rail-head">ROUTINES</h2>
-        <p className="briefings__rail-hint">
-          Skills on a schedule · cron in local time. Click a routine to
-          see details + actions on the right.
-        </p>
+    <section className="rt-page">
+      <header className="wf-toolbar">
+        {active ? (
+          <>
+            <button
+              type="button"
+              className="wf-btn wf-btn--ghost"
+              onClick={() => setActiveId(null)}
+              title="Back to all routines"
+            >
+              ← All routines
+            </button>
+            <div className="wf-toolbar__divider" aria-hidden />
+            <span className="wf-toolbar__title">{activeSkillName}</span>
+            <div className="wf-toolbar__spacer" />
+          </>
+        ) : (
+          <>
+            <span className="wf-toolbar__title">Routines</span>
+            <div className="wf-toolbar__spacer" />
+            {routines.length > 0 && (
+              <div className="rt-toolbar__search">
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Filter routines…"
+                  aria-label="Filter routines"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    className="rt-toolbar__search-clear"
+                    onClick={() => setSearch('')}
+                    title="Clear filter"
+                    aria-label="Clear filter"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            )}
+            <button
+              type="button"
+              className="wf-btn wf-btn--ghost"
+              onClick={() => setPresetsOpen((v) => !v)}
+              disabled={skills.length === 0}
+              title="Recommended cron presets"
+            >
+              {presetsOpen ? '▾ Presets' : '▸ Presets'}
+            </button>
+            <button
+              type="button"
+              className="wf-btn wf-btn--primary"
+              onClick={startBlank}
+              disabled={skills.length === 0}
+            >
+              + New routine
+            </button>
+          </>
+        )}
+      </header>
 
-        <div className="routines__rail-actions">
-          <button
-            className="briefings__generate"
-            onClick={startBlank}
-            disabled={skills.length === 0}
-          >
-            + New routine
-          </button>
-          <button
-            className="routines__preset-toggle"
-            onClick={() => setPresetsOpen((v) => !v)}
-            disabled={skills.length === 0}
-            title="Recommended presets"
-          >
-            {presetsOpen ? '▾ Presets' : '▸ Presets'}
-          </button>
-        </div>
-
-        {presetsOpen && (
-          <div className="routines__preset-list">
+      <div className="rt-body">
+        {!active && presetsOpen && (
+          <div className="rt-presets">
             {PRESETS.map((p) => (
               <button
                 key={p.id}
-                className="routines__preset-row"
+                className="rt-presets__row"
                 onClick={() => startFromPreset(p)}
               >
-                <div className="routines__preset-name">{p.name}</div>
-                <div className="routines__preset-desc">{p.description}</div>
-                <div className="routines__preset-cron">{humanCron(p.cron)}</div>
+                <div className="rt-presets__name">{p.name}</div>
+                <div className="rt-presets__desc">{p.description}</div>
+                <div className="rt-presets__cron">{humanCron(p.cron)}</div>
               </button>
             ))}
           </div>
         )}
 
-        {skills.length === 0 && (
-          <div className="briefings__empty" style={{ marginTop: 12 }}>
-            No skills loaded. Drop a SKILL.md in{' '}
-            <code>~/.jarvis/skills/</code> first.
-          </div>
-        )}
-
-        {routines.length === 0 && skills.length > 0 && (
-          <div className="briefings__empty" style={{ marginTop: 12 }}>
-            No routines yet. Open <strong>Presets</strong> above or click{' '}
-            <strong>+ New routine</strong>.
-          </div>
-        )}
-
-        {groupRoutinesByPurpose(routines).map(({ purpose, label, items }) => (
-          <Fragment key={purpose}>
-            <div className="routines__rail-section">
-              {label} · {items.length}
-            </div>
-            {items.map((r) => {
-              const skill = skillsById.get(r.skillId);
-              const isActive = r.id === activeId;
-              const running = isRoutineRunning(r);
-              return (
-                <button
-                  key={r.id}
-                  className={`briefings__kind${isActive ? ' briefings__kind--active' : ''}${r.enabled ? '' : ' routines__rail-card--off'}${running ? ' routines__rail-card--running' : ''}`}
-                  onClick={() => setActiveId(r.id)}
-                >
-                  <div className="briefings__kind-label">
-                    {running ? (
-                      <span
-                        className="briefings__kind-on-dot briefings__kind-on-dot--running"
-                        title="A task spawned by this routine is currently running"
-                      />
-                    ) : r.enabled ? (
-                      <span
-                        className="briefings__kind-on-dot"
-                        title="Enabled"
-                      />
-                    ) : null}
-                    {skill?.name ?? r.skillId}
-                  </div>
-                  <div className="briefings__kind-desc">
-                    {r.input || <em>no input</em>}
-                  </div>
-                  <div className="briefings__kind-schedule">
-                    {running ? 'running…' : humanCron(r.cron)}
-                    {!r.enabled && !running && ' · disabled'}
-                    {(() => {
-                      const c = routineCost.get(r.id);
-                      if (!c || c.totalUsd <= 0) return null;
-                      return (
-                        <span
-                          className="routines__rail-cost"
-                          title={`30-day spend · ${c.taskCount} runs`}
-                        >
-                          {' · $'}
-                          {c.totalUsd >= 0.01
-                            ? c.totalUsd.toFixed(2)
-                            : c.totalUsd.toFixed(4)}
-                          /30d
-                        </span>
-                      );
-                    })()}
-                  </div>
-                </button>
-              );
-            })}
-          </Fragment>
-        ))}
-      </aside>
-
-      <main className="briefings__main">
-        {!active && (
-          <div className="briefings__placeholder">
-            {routines.length === 0
-              ? 'No routines yet. Create one on the left.'
-              : 'Pick a routine on the left.'}
-          </div>
-        )}
-        {active && (
-          <RoutineDetail
-            routine={active}
-            skill={skillsById.get(active.skillId)}
-            isRunning={isRoutineRunning(active)}
-            onEdit={() => edit(active)}
-            onRemove={() => remove(active)}
-            onRunNow={() => runNow(active)}
-            onToggle={() => void toggle(active)}
-            onToggleShowInCalendar={() => void toggleShowInCalendar(active)}
-            onToggleUnattended={() => void toggleUnattended(active)}
+        {!active ? (
+          <RoutinesList
+            routines={routines}
+            skillsById={skillsById}
+            runningTaskIds={runningTaskIds}
+            routineCost={routineCost}
+            recentByRoutine={recentByRoutine}
+            search={search}
+            onSelect={setActiveId}
+            onToggle={(def, next) => void toggleEnabled(def, next)}
+            hasSkills={skills.length > 0}
           />
+        ) : (
+          <main className="rt-detail">
+            <RoutineDetail
+              routine={active}
+              skill={skillsById.get(active.skillId)}
+              isRunning={isRoutineRunning(active)}
+              onEdit={() => edit(active)}
+              onRemove={() => remove(active)}
+              onRunNow={() => runNow(active)}
+              onToggle={() => void toggle(active)}
+              onToggleShowInCalendar={() => void toggleShowInCalendar(active)}
+              onToggleUnattended={() => void toggleUnattended(active)}
+            />
+          </main>
         )}
-      </main>
+      </div>
 
       {draft && (
         <RoutineEditor
@@ -1035,24 +1054,6 @@ function derivePurpose(r: RoutineDef): RoutinePurpose | null {
   return { kind: 'freeform', label: 'Freeform' };
 }
 
-function groupRoutinesByPurpose(
-  routines: RoutineDef[],
-): { purpose: 'briefing' | 'inbox' | 'freeform'; label: string; items: RoutineDef[] }[] {
-  const briefings: RoutineDef[] = [];
-  const inbox: RoutineDef[] = [];
-  const freeform: RoutineDef[] = [];
-  for (const r of routines) {
-    const p = derivePurpose(r)?.kind ?? 'freeform';
-    if (p === 'briefing') briefings.push(r);
-    else if (p === 'inbox') inbox.push(r);
-    else freeform.push(r);
-  }
-  return [
-    { purpose: 'briefing' as const, label: 'Briefings', items: briefings },
-    { purpose: 'inbox' as const, label: 'Inbox sources', items: inbox },
-    { purpose: 'freeform' as const, label: 'Freeform', items: freeform },
-  ].filter((g) => g.items.length > 0);
-}
 
 function ToolChips({ skill }: { skill: SkillSummary | undefined }) {
   if (!skill) return null;

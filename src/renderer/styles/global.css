@@ -16305,6 +16305,12 @@ button:disabled:hover {
   box-shadow: 0 0 8px rgba(189, 153, 255, 0.55);
 }
 
+.wf-list__dot--running {
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.65);
+  animation: wf-spark-pulse 1.4s ease-in-out infinite;
+}
+
 .wf-list__main {
   flex: 1;
   min-width: 0;
@@ -17374,6 +17380,130 @@ button:disabled:hover {
 
 .workflows__step--clickable:hover .workflows__step-peek {
   color: var(--accent);
+}
+
+/* ───────────────── Routines page (list-then-detail) ───────────────── */
+
+/* Shares wf-page / wf-toolbar / wf-list visuals; only the body shape
+   differs because routines have no graph + dock split. */
+
+.rt-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.rt-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Toolbar-embedded filter input. Sits in the same row as the
+   primary actions on the index page. */
+.rt-toolbar__search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.rt-toolbar__search input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  border-radius: 2px;
+  width: 200px;
+  outline: 0;
+  transition: border-color 140ms ease;
+}
+
+.rt-toolbar__search input:focus {
+  border-color: var(--accent);
+}
+
+.rt-toolbar__search-clear {
+  background: transparent;
+  border: 0;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 14px;
+  padding: 0 4px;
+}
+
+.rt-toolbar__search-clear:hover {
+  color: var(--text);
+}
+
+/* Inline presets panel — slides under the toolbar on the index
+   page when the user clicks "Presets". Same look as the rail
+   variant, just full-width. */
+.rt-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(8, 14, 20, 0.4);
+}
+
+.rt-presets__row {
+  text-align: left;
+  background: rgba(4, 7, 11, 0.45);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.rt-presets__row:hover {
+  border-color: var(--accent);
+  background: rgba(0, 212, 255, 0.05);
+}
+
+.rt-presets__name {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+
+.rt-presets__desc {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.rt-presets__cron {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
+/* Detail-view wrapper: full-bleed below the toolbar, hosts the
+   pre-existing .briefings__main-* content blocks. */
+.rt-detail {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ───────────────── Connector rows + inline setup panel ───────────────── */
