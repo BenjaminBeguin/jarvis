@@ -100,6 +100,12 @@ function focusConversation(taskId: string): void {
   surfaceConversation(taskId);
 }
 
+/** Last-built native menu, popped manually on right-click as the
+ *  accessibility fallback. We deliberately don't attach it via
+ *  setContextMenu — macOS would auto-show it on left-click and
+ *  conflict with the custom popover. */
+let nativeMenu: Electron.Menu | null = null;
+
 function rebuildMenu(): void {
   if (!tray) return;
   const items: Electron.MenuItemConstructorOptions[] = [];
@@ -166,7 +172,7 @@ function rebuildMenu(): void {
     );
   }
   items.push({ type: 'separator' }, { role: 'quit' });
-  tray.setContextMenu(Menu.buildFromTemplate(items));
+  nativeMenu = Menu.buildFromTemplate(items);
 }
 
 /** Refresh the tray menu — exported so external AFK toggles (Settings UI,
@@ -252,8 +258,10 @@ export function initTray(): Tray {
   rebuildToolTip();
   rebuildMenu();
   // Left-click → custom Jarvis-styled popover. The native context
-  // menu is still wired for right-click as an accessibility
-  // fallback (VoiceOver / arrow-key nav).
+  // menu is popped on right-click as an accessibility fallback
+  // (VoiceOver / arrow-key nav). We deliberately don't call
+  // setContextMenu — that would auto-show the native menu on
+  // left-click and clash with the custom popover.
   tray.on('click', (_event, bounds) => {
     showTrayMenu({
       x: bounds.x,
@@ -261,6 +269,9 @@ export function initTray(): Tray {
       width: bounds.width,
       height: bounds.height,
     });
+  });
+  tray.on('right-click', () => {
+    if (nativeMenu && tray) tray.popUpContextMenu(nativeMenu);
   });
   return tray;
 }
