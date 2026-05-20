@@ -91,6 +91,19 @@ export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const [showSystem, setShowSystem] = useState(mode === 'full');
+  /** Per-conversation toggle: when on, each completed assistant
+   *  turn is read aloud via macOS `say`. Reset per task so the
+   *  preference doesn't bleed across conversations. */
+  const [speakReplies, setSpeakReplies] = useState(false);
+  useEffect(() => {
+    setSpeakReplies(false);
+    void window.jarvis.stopSpeaking();
+  }, [taskId]);
+  /** Index of the most recently-spoken `result` item in the chat
+   *  timeline. Used to identify which assistant text belongs to a
+   *  fresh turn so we don't replay history. */
+  const lastSpokenResultRef = useRef(-1);
+  const speakRepliesRef = useRef(false);
 
   // Subscribe to TaskSummary so the header / awaiting badge / composer
   // react to status changes live.
@@ -163,6 +176,45 @@ export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
     if (!body) return;
     body.scrollTop = body.scrollHeight;
   }, [visible.length]);
+
+  // Speak completed turns aloud when the toggle is on. We key off
+  // 'result' events — that's the turn boundary, so the assistant
+  // text between the previous and current result is what to read.
+  useEffect(() => {
+    const justEnabled = speakReplies && !speakRepliesRef.current;
+    const justDisabled = !speakReplies && speakRepliesRef.current;
+    speakRepliesRef.current = speakReplies;
+
+    let latestResultIdx = -1;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i]?.kind === 'result') latestResultIdx = i;
+    }
+
+    if (justDisabled) {
+      void window.jarvis.stopSpeaking();
+      return;
+    }
+    if (justEnabled) {
+      // Don't replay the existing transcript — only speak turns
+      // that finish AFTER the toggle was flipped on.
+      lastSpokenResultRef.current = latestResultIdx;
+      return;
+    }
+    if (!speakReplies) return;
+    if (latestResultIdx <= lastSpokenResultRef.current) return;
+
+    const start = lastSpokenResultRef.current + 1;
+    const end = latestResultIdx;
+    lastSpokenResultRef.current = latestResultIdx;
+
+    const parts: string[] = [];
+    for (let i = start; i < end; i++) {
+      const it = items[i];
+      if (it?.kind === 'assistant') parts.push(it.text);
+    }
+    const combined = parts.join(' ').trim();
+    if (combined) void window.jarvis.speak(combined);
+  }, [items, speakReplies]);
 
   if (!task) {
     return (
@@ -288,7 +340,14 @@ export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
       {isAwaiting && task.origin === 'external' && (
         <ContinueExternal task={task} onForked={onSelectTask} />
       )}
-      {showComposer && <SendReply task={task} resuming={canResumeReply} />}
+      {showComposer && (
+        <SendReply
+          task={task}
+          resuming={canResumeReply}
+          speakReplies={speakReplies}
+          onToggleSpeakReplies={() => setSpeakReplies((v) => !v)}
+        />
+      )}
     </section>
   );
 }
@@ -479,6 +538,8 @@ function AwaitingBanner() {
 function SendReply({
   task,
   resuming,
+  speakReplies,
+  onToggleSpeakReplies,
 }: {
   task: TaskSummary;
   /** True when the task already finished and we'll be respawning a
@@ -486,6 +547,9 @@ function SendReply({
    *  a live queue. Surfaced as a hint under the textarea so the
    *  user knows the agent is going to wake back up. */
   resuming: boolean;
+  /** Whether the agent's replies will be read aloud (macOS `say`). */
+  speakReplies: boolean;
+  onToggleSpeakReplies: () => void;
 }) {
   const [text, setText] = useState('');
   const [images, setImages] = useState<AttachedImage[]>([]);
@@ -750,6 +814,21 @@ function SendReply({
           aria-label="Hold to record voice"
         >
           🎙
+        </button>
+        <button
+          type="button"
+          className={`detail__reply-icon${speakReplies ? ' detail__reply-icon--on' : ''}`}
+          onClick={onToggleSpeakReplies}
+          disabled={sending}
+          title={
+            speakReplies
+              ? 'Replies are being read aloud — click to silence'
+              : 'Read each completed reply aloud'
+          }
+          aria-label="Toggle speak replies"
+          aria-pressed={speakReplies}
+        >
+          {speakReplies ? '🔊' : '🔈'}
         </button>
         <div className="detail__reply-spacer" />
         <button onClick={() => void send()} disabled={!canSend}>

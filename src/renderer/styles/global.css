@@ -7820,6 +7820,12 @@ button:disabled:hover {
   animation: wf-spark-pulse 1.4s ease-in-out infinite;
 }
 
+.detail__reply-icon--on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(0, 212, 255, 0.08);
+}
+
 .detail__reply-spacer {
   flex: 1;
 }

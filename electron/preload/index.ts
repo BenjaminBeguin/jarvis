@@ -508,6 +508,13 @@ const api = {
   onTranscribeProgress: (listener: Listener<TranscribeProgress>): Unsubscribe =>
     subscribe(IpcChannels.transcribeProgress, listener),
 
+  /** Speak text aloud via macOS `say`. Cancels any in-flight
+   *  utterance automatically. */
+  speak: (text: string, voice?: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IpcChannels.speak, { text, voice }),
+  stopSpeaking: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IpcChannels.stopSpeaking),
+
   meetingFinish: (payload: {
     title: string;
     project?: string | null;

@@ -172,6 +172,10 @@ export const IpcChannels = {
   transcribeAudio: 'audio:transcribe',
   transcribeProgress: 'audio:progress',
 
+  /** Text-to-speech via macOS `say`. */
+  speak: 'audio:speak',
+  stopSpeaking: 'audio:stopSpeak',
+
   meetingStart: 'meeting:start',
   meetingStopRequest: 'meeting:stop-request',
   meetingFinish: 'meeting:finish',

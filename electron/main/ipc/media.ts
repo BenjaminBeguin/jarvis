@@ -3,6 +3,7 @@ import { Notification, ipcMain, systemPreferences } from 'electron';
 import { IpcChannels } from '@shared/ipc';
 
 import { persistMeeting } from '../modules/meeting-recorder.js';
+import { speak, stopSpeaking } from '../speech.js';
 import { transcribePcm } from '../transcribe.js';
 import { openObservatory } from '../windows.js';
 import type { IpcDeps } from './types.js';
@@ -46,6 +47,23 @@ export function registerMediaIpc({
       return transcribePcm(pcm);
     },
   );
+
+  ipcMain.handle(
+    IpcChannels.speak,
+    async (
+      _e,
+      payload: { text: string; voice?: string },
+    ): Promise<{ ok: boolean }> => {
+      if (!payload || typeof payload.text !== 'string') return { ok: false };
+      await speak(payload.text, payload.voice);
+      return { ok: true };
+    },
+  );
+
+  ipcMain.handle(IpcChannels.stopSpeaking, (): { ok: boolean } => {
+    stopSpeaking();
+    return { ok: true };
+  });
 
   ipcMain.handle(
     IpcChannels.meetingFinish,
