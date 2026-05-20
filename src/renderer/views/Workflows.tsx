@@ -433,7 +433,9 @@ export function Workflows() {
         </div>
       )}
 
-      <div className="wf-body">
+      <div
+        className={`wf-body${!selected ? ' wf-body--dock-closed' : ''}`}
+      >
         <div className="wf-graph">
           {!selected ? (
             <WorkflowsList
