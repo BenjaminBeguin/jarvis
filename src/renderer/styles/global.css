@@ -14704,6 +14704,111 @@ button:disabled:hover {
   flex-direction: column;
 }
 
+/* Slack tracking panel under Settings → Inbox. Two channel/user
+   lists with chip + × remove + add input. Visually quiet — mono
+   chips, accent-on-hover, sits inside .settings__section. */
+.slack-tracking {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 8px;
+}
+
+.slack-tracking__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.slack-tracking__label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.slack-tracking__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 28px;
+  align-items: center;
+}
+
+.slack-tracking__empty {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.slack-tracking__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 10px;
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+}
+
+.slack-tracking__chip button {
+  background: transparent;
+  border: 0;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.slack-tracking__chip button:hover {
+  color: var(--bad);
+}
+
+.slack-tracking__add {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.slack-tracking__add input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  border-radius: 2px;
+  width: 220px;
+  outline: 0;
+}
+
+.slack-tracking__add input:focus {
+  border-color: var(--accent);
+}
+
+.slack-tracking__add button {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.slack-tracking__add button:hover {
+  background: rgba(0, 212, 255, 0.08);
+}
+
 /* Standalone floating chat window opened from the tray when the
    main app isn't focused. Fills its own BrowserWindow; the
    <Conversation> inside provides the chrome — but the popup

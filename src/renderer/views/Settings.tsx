@@ -9,6 +9,7 @@ import type {
   NotificationPrefs,
   ProjectDef,
   SkillSummary,
+  WorkflowDef,
 } from '../../shared/types';
 import { DEFAULT_INBOX_PREFS } from '../../shared/types';
 import { AutopilotPanel } from './autopilot/AutopilotPanel';
@@ -1052,8 +1053,286 @@ function InboxPanel() {
         PRs where you haven't submitted a review yet. Items you've
         already replied to drop out automatically on the next refresh.
       </p>
+
+      <h3 style={{ marginTop: 28 }}>Slack tracking</h3>
+      <p className="settings__hint">
+        DMs to you and explicit @mentions of you are tracked by default.
+        Add channels you want surfaced even without an @ (mirror the
+        ones grouped under your Jarvis sidebar section in Slack) and
+        people whose every message you care about. Edits rewrite the
+        query in <code>~/.jarvis/workflows/slack-inbox-sync.json</code>.
+      </p>
+      <SlackTrackingPanel />
     </div>
   );
+}
+
+/**
+ * Add/remove tracked Slack channels + people. The source of truth
+ * is the slack-inbox-sync workflow's http-fetch query body — we
+ * parse the OR-branches on read and rewrite the whole string on
+ * save. Two lists, two add buttons, chips with × to remove.
+ */
+function SlackTrackingPanel() {
+  const [channels, setChannels] = useState<string[]>([]);
+  const [users, setUsers] = useState<string[]>([]);
+  const [newChannel, setNewChannel] = useState('');
+  const [newUser, setNewUser] = useState('');
+  const [workflow, setWorkflow] = useState<WorkflowDef | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      const { workflows } = await window.jarvis.listWorkflows();
+      if (cancelled) return;
+      const wf = workflows.find((w) => w.id === 'slack-inbox-sync');
+      setWorkflow(wf ?? null);
+      const query = readQuery(wf);
+      if (query === null) {
+        setParseError(
+          'Could not find the Slack workflow. Open Workflows and check it exists.',
+        );
+        return;
+      }
+      const parsed = parseSlackQuery(query);
+      setChannels(parsed.channels);
+      setUsers(parsed.users);
+      setParseError(parsed.unrecognized ? UNRECOGNIZED_HINT : null);
+    };
+    void refresh();
+    const off = window.jarvis.onWorkflowsChanged(() => void refresh());
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
+
+  const persist = async (
+    nextChannels: string[],
+    nextUsers: string[],
+  ): Promise<void> => {
+    if (!workflow) return;
+    const updated = updateWorkflowQuery(workflow, nextChannels, nextUsers);
+    if (!updated) {
+      toast({
+        kind: 'error',
+        message: 'Workflow shape changed — edit the JSON directly.',
+      });
+      return;
+    }
+    setChannels(nextChannels);
+    setUsers(nextUsers);
+    try {
+      const res = await window.jarvis.saveWorkflow(updated);
+      if (!res.ok) {
+        toast({ kind: 'error', message: res.message ?? 'Save failed' });
+      }
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
+  const addChannel = (): void => {
+    const v = normaliseChannel(newChannel);
+    if (!v) return;
+    if (channels.includes(v)) {
+      setNewChannel('');
+      return;
+    }
+    setNewChannel('');
+    void persist([...channels, v], users);
+  };
+
+  const addUser = (): void => {
+    const v = normaliseUser(newUser);
+    if (!v) return;
+    if (users.includes(v)) {
+      setNewUser('');
+      return;
+    }
+    setNewUser('');
+    void persist(channels, [...users, v]);
+  };
+
+  return (
+    <div className="slack-tracking">
+      {parseError && (
+        <div className="settings__hint settings__hint--dim">{parseError}</div>
+      )}
+
+      <div className="slack-tracking__group">
+        <div className="slack-tracking__label">Channels</div>
+        <div className="slack-tracking__chips">
+          {channels.length === 0 && (
+            <span className="slack-tracking__empty">None added yet.</span>
+          )}
+          {channels.map((c) => (
+            <span key={c} className="slack-tracking__chip">
+              #{c}
+              <button
+                type="button"
+                onClick={() =>
+                  void persist(
+                    channels.filter((x) => x !== c),
+                    users,
+                  )
+                }
+                aria-label={`Remove #${c}`}
+                title="Remove"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="slack-tracking__add">
+          <input
+            type="text"
+            value={newChannel}
+            onChange={(e) => setNewChannel(e.target.value)}
+            placeholder="csai-epd-ops"
+            spellCheck={false}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addChannel();
+              }
+            }}
+          />
+          <button type="button" onClick={addChannel}>
+            Add
+          </button>
+        </div>
+      </div>
+
+      <div className="slack-tracking__group">
+        <div className="slack-tracking__label">People</div>
+        <div className="slack-tracking__chips">
+          {users.length === 0 && (
+            <span className="slack-tracking__empty">None added yet.</span>
+          )}
+          {users.map((u) => (
+            <span key={u} className="slack-tracking__chip">
+              @{u}
+              <button
+                type="button"
+                onClick={() =>
+                  void persist(
+                    channels,
+                    users.filter((x) => x !== u),
+                  )
+                }
+                aria-label={`Remove @${u}`}
+                title="Remove"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="slack-tracking__add">
+          <input
+            type="text"
+            value={newUser}
+            onChange={(e) => setNewUser(e.target.value)}
+            placeholder="elisa.ramos"
+            spellCheck={false}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addUser();
+              }
+            }}
+          />
+          <button type="button" onClick={addUser}>
+            Add
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const UNRECOGNIZED_HINT =
+  "The Slack workflow's query contains modifiers we don't parse — channels / people you add here are appended cleanly, but the rest is preserved as-is.";
+
+function readQuery(wf: WorkflowDef | null | undefined): string | null {
+  if (!wf) return null;
+  const fetch = wf.pipeline.find((n) => n.type === 'http-fetch');
+  if (!fetch) return null;
+  const body = (fetch.params as { body?: Record<string, unknown> }).body;
+  const q = body?.['query'];
+  return typeof q === 'string' ? q : null;
+}
+
+function parseSlackQuery(query: string): {
+  channels: string[];
+  users: string[];
+  unrecognized: boolean;
+} {
+  const channels: string[] = [];
+  const users: string[] = [];
+  for (const m of query.matchAll(/in:#?([a-z0-9._-]+)/gi)) {
+    if (m[1] && !channels.includes(m[1])) channels.push(m[1]);
+  }
+  for (const m of query.matchAll(/from:([a-z0-9._-]+)/gi)) {
+    if (m[1] && m[1] !== 'me' && !users.includes(m[1])) users.push(m[1]);
+  }
+  // Heuristic: the default contains to:me + mentions:me. If we see
+  // something else inside the parens, flag it so we don't claim full
+  // ownership over the query string.
+  const stripped = query
+    .replace(/in:#?[a-z0-9._-]+/gi, '')
+    .replace(/from:[a-z0-9._-]+/gi, '')
+    .replace(/to:me/g, '')
+    .replace(/mentions:me/g, '')
+    .replace(/[()\s]|OR|-/g, '');
+  return { channels, users, unrecognized: stripped.length > 0 };
+}
+
+function buildSlackQuery(channels: string[], users: string[]): string {
+  const branches = ['to:me', 'mentions:me'];
+  for (const c of channels) branches.push(`in:#${c}`);
+  for (const u of users) branches.push(`from:${u}`);
+  return `(${branches.join(' OR ')}) -from:me`;
+}
+
+function updateWorkflowQuery(
+  wf: WorkflowDef,
+  channels: string[],
+  users: string[],
+): WorkflowDef | null {
+  const idx = wf.pipeline.findIndex((n) => n.type === 'http-fetch');
+  if (idx === -1) return null;
+  const node = wf.pipeline[idx]!;
+  const params = (node.params ?? {}) as Record<string, unknown>;
+  const body = ((params['body'] ?? {}) as Record<string, unknown>);
+  const nextBody = { ...body, query: buildSlackQuery(channels, users) };
+  const nextParams = { ...params, body: nextBody };
+  const nextPipeline = wf.pipeline.map((n, i) =>
+    i === idx ? { ...n, params: nextParams } : n,
+  );
+  return { ...wf, pipeline: nextPipeline };
+}
+
+function normaliseChannel(input: string): string | null {
+  const trimmed = input.trim().replace(/^#/, '');
+  if (!trimmed) return null;
+  // Slack channel names: a-z, 0-9, -, _, ., max 80 chars.
+  if (!/^[a-z0-9._-]+$/.test(trimmed)) return null;
+  return trimmed;
+}
+
+function normaliseUser(input: string): string | null {
+  const trimmed = input.trim().replace(/^@/, '');
+  if (!trimmed) return null;
+  if (trimmed === 'me') return null;
+  if (!/^[a-z0-9._-]+$/.test(trimmed)) return null;
+  return trimmed;
 }
 
 /**
