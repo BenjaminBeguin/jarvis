@@ -259,6 +259,15 @@ export class MeetingActivityWatcher extends EventEmitter {
     if (sub.includes('cmio') && /(stream|capture|video|frame)/i.test(msg)) {
       const wasIdle = now - this.lastCameraAt > IDLE_GAP_MS;
       this.lastCameraAt = now;
+      // Self-suppress here too: macOS with Continuity Camera will
+      // wake CMIO events when getUserMedia({ audio }) opens the
+      // mic — same physical device. So when WE have the mic, the
+      // "camera" channel is also our own activity, not a real
+      // meeting we missed. Same selfMicActive flag covers both.
+      if (this.selfMicActive) {
+        this.emitStatus();
+        return;
+      }
       if (wasIdle) this.tryFire('camera');
       this.emitStatus();
       return;
@@ -272,23 +281,28 @@ export class MeetingActivityWatcher extends EventEmitter {
    */
   /** Mark the start of a Jarvis-owned mic capture (palette voice,
    *  composer mic, voice orb, meeting recorder). Suppresses the
-   *  auto-detect prompt for the duration. Pair with noteSelfMicStop().
+   *  auto-detect prompt for the duration on both the mic AND the
+   *  camera channels — Continuity Camera wakes CMIO when the mic
+   *  opens, so we have to suppress both. Pair with
+   *  noteSelfMicStop().
    *
-   *  Also stamps lastInputAt so any prior idle gap doesn't make the
-   *  next coreaudiod event re-trigger the "wasIdle → prompt" path
-   *  if the flag was racy on entry. */
+   *  Also stamps lastInputAt + lastCameraAt so any prior idle gap
+   *  doesn't make the next event re-trigger the "wasIdle → prompt"
+   *  path if the flag was racy on entry. */
   noteSelfMicStart(): void {
     this.selfMicCount++;
-    // Stamp so the wasIdle calc in handleEntry never thinks the
-    // mic was just-idle when we transitioned out of self-active.
-    this.lastInputAt = Date.now();
+    const now = Date.now();
+    this.lastInputAt = now;
+    this.lastCameraAt = now;
   }
 
   noteSelfMicStop(): void {
     if (this.selfMicCount > 0) this.selfMicCount--;
     if (this.selfMicCount === 0) {
-      this.selfMicStoppedAt = Date.now();
-      this.lastInputAt = this.selfMicStoppedAt;
+      const now = Date.now();
+      this.selfMicStoppedAt = now;
+      this.lastInputAt = now;
+      this.lastCameraAt = now;
     }
   }
 
