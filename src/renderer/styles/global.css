@@ -15657,6 +15657,18 @@ button:disabled:hover {
   flex-shrink: 0;
 }
 
+.wf-toolbar__title {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Unified toolbar button. All actions in the toolbar use the same
  * height + padding rhythm so the row reads as one strip instead of
  * a pile of differently-sized chips. Variants below tint accent
@@ -16196,6 +16208,185 @@ button:disabled:hover {
   padding: 1px 6px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 4px;
+}
+
+/* Index page — list of all workflows. Click a row to drill into
+   the detail (graph + dock) view. */
+
+.wf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 22px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.wf-list--empty {
+  margin: auto;
+  padding: 32px;
+  font-size: 13px;
+  color: var(--text-faint);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.wf-list--empty code {
+  margin: 0 4px;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.wf-list__subheader {
+  margin: 0;
+  padding: 8px 0 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(189, 153, 255, 0.85);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.wf-list__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wf-list__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: rgba(4, 7, 11, 0.45);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease;
+}
+
+.wf-list__row:hover {
+  border-color: var(--accent);
+  background: rgba(0, 212, 255, 0.04);
+  transform: translateY(-1px);
+}
+
+.wf-list__row:focus-visible {
+  outline: 0;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.32);
+}
+
+.wf-list__row--off {
+  opacity: 0.6;
+}
+
+.wf-list__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-faint);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.05);
+}
+
+.wf-list__dot--on {
+  background: #5fffa6;
+  box-shadow: 0 0 8px rgba(95, 255, 166, 0.5);
+}
+
+.wf-list__dot--autopilot.wf-list__dot--on {
+  background: #bd99ff;
+  box-shadow: 0 0 8px rgba(189, 153, 255, 0.55);
+}
+
+.wf-list__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wf-list__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wf-list__name {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+
+.wf-list__meta {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.wf-list__desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.wf-list__health {
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.wf-list__health-cell {
+  width: 6px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--text-faint);
+}
+
+.wf-list__health-cell--completed {
+  background: var(--good);
+}
+
+.wf-list__health-cell--errored,
+.wf-list__health-cell--aborted {
+  background: var(--bad);
+}
+
+.wf-list__health-cell--running {
+  background: var(--accent);
+  animation: wf-spark-pulse 1.4s ease-in-out infinite;
+}
+
+.wf-list__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.wf-list__chev {
+  color: var(--text-faint);
+  font-size: 14px;
+  font-family: var(--mono);
+  transition: transform 140ms ease, color 140ms ease;
+}
+
+.wf-list__row:hover .wf-list__chev {
+  color: var(--accent);
+  transform: translateX(2px);
 }
 
 .wf-canvas {

@@ -9,7 +9,7 @@ import {
   WorkflowPipeline,
   type WorkflowSelection,
 } from './workflows/WorkflowPipeline';
-import { WorkflowSelector } from './workflows/WorkflowSelector';
+import { WorkflowsList } from './workflows/WorkflowsList';
 
 /**
  * Workflows page — graph-first layout.
@@ -80,7 +80,6 @@ export function Workflows() {
       if (cancelled) return;
       setWorkflows(list);
       setErrors(errs);
-      if (!selectedId && list.length > 0) setSelectedId(list[0]!.id);
     };
     void refresh();
     const off = window.jarvis.onWorkflowsChanged((list) => {
@@ -228,10 +227,34 @@ export function Workflows() {
     }
   };
 
+  /**
+   * Flip the selected workflow's `enabled` flag. Used by the kebab
+   * menu in the detail view's toolbar. Surfaces failures so the
+   * user sees what's going on if the save is rejected (instead of
+   * the previous silent fail).
+   */
   const toggleEnabled = async (): Promise<void> => {
     if (!selected) return;
-    const next: WorkflowDef = { ...selected, enabled: !selected.enabled };
-    await window.jarvis.saveWorkflow(next);
+    await toggleWorkflowEnabled(selected, !selected.enabled);
+  };
+
+  /** Shared helper — used by both the detail-view kebab and the
+   *  index page row toggle. Save + surface errors via toast. */
+  const toggleWorkflowEnabled = async (
+    def: WorkflowDef,
+    next: boolean,
+  ): Promise<void> => {
+    const result = await window.jarvis.saveWorkflow({ ...def, enabled: next });
+    if (!result.ok) {
+      toast({
+        kind: 'error',
+        message: `Could not ${next ? 'enable' : 'disable'} · ${result.message ?? 'save failed'}`,
+      });
+      return;
+    }
+    toast({
+      message: `${def.name} · ${next ? 'enabled' : 'disabled'}`,
+    });
   };
 
   /**
@@ -302,16 +325,18 @@ export function Workflows() {
   return (
     <section className="wf-page">
       <header className="wf-toolbar">
-        <div className="wf-toolbar__group">
-          <WorkflowSelector
-            workflows={workflows}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            recentByWorkflow={recentByWorkflow}
-          />
-        </div>
-        {selected && (
+        {selected ? (
           <>
+            <button
+              type="button"
+              className="wf-btn wf-btn--ghost"
+              onClick={() => setSelectedId(null)}
+              title="Back to all workflows"
+            >
+              ← All workflows
+            </button>
+            <div className="wf-toolbar__divider" aria-hidden />
+            <span className="wf-toolbar__title">{selected.name}</span>
             <div className="wf-toolbar__divider" aria-hidden />
             <div className="wf-toolbar__group">
               <span
@@ -384,6 +409,8 @@ export function Workflows() {
               </div>
             </div>
           </>
+        ) : (
+          <span className="wf-toolbar__title">Workflows</span>
         )}
         <div className="wf-toolbar__spacer" />
       </header>
@@ -402,11 +429,12 @@ export function Workflows() {
       <div className="wf-body">
         <div className="wf-graph">
           {!selected ? (
-            <div className="wf-graph__empty">
-              Pick a workflow above. Built-ins live in{' '}
-              <code>~/.jarvis/workflows/</code>; drop a new JSON file there and
-              it shows up here.
-            </div>
+            <WorkflowsList
+              workflows={workflows}
+              recentByWorkflow={recentByWorkflow}
+              onSelect={setSelectedId}
+              onToggle={(def, next) => void toggleWorkflowEnabled(def, next)}
+            />
           ) : (
             <>
               <WorkflowPipeline
