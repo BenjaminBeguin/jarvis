@@ -381,8 +381,15 @@ export function Workflows() {
                         setOverflowOpen(false);
                         void toggleEnabled();
                       }}
+                      title={
+                        selected.enabled
+                          ? 'Stop auto-firing this workflow. It can still be run manually.'
+                          : 'Resume the workflow on its trigger (cron / autopilot).'
+                      }
                     >
-                      {selected.enabled ? 'Disable trigger' : 'Enable trigger'}
+                      {selected.enabled
+                        ? '✓ Enabled — click to disable'
+                        : 'Disabled — click to enable'}
                     </button>
                     <button
                       type="button"
