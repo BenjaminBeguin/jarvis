@@ -210,6 +210,9 @@ function rebuildToolTip(): void {
   if (reducedConversations > 0) {
     bits.push(`💬 ${reducedConversations} reduced`);
   }
+  if (pinnedConversations.length > 0) {
+    bits.push(`📌 ${pinnedConversations.length} pinned`);
+  }
   if (todaySpendUsd > 0) {
     bits.push(
       `$${todaySpendUsd >= 0.01 ? todaySpendUsd.toFixed(2) : todaySpendUsd.toFixed(4)} today`,
@@ -218,9 +221,26 @@ function rebuildToolTip(): void {
   tray.setToolTip(bits.length ? `Jarvis — ${bits.join(' · ')}` : 'Jarvis');
 }
 
+/**
+ * Update the visible text the tray shows in the macOS menu bar.
+ * Without this the bundled PNGs may be missing in dev → the icon
+ * is invisible. The title is intentionally tiny: a "J" base, with
+ * status badges appended when there's something to surface.
+ */
+function rebuildTitle(): void {
+  if (!tray) return;
+  const parts = ['J'];
+  if (runningTasks > 0) parts.push(`●${runningTasks}`);
+  if (pinnedConversations.length > 0) {
+    parts.push(`📌${pinnedConversations.length}`);
+  }
+  tray.setTitle(parts.join(' '));
+}
+
 export function initTray(): Tray {
   if (tray) return tray;
   tray = new Tray(buildIcon(false));
+  rebuildTitle();
   rebuildToolTip();
   rebuildMenu();
   tray.on('click', () => openObservatory());
@@ -231,6 +251,7 @@ export function setRunningTasksCount(n: number): void {
   runningTasks = Math.max(0, n);
   if (!tray) return;
   tray.setImage(buildIcon(runningTasks > 0 || awaitingReplies > 0));
+  rebuildTitle();
   rebuildToolTip();
   rebuildMenu();
 }
@@ -276,6 +297,8 @@ export function setPinnedConversations(
   entries: PinnedConversationEntry[],
 ): void {
   pinnedConversations = entries;
+  rebuildTitle();
+  rebuildToolTip();
   rebuildMenu();
 }
 
