@@ -28,12 +28,14 @@ type Transcriber = (
   options?: unknown,
 ) => Promise<{ text: string } | { text: string }[]>;
 
-// Smaller multilingual Whisper (~75MB). Switched from whisper-small
-// + q8 because that combo crashes ONNX Runtime on Apple Silicon
-// with SIGTRAP — likely a SIMD path in the q8 kernels. fp32 +
-// tiny is the most-tested combo across transformers.js installs
-// and runs comfortably on any modern Mac.
-const MODEL_NAME = 'Xenova/whisper-tiny';
+// Whisper-base multilingual (~290MB fp32). Sized up from tiny —
+// tiny's accuracy on accented English / non-English / short
+// queries is poor, often producing wild mistranslations. Base is
+// the smallest model with real language-detection competence
+// (Whisper paper benchmarks show a meaningful WER drop from tiny
+// → base for non-English speech). Still fp32 + CPU to avoid the
+// q8 / CoreML SIGTRAP we hit with whisper-small.
+const MODEL_NAME = 'Xenova/whisper-base';
 const TARGET_SAMPLE_RATE = 16_000;
 const TASK = 'transcribe';
 

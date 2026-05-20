@@ -84,10 +84,20 @@ export function VoiceOrb() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  /** Poll the recorder's level on a small interval so the orb's
-   *  outer ring breathes with the user's voice. AudioCapture
-   *  doesn't expose a level meter; approximate via capturedSamples
-   *  delta over a 60ms window. */
+  /** RMS-based voice activity detection. Two jobs:
+   *
+   *   1. Drive the orb's level ring so it visibly reacts to your
+   *      voice (not just to "samples are flowing" like the
+   *      previous heuristic).
+   *   2. Auto-stop + dispatch ~1.6s after you finish speaking, so
+   *      you don't have to hit ⌘⇧Space twice. Mirrors how every
+   *      modern voice assistant behaves.
+   */
+  const lastSpeechAtRef = useRef(0);
+  const sawSpeechRef = useRef(false);
+  const lastTickPosRef = useRef(0);
+  const startedAtRef = useRef(0);
+  const autoStopFiredRef = useRef(false);
   useEffect(() => {
     if (phase !== 'listening') {
       setLevel(0);
@@ -97,25 +107,69 @@ export function VoiceOrb() {
       }
       return;
     }
-    let prevSamples = captureRef.current?.capturedSamples() ?? 0;
+    lastSpeechAtRef.current = 0;
+    sawSpeechRef.current = false;
+    lastTickPosRef.current = captureRef.current?.capturedSamples() ?? 0;
+    startedAtRef.current = Date.now();
+    autoStopFiredRef.current = false;
+
+    /** Speech threshold for RMS of 16kHz audio. Whisper-grade
+     *  voice usually lands at 0.05+; quiet typing / ambient noise
+     *  is around 0.005-0.01. 0.02 is a safe middle. */
+    const SPEECH_RMS = 0.02;
+    /** Wait this long after the last speech tick before
+     *  auto-stopping. Long enough to bridge natural pauses, short
+     *  enough not to feel laggy. */
+    const SILENCE_TAIL_MS = 1600;
+    /** Don't auto-stop if the user hasn't been recording at least
+     *  this long — guards against an immediate stop on cold start
+     *  before they've begun talking. */
+    const MIN_RECORD_MS = 400;
+
     levelTimerRef.current = window.setInterval(() => {
       const cap = captureRef.current;
       if (!cap) return;
-      const samples = cap.capturedSamples();
-      const delta = samples - prevSamples;
-      prevSamples = samples;
-      // delta is ≈sourceSampleRate * intervalSec when speaking
-      // hard, 0 when silent. Normalize against a heuristic max.
-      const sr = cap.sampleRate() ?? 48000;
-      const normalised = Math.min(1, delta / (sr * 0.06));
-      setLevel((prev) => prev * 0.6 + normalised * 0.4);
-    }, 60);
+      const now = Date.now();
+      const start = lastTickPosRef.current;
+      const end = cap.capturedSamples();
+      if (end <= start) return;
+      lastTickPosRef.current = end;
+
+      const chunk = cap.sliceResampled(start, end);
+      if (!chunk || chunk.length === 0) return;
+
+      // RMS of the 16kHz audio window.
+      let sum = 0;
+      for (let i = 0; i < chunk.length; i++) sum += chunk[i]! * chunk[i]!;
+      const rms = Math.sqrt(sum / chunk.length);
+
+      // Display level — scale RMS so reasonable speech maps to
+      // a visible ring (clamped at 1).
+      setLevel((prev) => prev * 0.5 + Math.min(1, rms * 6) * 0.5);
+
+      if (rms > SPEECH_RMS) {
+        lastSpeechAtRef.current = now;
+        sawSpeechRef.current = true;
+      }
+
+      // Auto-stop: had speech AND silence has run long enough.
+      if (
+        sawSpeechRef.current &&
+        !autoStopFiredRef.current &&
+        now - startedAtRef.current > MIN_RECORD_MS &&
+        now - lastSpeechAtRef.current > SILENCE_TAIL_MS
+      ) {
+        autoStopFiredRef.current = true;
+        void stopAndDispatch();
+      }
+    }, 100);
     return () => {
       if (levelTimerRef.current != null) {
         window.clearInterval(levelTimerRef.current);
         levelTimerRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
   const startingRef = useRef(false);
@@ -283,7 +337,7 @@ export function VoiceOrb() {
       {error && <div className="voice-orb__error">{error}</div>}
       <div className="voice-orb__hint">
         {phase === 'listening'
-          ? '⌘⇧Space or click to send · Esc to cancel'
+          ? 'Stops on its own when you pause · Esc to cancel'
           : phase === 'errored'
             ? 'Esc to dismiss'
             : null}
