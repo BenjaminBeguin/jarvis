@@ -18,6 +18,19 @@ function loadRoute(win: BrowserWindow, route: string): void {
 let observatoryWindow: BrowserWindow | null = null;
 let paletteWindow: BrowserWindow | null = null;
 let answerHudWindow: BrowserWindow | null = null;
+/** Floating chat-popup windows keyed by taskId. Opened from the
+ *  tray when the main window isn't focused so the user can read /
+ *  reply to a conversation without disrupting whatever they're
+ *  doing in another app. */
+const chatPopupWindows = new Map<string, BrowserWindow>();
+
+/** Read-only access to the main window so callers can branch on
+ *  its visibility / focus without forcing it forward. Returns null
+ *  if the window doesn't exist yet (cold launch / closed). */
+export function getObservatoryWindow(): BrowserWindow | null {
+  if (!observatoryWindow || observatoryWindow.isDestroyed()) return null;
+  return observatoryWindow;
+}
 
 export function openObservatory(): BrowserWindow {
   if (observatoryWindow && !observatoryWindow.isDestroyed()) {
@@ -236,4 +249,65 @@ export function resizeAnswerHud(targetHeight: number): void {
 
 export function getAnswerHudWindow(): BrowserWindow | null {
   return answerHudWindow && !answerHudWindow.isDestroyed() ? answerHudWindow : null;
+}
+
+const CHAT_POPUP_WIDTH = 460;
+const CHAT_POPUP_HEIGHT = 640;
+const CHAT_POPUP_MARGIN = 16;
+
+/**
+ * Floating window that renders a single conversation. Surfaces
+ * when the user clicks a pinned conversation in the tray menu
+ * while the main app window isn't focused — so they can keep
+ * reading / replying without us yanking their cursor into Jarvis.
+ *
+ * One window per taskId (keyed map). Re-clicking the same pinned
+ * entry brings the existing popup forward instead of stacking.
+ */
+export function openChatPopup(taskId: string): BrowserWindow {
+  const existing = chatPopupWindows.get(taskId);
+  if (existing && !existing.isDestroyed()) {
+    if (!existing.isVisible()) existing.show();
+    existing.moveTop();
+    existing.focus();
+    return existing;
+  }
+  const display = screen.getPrimaryDisplay();
+  // Anchor top-right so consecutive popups don't pile on the same
+  // pixel — offset each new one by 24px down and to the left.
+  const offset = chatPopupWindows.size * 24;
+  const x =
+    display.workArea.x +
+    display.workArea.width -
+    CHAT_POPUP_WIDTH -
+    CHAT_POPUP_MARGIN -
+    offset;
+  const y = display.workArea.y + CHAT_POPUP_MARGIN + offset;
+  const win = new BrowserWindow({
+    width: CHAT_POPUP_WIDTH,
+    height: CHAT_POPUP_HEIGHT,
+    x,
+    y,
+    minWidth: 360,
+    minHeight: 420,
+    titleBarStyle: 'hiddenInset',
+    backgroundColor: '#0b0d12',
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    show: false,
+    webPreferences: {
+      preload: preloadPath,
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.on('ready-to-show', () => win.show());
+  win.on('closed', () => {
+    chatPopupWindows.delete(taskId);
+  });
+  chatPopupWindows.set(taskId, win);
+  loadRoute(win, `/chat-popup?taskId=${encodeURIComponent(taskId)}`);
+  return win;
 }

@@ -12,7 +12,15 @@ import {
   saveAfkMode,
   saveAppMode,
 } from './auth.js';
-import { broadcast, openObservatory, openPalette, sendWhenReady, showAnswerHud } from './windows.js';
+import {
+  broadcast,
+  getObservatoryWindow,
+  openChatPopup,
+  openObservatory,
+  openPalette,
+  sendWhenReady,
+  showAnswerHud,
+} from './windows.js';
 
 /** Lightweight shape pushed from the renderer for each pinned tab.
  *  Mirrors the renderer's ConvoEntry but only the fields the tray
@@ -86,10 +94,21 @@ function statusGlyph(status: TaskStatus): string {
   }
 }
 
+/**
+ * Route a tray-menu conversation click. If the main app window is
+ * currently focused (the user is already looking at Jarvis), open
+ * the conversation in the existing sidebar — no focus stealing,
+ * no extra window. Otherwise pop a small standalone chat window
+ * so the user can read / reply without us yanking their cursor
+ * out of whatever app they're working in.
+ */
 function focusConversation(taskId: string): void {
-  const win = openObservatory();
-  win.focus();
-  sendWhenReady(win, IpcChannels.conversationFocus, { taskId });
+  const main = getObservatoryWindow();
+  if (main && main.isVisible() && main.isFocused()) {
+    sendWhenReady(main, IpcChannels.conversationFocus, { taskId });
+    return;
+  }
+  openChatPopup(taskId);
 }
 
 function rebuildMenu(): void {
@@ -243,7 +262,9 @@ export function initTray(): Tray {
   rebuildTitle();
   rebuildToolTip();
   rebuildMenu();
-  tray.on('click', () => openObservatory());
+  // No click handler — left-clicking the tray on macOS shows the
+  // context menu by default. We don't want to also yank the main
+  // window forward; the user picks an action from the menu.
   return tray;
 }
 

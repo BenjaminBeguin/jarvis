@@ -3,13 +3,16 @@ import { useEffect, useState } from 'react';
 import type { AppStatus } from '../shared/types';
 import { AnswerHUD } from './views/AnswerHUD';
 import { BootOverlay } from './views/BootOverlay';
+import { ChatPopup } from './views/ChatPopup';
 import { CommandPalette } from './views/CommandPalette';
 import { Setup } from './views/Setup';
 import { Shell } from './views/Shell';
 
 function getRoute(): string {
   const hash = window.location.hash.replace(/^#/, '');
-  return hash || '/observatory';
+  // Strip query string so '/chat-popup?taskId=…' still matches '/chat-popup'.
+  const path = hash.split('?')[0] ?? '';
+  return path || '/observatory';
 }
 
 export function App() {
@@ -66,6 +69,10 @@ export function App() {
   if (route === '/answer-hud') {
     if (!status || !isReady(status)) return null;
     return <AnswerHUD />;
+  }
+  if (route === '/chat-popup') {
+    if (!status || !isReady(status)) return null;
+    return <ChatPopup />;
   }
 
   // Main window: render the Shell behind the overlay so the underlying

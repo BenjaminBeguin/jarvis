@@ -14681,6 +14681,31 @@ button:disabled:hover {
   flex-direction: column;
 }
 
+/* Standalone floating chat window opened from the tray when the
+   main app isn't focused. Fills its own BrowserWindow; the
+   <Conversation> inside provides all the chrome. */
+.chat-popup {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.chat-popup > .detail {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.chat-popup--empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
 /* Conversation component now ships with its full .detail chrome —
    header, awaiting banner, scrolling transcript, composer. Stretch
    it to fill the sidebar tab body. */
