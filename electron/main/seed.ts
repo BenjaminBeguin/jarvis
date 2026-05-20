@@ -44,16 +44,23 @@ const WORKFLOW_STALE_DETECTORS: Record<
   'calendar-today-sync': (def) => {
     return def.pipeline.some((n) => n.type === 'osascript');
   },
-  // Old slack workflow had no `validate` clause on the http-fetch,
-  // so { ok: false } responses went silently through and zero items
-  // got written. New seed includes the validate expression — also
-  // matches the previous `'5m'` cron-shorthand default (now bumped
-  // to business hours). Either fingerprint authorises a rewrite.
+  // Slack workflow has gone through three shapes:
+  //   1. cron '5m', no validate clause                  → migrate
+  //   2. cron '*/15 9-18 * * 1-5', validate present    → migrate
+  //   3. transform without the noise-v2 filter (drops
+  //      bots + caps age at 14 days)                    → migrate
+  // Any of the above authorise a rewrite. The noise-v2 marker in
+  // the new transform body acts as the version sentinel.
   'slack-inbox-sync': (def) => {
     const fetch = def.pipeline.find((n) => n.type === 'http-fetch');
     if (fetch) {
       const p = fetch.params ?? {};
       if (typeof p['validate'] !== 'string') return true;
+    }
+    const transform = def.pipeline.find((n) => n.type === 'transform');
+    if (transform) {
+      const fn = (transform.params as { fn?: string })?.fn;
+      if (typeof fn === 'string' && !fn.includes('noise-v2')) return true;
     }
     return (
       isUntouchedShorthandCron(def, '5m') ||

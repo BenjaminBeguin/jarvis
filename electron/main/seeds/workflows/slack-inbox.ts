@@ -17,35 +17,44 @@ import type { WorkflowDef } from '@shared/types';
  * round-trip needed.
  */
 
-const SLACK_TRANSFORM = `(($.messages?.matches ?? []).filter(m => m && m.ts && m.channel && m.channel.id).map(m => {
-  const seconds = parseFloat(m.ts);
-  const ts = Number.isFinite(seconds) ? Math.round(seconds * 1000) : Date.now();
-  const text = (m.text || '').trim().replace(/\\s+/g, ' ');
-  const title80 = text.length > 80 ? text.slice(0, 79) + '…' : text;
-  const who = m.username || m.user || 'someone';
-  const diff = Date.now() - ts;
-  let age;
-  if (diff < 60000) age = 'just now';
-  else if (diff < 3600000) age = Math.floor(diff / 60000) + 'm';
-  else if (diff < 86400000) age = Math.floor(diff / 3600000) + 'h';
-  else age = Math.floor(diff / 86400000) + 'd';
-  const chan = m.channel.name ? '#' + m.channel.name : m.channel.id;
-  // Bot detection: Slack sets bot_id / subtype:bot_message on app-
-  // emitted messages. Also catch known bot usernames (github,
-  // github-bot, etc.) as a belt-and-suspenders for installs where
-  // bot_id isn't returned by search.messages.
-  const isBot = !!m.bot_id || m.subtype === 'bot_message' ||
-    /^(github|github-bot|githubapp)$/i.test(String(m.username || ''));
-  return {
-    id: 'slack-' + m.channel.id + '-' + m.ts,
-    source: 'slack',
-    title: who + ': ' + title80,
-    subtitle: chan + ' · ' + age,
-    ...(m.permalink ? { url: m.permalink } : {}),
-    createdAt: ts,
-    isBotSender: isBot,
-  };
-}).slice(0, 40))`;
+// noise-v2: drops bot senders entirely + caps age at 14 days so the
+// inbox doesn't get clogged with month-old DMs and GitHub bot summaries.
+const SLACK_TRANSFORM = `((() => {
+  const MAX_AGE_MS = 14 * 86400000;
+  const now = Date.now();
+  return ($.messages?.matches ?? []).filter(m => {
+    if (!m || !m.ts || !m.channel || !m.channel.id) return false;
+    // Drop bot senders: github / github-bot are not actionable.
+    if (m.bot_id || m.subtype === 'bot_message') return false;
+    if (/^(github|github-bot|githubapp)$/i.test(String(m.username || ''))) return false;
+    // Drop messages older than the cap.
+    const seconds = parseFloat(m.ts);
+    if (!Number.isFinite(seconds)) return false;
+    const ts = Math.round(seconds * 1000);
+    if (now - ts > MAX_AGE_MS) return false;
+    return true;
+  }).map(m => {
+    const ts = Math.round(parseFloat(m.ts) * 1000);
+    const text = (m.text || '').trim().replace(/\\s+/g, ' ');
+    const title80 = text.length > 80 ? text.slice(0, 79) + '…' : text;
+    const who = m.username || m.user || 'someone';
+    const diff = now - ts;
+    let age;
+    if (diff < 60000) age = 'just now';
+    else if (diff < 3600000) age = Math.floor(diff / 60000) + 'm';
+    else if (diff < 86400000) age = Math.floor(diff / 3600000) + 'h';
+    else age = Math.floor(diff / 86400000) + 'd';
+    const chan = m.channel.name ? '#' + m.channel.name : m.channel.id;
+    return {
+      id: 'slack-' + m.channel.id + '-' + m.ts,
+      source: 'slack',
+      title: who + ': ' + title80,
+      subtitle: chan + ' · ' + age,
+      ...(m.permalink ? { url: m.permalink } : {}),
+      createdAt: ts,
+    };
+  }).slice(0, 20);
+})())`;
 
 export const SLACK_INBOX_WORKFLOW: WorkflowDef = {
   id: 'slack-inbox-sync',
