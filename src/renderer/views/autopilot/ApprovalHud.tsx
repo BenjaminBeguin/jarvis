@@ -33,10 +33,13 @@ export function ApprovalHud() {
   const [feedbackOpen, setFeedbackOpen] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string>('');
 
-  // Subscribe to incoming requests. Push to queue; head renders.
+  // Subscribe to incoming requests. Only handle single-item
+  // payloads — batch payloads (with `items`) go to the
+  // BatchApprovalHud component instead.
   useEffect(() => {
     const off = window.jarvis.onAutopilotApprovalRequested((req) => {
-      setQueue((prev) => [...prev, req]);
+      if (Array.isArray((req as { items?: unknown }).items)) return;
+      setQueue((prev) => [...prev, req as Request]);
     });
     return off;
   }, []);

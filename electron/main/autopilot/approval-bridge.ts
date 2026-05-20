@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 
 import { IpcChannels } from '@shared/ipc';
+import type { BatchDecision, BatchItem } from '@shared/types';
 
 import { broadcast } from '../windows.js';
 
@@ -41,13 +42,36 @@ export type ApprovalDecision =
   | { decision: 'accept'; editedBody?: string }
   | { decision: 'reject'; feedback?: string };
 
+/**
+ * Batch-mode payload (multi-row HUD). Same broadcast/settle plumbing
+ * as the single-item path; the renderer picks which HUD to mount by
+ * sniffing the `items` field.
+ */
+export interface BatchApprovalPayload {
+  title: string;
+  summary?: string;
+  items: BatchItem[];
+  /** Origin workflow id — used for the feedback file path. */
+  workflowId: string;
+}
+
+export interface BatchApprovalRequested extends BatchApprovalPayload {
+  requestId: string;
+}
+
 interface Pending {
   resolve: (d: ApprovalDecision) => void;
   payload: ApprovalPayload;
 }
 
+interface PendingBatch {
+  resolve: (d: BatchDecision[]) => void;
+  payload: BatchApprovalPayload;
+}
+
 export class ApprovalBridge extends EventEmitter {
   private pending = new Map<string, Pending>();
+  private pendingBatches = new Map<string, PendingBatch>();
 
   /**
    * Block until the user settles the prompt. Broadcasts an
@@ -102,6 +126,49 @@ export class ApprovalBridge extends EventEmitter {
     return true;
   }
 
+  /**
+   * Batch counterpart to `await`. Broadcasts the same
+   * `approvalRequested` event but with an `items` array; the
+   * renderer's BatchApprovalHud opens. Resolves with an array of
+   * per-row decisions when the user clicks Done (or all rows
+   * decided).
+   */
+  awaitBatch(
+    payload: BatchApprovalPayload,
+    signal?: AbortSignal,
+  ): Promise<BatchDecision[]> {
+    return new Promise<BatchDecision[]>((resolve, reject) => {
+      const requestId = randomUUID();
+      this.pendingBatches.set(requestId, { resolve, payload });
+      const event: BatchApprovalRequested = { ...payload, requestId };
+      broadcast(IpcChannels.autopilotApprovalRequested, event);
+      this.emit('requested', event);
+      if (signal) {
+        if (signal.aborted) {
+          this.pendingBatches.delete(requestId);
+          reject(new Error('batch approval aborted before dispatch'));
+          return;
+        }
+        signal.addEventListener(
+          'abort',
+          () => {
+            this.pendingBatches.delete(requestId);
+            reject(new Error('batch approval aborted by caller'));
+          },
+          { once: true },
+        );
+      }
+    });
+  }
+
+  settleBatch(requestId: string, decisions: BatchDecision[]): boolean {
+    const pending = this.pendingBatches.get(requestId);
+    if (!pending) return false;
+    this.pendingBatches.delete(requestId);
+    pending.resolve(decisions);
+    return true;
+  }
+
   /** Abort all pending — used on app shutdown or a hard scheduler
    *  restart. Each pending Promise resolves to a synthetic reject. */
   closeAll(reason = 'cancelled'): void {
@@ -109,6 +176,18 @@ export class ApprovalBridge extends EventEmitter {
       p.resolve({ decision: 'reject', feedback: reason });
     }
     this.pending.clear();
+    for (const [, p] of this.pendingBatches) {
+      // Map shutdown to "skip every row" — no feedback noise, no
+      // false ACCEPTs, the run terminates as if the user closed.
+      p.resolve(
+        p.payload.items.map((it) => ({
+          rowId: it.id,
+          decision: 'skip',
+          feedback: reason,
+        })),
+      );
+    }
+    this.pendingBatches.clear();
   }
 }
 

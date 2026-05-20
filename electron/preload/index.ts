@@ -6,6 +6,7 @@ import type {
   AppMode,
   AppStatus,
   AuthMode,
+  BatchDecision,
   ClaudeMcpEntry,
   ConnectorAccount,
   ConnectorId,
@@ -98,8 +99,18 @@ const api = {
       workflowId: string;
       title: string;
       summary?: string;
+      // Single-item shape (prompt-output node)
       body?: string;
       context?: string;
+      // Batch shape (batch-prompt-output node). Renderer routes by
+      // presence of `items`.
+      items?: Array<{
+        id: string;
+        preview: Array<{ label: string; value: string }>;
+        draft: string;
+        verdict?: string;
+        context?: string;
+      }>;
     }>,
   ): Unsubscribe => subscribe(IpcChannels.autopilotApprovalRequested, listener),
   autopilotApprove: (
@@ -117,6 +128,14 @@ const api = {
     ipcRenderer.invoke(IpcChannels.autopilotReject, {
       requestId,
       feedback,
+    }),
+  autopilotApproveBatch: (
+    requestId: string,
+    decisions: BatchDecision[],
+  ): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IpcChannels.autopilotApproveBatch, {
+      requestId,
+      decisions,
     }),
   autopilotFeedback: (
     action: 'list' | 'read' | 'clear',

@@ -28,10 +28,14 @@ export const IpcChannels = {
 
   // Autopilot approval flow (prompt-output workflow node). The main
   // process opens the approval HUD with a payload; the renderer
-  // settles it via approve/reject.
+  // settles it via approve/reject. Batch flow (batch-prompt-output)
+  // reuses the same `approvalRequested` event — payload carries
+  // either { body } (single) or { items } (batch); the renderer
+  // routes by sniffing the payload shape.
   autopilotApprovalRequested: 'autopilot:approvalRequested',
   autopilotApprove: 'autopilot:approve',
   autopilotReject: 'autopilot:reject',
+  autopilotApproveBatch: 'autopilot:approveBatch',
   autopilotFeedback: 'autopilot:feedback',
 
   // Telegram module bot-token management (Keychain-backed; the renderer

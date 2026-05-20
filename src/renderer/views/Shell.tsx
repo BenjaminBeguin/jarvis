@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { AppMode, AppStatus, ModuleSummary, ProjectDef } from '../../shared/types';
 import { getModulePage } from '../modules/registry';
 import { ApprovalHud } from './autopilot/ApprovalHud';
+import { BatchApprovalHud } from './autopilot/BatchApprovalHud';
 import { Inbox } from './Inbox';
 import { Logo } from './Logo';
 import { MeetingOverlay } from './MeetingOverlay';
@@ -756,6 +757,7 @@ export function Shell({ status }: Props) {
       <MeetingOverlay />
       <MeetingPrompt />
       <ApprovalHud />
+      <BatchApprovalHud />
       <SessionSidebar />
       <NewProjectDialog
         open={newProjectOpen}

@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 
 import { IpcChannels } from '@shared/ipc';
+import type { BatchDecision } from '@shared/types';
 
 import { approvalBridge } from '../autopilot/approval-bridge.js';
 import {
@@ -68,6 +69,48 @@ export function registerAutopilotIpc(deps: AutopilotIpcDeps): void {
           detail: {
             requestId: payload.requestId,
             hasFeedback: !!payload.feedback,
+          },
+        });
+      }
+      return { ok };
+    },
+  );
+
+  // Batch settle. Renderer sends one IPC at the end of the HUD
+  // session (all rows decided or user clicked Done) carrying every
+  // per-row decision. Activity feed gets one summary row per batch
+  // — too noisy to log every individual row.
+  ipcMain.handle(
+    IpcChannels.autopilotApproveBatch,
+    (
+      _e,
+      payload: { requestId: string; decisions: BatchDecision[] },
+    ): { ok: boolean } => {
+      if (!payload?.requestId || !Array.isArray(payload.decisions)) {
+        return { ok: false };
+      }
+      const ok = approvalBridge.settleBatch(
+        payload.requestId,
+        payload.decisions,
+      );
+      if (ok) {
+        const accepted = payload.decisions.filter(
+          (d) => d.decision === 'accept',
+        ).length;
+        const rejected = payload.decisions.filter(
+          (d) => d.decision === 'reject',
+        ).length;
+        const skipped = payload.decisions.filter(
+          (d) => d.decision === 'skip',
+        ).length;
+        deps.activity.record({
+          kind: 'autopilot.batch-decided',
+          label: `Autopilot batch · ${accepted} accepted · ${rejected} rejected · ${skipped} skipped`,
+          detail: {
+            requestId: payload.requestId,
+            accepted,
+            rejected,
+            skipped,
           },
         });
       }

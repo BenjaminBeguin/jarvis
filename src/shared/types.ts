@@ -869,6 +869,50 @@ export interface TranscribeProgress {
 export type AuthMode = 'subscription' | 'api-key';
 
 /**
+ * One row in a `batch-prompt-output` HUD. The autopilot scenarios
+ * that produce multiple drafts in a single tick (Slack DMs across
+ * several senders, PR review across a queue, PR comments across one
+ * PR) emit an array of these; the HUD renders them as a table and
+ * the user accepts / rejects per row.
+ */
+export interface BatchItem {
+  /** Stable id keyed by domain (e.g. `slack-CXXX-1727654321.001`,
+   *  `pr-acme-foo-#123`, `comment-12345`). Used as the React key in
+   *  the HUD and the row-id in the per-row decision IPC. */
+  id: string;
+  /** Header cells the renderer shows as the row's identity (From,
+   *  Channel, File:line, PR title, etc.). Pure labels + values; the
+   *  HUD doesn't reflow these. */
+  preview: Array<{ label: string; value: string }>;
+  /** Editable draft body for this row. Slack scenario: the reply
+   *  text. PR scenarios: the review summary or the reply text. */
+  draft: string;
+  /** Optional intent / verdict line shown next to the draft.
+   *  'approve' / 'comment' / 'request-changes' for PR review;
+   *  'should-do' / 'ignore' for PR-comments; omitted for Slack. */
+  verdict?: string;
+  /** Optional read-only context shown when the row is expanded
+   *  (diff snippet, thread excerpt, the original comment, …).
+   *  Renders as monospaced plain text. */
+  context?: string;
+}
+
+/**
+ * Per-row outcome the renderer reports back from `BatchApprovalHud`.
+ * The workflow's `batch-prompt-output` node fans each one into the
+ * feedback file (one entry per decision) and returns the accepted +
+ * rejected subsets as the pipeline's next-step input.
+ */
+export interface BatchDecision {
+  rowId: string;
+  decision: 'accept' | 'reject' | 'skip';
+  /** If the user edited the draft before accepting, the edited text. */
+  editedDraft?: string;
+  /** Free-form note attached to a reject. */
+  feedback?: string;
+}
+
+/**
  * Top-level operating state. Replaces the older `paused: boolean` —
  * three exclusive modes:
  *
@@ -988,7 +1032,8 @@ export type WorkflowNodeType =
   | 'run-skill'
   | 'mcp-call'
   | 'draft-output'
-  | 'prompt-output';
+  | 'prompt-output'
+  | 'batch-prompt-output';
 
 export interface WorkflowNodeDef {
   type: string;

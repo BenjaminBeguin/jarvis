@@ -1,5 +1,6 @@
 import type { NodeHandler } from './types.js';
 
+import { batchPromptOutputNode } from './batch-prompt-output.js';
 import { draftOutputNode } from './draft-output.js';
 import { httpFetchNode } from './http-fetch.js';
 import { inboxWriteNode } from './inbox-write.js';
@@ -32,6 +33,7 @@ export const NODE_REGISTRY: Record<string, NodeHandler> = {
   'mcp-call': mcpCallNode as unknown as NodeHandler,
   'draft-output': draftOutputNode as unknown as NodeHandler,
   'prompt-output': promptOutputNode as unknown as NodeHandler,
+  'batch-prompt-output': batchPromptOutputNode as unknown as NodeHandler,
 };
 
 export type { NodeHandler, NodeHandlerInput, WorkflowNodeContext } from './types.js';
