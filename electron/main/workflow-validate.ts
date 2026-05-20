@@ -95,6 +95,29 @@ export function validateWorkflow(
     }
   } else if (def.trigger?.kind === 'manual') {
     // No fields are required; palette field is optional.
+  } else if (def.trigger?.kind === 'autopilot') {
+    // Autopilot scenario: gated by appMode === 'autopilot' at the
+    // scheduler. Two firing patterns — cron or inbox-changed —
+    // share the same envelope so we validate each branch's required
+    // fields here.
+    if (def.trigger.when === 'cron') {
+      if (!def.trigger.every || typeof def.trigger.every !== 'string') {
+        errors.push('autopilot trigger with when:"cron" needs an "every" expression');
+      } else {
+        const expanded = expandForValidation(def.trigger.every);
+        if (expanded && !cron.validate(expanded)) {
+          errors.push(
+            `cron expression "${def.trigger.every}" → "${expanded}" is not a valid 5-field cron`,
+          );
+        }
+      }
+    } else if (def.trigger.when === 'inbox-changed') {
+      // sources is optional (default = all sources); minIntervalMs is optional.
+    } else {
+      errors.push(
+        `autopilot trigger needs when:"cron" or when:"inbox-changed" (got ${String((def.trigger as { when?: unknown }).when)})`,
+      );
+    }
   } else if (def.trigger) {
     errors.push(`unknown trigger kind: ${String((def.trigger as { kind?: unknown }).kind)}`);
   }
