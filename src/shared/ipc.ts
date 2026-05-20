@@ -197,6 +197,13 @@ export const IpcChannels = {
    *  reaching for the mic button. */
   paletteToggleVoice: 'palette:toggleVoice',
 
+  /** Voice-orb interaction events. The orb is a separate window
+   *  that handles mic + transcribe + dispatch. The global ⌘⇧Space
+   *  shortcut sends a single "toggle" event — the orb decides
+   *  whether to start or stop based on its own state. */
+  voiceOrbToggle: 'voiceOrb:toggle',
+  voiceOrbHide: 'voiceOrb:hide',
+
   /** Bring the main window forward and switch to a specific tab.
    *  Used by the tray menu so its nav rows actually land on the
    *  named tab (Observatory / Inbox / Routines / …) instead of

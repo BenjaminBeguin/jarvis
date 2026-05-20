@@ -33,6 +33,12 @@ const chatPopupWindows = new Map<string, BrowserWindow>();
  *  fallback. */
 let trayMenuWindow: BrowserWindow | null = null;
 
+/** Floating Jarvis-style orb shown while the user is dictating
+ *  via the global ⌘⇧Space shortcut. Replaces the palette UI for
+ *  the voice flow — a pulsing cyan circle is less disruptive
+ *  than slamming the full palette in the user's face. */
+let voiceOrbWindow: BrowserWindow | null = null;
+
 /** Read-only access to the main window so callers can branch on
  *  its visibility / focus without forcing it forward. Returns null
  *  if the window doesn't exist yet (cold launch / closed). */
@@ -376,6 +382,77 @@ export function resizeTrayMenu(targetHeight: number): void {
     width: w,
     height: clamped,
   });
+}
+
+const VOICE_ORB_WIDTH = 280;
+const VOICE_ORB_HEIGHT = 320;
+
+/**
+ * Show the voice-listening orb — a frameless transparent
+ * BrowserWindow centered horizontally near the top of the screen,
+ * with a pulsing cyan orb + "Listening…" label. The orb's React
+ * component manages the actual mic capture + transcription +
+ * dispatch. We just provide the window chrome.
+ */
+export function showVoiceOrb(): BrowserWindow {
+  if (voiceOrbWindow && !voiceOrbWindow.isDestroyed()) {
+    if (!voiceOrbWindow.isVisible()) voiceOrbWindow.show();
+    voiceOrbWindow.moveTop();
+    voiceOrbWindow.focus();
+    return voiceOrbWindow;
+  }
+  const display = screen.getPrimaryDisplay();
+  const x =
+    display.workArea.x +
+    Math.floor(display.workArea.width / 2 - VOICE_ORB_WIDTH / 2);
+  const y =
+    display.workArea.y +
+    Math.floor(display.workArea.height * 0.18);
+  voiceOrbWindow = new BrowserWindow({
+    width: VOICE_ORB_WIDTH,
+    height: VOICE_ORB_HEIGHT,
+    x,
+    y,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    alwaysOnTop: true,
+    resizable: false,
+    movable: true,
+    skipTaskbar: true,
+    focusable: true,
+    show: false,
+    webPreferences: {
+      preload: preloadPath,
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  voiceOrbWindow.setVisibleOnAllWorkspaces(true, {
+    visibleOnFullScreen: true,
+  });
+  voiceOrbWindow.on('ready-to-show', () => {
+    if (!voiceOrbWindow || voiceOrbWindow.isDestroyed()) return;
+    voiceOrbWindow.show();
+    voiceOrbWindow.focus();
+  });
+  voiceOrbWindow.on('closed', () => {
+    voiceOrbWindow = null;
+  });
+  loadRoute(voiceOrbWindow, '/voice-orb');
+  return voiceOrbWindow;
+}
+
+export function hideVoiceOrb(): void {
+  if (voiceOrbWindow && !voiceOrbWindow.isDestroyed()) voiceOrbWindow.hide();
+}
+
+export function getVoiceOrbWindow(): BrowserWindow | null {
+  return voiceOrbWindow && !voiceOrbWindow.isDestroyed()
+    ? voiceOrbWindow
+    : null;
 }
 
 /**

@@ -132,9 +132,11 @@ import {
 } from './tray.js';
 import {
   broadcast,
+  hideVoiceOrb,
   openObservatory,
   openPalette,
   sendWhenReady,
+  showVoiceOrb,
   surfaceConversation,
 } from './windows.js';
 
@@ -274,6 +276,13 @@ ipcMain.handle(IpcChannels.noteSelfMicStart, () => {
 });
 ipcMain.handle(IpcChannels.noteSelfMicStop, () => {
   meetingActivity.noteSelfMicStop();
+});
+
+// Voice orb: lets the orb's React component dismiss its own
+// window after dispatching the transcribed prompt or after the
+// user hits Escape.
+ipcMain.handle(IpcChannels.voiceOrbHide, () => {
+  hideVoiceOrb();
 });
 // Broadcast on every status change so a permanently-mounted status
 // pill in the Shell can react without polling.
@@ -737,14 +746,15 @@ function registerGlobalShortcut(): void {
   if (!ok) {
     console.warn(`failed to register global shortcut ${accelerator}`);
   }
-  // Voice trigger — open palette + toggle mic in one shortcut so
-  // you can start talking without first finding the mic icon.
-  // Tap once to start listening, again to stop + transcribe +
-  // dispatch (matches the in-palette button's mouse-up behavior).
+  // Voice trigger — pops the Jarvis-style listening orb (a small
+  // floating BrowserWindow with a pulsing cyan circle) instead of
+  // the full palette UI. Tap once to start listening, again to
+  // stop + transcribe + dispatch via routePrompt. Esc inside the
+  // orb cancels without dispatching.
   const voiceAccel = 'CommandOrControl+Shift+Space';
   const voiceOk = globalShortcut.register(voiceAccel, () => {
-    const win = openPalette();
-    sendWhenReady(win, IpcChannels.paletteToggleVoice, undefined);
+    const win = showVoiceOrb();
+    sendWhenReady(win, IpcChannels.voiceOrbToggle, undefined);
   });
   if (!voiceOk) {
     console.warn(`failed to register global shortcut ${voiceAccel}`);

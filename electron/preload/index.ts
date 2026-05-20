@@ -258,6 +258,12 @@ const api = {
   onPaletteToggleVoice: (listener: Listener<void>): Unsubscribe =>
     subscribe(IpcChannels.paletteToggleVoice, listener),
 
+  /** Voice orb: receive shortcut toggles + ask main to dismiss. */
+  onVoiceOrbToggle: (listener: Listener<void>): Unsubscribe =>
+    subscribe(IpcChannels.voiceOrbToggle, listener),
+  hideVoiceOrb: (): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.voiceOrbHide),
+
   listSkills: (): Promise<SkillSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listSkills),
   refreshSkills: (): Promise<SkillSummary[]> =>

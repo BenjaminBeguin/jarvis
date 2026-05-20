@@ -8,6 +8,7 @@ import { CommandPalette } from './views/CommandPalette';
 import { Setup } from './views/Setup';
 import { Shell } from './views/Shell';
 import { TrayMenu } from './views/TrayMenu';
+import { VoiceOrb } from './views/VoiceOrb';
 
 function getRoute(): string {
   const hash = window.location.hash.replace(/^#/, '');
@@ -44,7 +45,8 @@ export function App() {
     const transparent =
       route === '/palette' ||
       route === '/answer-hud' ||
-      route === '/tray-menu';
+      route === '/tray-menu' ||
+      route === '/voice-orb';
     if (transparent) document.body.classList.add('palette-body');
     else document.body.classList.remove('palette-body');
   }, [route]);
@@ -80,6 +82,9 @@ export function App() {
   }
   if (route === '/tray-menu') {
     return <TrayMenu />;
+  }
+  if (route === '/voice-orb') {
+    return <VoiceOrb />;
   }
 
   // Main window: render the Shell behind the overlay so the underlying

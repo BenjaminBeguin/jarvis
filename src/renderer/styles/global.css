@@ -7736,6 +7736,218 @@ button:disabled:hover {
   letter-spacing: 0;
 }
 
+/* ───────────────── Voice orb (⌘⇧Space) ───────────────── */
+
+@keyframes voice-orb-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes voice-orb-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+}
+
+@keyframes voice-orb-ring-pulse {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes voice-orb-ring-spread {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.voice-orb {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text);
+  font-family: var(--mono);
+  user-select: none;
+  cursor: pointer;
+  animation: voice-orb-in 200ms ease-out;
+}
+
+/* Outer + mid rings — driven by the live mic level (transform
+   override in component). When level is 0 they just pulse on the
+   keyframes; when level > 0 they scale up to match the voice. */
+.voice-orb__ring {
+  position: absolute;
+  top: 24px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  pointer-events: none;
+  transition: transform 80ms ease-out;
+}
+
+.voice-orb__ring--outer {
+  border: 1.5px solid rgba(0, 212, 255, 0.45);
+  box-shadow: 0 0 32px rgba(0, 212, 255, 0.35);
+  animation: voice-orb-ring-pulse 1.8s ease-in-out infinite;
+}
+
+.voice-orb__ring--mid {
+  border: 1px solid rgba(0, 212, 255, 0.6);
+  box-shadow: 0 0 18px rgba(0, 212, 255, 0.4);
+  animation: voice-orb-ring-pulse 1.4s ease-in-out infinite reverse;
+}
+
+.voice-orb__core {
+  position: absolute;
+  top: 44px;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle at 50% 40%,
+      rgba(0, 212, 255, 0.85) 0%,
+      rgba(0, 212, 255, 0.45) 40%,
+      rgba(0, 50, 80, 0.65) 75%,
+      rgba(0, 30, 50, 0.85) 100%
+    );
+  box-shadow:
+    0 0 36px rgba(0, 212, 255, 0.55),
+    inset 0 0 16px rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: voice-orb-pulse 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.voice-orb__glyph {
+  font-family: var(--mono);
+  font-size: 28px;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow:
+    0 0 12px rgba(0, 212, 255, 0.95),
+    0 0 24px rgba(0, 212, 255, 0.5);
+  letter-spacing: 0.1em;
+}
+
+.voice-orb__label {
+  position: absolute;
+  top: 168px;
+  font-size: 11px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-shadow: var(--accent-glow);
+}
+
+.voice-orb__transcript {
+  position: absolute;
+  top: 196px;
+  max-width: 240px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-style: italic;
+  text-align: center;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+}
+
+.voice-orb__error {
+  position: absolute;
+  top: 196px;
+  max-width: 240px;
+  font-size: 11px;
+  color: var(--bad);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.voice-orb__hint {
+  position: absolute;
+  top: 248px;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: var(--text-faint);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* Phase-specific tinting. Errored + cancelled drop accent → warm
+   so the user knows something went wrong / they bailed. */
+.voice-orb--errored .voice-orb__core {
+  background:
+    radial-gradient(
+      circle at 50% 40%,
+      rgba(255, 85, 119, 0.85) 0%,
+      rgba(255, 85, 119, 0.45) 40%,
+      rgba(80, 30, 50, 0.75) 100%
+    );
+  box-shadow: 0 0 36px rgba(255, 85, 119, 0.5);
+  animation: none;
+}
+
+.voice-orb--errored .voice-orb__ring,
+.voice-orb--cancelled .voice-orb__ring {
+  border-color: rgba(255, 85, 119, 0.45);
+  box-shadow: 0 0 24px rgba(255, 85, 119, 0.3);
+}
+
+.voice-orb--errored .voice-orb__label,
+.voice-orb--cancelled .voice-orb__label {
+  color: var(--bad);
+  text-shadow: 0 0 6px rgba(255, 85, 119, 0.6);
+}
+
+.voice-orb--done .voice-orb__core {
+  background:
+    radial-gradient(
+      circle at 50% 40%,
+      rgba(95, 255, 166, 0.85) 0%,
+      rgba(95, 255, 166, 0.45) 40%,
+      rgba(20, 60, 40, 0.75) 100%
+    );
+  box-shadow: 0 0 36px rgba(95, 255, 166, 0.5);
+  animation: none;
+}
+
+.voice-orb--done .voice-orb__label {
+  color: var(--good);
+  text-shadow: 0 0 6px rgba(95, 255, 166, 0.6);
+}
+
+.voice-orb--transcribing .voice-orb__core,
+.voice-orb--dispatching .voice-orb__core {
+  animation: voice-orb-pulse 0.8s ease-in-out infinite;
+}
+
 /* ───────────────── Custom tray-menu popover ───────────────── */
 
 @keyframes tray-menu-in {
