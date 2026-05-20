@@ -727,6 +727,18 @@ function registerGlobalShortcut(): void {
   if (!ok) {
     console.warn(`failed to register global shortcut ${accelerator}`);
   }
+  // Voice trigger — open palette + toggle mic in one shortcut so
+  // you can start talking without first finding the mic icon.
+  // Tap once to start listening, again to stop + transcribe +
+  // dispatch (matches the in-palette button's mouse-up behavior).
+  const voiceAccel = 'CommandOrControl+Shift+Space';
+  const voiceOk = globalShortcut.register(voiceAccel, () => {
+    const win = openPalette();
+    sendWhenReady(win, IpcChannels.paletteToggleVoice, undefined);
+  });
+  if (!voiceOk) {
+    console.warn(`failed to register global shortcut ${voiceAccel}`);
+  }
 }
 
 /**

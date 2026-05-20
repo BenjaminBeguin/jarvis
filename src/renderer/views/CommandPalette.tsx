@@ -538,6 +538,20 @@ export function CommandPalette() {
     inputRef.current?.focus();
   };
 
+  // Global voice shortcut — Cmd+Shift+Space pops the palette and
+  // toggles the mic. Tap to start, tap again to stop + transcribe.
+  useEffect(() => {
+    return window.jarvis.onPaletteToggleVoice(() => {
+      if (transcribing) return;
+      if (captureRef.current) {
+        void stopVoice();
+      } else {
+        void startVoice();
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transcribing]);
+
   const startVoice = async () => {
     if (captureRef.current || transcribing) return;
     setError(null);

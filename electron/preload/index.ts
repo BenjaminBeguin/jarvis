@@ -248,6 +248,12 @@ const api = {
     ipcRenderer.invoke(IpcChannels.trayMenuResize, height),
   quitApp: (): Promise<void> => ipcRenderer.invoke(IpcChannels.trayMenuQuit),
 
+  /** Subscribe to the global voice-shortcut toggle. Fires once per
+   *  shortcut press; consumer decides whether to start or stop
+   *  based on its own listening state. */
+  onPaletteToggleVoice: (listener: Listener<void>): Unsubscribe =>
+    subscribe(IpcChannels.paletteToggleVoice, listener),
+
   listSkills: (): Promise<SkillSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listSkills),
   refreshSkills: (): Promise<SkillSummary[]> =>

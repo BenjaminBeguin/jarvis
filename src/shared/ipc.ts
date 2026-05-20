@@ -186,6 +186,11 @@ export const IpcChannels = {
   trayMenuResize: 'tray:resize',
   trayMenuQuit: 'tray:quit',
 
+  /** Toggle voice capture inside the palette. Fired by a global
+   *  shortcut so the user can start speaking without first
+   *  reaching for the mic button. */
+  paletteToggleVoice: 'palette:toggleVoice',
+
   meetingStart: 'meeting:start',
   meetingStopRequest: 'meeting:stop-request',
   meetingFinish: 'meeting:finish',
