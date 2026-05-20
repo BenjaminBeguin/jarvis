@@ -1,54 +1,102 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { TaskEvent } from '../../../shared/types';
+import type { TaskEvent, TaskSummary } from '../../../shared/types';
 import { buildItems } from '../../conversation/buildItems';
 import type { ChatItem, ConversationMode } from '../../conversation/types';
 import { MarkdownText } from '../MarkdownText';
+import { formatRelative } from '../TaskList';
+import { toast } from '../Toaster';
 
 /**
- * Unified chat-transcript renderer. Subscribes to a task's events
- * and renders them as chat bubbles. Replaces three earlier builders
- * that all parsed SDKMessages differently.
+ * Unified task-conversation surface. One component renders every
+ * conversation in the app — sidebar slide-in, Observatory panel,
+ * standalone Task page — so the user sees the same affordances
+ * regardless of where the transcript lives.
  *
- * `mode='cozy'` (default) — Claude-Code-Desktop-style:
- *   - User messages right-aligned, assistant left.
- *   - Tool calls collapse to a single line ("⚙ Read foo.ts:42 ▸");
- *     click to expand input + result.
- *   - Successful tool calls without informative output stay
- *     collapsed; errored ones expand by default.
- *   - "Thinking" / system events render as a dim single-line row
- *     that expands to the full payload.
- *   - Result event becomes a small footer pill.
+ * Chrome (always rendered when a task is loaded):
+ *   - Header: title + status + origin + cost + cwd + session id row
+ *     with "Copy resume" / "Open in Claude Code" / "Hand off to
+ *     terminal" actions.
+ *   - "Agent is waiting for your input" banner when applicable.
+ *   - Composer at the bottom — SendReply for owned tasks, the
+ *     fork-into-Jarvis ContinueExternal for external sessions.
+ *   - Stop button while running.
  *
- * `mode='full'` — everything expanded by default, system events
- * visible, tool input + result JSON shown inline. The Observatory
- * panel uses this for serious debugging.
- *
- * Auto-scrolls to the bottom on each new event unless the user has
- * scrolled up — that locks the view until they scroll back near
- * the bottom.
+ * Transcript:
+ *   - `mode='cozy'` (default): chat-bubble style. Tools collapse
+ *     to one line (errors auto-expanded). System events render as
+ *     a dim "thinking…" row.
+ *   - `mode='full'`: tools + system events expanded by default,
+ *     with a togglable "N system events" row at the top.
  */
 
-export interface ConversationProps {
+interface Props {
   taskId: string;
   mode?: ConversationMode;
+  /** Lets reply paths swap to a freshly-created task (e.g. fork
+   *  resume from an external Claude Code session). */
+  onSelectTask?: (id: string) => void;
 }
 
-export function Conversation({ taskId, mode = 'cozy' }: ConversationProps) {
+function formatTime(ts: number): string {
+  const d = new Date(ts);
+  const today = new Date();
+  const sameDay =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
+  if (sameDay) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function formatCwd(cwd: string): string {
+  const match = cwd.match(/^\/Users\/[^/]+(\/.*)?$/);
+  if (match) return `~${match[1] ?? ''}`;
+  return cwd;
+}
+
+export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
+  const [task, setTask] = useState<TaskSummary | null>(null);
   const [events, setEvents] = useState<TaskEvent[]>([]);
   const bodyRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
+  const [showSystem, setShowSystem] = useState(mode === 'full');
 
-  // Load history + subscribe to live events.
+  // Subscribe to TaskSummary so the header / awaiting badge / composer
+  // react to status changes live.
   useEffect(() => {
     let cancelled = false;
+    void window.jarvis.listTasks().then((all) => {
+      if (cancelled) return;
+      const t = all.find((x) => x.id === taskId);
+      if (t) setTask(t);
+    });
+    const off = window.jarvis.onTaskStatus((summary) => {
+      if (summary.id !== taskId) return;
+      setTask(summary);
+    });
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [taskId]);
+
+  // Backfill history + subscribe to live events.
+  useEffect(() => {
+    let cancelled = false;
+    setEvents([]);
     void window.jarvis.getTaskHistory(taskId).then((history) => {
       if (cancelled) return;
       setEvents(history);
     });
     const off = window.jarvis.onTaskEvent(({ taskId: id, event }) => {
       if (id !== taskId) return;
-      setEvents((prev) => [...prev, event]);
+      setEvents((prev) => {
+        if (prev.some((e) => e.seq === event.seq)) return prev;
+        return [...prev, event];
+      });
     });
     return () => {
       cancelled = true;
@@ -57,6 +105,16 @@ export function Conversation({ taskId, mode = 'cozy' }: ConversationProps) {
   }, [taskId]);
 
   const items = useMemo(() => buildItems(events), [events]);
+  const systemCount = useMemo(
+    () => items.filter((i) => i.kind === 'thinking').length,
+    [items],
+  );
+  // Cozy default hides system events; full default shows them. Users
+  // can toggle either way via the filter bar.
+  const visible = useMemo(() => {
+    if (showSystem) return items;
+    return items.filter((i) => i.kind !== 'thinking');
+  }, [items, showSystem]);
 
   // Scroll tracking: when the user scrolls up, stop auto-scrolling
   // until they come back to within 64px of the bottom.
@@ -71,27 +129,106 @@ export function Conversation({ taskId, mode = 'cozy' }: ConversationProps) {
     return () => body.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Auto-scroll on new items when sticky.
   useEffect(() => {
     if (!stickToBottomRef.current) return;
     const body = bodyRef.current;
     if (!body) return;
     body.scrollTop = body.scrollHeight;
-  }, [items]);
+  }, [visible.length]);
+
+  if (!task) {
+    return (
+      <section className="detail">
+        <div className="empty" style={{ padding: 24 }}>
+          Loading conversation…
+        </div>
+      </section>
+    );
+  }
+
+  // Defensive: a task in a terminal state can't actually be waiting
+  // even if the awaitingInput flag is stale.
+  const isAwaiting =
+    !!task.awaitingInput &&
+    task.status !== 'completed' &&
+    task.status !== 'errored' &&
+    task.status !== 'aborted';
 
   return (
-    <div className={`convo convo--${mode}`} ref={bodyRef}>
-      {items.length === 0 && (
-        <div className="convo__empty">
-          {mode === 'cozy'
-            ? 'Waiting for the agent to respond…'
-            : 'No events yet.'}
+    <section className="detail">
+      <header className="detail__header">
+        <div className="detail__title">
+          <h2>{task.title}</h2>
+          <div
+            className="meta"
+            title={new Date(task.startedAt).toLocaleString()}
+          >
+            {task.status === 'running' && task.awaitingInput
+              ? 'awaiting'
+              : task.status}{' '}
+            · {task.origin} · started {formatRelative(task.startedAt)}
+            {task.costUsd > 0 && ` · $${task.costUsd.toFixed(4)}`}
+            {task.pooled && (
+              <span
+                className="detail__pooled"
+                title="This task resumed a pooled SDK session — skipped the cold-start cost. The session is shared with prior turns of the same skill within the 60-min pool window."
+              >
+                {' '}
+                · ↪ pooled
+              </span>
+            )}
+          </div>
+          {task.cwd && task.origin !== 'external' && (
+            <div className="meta detail__cwd" title="Working directory">
+              📁 {formatCwd(task.cwd)}
+            </div>
+          )}
+          {task.sdkSessionId && task.origin !== 'external' && (
+            <SessionAffordances task={task} />
+          )}
+        </div>
+        {task.status === 'running' && task.origin !== 'external' && (
+          <button onClick={() => void window.jarvis.abortTask(task.id)}>
+            Stop
+          </button>
+        )}
+      </header>
+
+      {isAwaiting && <AwaitingBanner />}
+
+      {systemCount > 0 && (
+        <div className="detail__filter-bar">
+          <button
+            className="detail__filter-toggle"
+            onClick={() => setShowSystem((s) => !s)}
+            title={
+              showSystem ? 'Hide system diagnostics' : 'Show system diagnostics'
+            }
+          >
+            {showSystem ? '▾' : '▸'} {systemCount} system event
+            {systemCount === 1 ? '' : 's'}
+          </button>
         </div>
       )}
-      {items.map((item) => (
-        <ChatItemRow key={item.key} item={item} mode={mode} />
-      ))}
-    </div>
+
+      <div className="detail__body" ref={bodyRef}>
+        {visible.length === 0 && (
+          <div className="empty">
+            {mode === 'cozy'
+              ? 'Waiting for the agent to respond…'
+              : 'No events yet.'}
+          </div>
+        )}
+        {visible.map((item) => (
+          <ChatItemRow key={item.key} item={item} mode={mode} />
+        ))}
+      </div>
+
+      {isAwaiting && task.origin === 'external' && (
+        <ContinueExternal task={task} onForked={onSelectTask} />
+      )}
+      {isAwaiting && task.origin !== 'external' && <SendReply task={task} />}
+    </section>
   );
 }
 
@@ -104,9 +241,16 @@ function ChatItemRow({
 }) {
   if (item.kind === 'user') {
     return (
-      <div className="convo__row convo__row--user">
-        <div className="convo__bubble convo__bubble--user">
+      <div className="chat-row chat-row--user">
+        <span className="chat-row__chip">you</span>
+        <div className="chat-row__body">
           <MarkdownText>{item.text}</MarkdownText>
+        </div>
+        <div
+          className="chat-row__time"
+          title={new Date(item.ts).toLocaleString()}
+        >
+          {formatTime(item.ts)}
         </div>
       </div>
     );
@@ -114,9 +258,15 @@ function ChatItemRow({
 
   if (item.kind === 'assistant') {
     return (
-      <div className="convo__row convo__row--assistant">
-        <div className="convo__bubble convo__bubble--assistant">
+      <div className="chat-row chat-row--assistant">
+        <div className="chat-row__body">
           <MarkdownText>{item.text}</MarkdownText>
+        </div>
+        <div
+          className="chat-row__time"
+          title={new Date(item.ts).toLocaleString()}
+        >
+          {formatTime(item.ts)}
         </div>
       </div>
     );
@@ -139,19 +289,20 @@ function ChatItemRow({
           : `${item.durationMs}ms`;
     const cost = item.costUsd > 0 ? ` · $${item.costUsd.toFixed(4)}` : '';
     return (
-      <div className="convo__row convo__row--result">
-        <div className="convo__result">Done · {dur}{cost}</div>
+      <div className="chat-row chat-row--result">
+        turn complete · {dur}
+        {cost}
       </div>
     );
   }
 
   if (item.kind === 'error') {
     return (
-      <div className="convo__row convo__row--error">
-        <div className="convo__error">
-          <span className="convo__error-glyph">✗</span>
-          <pre className="convo__error-body">{item.body}</pre>
-        </div>
+      <div className="chat-row chat-row--error">
+        <span className="chat-row__chip chat-row__chip--error">
+          {item.aborted ? 'aborted' : 'error'}
+        </span>
+        <div className="chat-row__body">{item.body}</div>
       </div>
     );
   }
@@ -166,30 +317,30 @@ function ToolRow({
   item: Extract<ChatItem, { kind: 'tool' }>;
   mode: ConversationMode;
 }) {
-  // Default-expanded in full mode, or when the tool errored.
   const [open, setOpen] = useState<boolean>(mode === 'full' || item.isError);
   const summary = item.preview ?? '';
   return (
     <div
-      className={`convo__row convo__row--tool${item.isError ? ' convo__row--tool-error' : ''}`}
+      className={`chat-row chat-row--tool${item.isError ? ' chat-row--tool-error' : ''}`}
     >
       <button
         type="button"
-        className="convo__tool-head"
+        className="chat-row__tool-head"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <span className="convo__tool-glyph">{item.isError ? '✗' : '⚙'}</span>
-        <span className="convo__tool-name">{item.name}</span>
-        {summary && <span className="convo__tool-summary">{summary}</span>}
-        <span className="convo__tool-chev">{open ? '▾' : '▸'}</span>
+        <span className="chat-row__tool-caret">{open ? '▾' : '▸'}</span>
+        <span className="chat-row__tool-name">
+          {item.isError ? '✗' : '⚙'} {item.name}
+        </span>
+        {summary && <span className="chat-row__tool-summary">{summary}</span>}
       </button>
       {open && (
-        <div className="convo__tool-detail">
+        <div className="chat-row__tool-detail">
           {item.input !== null && item.input !== undefined && (
             <>
-              <div className="convo__tool-label">Input</div>
-              <pre className="convo__tool-block">
+              <div className="chat-row__tool-label">Input</div>
+              <pre className="chat-row__tool-pre">
                 {typeof item.input === 'string'
                   ? item.input
                   : JSON.stringify(item.input, null, 2)}
@@ -198,11 +349,11 @@ function ToolRow({
           )}
           {item.result && (
             <>
-              <div className="convo__tool-label">
+              <div className="chat-row__tool-label">
                 {item.isError ? 'Error' : 'Result'}
               </div>
               <pre
-                className={`convo__tool-block${item.isError ? ' convo__tool-block--error' : ''}`}
+                className={`chat-row__tool-pre${item.isError ? ' chat-row__tool-pre--error' : ''}`}
               >
                 {item.result}
               </pre>
@@ -222,26 +373,284 @@ function ThinkingRow({
   mode: ConversationMode;
 }) {
   const [open, setOpen] = useState<boolean>(mode === 'full');
-  // Cozy: hide system events except as a single dim "thinking…" line.
-  // Full: show everything inline, no toggle pressure.
   return (
-    <div className="convo__row convo__row--thinking">
+    <div className="chat-row chat-row--system">
       <button
-        type="button"
-        className="convo__thinking-head"
+        className="chat-row__tool-head"
         onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
       >
-        <span className="convo__thinking-glyph">✦</span>
-        <span className="convo__thinking-label">
-          {item.subtype === 'system'
-            ? 'thinking…'
-            : `${item.subtype}…`}
+        <span className="chat-row__tool-caret">{open ? '▾' : '▸'}</span>
+        <span className="chat-row__tool-name">
+          ✦{' '}
+          {item.subtype === 'system' ? 'thinking…' : `${item.subtype}…`}
         </span>
-        <span className="convo__thinking-chev">{open ? '▾' : '▸'}</span>
       </button>
-      {open && (
-        <pre className="convo__thinking-body">{item.body}</pre>
+      {open && <pre className="chat-row__tool-pre">{item.body}</pre>}
+    </div>
+  );
+}
+
+function AwaitingBanner() {
+  return (
+    <div className="detail__awaiting">
+      <span className="detail__awaiting-glyph">!</span>
+      <span>Agent is waiting for your input</span>
+    </div>
+  );
+}
+
+function SendReply({ task }: { task: TaskSummary }) {
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    taRef.current?.focus();
+  }, [task.id]);
+
+  useEffect(() => {
+    setText('');
+    setError(null);
+  }, [task.id]);
+
+  const send = async () => {
+    const value = text.trim();
+    if (!value) return;
+    setSending(true);
+    setError(null);
+    try {
+      const ok = await window.jarvis.sendTaskMessage(task.id, value);
+      if (!ok) {
+        setError("Couldn't send — task isn't accepting input anymore.");
+        return;
+      }
+      setText('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="detail__reply-dock detail__reply-dock--open">
+      <textarea
+        ref={taRef}
+        value={text}
+        rows={3}
+        placeholder="Reply to keep the conversation going. ↵ to send, ⇧↵ for newline."
+        disabled={sending}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (
+            e.key === 'Enter' &&
+            !e.shiftKey &&
+            !e.metaKey &&
+            !e.ctrlKey &&
+            !e.altKey
+          ) {
+            e.preventDefault();
+            void send();
+          }
+        }}
+      />
+      {error && (
+        <div className="detail__reply-hint" style={{ color: 'var(--bad)' }}>
+          {error}
+        </div>
+      )}
+      <div className="detail__reply-actions">
+        <button onClick={() => void send()} disabled={sending || !text.trim()}>
+          {sending ? 'Sending…' : 'Send'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Fork an external Claude Code session into a Jarvis-owned task with
+ * the full history. Lets the user keep chatting inside Jarvis instead
+ * of switching to their terminal — the original session stays
+ * untouched (the fork gets a new SDK session id).
+ */
+function ContinueExternal({
+  task,
+  onForked,
+}: {
+  task: TaskSummary;
+  onForked?: (newId: string) => void;
+}) {
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    taRef.current?.focus();
+  }, [task.id]);
+
+  useEffect(() => {
+    setText('');
+    setError(null);
+  }, [task.id]);
+
+  const send = async () => {
+    const value = text.trim();
+    if (!value) return;
+    if (!task.id.startsWith('cc-')) {
+      setError('Cannot resume this task — unknown source format.');
+      return;
+    }
+    const sessionId = task.id.slice('cc-'.length);
+    setSending(true);
+    setError(null);
+    try {
+      const summary = await window.jarvis.launchTask({
+        prompt: value,
+        origin: 'palette',
+        resumeSessionId: sessionId,
+      });
+      setText('');
+      onForked?.(summary.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="detail__reply-dock detail__reply-dock--open">
+      <textarea
+        ref={taRef}
+        value={text}
+        rows={3}
+        placeholder="Continue this conversation in Jarvis. ↵ to send, ⇧↵ for newline."
+        disabled={sending}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (
+            e.key === 'Enter' &&
+            !e.shiftKey &&
+            !e.metaKey &&
+            !e.ctrlKey &&
+            !e.altKey
+          ) {
+            e.preventDefault();
+            void send();
+          }
+        }}
+      />
+      {error && (
+        <div className="detail__reply-hint" style={{ color: 'var(--bad)' }}>
+          {error}
+        </div>
+      )}
+      <div className="detail__reply-hint">
+        Forks this session into a Jarvis-owned task with the full
+        history. The terminal session stays untouched.
+      </div>
+      <div className="detail__reply-actions">
+        <button onClick={() => void send()} disabled={sending || !text.trim()}>
+          {sending ? 'Forking…' : 'Continue here'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Inline footer that lets the user jump from a Jarvis task into the
+ * same conversation in Claude Code (CLI or Desktop).
+ */
+function SessionAffordances({ task }: { task: TaskSummary }) {
+  if (!task.sdkSessionId) return null;
+  const sessionId = task.sdkSessionId;
+  const resumeCmd = `claude --resume ${sessionId}`;
+  const isLive = task.status === 'running' || task.status === 'queued';
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(resumeCmd);
+      toast({ message: 'Copied — paste in any terminal to resume' });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
+  const openInDesktop = async () => {
+    if (isLive) {
+      const ok = confirm(
+        'This task is still running in Jarvis. Opening it in Claude Code Desktop ' +
+          "while it's live can corrupt the session. Open anyway?",
+      );
+      if (!ok) return;
+    }
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(resumeCmd);
+      copied = true;
+    } catch {
+      // clipboard can fail in some webview contexts; we'll still open Claude
+    }
+    const res = await window.jarvis.openInClaudeDesktop(sessionId);
+    if (res.ok) {
+      toast({
+        message: copied
+          ? `Claude opened · ${resumeCmd.slice(0, 36)}… copied — paste it to resume`
+          : 'Claude opened — session is in Recents (couldn’t copy resume cmd)',
+      });
+    } else {
+      toast({
+        kind: 'error',
+        message: res.message ?? 'Failed to open Claude Code Desktop',
+      });
+    }
+  };
+
+  const handOff = async () => {
+    try {
+      await window.jarvis.abortTask(task.id);
+      await navigator.clipboard.writeText(resumeCmd);
+      toast({
+        message: `Aborted in Jarvis · ${resumeCmd} copied. Paste in any terminal to continue.`,
+      });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
+  return (
+    <div className="detail__session-row" title={`session ${sessionId}`}>
+      <code className="detail__session-id">{sessionId.slice(0, 8)}…</code>
+      <button
+        onClick={() => void copy()}
+        title={`Copy "${resumeCmd}" to clipboard`}
+      >
+        Copy resume command
+      </button>
+      <button
+        onClick={() => void openInDesktop()}
+        title="Open this session in Claude Code Desktop"
+      >
+        Open in Claude Code
+      </button>
+      {isLive && (
+        <button
+          onClick={() => void handOff()}
+          title="Stop Jarvis cleanly and copy the resume command so you can continue in a terminal"
+          className="detail__session-handoff"
+        >
+          Hand off to terminal
+        </button>
       )}
     </div>
   );

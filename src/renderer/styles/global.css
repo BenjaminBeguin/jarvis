@@ -14681,9 +14681,39 @@ button:disabled:hover {
   flex-direction: column;
 }
 
-.convo-sidebar__body .convo {
+/* Conversation component now ships with its full .detail chrome —
+   header, awaiting banner, scrolling transcript, composer. Stretch
+   it to fill the sidebar tab body. */
+.convo-sidebar__body .detail {
   flex: 1;
   min-height: 0;
+  background: transparent;
+}
+
+/* Slimmer header inside the sidebar: less padding so the title +
+   meta + session affordances fit comfortably in the narrower rail. */
+.convo-sidebar__body .detail__header {
+  padding: 10px 14px;
+}
+
+.convo-sidebar__body .detail__title h2 {
+  font-size: 13px;
+  letter-spacing: 0.16em;
+}
+
+.convo-sidebar__body .detail__body {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.convo-sidebar__body .detail__session-row {
+  flex-wrap: wrap;
+  font-size: 10.5px;
+}
+
+.convo-sidebar__body .detail__reply-dock--open {
+  padding-left: 12px;
+  padding-right: 12px;
 }
 
 .convo-sidebar__empty {
