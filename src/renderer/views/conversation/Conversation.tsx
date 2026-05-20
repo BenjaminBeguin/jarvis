@@ -154,6 +154,20 @@ export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
     task.status !== 'errored' &&
     task.status !== 'aborted';
 
+  // The runner's sendMessage handles both live and completed cases:
+  //   - running + queue open → push next user message
+  //   - completed + sdkSessionId → spin up a fresh resume turn
+  // So the composer should show whenever either path is viable, not
+  // just when awaitingInput is set. Without this, a turn that ended
+  // with the agent asking a question (but transitioned to completed)
+  // would lock the user out of replying.
+  const canResumeReply =
+    task.status === 'completed' &&
+    !!task.sdkSessionId &&
+    task.origin !== 'external';
+  const showComposer =
+    task.origin !== 'external' && (isAwaiting || canResumeReply);
+
   return (
     <section className="detail">
       <header className="detail__header">
@@ -227,7 +241,7 @@ export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
       {isAwaiting && task.origin === 'external' && (
         <ContinueExternal task={task} onForked={onSelectTask} />
       )}
-      {isAwaiting && task.origin !== 'external' && <SendReply task={task} />}
+      {showComposer && <SendReply task={task} resuming={canResumeReply} />}
     </section>
   );
 }
@@ -399,7 +413,17 @@ function AwaitingBanner() {
   );
 }
 
-function SendReply({ task }: { task: TaskSummary }) {
+function SendReply({
+  task,
+  resuming,
+}: {
+  task: TaskSummary;
+  /** True when the task already finished and we'll be respawning a
+   *  resume turn on the saved sdkSessionId rather than appending to
+   *  a live queue. Surfaced as a hint under the textarea so the
+   *  user knows the agent is going to wake back up. */
+  resuming: boolean;
+}) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -420,6 +444,9 @@ function SendReply({ task }: { task: TaskSummary }) {
     setSending(true);
     setError(null);
     try {
+      // The runner's sendMessage handles both paths — live queue
+      // append or resume-then-fresh-turn — so the renderer just
+      // calls one IPC.
       const ok = await window.jarvis.sendTaskMessage(task.id, value);
       if (!ok) {
         setError("Couldn't send — task isn't accepting input anymore.");
@@ -439,7 +466,11 @@ function SendReply({ task }: { task: TaskSummary }) {
         ref={taRef}
         value={text}
         rows={3}
-        placeholder="Reply to keep the conversation going. ↵ to send, ⇧↵ for newline."
+        placeholder={
+          resuming
+            ? 'Continue this conversation. ↵ to send, ⇧↵ for newline.'
+            : 'Reply to keep the conversation going. ↵ to send, ⇧↵ for newline.'
+        }
         disabled={sending}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -455,6 +486,12 @@ function SendReply({ task }: { task: TaskSummary }) {
           }
         }}
       />
+      {resuming && !error && (
+        <div className="detail__reply-hint">
+          Turn complete — your reply will resume the session and start
+          a new turn.
+        </div>
+      )}
       {error && (
         <div className="detail__reply-hint" style={{ color: 'var(--bad)' }}>
           {error}
@@ -462,7 +499,7 @@ function SendReply({ task }: { task: TaskSummary }) {
       )}
       <div className="detail__reply-actions">
         <button onClick={() => void send()} disabled={sending || !text.trim()}>
-          {sending ? 'Sending…' : 'Send'}
+          {sending ? 'Sending…' : resuming ? 'Continue' : 'Send'}
         </button>
       </div>
     </div>
