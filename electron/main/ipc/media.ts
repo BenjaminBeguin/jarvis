@@ -3,8 +3,8 @@ import { Notification, ipcMain, systemPreferences } from 'electron';
 import { IpcChannels } from '@shared/ipc';
 
 import { persistMeeting } from '../modules/meeting-recorder.js';
-import { speak, stopSpeaking } from '../speech.js';
-import { transcribePcm } from '../transcribe.js';
+import { speak, stopSpeaking } from '../modules/voice/speech.js';
+import { transcribePcm } from '../modules/voice/transcribe.js';
 import { openObservatory } from '../windows.js';
 import type { IpcDeps } from './types.js';
 

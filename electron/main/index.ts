@@ -128,7 +128,8 @@ import { WorkflowStore } from './workflow-store.js';
 import { SkillStore } from './skill-store.js';
 import { SkillSuggestionStore } from './skill-suggestions.js';
 import { asTaskOrigin, lastAssistantText, TaskRunner } from './task-runner.js';
-import { setProgressEmitter, warmUp as warmUpTranscribe } from './transcribe.js';
+import { setProgressEmitter } from './modules/voice/transcribe.js';
+import { voiceModule } from './modules/voice/index.js';
 import {
   activeProjectProfileProvider,
   activeProjectProvider,
@@ -1203,6 +1204,7 @@ app.whenReady().then(async () => {
   await modules.register(shellModule);
   await modules.register(workflowsModule);
   await modules.register(telegramBotModule);
+  await modules.register(voiceModule);
 
   // Sync the auto-dedupe routine with the quick-note module's
   // dedupe cadence setting. Re-runs on every module-registry change so
@@ -1488,14 +1490,9 @@ app.whenReady().then(async () => {
   setProgressEmitter((event) =>
     broadcast(IpcChannels.transcribeProgress, event),
   );
-
-  // Eager-warm the Whisper worker in the background so the first
-  // ⌘⇧Space dictation isn't paying for "spawn child process + load
-  // 290MB ONNX model" from cold. Fire-and-forget — failures are
-  // logged inside warmUp() and won't block app startup.
-  setTimeout(() => {
-    void warmUpTranscribe();
-  }, 2_000);
+  // Whisper warm-up now lives in the voice module's onLoad — see
+  // modules/voice/index.ts. The module registry fires onLoad at
+  // app boot.
 
   registerAllIpc({
     skills,

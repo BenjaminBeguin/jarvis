@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 
 import ffmpegPath from 'ffmpeg-static';
 
-import { transcribePcm } from '../../transcribe.js';
+import { transcribePcm } from '../voice/transcribe.js';
 
 const TARGET_SAMPLE_RATE = 16_000;
 

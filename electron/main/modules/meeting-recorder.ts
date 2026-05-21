@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { transcribePcm } from '../transcribe.js';
+import { transcribePcm } from './voice/transcribe.js';
 import type { Module } from './types.js';
 
 const CHANNEL_START = 'meeting:start';

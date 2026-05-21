@@ -22,7 +22,7 @@ export default defineConfig({
           index: resolve(__dirname, 'electron/main/index.ts'),
           'transcribe-worker': resolve(
             __dirname,
-            'electron/main/transcribe-worker.ts',
+            'electron/main/modules/voice/transcribe-worker.ts',
           ),
         },
         output: {
