@@ -1,39 +1,53 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { hostname } from 'node:os';
 
-import type { LaunchTaskRequest } from '@shared/types';
+import type { LaunchTaskRequest, TrayMenuState } from '@shared/types';
 
 import { parseIntent } from './intent-router.js';
 import type { InboxStore } from './inbox.js';
 import type { OAuthOrchestrator } from './oauth/orchestrator.js';
+import type { notifier as NotifierInstance } from './notifier.js';
 import type { ReminderStore } from './reminders.js';
 import { asTaskOrigin, type TaskRunner } from './task-runner.js';
 
 /**
- * Localhost HTTP API for Jarvis. Mounts on 127.0.0.1 with a fixed port +
- * bearer-token auth. Same shape as the IPC layer — every IPC handler with
- * a useful external-driver shape has an HTTP equivalent. Designed for:
+ * HTTP API for Jarvis. Mounts on a fixed port + bearer-token auth.
+ * Same shape as the IPC layer — every IPC handler with a useful
+ * external-driver shape has an HTTP equivalent. Designed for:
  *
  *   - iOS Shortcuts ("Run skill X from my phone")
  *   - CLI clients (jarvis attach, jarvis run)
  *   - CI / cron / external schedulers triggering Jarvis tasks
- *   - Future phone/web client
+ *   - The mobile PWA reaching the Mac over Tailscale
  *
- * What this is NOT: a remote-control surface for the renderer (still IPC),
- * nor a public-facing API (127.0.0.1 only, never bind to 0.0.0.0).
+ * Bind address: `0.0.0.0` so the Tailscale interface accepts
+ * connections from the phone. Localhost is still served, and the
+ * bearer-token check guards every authenticated route, so LAN
+ * exposure is not a free read of internal data.
  *
- * Auth model: every request needs `Authorization: Bearer <token>`. Token
- * is auto-generated on first launch, stored in macOS Keychain, surfaced
- * in Settings → API. Single token shared across all clients; user can
- * rotate it from Settings.
+ * Auth model: every authenticated request needs `Authorization:
+ * Bearer <token>`. Token is auto-generated on first launch, stored
+ * in macOS Keychain, surfaced in Settings → API. Single token
+ * shared across all clients; user can rotate it from Settings.
  */
 
 const PORT = 4747;
+/** How often the SSE keepalive + snapshot tick fires. Doubles as
+ *  a "current state" rebroadcast so a phone that just reconnected
+ *  gets the latest counts without having to also re-GET
+ *  /v1/status/details. */
+const SSE_TICK_MS = 5_000;
 
 export interface HttpDeps {
   runner: TaskRunner;
   reminders: ReminderStore;
   inbox: InboxStore;
   oauth: OAuthOrchestrator;
+  notifier: typeof NotifierInstance;
+  /** Returns the current status snapshot (mode + counts + pinned).
+   *  Same shape the tray menu consumes; reused here so SSE +
+   *  /v1/status/details stay in lockstep with the desktop UI. */
+  getStatus(): TrayMenuState;
   token: string;
   version: string;
 }
@@ -62,9 +76,13 @@ export async function startHttpServer(deps: HttpDeps): Promise<HttpServerHandle 
       console.warn('HTTP API: failed to start:', err);
       resolve(null);
     });
-    server.listen(PORT, '127.0.0.1', () => {
+    server.listen(PORT, '0.0.0.0', () => {
+      // The `url` we return is the loopback one — used by Settings
+      // → API + by callers on the same machine. The phone reaches
+      // the same server via the Tailscale hostname (printed for
+      // diagnostics) or any other interface address.
       const url = `http://127.0.0.1:${PORT}`;
-      console.log(`HTTP API listening on ${url}`);
+      console.log(`HTTP API listening on ${url} (also: http://${hostname()}:${PORT})`);
       resolve({
         url,
         close: () =>
@@ -102,6 +120,16 @@ async function handle(
   // with auth. Everything else requires a valid bearer token.
   if (req.method === 'GET' && path === '/v1/status') {
     sendJson(res, 200, { ok: true, name: 'jarvis', version: deps.version });
+    return;
+  }
+
+  // GET /mobile — placeholder until vite-plugin-pwa wires the
+  // real renderer build into a static handler. The phone hits
+  // this URL after scanning the pairing QR; the placeholder
+  // confirms reachability + bearer-token roundtrip before the
+  // PWA shell ships.
+  if (req.method === 'GET' && path === '/mobile') {
+    sendHtml(res, 200, mobilePlaceholder(deps.version));
     return;
   }
 
@@ -205,6 +233,26 @@ async function handle(
     return;
   }
 
+  // GET /v1/status/details — authenticated counts + app mode +
+  // pinned conversations. Same snapshot the tray menu consumes,
+  // so phone + desktop never drift.
+  if (req.method === 'GET' && path === '/v1/status/details') {
+    sendJson(res, 200, deps.getStatus());
+    return;
+  }
+
+  // GET /v1/status/live — SSE stream. Phone connects once and
+  // receives:
+  //   event: status        every SSE_TICK_MS, payload = full snapshot
+  //   event: notif         on each notifier.post (NotificationEvent)
+  //   event: task.status   on each TaskRunner status change
+  // The keepalive comment lines keep idle proxies / phone radios
+  // from closing the connection.
+  if (req.method === 'GET' && path === '/v1/status/live') {
+    handleSseStatus(req, res, deps);
+    return;
+  }
+
   // GET /v1/inbox — current cached items.
   if (req.method === 'GET' && path === '/v1/inbox') {
     sendJson(res, 200, deps.inbox.list());
@@ -293,6 +341,97 @@ function sendHtml(res: ServerResponse, status: number, body: string): void {
   res.statusCode = status;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.end(body);
+}
+
+/**
+ * Server-Sent Events: holds the response open and streams events
+ * to the phone (or any EventSource client). Cleanup runs on
+ * 'close' so a dropped connection doesn't leak the subscriptions.
+ */
+function handleSseStatus(
+  req: IncomingMessage,
+  res: ServerResponse,
+  deps: HttpDeps,
+): void {
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  // Disable reverse-proxy buffering (Nginx / Cloudflare) — Tailscale
+  // is direct so this is mostly defensive but the header is harmless.
+  res.setHeader('X-Accel-Buffering', 'no');
+  // Flush headers immediately so the client sees the connection open.
+  res.write(': connected\n\n');
+
+  const write = (event: string, payload: unknown): void => {
+    if (res.writableEnded) return;
+    try {
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    } catch (err) {
+      console.warn('[sse] write failed', err);
+    }
+  };
+
+  // First payload: current snapshot. Phone renders before waiting
+  // for the first tick.
+  write('status', deps.getStatus());
+
+  const unsubNotif = deps.notifier.subscribe((evt) => {
+    write('notif', evt);
+  });
+  const onTaskStatus = (summary: unknown): void => write('task.status', summary);
+  deps.runner.on('status', onTaskStatus);
+
+  const tick = setInterval(() => {
+    if (res.writableEnded) return;
+    // Keepalive comment first (always cheap; some proxies time out
+    // streams that haven't sent bytes in 60s).
+    res.write(': keepalive\n\n');
+    // Snapshot too — covers app-mode / AFK / spend / pinned changes
+    // we don't have a dedicated event for yet.
+    write('status', deps.getStatus());
+  }, SSE_TICK_MS);
+
+  const cleanup = (): void => {
+    clearInterval(tick);
+    unsubNotif();
+    deps.runner.off('status', onTaskStatus);
+    if (!res.writableEnded) res.end();
+  };
+  req.on('close', cleanup);
+  req.on('error', cleanup);
+}
+
+/** Inline placeholder served at /mobile until the PWA shell lands.
+ *  Confirms the auth + Tailscale path works end-to-end before we
+ *  bundle the renderer in. */
+function mobilePlaceholder(version: string): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Jarvis · mobile</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #04070b; color: #d8eefb;
+               font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; }
+  body { display: flex; flex-direction: column; align-items: center;
+         justify-content: center; padding: 24px; text-align: center; gap: 18px; }
+  h1 { margin: 0; font-size: 16px; letter-spacing: 0.32em; color: #00d4ff;
+       text-shadow: 0 0 8px rgba(0, 212, 255, 0.55); }
+  p { margin: 0; max-width: 320px; line-height: 1.5; color: #88a7bd; font-size: 12px; }
+  .v { color: #4a6478; font-size: 10px; letter-spacing: 0.18em;
+       text-transform: uppercase; }
+</style>
+</head>
+<body>
+  <h1>◢ JARVIS · MOBILE</h1>
+  <p>Reachable. The PWA shell isn't installed yet — this is the placeholder.</p>
+  <span class="v">v${escape(version)}</span>
+</body>
+</html>`;
 }
 
 function escape(s: string): string {

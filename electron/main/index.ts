@@ -139,6 +139,7 @@ import {
   UserContextStore,
 } from './user-context.js';
 import {
+  getTrayMenuState,
   initTray,
   refreshTrayMenu,
   setAbortAllHandler,
@@ -1451,6 +1452,8 @@ app.whenReady().then(async () => {
       reminders,
       inbox,
       oauth: oauthOrchestrator,
+      notifier,
+      getStatus: () => getTrayMenuState(),
       token,
       version: app.getVersion(),
     });
@@ -1480,6 +1483,8 @@ app.whenReady().then(async () => {
         reminders,
         inbox,
         oauth: oauthOrchestrator,
+        notifier,
+        getStatus: () => getTrayMenuState(),
         token: fresh,
         version: app.getVersion(),
       });
