@@ -8,6 +8,12 @@ import { parseIntent } from './intent-router.js';
 import type { InboxStore } from './inbox.js';
 import type { OAuthOrchestrator } from './oauth/orchestrator.js';
 import type { notifier as NotifierInstance } from './notifier.js';
+import {
+  getPublicKey as getPushPublicKey,
+  isReady as isPushReady,
+  removeSubscription as removePushSubscription,
+  saveSubscription as savePushSubscription,
+} from './push.js';
 import type { ReminderStore } from './reminders.js';
 import { asTaskOrigin, type TaskRunner } from './task-runner.js';
 import { transcribePcm } from './modules/voice/transcribe.js';
@@ -334,6 +340,61 @@ async function handle(
       origin: 'voice',
     });
     sendJson(res, 200, { taskId: task.id, text });
+    return;
+  }
+
+  // GET /v1/push/key — VAPID public key. The PWA fetches this on
+  // first install before calling pushManager.subscribe(), since
+  // the server identity is half of the Web Push authentication.
+  if (req.method === 'GET' && path === '/v1/push/key') {
+    const key = getPushPublicKey();
+    if (!key || !isPushReady()) {
+      sendJson(res, 503, { error: 'push not initialised' });
+      return;
+    }
+    sendJson(res, 200, { publicKey: key });
+    return;
+  }
+
+  // POST /v1/push/subscribe — register a PushSubscription returned
+  // by the SW. Body: { deviceId, subscription }. Persisted on disk
+  // so a desktop restart doesn't lose registered phones.
+  if (req.method === 'POST' && path === '/v1/push/subscribe') {
+    const body = await readJson(req);
+    const deviceId = typeof body?.deviceId === 'string' ? body.deviceId.trim() : '';
+    const sub = body?.subscription as
+      | { endpoint?: string; keys?: { p256dh?: string; auth?: string } }
+      | undefined;
+    if (
+      !deviceId ||
+      !sub?.endpoint ||
+      typeof sub.endpoint !== 'string' ||
+      !sub.keys?.p256dh ||
+      !sub.keys?.auth
+    ) {
+      sendJson(res, 400, { error: 'deviceId + subscription required' });
+      return;
+    }
+    savePushSubscription(deviceId, {
+      endpoint: sub.endpoint,
+      keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+    });
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  // POST /v1/push/unsubscribe — drop the registration for one
+  // device (called from the SW pushsubscriptionchange event or
+  // from the PWA on explicit sign-out).
+  if (req.method === 'POST' && path === '/v1/push/unsubscribe') {
+    const body = await readJson(req);
+    const deviceId = typeof body?.deviceId === 'string' ? body.deviceId.trim() : '';
+    if (!deviceId) {
+      sendJson(res, 400, { error: 'deviceId required' });
+      return;
+    }
+    removePushSubscription(deviceId);
+    sendJson(res, 200, { ok: true });
     return;
   }
 

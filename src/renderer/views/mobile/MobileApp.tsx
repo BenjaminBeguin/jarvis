@@ -5,6 +5,7 @@ import './mobile.css';
 import { MobileLogin } from './MobileLogin';
 import { MobileShell } from './MobileShell';
 import type { MobileAuth, MobileView } from './types';
+import { usePushRegistration } from './usePushRegistration';
 
 /**
  * Mobile PWA root. Three phases:
@@ -38,6 +39,11 @@ export function MobileApp() {
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
+
+  // Web Push registration runs after first successful pairing. The
+  // hook short-circuits if the browser can't push or permission is
+  // denied, so it's safe to call unconditionally.
+  usePushRegistration(auth);
 
   if (!auth) {
     return (

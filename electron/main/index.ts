@@ -54,6 +54,7 @@ import {
   pruneWorkflowRuns,
 } from './db.js';
 import { startHttpServer, type HttpServerHandle } from './http-server.js';
+import { initPush, pushToAll } from './push.js';
 import { ActivityStore } from './activity-store.js';
 import { IntegrationsStore } from './integrations-store.js';
 import { IntentClassifier } from './intent-classifier.js';
@@ -516,6 +517,30 @@ notifier.subscribe((e) => {
     ts: Date.now(),
   };
   broadcast(IpcChannels.notifierEmitted, payload);
+});
+
+/**
+ * Mirror notifier.post() to every registered Web Push subscription
+ * (the mobile PWA, once the user has paired + granted notifications).
+ * Pause already short-circuits AUTO_SOURCES inside notifier.post itself,
+ * so by the time we get here a paused Jarvis won't be sending pushes
+ * for cron-fired stuff. Task lifecycle events still come through —
+ * that matches the desktop behaviour and is what the user wants on
+ * the phone too. The fan-out is fire-and-forget; failures (stale
+ * endpoints, network) are handled inside pushToAll.
+ */
+notifier.subscribe((e) => {
+  const payload = {
+    title: e.title,
+    body: e.body,
+    source: e.source,
+    ...(e.taskId ? { taskId: e.taskId } : {}),
+    ...(e.reminderId ? { reminderId: e.reminderId } : {}),
+    ts: Date.now(),
+  };
+  void pushToAll(payload).catch((err) => {
+    console.warn('[push] fan-out failed:', err);
+  });
 });
 
 function wireRunnerEvents(): void {
@@ -1439,6 +1464,15 @@ app.whenReady().then(async () => {
   };
   pruneRuns();
   setInterval(pruneRuns, 60 * 60 * 1000);
+
+  // Web Push: load/generate the VAPID keypair before the HTTP
+  // server comes up so /v1/push/key has something to return on the
+  // first phone reconnect after a fresh boot.
+  try {
+    await initPush();
+  } catch (err) {
+    console.warn('[push] init failed:', err);
+  }
 
   // Localhost HTTP API. Auto-generates a bearer token on first launch
   // and binds 127.0.0.1:4747. Lets iOS Shortcuts / CLI / future phone

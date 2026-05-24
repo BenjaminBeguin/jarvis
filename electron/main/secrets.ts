@@ -7,6 +7,7 @@ const ACCOUNT_API_KEY = 'anthropic-api-key';
 const ACCOUNT_SUBSCRIPTION_TOKEN = 'claude-code-subscription-token';
 const ACCOUNT_HTTP_API_TOKEN = 'jarvis-http-api-token';
 const ACCOUNT_TELEGRAM_BOT_TOKEN = 'telegram-bot-token';
+const ACCOUNT_VAPID = 'jarvis-vapid';
 
 export async function getAnthropicApiKey(): Promise<string | null> {
   return keytar.getPassword(SERVICE, ACCOUNT_API_KEY);
@@ -174,4 +175,35 @@ export async function clearConnectorCredentials(
   connectorId: string,
 ): Promise<void> {
   await keytar.deletePassword(SERVICE, connectorCredsAccount(connectorId));
+}
+
+/** VAPID keypair used by Web Push to identify Jarvis as the
+ *  push origin. One pair per install; both halves stored as a
+ *  single JSON blob in the Keychain so we read/write atomically. */
+export async function getJarvisVapidKeys(): Promise<{
+  publicKey: string;
+  privateKey: string;
+} | null> {
+  const raw = await keytar.getPassword(SERVICE, ACCOUNT_VAPID);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { publicKey?: string; privateKey?: string };
+    if (parsed?.publicKey && parsed?.privateKey) {
+      return { publicKey: parsed.publicKey, privateKey: parsed.privateKey };
+    }
+  } catch {
+    /* corrupt — treat as missing so callers regenerate */
+  }
+  return null;
+}
+
+export async function setJarvisVapidKeys(
+  publicKey: string,
+  privateKey: string,
+): Promise<void> {
+  await keytar.setPassword(
+    SERVICE,
+    ACCOUNT_VAPID,
+    JSON.stringify({ publicKey, privateKey }),
+  );
 }
