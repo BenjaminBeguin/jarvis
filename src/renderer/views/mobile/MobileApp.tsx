@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react';
 
-import { loadAuth } from './auth';
+import { clearAuth, loadAuth, saveAuth } from './auth';
 import './mobile.css';
+import { MobileLogin } from './MobileLogin';
 import { MobileShell } from './MobileShell';
 import type { MobileAuth, MobileView } from './types';
 
 /**
- * Mobile PWA root. Reads auth from localStorage; if absent
- * renders a placeholder until the pairing screen lands in the
- * next commit. Otherwise hands off to MobileShell.
+ * Mobile PWA root. Three phases:
+ *
+ *   1. URL-encoded pair payload (?pair=base64-json) → save it,
+ *      strip from URL, render MobileShell. This is the path
+ *      taken right after scanning the desktop QR.
+ *   2. Auth already in localStorage → render MobileShell.
+ *   3. Neither → render MobileLogin (paste-the-URL fallback).
  *
  * Sub-views are picked from the URL query (`?view=inbox`,
  * `?view=conversation&id=<taskId>`, …) so iOS Safari handles
@@ -16,7 +21,10 @@ import type { MobileAuth, MobileView } from './types';
  * router does.
  */
 export function MobileApp() {
-  const [auth, setAuth] = useState<MobileAuth | null>(() => loadAuth());
+  // Consume ?pair=… BEFORE the first paint so the URL is clean
+  // by the time the user looks at it. saveAuth happens here too.
+  const initialAuth = consumePairPayload() ?? loadAuth();
+  const [auth, setAuth] = useState<MobileAuth | null>(initialAuth);
   const [view, setView] = useState<MobileView>(() => readViewFromHash());
   const [conversationId, setConversationId] = useState<string | null>(() =>
     readConversationIdFromHash(),
@@ -33,10 +41,12 @@ export function MobileApp() {
 
   if (!auth) {
     return (
-      <div className="mobile-bootstrap">
-        <div className="mobile-bootstrap__brand">◢ JARVIS</div>
-        <p>Pairing screen lands here. Scan the QR from Settings → Mobile on your Mac.</p>
-      </div>
+      <MobileLogin
+        onPaired={(a) => {
+          saveAuth(a);
+          setAuth(a);
+        }}
+      />
     );
   }
 
@@ -45,9 +55,50 @@ export function MobileApp() {
       auth={auth}
       view={view}
       conversationId={conversationId}
-      onSignOut={() => setAuth(null)}
+      onSignOut={() => {
+        clearAuth();
+        setAuth(null);
+      }}
     />
   );
+}
+
+/**
+ * Decode `?pair=<base64-json>` from the URL hash, save it, and
+ * scrub the param from the URL so the QR payload doesn't sit
+ * around in browser history. Returns the parsed auth or null.
+ */
+function consumePairPayload(): MobileAuth | null {
+  const hash = window.location.hash.replace(/^#/, '');
+  const qIdx = hash.indexOf('?');
+  if (qIdx === -1) return null;
+  const params = new URLSearchParams(hash.slice(qIdx + 1));
+  const pair = params.get('pair');
+  if (!pair) return null;
+  let parsed: MobileAuth | null = null;
+  try {
+    const raw = atob(pair);
+    const obj = JSON.parse(raw) as Partial<MobileAuth>;
+    if (
+      typeof obj?.baseUrl === 'string' &&
+      typeof obj?.token === 'string' &&
+      obj.baseUrl &&
+      obj.token
+    ) {
+      parsed = { baseUrl: obj.baseUrl, token: obj.token };
+    }
+  } catch {
+    return null;
+  }
+  if (parsed) {
+    saveAuth(parsed);
+    // Strip the pair param + leave the rest of the hash intact.
+    params.delete('pair');
+    const rest = params.toString();
+    const base = hash.slice(0, qIdx);
+    window.location.hash = rest ? `${base}?${rest}` : base;
+  }
+  return parsed;
 }
 
 function readViewFromHash(): MobileView {

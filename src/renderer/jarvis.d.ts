@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 import type { JarvisApi } from '../../electron/preload/index';
 
 declare global {

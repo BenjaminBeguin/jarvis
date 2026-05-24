@@ -193,3 +193,81 @@ body:has(.mobile-bootstrap) {
 .mobile-shell__tab--active .mobile-shell__tab-glyph {
   filter: drop-shadow(0 0 6px rgba(0, 212, 255, 0.55));
 }
+
+/* ─────── login screen (fallback paste flow) ─────── */
+
+.mobile-login {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  padding: 32px 24px;
+  gap: 14px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.mobile-login__brand {
+  align-self: center;
+  font-size: 14px;
+  letter-spacing: 0.32em;
+  color: #00d4ff;
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.55);
+}
+
+.mobile-login h1 {
+  margin: 4px 0 0;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  color: #d8eefb;
+  text-align: center;
+}
+
+.mobile-login p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #88a7bd;
+  text-align: center;
+}
+
+.mobile-login textarea {
+  font-family: inherit;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #d8eefb;
+  border: 1px solid rgba(0, 217, 255, 0.2);
+  border-radius: 6px;
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 96px;
+  outline: 0;
+}
+
+.mobile-login textarea:focus {
+  border-color: #00d4ff;
+}
+
+.mobile-login__error {
+  color: #ff5577;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.mobile-login__submit {
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid #00d4ff;
+  color: #00d4ff;
+  padding: 12px 16px;
+  font-family: inherit;
+  font-size: 11.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.mobile-login__submit:active {
+  background: rgba(0, 212, 255, 0.18);
+}
