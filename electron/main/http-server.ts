@@ -3,12 +3,14 @@ import { hostname } from 'node:os';
 
 import type { LaunchTaskRequest, TrayMenuState } from '@shared/types';
 
+import { decodeAudioToFloat32 } from './audio-dispatch.js';
 import { parseIntent } from './intent-router.js';
 import type { InboxStore } from './inbox.js';
 import type { OAuthOrchestrator } from './oauth/orchestrator.js';
 import type { notifier as NotifierInstance } from './notifier.js';
 import type { ReminderStore } from './reminders.js';
 import { asTaskOrigin, type TaskRunner } from './task-runner.js';
+import { transcribePcm } from './modules/voice/transcribe.js';
 
 /**
  * HTTP API for Jarvis. Mounts on a fixed port + bearer-token auth.
@@ -266,6 +268,58 @@ async function handle(
     return;
   }
 
+  // POST /v1/audio/dispatch — phone uploads a voice blob, we
+  // decode + transcribe + dispatch via routePrompt's same flow
+  // as the desktop ⌘⇧Space orb. Body is raw audio bytes
+  // (Content-Type from MediaRecorder — usually `audio/webm` on
+  // iOS). Returns the new task id + transcript so the PWA can
+  // navigate straight to the conversation.
+  if (req.method === 'POST' && path === '/v1/audio/dispatch') {
+    const buf = await readRawBody(req, 25 * 1024 * 1024); // 25 MB cap
+    if (!buf || buf.length === 0) {
+      sendJson(res, 400, { error: 'empty body' });
+      return;
+    }
+    let pcm: Float32Array;
+    try {
+      pcm = await decodeAudioToFloat32(buf);
+    } catch (err) {
+      sendJson(res, 400, {
+        error:
+          err instanceof Error
+            ? `audio decode failed: ${err.message}`
+            : 'audio decode failed',
+      });
+      return;
+    }
+    if (pcm.length < 16_000 * 0.3) {
+      sendJson(res, 400, { error: 'audio too short' });
+      return;
+    }
+    let text: string;
+    try {
+      text = (await transcribePcm(pcm)).trim();
+    } catch (err) {
+      sendJson(res, 500, {
+        error:
+          err instanceof Error
+            ? `transcribe failed: ${err.message}`
+            : 'transcribe failed',
+      });
+      return;
+    }
+    if (!text) {
+      sendJson(res, 400, { error: "couldn't make out audio" });
+      return;
+    }
+    const task = deps.runner.launch({
+      prompt: text,
+      origin: 'voice',
+    });
+    sendJson(res, 200, { taskId: task.id, text });
+    return;
+  }
+
   // POST /v1/reminders — schedule a reminder / action.
   if (req.method === 'POST' && path === '/v1/reminders') {
     const body = await readJson(req);
@@ -308,6 +362,31 @@ function isAuthorized(req: IncomingMessage, url: URL, token: string): boolean {
     diff |= presented.charCodeAt(i) ^ token.charCodeAt(i);
   }
   return diff === 0;
+}
+
+async function readRawBody(
+  req: IncomingMessage,
+  maxBytes: number,
+): Promise<Buffer | null> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on('data', (c: Buffer) => {
+      chunks.push(c);
+      size += c.length;
+      if (size > maxBytes) {
+        req.destroy(new Error('payload too large'));
+      }
+    });
+    req.on('end', () => {
+      if (chunks.length === 0) {
+        resolve(null);
+        return;
+      }
+      resolve(Buffer.concat(chunks));
+    });
+    req.on('error', reject);
+  });
 }
 
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {

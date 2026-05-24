@@ -640,6 +640,113 @@ body:has(.mobile-bootstrap) {
   font-size: 11px;
 }
 
+/* ─────── dictate orb ─────── */
+
+@keyframes mobile-dictate-pulse {
+  0% { transform: scale(1); box-shadow: 0 0 24px rgba(0, 212, 255, 0.5); }
+  50% { transform: scale(1.06); box-shadow: 0 0 36px rgba(0, 212, 255, 0.8); }
+  100% { transform: scale(1); box-shadow: 0 0 24px rgba(0, 212, 255, 0.5); }
+}
+
+@keyframes mobile-dictate-spin {
+  from { transform: rotate(0); }
+  to { transform: rotate(360deg); }
+}
+
+.mobile-dictate {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.mobile-dictate__orb {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 212, 255, 0.45);
+  background: radial-gradient(
+    circle at 50% 40%,
+    rgba(0, 212, 255, 0.85) 0%,
+    rgba(0, 212, 255, 0.45) 40%,
+    rgba(0, 50, 80, 0.65) 75%,
+    rgba(0, 30, 50, 0.85) 100%
+  );
+  box-shadow: 0 0 24px rgba(0, 212, 255, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  outline: 0;
+  transition: transform 140ms ease;
+}
+
+.mobile-dictate__orb:active {
+  transform: scale(0.98);
+}
+
+.mobile-dictate__orb--listening {
+  border-color: #00d4ff;
+  animation: mobile-dictate-pulse 1.5s ease-in-out infinite;
+}
+
+.mobile-dictate__orb--uploading {
+  border-color: #ffb454;
+  background: radial-gradient(
+    circle at 50% 40%,
+    rgba(255, 180, 84, 0.7) 0%,
+    rgba(255, 180, 84, 0.35) 50%,
+    rgba(80, 50, 20, 0.7) 100%
+  );
+  animation: mobile-dictate-spin 1.6s linear infinite;
+}
+
+.mobile-dictate__orb--errored {
+  border-color: #ff5577;
+  background: radial-gradient(
+    circle at 50% 40%,
+    rgba(255, 85, 119, 0.75) 0%,
+    rgba(255, 85, 119, 0.35) 50%,
+    rgba(60, 20, 30, 0.7) 100%
+  );
+  animation: none;
+}
+
+.mobile-dictate__glyph {
+  font-size: 56px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow:
+    0 0 12px rgba(0, 212, 255, 0.95),
+    0 0 24px rgba(0, 212, 255, 0.5);
+}
+
+.mobile-dictate__label {
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #00d4ff;
+  text-shadow: 0 0 6px rgba(0, 212, 255, 0.45);
+}
+
+.mobile-dictate__error {
+  font-size: 12px;
+  color: #ff5577;
+  max-width: 280px;
+  line-height: 1.5;
+}
+
+.mobile-dictate__hint {
+  max-width: 280px;
+  font-size: 11px;
+  color: #4a6478;
+  line-height: 1.5;
+}
+
 /* ─────── login screen (fallback paste flow) ─────── */
 
 .mobile-login {

@@ -4,6 +4,7 @@ import type { TrayMenuState } from '../../../shared/types';
 import { api } from './api';
 import { MobileConversation } from './MobileConversation';
 import { MobileConversations } from './MobileConversations';
+import { MobileDictate } from './MobileDictate';
 import { MobileInbox } from './MobileInbox';
 import { navigateMobile } from './MobileApp';
 import { useSse } from './useSse';
@@ -167,13 +168,10 @@ function ViewBody({
     return <MobileConversations auth={auth} status={status} />;
   if (view === 'conversation' && conversationId)
     return <MobileConversation auth={auth} taskId={conversationId} />;
+  if (view === 'dictate') return <MobileDictate auth={auth} />;
   return (
     <div className="mobile-shell__placeholder">
-      <h2>
-        {view === 'conversation'
-          ? 'Pick a thread first.'
-          : 'Dictate orb lands here.'}
-      </h2>
+      <h2>Pick a thread first.</h2>
       <p>
         Paired with <code>{auth.baseUrl}</code>
         {status && <> · mode: {status.appMode}</>}
