@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 
 import type { TrayMenuState } from '../../../shared/types';
 import { api } from './api';
+import { MobileConversation } from './MobileConversation';
+import { MobileConversations } from './MobileConversations';
 import { MobileInbox } from './MobileInbox';
 import { navigateMobile } from './MobileApp';
 import { useSse } from './useSse';
@@ -161,14 +163,16 @@ function ViewBody({
   status: TrayMenuState | null;
 }) {
   if (view === 'inbox') return <MobileInbox auth={auth} />;
+  if (view === 'conversations')
+    return <MobileConversations auth={auth} status={status} />;
+  if (view === 'conversation' && conversationId)
+    return <MobileConversation auth={auth} taskId={conversationId} />;
   return (
     <div className="mobile-shell__placeholder">
       <h2>
-        {view === 'conversations'
-          ? 'Conversations land here.'
-          : view === 'conversation'
-            ? `Conversation ${conversationId ?? '?'} renders here.`
-            : 'Dictate orb lands here.'}
+        {view === 'conversation'
+          ? 'Pick a thread first.'
+          : 'Dictate orb lands here.'}
       </h2>
       <p>
         Paired with <code>{auth.baseUrl}</code>

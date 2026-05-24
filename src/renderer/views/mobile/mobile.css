@@ -373,6 +373,273 @@ body:has(.mobile-bootstrap) {
   line-height: 1.4;
 }
 
+/* ─────── conversations list ─────── */
+
+.mobile-convos__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.mobile-convos__head h2 {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #00d4ff;
+  text-shadow: 0 0 6px rgba(0, 212, 255, 0.45);
+}
+
+.mobile-convos__section {
+  margin: 14px 0 6px;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #4a6478;
+}
+
+.mobile-convos__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-convos__row {
+  width: 100%;
+  background: rgba(4, 7, 11, 0.65);
+  border: 1px solid rgba(0, 217, 255, 0.1);
+  border-radius: 4px;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.mobile-convos__row:active {
+  border-color: #00d4ff;
+  background: rgba(0, 212, 255, 0.06);
+}
+
+.mobile-convos__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #4a6478;
+  flex-shrink: 0;
+}
+
+.mobile-convos__dot--running {
+  background: #00d4ff;
+  box-shadow: 0 0 6px rgba(0, 212, 255, 0.55);
+}
+
+.mobile-convos__dot--awaiting {
+  background: #ffb454;
+  box-shadow: 0 0 6px rgba(255, 180, 84, 0.55);
+}
+
+.mobile-convos__dot--completed {
+  background: #5fffa6;
+}
+
+.mobile-convos__dot--errored,
+.mobile-convos__dot--aborted {
+  background: #ff5577;
+}
+
+.mobile-convos__dot--queued {
+  background: #88a7bd;
+  opacity: 0.65;
+}
+
+.mobile-convos__title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: #d8eefb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-convos__meta {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #4a6478;
+}
+
+/* ─────── conversation transcript ─────── */
+
+.mobile-conv {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* Pull the conversation below the shell header without
+   * doubling padding — the body already has 16px. */
+  margin: -4px 0;
+}
+
+.mobile-conv__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 217, 255, 0.1);
+}
+
+.mobile-conv__back {
+  background: transparent;
+  border: 1px solid rgba(0, 217, 255, 0.2);
+  color: #88a7bd;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.mobile-conv__back:active {
+  background: rgba(0, 212, 255, 0.08);
+  color: #00d4ff;
+}
+
+.mobile-conv__title-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mobile-conv__title {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: #d8eefb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-conv__meta {
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #4a6478;
+}
+
+.mobile-conv__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-conv__row {
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.mobile-conv__row--user {
+  background: rgba(0, 212, 255, 0.06);
+  border: 1px solid rgba(0, 217, 255, 0.18);
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.mobile-conv__chip {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #00d4ff;
+  background: rgba(0, 212, 255, 0.12);
+  padding: 1px 5px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.mobile-conv__row--assistant {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: #d8eefb;
+}
+
+.mobile-conv__body {
+  flex: 1;
+  white-space: pre-wrap;
+}
+
+.mobile-conv__row--tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px dashed rgba(0, 217, 255, 0.1);
+  font-size: 11px;
+  color: #88a7bd;
+}
+
+.mobile-conv__row--error {
+  border-color: rgba(255, 85, 119, 0.35);
+  color: #ff5577;
+}
+
+.mobile-conv__glyph {
+  font-size: 12px;
+  color: #00d4ff;
+}
+
+.mobile-conv__tool-name {
+  font-weight: 600;
+}
+
+.mobile-conv__tool-arg {
+  font-size: 10.5px;
+  color: #4a6478;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60vw;
+}
+
+.mobile-conv__row--thinking {
+  font-size: 11px;
+  color: #4a6478;
+  font-style: italic;
+}
+
+.mobile-conv__row--error-body {
+  background: rgba(255, 85, 119, 0.06);
+  border: 1px solid rgba(255, 85, 119, 0.3);
+  color: #ff5577;
+  font-size: 11.5px;
+}
+
+.mobile-conv__composer-stub {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px dashed rgba(0, 217, 255, 0.18);
+  border-radius: 6px;
+  text-align: center;
+  color: #4a6478;
+  font-size: 11px;
+}
+
 /* ─────── login screen (fallback paste flow) ─────── */
 
 .mobile-login {

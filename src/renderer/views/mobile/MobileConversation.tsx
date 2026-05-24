@@ -1,0 +1,156 @@
+import { useEffect, useMemo, useState } from 'react';
+
+import { buildItems } from '../../conversation/buildItems';
+import type { ChatItem } from '../../conversation/types';
+import type { TaskEvent, TaskSummary } from '../../../shared/types';
+import { api } from './api';
+import { navigateMobile } from './MobileApp';
+import { useSse } from './useSse';
+import type { MobileAuth } from './types';
+
+interface Props {
+  auth: MobileAuth;
+  taskId: string;
+}
+
+interface TaskBundle {
+  summary: TaskSummary;
+  events: TaskEvent[];
+}
+
+/**
+ * One conversation's transcript on the phone. Read-only for v1 —
+ * the composer (text + mic + send) lands in the next two
+ * commits. Uses the shared buildItems builder so the rendering
+ * stays in lockstep with desktop.
+ */
+export function MobileConversation({ auth, taskId }: Props) {
+  const [bundle, setBundle] = useState<TaskBundle | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = async (): Promise<void> => {
+    try {
+      const data = await api<TaskBundle>(auth, `/v1/tasks/${taskId}`);
+      setBundle(data);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.baseUrl, auth.token, taskId]);
+
+  // Refetch when this task's status changes (new event arrives,
+  // turn ends, etc.). v1 polls on every transition — a future
+  // commit can subscribe to per-event SSE for incremental
+  // updates if it feels laggy.
+  useSse(auth, {
+    onTaskStatus: (payload) => {
+      const p = payload as { id?: string } | null;
+      if (p?.id === taskId) void refresh();
+    },
+  });
+
+  const items = useMemo<ChatItem[]>(
+    () => (bundle ? buildItems(bundle.events) : []),
+    [bundle],
+  );
+
+  return (
+    <div className="mobile-conv">
+      <header className="mobile-conv__head">
+        <button
+          type="button"
+          className="mobile-conv__back"
+          onClick={() => navigateMobile('conversations')}
+          aria-label="Back to threads"
+        >
+          ←
+        </button>
+        <div className="mobile-conv__title-wrap">
+          <h2 className="mobile-conv__title">
+            {bundle?.summary.title ?? 'Conversation'}
+          </h2>
+          {bundle && (
+            <span className="mobile-conv__meta">
+              {bundle.summary.status === 'running' &&
+              bundle.summary.awaitingInput
+                ? 'awaiting reply'
+                : bundle.summary.status}
+              {bundle.summary.costUsd > 0 &&
+                ` · $${bundle.summary.costUsd.toFixed(4)}`}
+            </span>
+          )}
+        </div>
+      </header>
+
+      {error && <div className="mobile-inbox__error">{error}</div>}
+      {!bundle && !error && (
+        <div className="mobile-inbox__empty">Loading…</div>
+      )}
+
+      <ul className="mobile-conv__items">
+        {items.map((it) => (
+          <Row key={it.key} item={it} />
+        ))}
+      </ul>
+
+      <div className="mobile-conv__composer-stub">
+        Compose lands in the next commit.
+      </div>
+    </div>
+  );
+}
+
+function Row({ item }: { item: ChatItem }) {
+  if (item.kind === 'user') {
+    return (
+      <li className="mobile-conv__row mobile-conv__row--user">
+        <span className="mobile-conv__chip">you</span>
+        <div className="mobile-conv__body">{item.text}</div>
+      </li>
+    );
+  }
+  if (item.kind === 'assistant') {
+    return (
+      <li className="mobile-conv__row mobile-conv__row--assistant">
+        <div className="mobile-conv__body">{item.text}</div>
+      </li>
+    );
+  }
+  if (item.kind === 'tool') {
+    const summary = item.preview ?? '';
+    return (
+      <li
+        className={`mobile-conv__row mobile-conv__row--tool${item.isError ? ' mobile-conv__row--error' : ''}`}
+      >
+        <span className="mobile-conv__glyph" aria-hidden>
+          {item.isError ? '✗' : '⚙'}
+        </span>
+        <span className="mobile-conv__tool-name">{item.name}</span>
+        {summary && <span className="mobile-conv__tool-arg">{summary}</span>}
+      </li>
+    );
+  }
+  if (item.kind === 'thinking') {
+    return (
+      <li className="mobile-conv__row mobile-conv__row--thinking">
+        ✦ {item.subtype === 'system' ? 'thinking…' : `${item.subtype}…`}
+      </li>
+    );
+  }
+  if (item.kind === 'result') {
+    return null;
+  }
+  if (item.kind === 'error') {
+    return (
+      <li className="mobile-conv__row mobile-conv__row--error-body">
+        ⚠ {item.body}
+      </li>
+    );
+  }
+  return null;
+}
