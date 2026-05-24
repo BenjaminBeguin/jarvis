@@ -149,7 +149,7 @@ async function handle(
     return;
   }
 
-  if (!isAuthorized(req, deps.token)) {
+  if (!isAuthorized(req, url, deps.token)) {
     sendJson(res, 401, { error: 'unauthorized' });
     return;
   }
@@ -286,14 +286,22 @@ async function handle(
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function isAuthorized(req: IncomingMessage, token: string): boolean {
+function isAuthorized(req: IncomingMessage, url: URL, token: string): boolean {
+  // Two accepted forms:
+  //   - `Authorization: Bearer <token>` (default; used by fetch + custom clients)
+  //   - `?token=<token>` query (fallback for EventSource, which can't
+  //     attach custom headers). Same token, same constant-time compare.
+  let presented = '';
   const header = req.headers['authorization'];
-  if (typeof header !== 'string') return false;
-  const m = header.match(/^Bearer\s+(.+)$/i);
-  if (!m) return false;
-  // Constant-time-ish compare to discourage timing attacks. Token is high-
-  // entropy so a length-check fast-path is fine.
-  const presented = m[1]!.trim();
+  if (typeof header === 'string') {
+    const m = header.match(/^Bearer\s+(.+)$/i);
+    if (m) presented = m[1]!.trim();
+  }
+  if (!presented) {
+    const q = url.searchParams.get('token');
+    if (q) presented = q;
+  }
+  if (!presented) return false;
   if (presented.length !== token.length) return false;
   let diff = 0;
   for (let i = 0; i < token.length; i++) {
