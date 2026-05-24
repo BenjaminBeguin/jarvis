@@ -5,10 +5,17 @@ import { AnswerHUD } from './views/AnswerHUD';
 import { BootOverlay } from './views/BootOverlay';
 import { ChatPopup } from './views/ChatPopup';
 import { CommandPalette } from './views/CommandPalette';
+import { MobileApp } from './views/mobile/MobileApp';
 import { Setup } from './views/Setup';
 import { Shell } from './views/Shell';
 import { TrayMenu } from './views/TrayMenu';
 import { VoiceOrb } from './views/VoiceOrb';
+
+/** True when the renderer is loaded inside Electron — the preload
+ *  bridge populates window.jarvis. On the mobile PWA the same
+ *  bundle loads in mobile Safari with no preload, so we guard the
+ *  Electron-only IPC paths. */
+const IS_ELECTRON = typeof window.jarvis !== 'undefined';
 
 function getRoute(): string {
   const hash = window.location.hash.replace(/^#/, '');
@@ -29,10 +36,16 @@ export function App() {
   const [bootDone, setBootDone] = useState(false);
 
   useEffect(() => {
-    void window.jarvis.getStatus().then(setStatus);
-    const off = window.jarvis.onAppStatus(setStatus);
     const onHash = () => setRoute(getRoute());
     window.addEventListener('hashchange', onHash);
+    // window.jarvis is only present inside Electron — on the
+    // mobile PWA there's no preload, so we skip the status IPC.
+    // MobileApp pulls its own status via the HTTP API.
+    if (!IS_ELECTRON) {
+      return () => window.removeEventListener('hashchange', onHash);
+    }
+    void window.jarvis.getStatus().then(setStatus);
+    const off = window.jarvis.onAppStatus(setStatus);
     return () => {
       off();
       window.removeEventListener('hashchange', onHash);
@@ -85,6 +98,12 @@ export function App() {
   }
   if (route === '/voice-orb') {
     return <VoiceOrb />;
+  }
+  if (route === '/mobile') {
+    // The PWA target — same React bundle, totally different
+    // surface (touch-first, runs in mobile Safari with no
+    // Electron preload available).
+    return <MobileApp />;
   }
 
   // Main window: render the Shell behind the overlay so the underlying

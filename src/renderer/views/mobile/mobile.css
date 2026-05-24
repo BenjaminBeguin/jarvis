@@ -1,0 +1,195 @@
+/* ─────────────────── Mobile PWA shell ───────────────────
+ *
+ * Touch-tuned surface for the /mobile route, loaded in mobile
+ * Safari via Tailscale. Visual language tracks the desktop
+ * (neon cyan accent + mono headers) but every interactive
+ * target is sized for thumb taps.
+ *
+ * Isolated under .mobile-shell / .mobile-bootstrap so the
+ * desktop UI is unaffected.
+ */
+
+html:has(.mobile-shell),
+html:has(.mobile-bootstrap),
+.mobile-shell,
+.mobile-bootstrap {
+  background: #04070b;
+  color: #d8eefb;
+  font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+body:has(.mobile-shell),
+body:has(.mobile-bootstrap) {
+  margin: 0;
+  min-height: 100vh;
+  /* Honour iOS safe areas — notch + home indicator. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.mobile-bootstrap {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px;
+  gap: 16px;
+}
+
+.mobile-bootstrap__brand {
+  font-size: 14px;
+  letter-spacing: 0.32em;
+  color: #00d4ff;
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.55);
+}
+
+.mobile-bootstrap p {
+  margin: 0;
+  max-width: 320px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #88a7bd;
+}
+
+/* ─────── shell ─────── */
+
+.mobile-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-shell__header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px 12px;
+  background: linear-gradient(180deg, #04070b 0%, rgba(4, 7, 11, 0.92) 100%);
+  border-bottom: 1px solid rgba(0, 217, 255, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.mobile-shell__brand {
+  color: #00d4ff;
+  font-size: 14px;
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.55);
+}
+
+.mobile-shell__title {
+  flex: 1;
+  font-size: 12px;
+  letter-spacing: 0.32em;
+  font-weight: 600;
+  color: #00d4ff;
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.55);
+}
+
+.mobile-shell__signout {
+  background: transparent;
+  border: 1px solid rgba(0, 217, 255, 0.2);
+  color: #88a7bd;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.mobile-shell__signout:active {
+  background: rgba(0, 212, 255, 0.08);
+  color: #00d4ff;
+}
+
+.mobile-shell__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px 14px 90px;
+}
+
+.mobile-shell__placeholder {
+  padding: 32px 8px;
+  text-align: center;
+  color: #88a7bd;
+}
+
+.mobile-shell__placeholder h2 {
+  margin: 0 0 12px;
+  color: #00d4ff;
+  font-size: 13px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.45);
+}
+
+.mobile-shell__placeholder p {
+  margin: 0 auto;
+  max-width: 280px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.mobile-shell__placeholder code {
+  color: #d8eefb;
+  background: rgba(0, 212, 255, 0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* ─────── tab bar ─────── */
+
+.mobile-shell__tabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  gap: 0;
+  background: rgba(4, 7, 11, 0.94);
+  border-top: 1px solid rgba(0, 217, 255, 0.18);
+  backdrop-filter: blur(10px);
+  padding: 6px 8px calc(env(safe-area-inset-bottom) + 6px);
+}
+
+.mobile-shell__tab {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  color: #4a6478;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0 4px;
+  font-family: inherit;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.mobile-shell__tab-glyph {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.mobile-shell__tab-label {
+  font-weight: 500;
+}
+
+.mobile-shell__tab--active {
+  color: #00d4ff;
+  text-shadow: 0 0 6px rgba(0, 212, 255, 0.55);
+}
+
+.mobile-shell__tab--active .mobile-shell__tab-glyph {
+  filter: drop-shadow(0 0 6px rgba(0, 212, 255, 0.55));
+}
