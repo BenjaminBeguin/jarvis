@@ -640,6 +640,65 @@ body:has(.mobile-bootstrap) {
   font-size: 11px;
 }
 
+.mobile-conv__composer {
+  position: sticky;
+  /* Above the bottom tab bar (~62px + safe-area). */
+  bottom: calc(env(safe-area-inset-bottom) + 76px);
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: rgba(4, 7, 11, 0.92);
+  border: 1px solid rgba(0, 217, 255, 0.2);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+}
+
+.mobile-conv__composer textarea {
+  background: rgba(0, 0, 0, 0.45);
+  color: #d8eefb;
+  border: 1px solid rgba(0, 217, 255, 0.15);
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+  min-height: 48px;
+  outline: 0;
+}
+
+.mobile-conv__composer textarea:focus {
+  border-color: #00d4ff;
+}
+
+.mobile-conv__composer-error {
+  font-size: 11px;
+  color: #ff5577;
+}
+
+.mobile-conv__send {
+  align-self: flex-end;
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid #00d4ff;
+  color: #00d4ff;
+  padding: 8px 16px;
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mobile-conv__send:active {
+  background: rgba(0, 212, 255, 0.18);
+}
+
+.mobile-conv__send:disabled {
+  opacity: 0.4;
+}
+
 /* ─────── dictate orb ─────── */
 
 @keyframes mobile-dictate-pulse {

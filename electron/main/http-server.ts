@@ -235,6 +235,23 @@ async function handle(
     return;
   }
 
+  // POST /v1/tasks/:id/message — append a user reply to a
+  // running / resumable task. Returns { ok } so the phone can
+  // show "sent" feedback; the actual agent response streams via
+  // the SSE task.status event + refetch.
+  const messageMatch = path.match(/^\/v1\/tasks\/([^/]+)\/message$/);
+  if (req.method === 'POST' && messageMatch) {
+    const body = await readJson(req);
+    const text = typeof body?.text === 'string' ? body.text.trim() : '';
+    if (!text) {
+      sendJson(res, 400, { error: 'text required' });
+      return;
+    }
+    const ok = deps.runner.sendMessage(messageMatch[1]!, text);
+    sendJson(res, ok ? 200 : 409, { ok });
+    return;
+  }
+
   // GET /v1/status/details — authenticated counts + app mode +
   // pinned conversations. Same snapshot the tray menu consumes,
   // so phone + desktop never drift.

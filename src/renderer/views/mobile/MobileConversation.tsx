@@ -98,9 +98,85 @@ export function MobileConversation({ auth, taskId }: Props) {
         ))}
       </ul>
 
-      <div className="mobile-conv__composer-stub">
-        Compose lands in the next commit.
-      </div>
+      {bundle && canReply(bundle.summary) && (
+        <Composer
+          auth={auth}
+          taskId={taskId}
+          resuming={bundle.summary.status !== 'running'}
+          onSent={refresh}
+        />
+      )}
+    </div>
+  );
+}
+
+function canReply(summary: TaskSummary): boolean {
+  if (summary.origin === 'external') return false;
+  // Same gate as the desktop Conversation: live + awaiting,
+  // OR completed with a saved sdkSessionId so the runner can
+  // spin up a resume turn.
+  if (summary.status === 'running' && summary.awaitingInput) return true;
+  if (summary.status === 'completed' && summary.sdkSessionId) return true;
+  return false;
+}
+
+function Composer({
+  auth,
+  taskId,
+  resuming,
+  onSent,
+}: {
+  auth: MobileAuth;
+  taskId: string;
+  resuming: boolean;
+  onSent: () => void;
+}) {
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const send = async (): Promise<void> => {
+    const value = text.trim();
+    if (!value || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      await api<{ ok: boolean }>(auth, `/v1/tasks/${taskId}/message`, {
+        method: 'POST',
+        body: JSON.stringify({ text: value }),
+      });
+      setText('');
+      onSent();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="mobile-conv__composer">
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={
+          resuming
+            ? 'Continue the conversation. Resumes the session.'
+            : 'Reply…'
+        }
+        rows={2}
+        disabled={sending}
+        spellCheck
+      />
+      {error && <div className="mobile-conv__composer-error">{error}</div>}
+      <button
+        type="button"
+        className="mobile-conv__send"
+        onClick={() => void send()}
+        disabled={sending || !text.trim()}
+      >
+        {sending ? '…' : resuming ? 'Continue' : 'Send'}
+      </button>
     </div>
   );
 }
