@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 
 import type {
   Draft,
+  DraftAction,
   DraftIntent,
   DraftStatus,
   NewDraft,
@@ -18,6 +19,7 @@ interface DraftRow {
   source_item_id: string | null;
   status: string;
   intent: string;
+  actions: string;
   title: string;
   context_summary: string | null;
   context_full: string | null;
@@ -32,13 +34,47 @@ interface DraftRow {
   sent_result: string | null;
 }
 
-function rowToDraft(row: DraftRow): Draft {
-  let sendAction: SendAction;
-  try {
-    sendAction = JSON.parse(row.send_action) as SendAction;
-  } catch {
-    sendAction = { mcp: '', tool: '', args: {}, bodyKey: 'body' };
+function isDraftAction(v: unknown): v is DraftAction {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (typeof r.id !== 'string' || !r.id) return false;
+  if (typeof r.label !== 'string' || !r.label) return false;
+  if (!r.sendAction || typeof r.sendAction !== 'object') return false;
+  return true;
+}
+
+/**
+ * Legacy adapter — older draft rows have actions='[]' (the column
+ * default) and the real dispatch info on intent + send_action. Build
+ * a single-action list so the new code path still works.
+ */
+function synthesizeLegacyActions(
+  intent: string,
+  sendAction: SendAction,
+): DraftAction[] {
+  if (intent === 'archive') {
+    return [
+      {
+        id: 'archive',
+        label: 'Archive',
+        primary: true,
+        requiresBody: false,
+        sendAction,
+      },
+    ];
   }
+  return [
+    {
+      id: 'send',
+      label: 'Send',
+      primary: true,
+      requiresBody: true,
+      sendAction,
+    },
+  ];
+}
+
+function rowToDraft(row: DraftRow): Draft {
   let sentResult: unknown = null;
   if (row.sent_result) {
     try {
@@ -49,12 +85,35 @@ function rowToDraft(row: DraftRow): Draft {
   }
   const intent: DraftIntent =
     row.intent === 'archive' ? 'archive' : 'reply';
+
+  // Prefer the canonical `actions` column. Fall back to synthesizing
+  // from legacy (intent, send_action) when the column is empty —
+  // covers rows written before the actions[] schema landed.
+  let actions: DraftAction[] = [];
+  try {
+    const parsed = JSON.parse(row.actions) as unknown;
+    if (Array.isArray(parsed)) {
+      actions = parsed.filter(isDraftAction);
+    }
+  } catch {
+    actions = [];
+  }
+  if (actions.length === 0) {
+    let legacySendAction: SendAction;
+    try {
+      legacySendAction = JSON.parse(row.send_action) as SendAction;
+    } catch {
+      legacySendAction = { mcp: '', tool: '', args: {}, bodyKey: 'body' };
+    }
+    actions = synthesizeLegacyActions(row.intent, legacySendAction);
+  }
   return {
     id: row.id,
     source: row.source,
     channel: row.channel,
     sourceItemId: row.source_item_id,
     status: row.status as DraftStatus,
+    actions,
     intent,
     title: row.title,
     contextSummary: row.context_summary,
@@ -62,7 +121,6 @@ function rowToDraft(row: DraftRow): Draft {
     currentBody: row.current_body,
     originalBody: row.original_body,
     why: row.why,
-    sendAction,
     workflowId: row.workflow_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -152,14 +210,24 @@ export class DraftsStore extends EventEmitter {
     }
     const now = Date.now();
     const id = `dft-${nanoid(10)}`;
+    // Derive a legacy intent for the DB column from the first action
+    // — old rows still surface it; new code reads actions[] directly.
+    const firstAction = input.actions[0];
+    const legacyIntent: DraftIntent =
+      firstAction && firstAction.requiresBody === false ? 'archive' : 'reply';
+    // Legacy send_action column gets the primary action's
+    // sendAction (or the first one) so callers that haven't been
+    // updated to read `actions` still see something sensible.
+    const primaryAction =
+      input.actions.find((a) => a.primary) ?? input.actions[0];
     db.prepare(
       `INSERT INTO ai_drafts (
-        id, source, channel, source_item_id, status, intent, title,
+        id, source, channel, source_item_id, status, intent, actions, title,
         context_summary, context_full, current_body, original_body,
         why, send_action, workflow_id, created_at, updated_at,
         sent_at, sent_result
       ) VALUES (
-        @id, @source, @channel, @sourceItemId, 'pending', @intent, @title,
+        @id, @source, @channel, @sourceItemId, 'pending', @intent, @actions, @title,
         @contextSummary, @contextFull, @body, @body,
         @why, @sendAction, @workflowId, @now, @now,
         NULL, NULL
@@ -169,13 +237,14 @@ export class DraftsStore extends EventEmitter {
       source: input.source,
       channel: input.channel,
       sourceItemId: input.sourceItemId ?? null,
-      intent: input.intent ?? 'reply',
+      intent: legacyIntent,
+      actions: JSON.stringify(input.actions),
       title: input.title,
       contextSummary: input.contextSummary ?? null,
       contextFull: input.contextFull ?? null,
       body: input.body,
       why: input.why ?? null,
-      sendAction: JSON.stringify(input.sendAction),
+      sendAction: JSON.stringify(primaryAction?.sendAction ?? {}),
       workflowId: input.workflowId ?? null,
       now,
     });

@@ -1,15 +1,16 @@
 import { fromPromise } from 'xstate';
 
-import type { Draft, NewDraft, SendAction } from '@shared/types';
+import type { Draft, DraftAction, NewDraft, SendAction } from '@shared/types';
 
 import type { NodeHandlerInput } from './types.js';
 
 /**
  * Append-only writer for the AI Drafts store. Any triage/autopilot
  * workflow whose final output is "drafts the user should review" ends
- * with this node — Gmail triage, future Slack triage, social DMs, PR
- * comment drafts. The renderer then shows everything in one Drafts
- * view; per-channel dispatch lives in each row's `sendAction`.
+ * with this node — Gmail triage, Slack triage, social DMs, PR comment
+ * drafts. The renderer then shows everything in one Drafts view;
+ * per-channel + per-action dispatch lives in each row's
+ * `actions[].sendAction`.
  *
  * Params:
  *   {
@@ -18,21 +19,28 @@ import type { NodeHandlerInput } from './types.js';
  *
  * Input (prev): an array of draft objects shaped for `NewDraft`:
  *   {
- *     sourceItemId?: string,    // natural id from the upstream channel
- *     channel: string,          // 'gmail' | 'slack' | 'github' | ...
+ *     sourceItemId?: string,
+ *     channel: string,
  *     title: string,
  *     contextSummary?: string,
  *     contextFull?: string,
- *     body: string,             // the AI-drafted reply text
- *     why?: string,             // one-sentence reasoning
- *     sendAction: {
- *       mcp, tool, args, bodyKey
- *     }
+ *     body: string,             // default body for actions that need one
+ *     why?: string,
+ *     actions: Array<{
+ *       id: string,
+ *       label: string,
+ *       primary?: boolean,
+ *       requiresBody?: boolean,
+ *       sendAction: { ... }
+ *     }>
  *   }
+ *
+ * Backwards compat: if the skill emits the legacy { intent,
+ * sendAction } pair INSTEAD of actions[], the node synthesizes a
+ * single-action list so old skills keep working.
  *
  * Dedup: if a draft for `(source, sourceItemId)` already exists, the
  * store returns the existing row instead of inserting a duplicate.
- * Producers that don't have a natural id just omit it.
  *
  * Output: the created/existing Draft[] (passthrough so a downstream
  * `notify` node can mention "N new drafts").
@@ -51,19 +59,18 @@ interface IncomingDraft {
   contextFull?: unknown;
   body?: unknown;
   why?: unknown;
+  // New shape
+  actions?: unknown;
+  // Legacy shape (still accepted for backwards compat)
   sendAction?: unknown;
 }
 
 function isSendAction(v: unknown): v is SendAction {
   if (!v || typeof v !== 'object') return false;
   const r = v as Record<string, unknown>;
-  // Shell variant — needs cmd + args[]
   if (r.kind === 'shell') {
     return typeof r.cmd === 'string' && Array.isArray(r.args);
   }
-  // MCP variant (default) — needs mcp + tool + args object. bodyKey
-  // is optional: present for body-carrying sends (reply); absent
-  // for body-less actions like archive (modify_labels).
   return (
     typeof r.mcp === 'string' &&
     typeof r.tool === 'string' &&
@@ -72,6 +79,14 @@ function isSendAction(v: unknown): v is SendAction {
     !Array.isArray(r.args) &&
     (r.bodyKey === undefined || typeof r.bodyKey === 'string')
   );
+}
+
+function isDraftAction(v: unknown): v is DraftAction {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (typeof r.id !== 'string' || !r.id) return false;
+  if (typeof r.label !== 'string' || !r.label) return false;
+  return isSendAction(r.sendAction);
 }
 
 function coerceString(v: unknown): string | undefined {
@@ -88,8 +103,6 @@ export const draftStoreWriteNode = fromPromise<
     throw new Error('draft-store-write: params.source is required');
   }
   if (!Array.isArray(prev)) {
-    // Empty/undefined input is a no-op rather than an error so an
-    // upstream "no candidates" run still ends cleanly.
     return [];
   }
   const created: Draft[] = [];
@@ -97,27 +110,44 @@ export const draftStoreWriteNode = fromPromise<
     if (!raw || typeof raw !== 'object') continue;
     const channel = coerceString(raw.channel);
     const title = coerceString(raw.title);
-    const body = coerceString(raw.body);
-    if (!channel || !title || !body) {
-      // Drop malformed rows silently — the workflow runner already
-      // surfaces the input via the run dock, so the user can inspect.
+    const body = coerceString(raw.body) ?? '';
+    if (!channel || !title) {
+      // Drop malformed rows silently — the workflow runner surfaces
+      // the input via the run dock so the user can inspect.
       continue;
     }
-    if (!isSendAction(raw.sendAction)) continue;
-    const intentRaw = coerceString(raw.intent);
-    const intent: 'reply' | 'archive' =
-      intentRaw === 'archive' ? 'archive' : 'reply';
+    // Resolve actions[]:
+    //   1. Use the new `actions` array if present + well-formed.
+    //   2. Else, synthesize one from legacy { intent, sendAction }.
+    //   3. Else skip.
+    let actions: DraftAction[] = [];
+    if (Array.isArray(raw.actions)) {
+      actions = raw.actions.filter(isDraftAction);
+    }
+    if (actions.length === 0 && isSendAction(raw.sendAction)) {
+      const intentRaw = coerceString(raw.intent);
+      const isArchive = intentRaw === 'archive';
+      actions = [
+        {
+          id: isArchive ? 'archive' : 'send',
+          label: isArchive ? 'Archive' : 'Send',
+          primary: true,
+          requiresBody: !isArchive,
+          sendAction: raw.sendAction,
+        },
+      ];
+    }
+    if (actions.length === 0) continue;
     const newDraft: NewDraft = {
       source: params.source,
       channel,
       sourceItemId: coerceString(raw.sourceItemId) ?? null,
-      intent,
       title,
       contextSummary: coerceString(raw.contextSummary) ?? null,
       contextFull: coerceString(raw.contextFull) ?? null,
       body,
       why: coerceString(raw.why) ?? null,
-      sendAction: raw.sendAction,
+      actions,
       workflowId: ctx.workflowId ?? null,
     };
     created.push(ctx.drafts.create(newDraft));

@@ -157,7 +157,7 @@ export function registerDraftsIpc({ drafts, mcp, runner }: IpcDeps): void {
 
   ipcMain.handle(
     IpcChannels.sendDraft,
-    async (_e, id: string): Promise<SendResult> => {
+    async (_e, id: string, actionId?: string): Promise<SendResult> => {
       const draft = drafts.get(id);
       if (!draft) return { ok: false, message: 'Draft not found.' };
       if (draft.status === 'sent') {
@@ -166,7 +166,21 @@ export function registerDraftsIpc({ drafts, mcp, runner }: IpcDeps): void {
       if (draft.status === 'sending') {
         return { ok: false, draft, message: 'Send in progress.' };
       }
-      const { sendAction } = draft;
+      // Pick the action: explicit by id, else the primary, else the
+      // first. Single-action drafts (legacy / simple) work without
+      // the caller supplying an actionId at all.
+      const action =
+        (actionId && draft.actions.find((a) => a.id === actionId)) ||
+        draft.actions.find((a) => a.primary) ||
+        draft.actions[0];
+      if (!action) {
+        return {
+          ok: false,
+          draft,
+          message: 'Draft has no actions — cannot dispatch.',
+        };
+      }
+      const { sendAction } = action;
       // Dispatch on kind. Default (omitted) is 'mcp' for backwards
       // compat with the original Gmail/Slack drafts.
       if (sendAction.kind === 'shell') {
@@ -191,15 +205,19 @@ export function registerDraftsIpc({ drafts, mcp, runner }: IpcDeps): void {
         return {
           ok: false,
           draft,
-          message: 'Draft is missing send_action — cannot dispatch.',
+          message: 'Draft action is missing mcp/tool — cannot dispatch.',
         };
       }
       drafts.markSending(id);
       // Substitute the editable body into the configured arg slot
-      // when bodyKey is set. Body-less actions (archive, label-as,
-      // etc.) omit bodyKey and the args go through verbatim.
-      const args: Record<string, unknown> = sendAction.bodyKey
-        ? { ...sendAction.args, [sendAction.bodyKey]: draft.currentBody }
+      // when bodyKey is set AND the action expects a body. Body-less
+      // actions (archive, label-as, forward-to-fixed, etc.) omit
+      // bodyKey and/or set requiresBody=false; the args go through
+      // verbatim.
+      const consumesBody =
+        action.requiresBody !== false && typeof sendAction.bodyKey === 'string';
+      const args: Record<string, unknown> = consumesBody
+        ? { ...sendAction.args, [sendAction.bodyKey as string]: draft.currentBody }
         : { ...sendAction.args };
       const result = await invokeMcpTool(
         mcp,

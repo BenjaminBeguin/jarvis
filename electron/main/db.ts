@@ -110,6 +110,13 @@ const MIGRATIONS = [
   // sendAction shape AND a different UI affordance (Archive button
   // instead of Send, no body textarea).
   `ALTER TABLE ai_drafts ADD COLUMN intent TEXT NOT NULL DEFAULT 'reply';`,
+  // Actions — replaces the single (intent, sendAction) pair with a
+  // list of LLM-emitted resolutions per draft. Each entry: {id,
+  // label, primary?, requiresBody?, sendAction}. Stored as a JSON
+  // string. Legacy rows have actions='[]' and get a synthesized
+  // single-action list at read time (from the row's intent +
+  // send_action JSON).
+  `ALTER TABLE ai_drafts ADD COLUMN actions TEXT NOT NULL DEFAULT '[]';`,
 ];
 
 let db: DatabaseType | null = null;

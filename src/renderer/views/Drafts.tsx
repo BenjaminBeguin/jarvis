@@ -363,20 +363,27 @@ function DraftRow({
     toast({ message: 'Draft saved' });
   };
 
-  const onSend = async () => {
-    // Save inline edits first so the substituted body is current.
-    if (dirty) {
+  /**
+   * Execute one of the draft's actions. The LLM emits the list per
+   * draft (e.g. Send / Archive / Forward-to-X). We save inline edits
+   * to the body first only when the chosen action consumes a body —
+   * archive-style actions don't, so the textarea stays as-is.
+   */
+  const runAction = async (actionId: string) => {
+    const action = draft.actions.find((a) => a.id === actionId);
+    if (!action) return;
+    if (action.requiresBody !== false && dirty) {
       await window.jarvis.updateDraftBody(draft.id, body);
     }
     setSending(true);
     try {
-      const result = await window.jarvis.sendDraft(draft.id);
+      const result = await window.jarvis.sendDraft(draft.id, actionId);
       if (result.ok) {
-        toast({ message: 'Sent ✓' });
+        toast({ message: `${action.label} ✓` });
       } else {
         toast({
           kind: 'error',
-          message: `Send failed: ${result.message ?? 'unknown error'}`,
+          message: `${action.label} failed: ${result.message ?? 'unknown error'}`,
         });
       }
     } finally {
@@ -518,236 +525,18 @@ function DraftRow({
         </div>
       </header>
 
-      {expanded && draft.intent === 'archive' && (
-        <div
-          style={{
-            padding: '0 16px 16px 16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-          }}
-        >
-          {draft.contextFull && (
-            <details>
-              <summary
-                style={{
-                  fontSize: 12,
-                  color: 'var(--muted)',
-                  cursor: 'pointer',
-                }}
-              >
-                Show original
-              </summary>
-              <pre
-                style={{
-                  margin: '8px 0 0 0',
-                  padding: 12,
-                  background: 'rgba(0,0,0,0.2)',
-                  borderRadius: 6,
-                  fontSize: 12,
-                  whiteSpace: 'pre-wrap',
-                  maxHeight: 240,
-                  overflow: 'auto',
-                }}
-              >
-                {draft.contextFull}
-              </pre>
-            </details>
-          )}
-          <div
-            style={{
-              padding: 12,
-              background: 'rgba(255, 165, 0, 0.04)',
-              border: '1px solid rgba(255, 165, 0, 0.2)',
-              borderRadius: 6,
-              fontSize: 12.5,
-              color: 'var(--text)',
-              lineHeight: 1.5,
-            }}
-          >
-            <strong style={{ color: '#ffa500' }}>Why archive:</strong>{' '}
-            {draft.why ?? 'looks like junk'}
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button
-              onClick={() => void onSend()}
-              disabled={
-                sending ||
-                draft.status === 'sent' ||
-                draft.status === 'discarded' ||
-                draft.status === 'sending'
-              }
-              style={{
-                padding: '8px 16px',
-                background: 'var(--accent)',
-                color: '#000',
-                border: 'none',
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: 'pointer',
-                opacity:
-                  sending ||
-                  (draft.status !== 'pending' && draft.status !== 'failed')
-                    ? 0.5
-                    : 1,
-              }}
-            >
-              {sending ? 'Archiving…' : 'Archive'}
-            </button>
-            <button
-              onClick={() => void onDiscard()}
-              style={{
-                marginLeft: 'auto',
-                padding: '8px 16px',
-                background: 'transparent',
-                border: '1px solid var(--border)',
-                borderRadius: 6,
-                color: 'var(--muted)',
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
-              title="Keep in inbox; don't archive"
-            >
-              Keep in inbox
-            </button>
-          </div>
-        </div>
-      )}
-
-      {expanded && draft.intent !== 'archive' && (
-        <div
-          style={{
-            padding: '0 16px 16px 16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-          }}
-        >
-          {draft.contextFull && (
-            <details>
-              <summary
-                style={{
-                  fontSize: 12,
-                  color: 'var(--muted)',
-                  cursor: 'pointer',
-                }}
-              >
-                Show original
-              </summary>
-              <pre
-                style={{
-                  margin: '8px 0 0 0',
-                  padding: 12,
-                  background: 'rgba(0,0,0,0.2)',
-                  borderRadius: 6,
-                  fontSize: 12,
-                  whiteSpace: 'pre-wrap',
-                  maxHeight: 240,
-                  overflow: 'auto',
-                }}
-              >
-                {draft.contextFull}
-              </pre>
-            </details>
-          )}
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            onBlur={() => void onSave()}
-            disabled={draft.status === 'sent' || draft.status === 'discarded'}
-            style={{
-              width: '100%',
-              minHeight: 140,
-              padding: 12,
-              background: 'var(--input-bg, rgba(0,0,0,0.2))',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              color: 'var(--text)',
-              fontSize: 13,
-              fontFamily: 'inherit',
-              resize: 'vertical',
-              boxSizing: 'border-box',
-            }}
-          />
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button
-              onClick={() => void onSend()}
-              disabled={
-                sending ||
-                draft.status === 'sent' ||
-                draft.status === 'discarded' ||
-                draft.status === 'sending'
-              }
-              style={{
-                padding: '8px 16px',
-                background: 'var(--accent)',
-                color: '#000',
-                border: 'none',
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: 'pointer',
-                opacity:
-                  sending || draft.status !== 'pending' && draft.status !== 'failed'
-                    ? 0.5
-                    : 1,
-              }}
-            >
-              {sending ? 'Sending…' : 'Send'}
-            </button>
-            <button
-              onClick={() => setRefineOpen(true)}
-              disabled={draft.status === 'sent' || draft.status === 'discarded'}
-              style={{
-                padding: '8px 16px',
-                background: 'transparent',
-                border: '1px solid var(--border)',
-                borderRadius: 6,
-                color: 'var(--text)',
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
-            >
-              Refine with prompt…
-            </button>
-            <button
-              onClick={() => void onRevert()}
-              disabled={
-                draft.status === 'sent' ||
-                draft.status === 'discarded' ||
-                body === draft.originalBody
-              }
-              style={{
-                padding: '8px 16px',
-                background: 'transparent',
-                border: '1px solid var(--border)',
-                borderRadius: 6,
-                color: 'var(--text)',
-                fontSize: 13,
-                cursor: 'pointer',
-                opacity: body === draft.originalBody ? 0.4 : 1,
-              }}
-            >
-              Revert
-            </button>
-            <button
-              onClick={() => void onDiscard()}
-              style={{
-                marginLeft: 'auto',
-                padding: '8px 16px',
-                background: 'transparent',
-                border: '1px solid var(--border)',
-                borderRadius: 6,
-                color: 'var(--muted)',
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
-            >
-              Discard
-            </button>
-          </div>
-        </div>
+      {expanded && (
+        <ExpandedBody
+          draft={draft}
+          body={body}
+          setBody={setBody}
+          sending={sending}
+          onSave={onSave}
+          onRevert={onRevert}
+          onDiscard={onDiscard}
+          onAction={runAction}
+          onOpenRefine={() => setRefineOpen(true)}
+        />
       )}
 
       {refineOpen && (
@@ -757,6 +546,197 @@ function DraftRow({
         />
       )}
     </article>
+  );
+}
+
+/**
+ * Expanded body for one draft row. Renders the original-message
+ * disclosure, the editable body (only when ≥1 action consumes a
+ * body), and one button per LLM-emitted action. The primary action
+ * gets the accent style; the rest are outlined. A persistent Discard
+ * button sits on the right.
+ */
+function ExpandedBody({
+  draft,
+  body,
+  setBody,
+  sending,
+  onSave,
+  onRevert,
+  onDiscard,
+  onAction,
+  onOpenRefine,
+}: {
+  draft: Draft;
+  body: string;
+  setBody: (v: string) => void;
+  sending: boolean;
+  onSave: () => Promise<void>;
+  onRevert: () => Promise<void>;
+  onDiscard: () => Promise<void>;
+  onAction: (actionId: string) => Promise<void>;
+  onOpenRefine: () => void;
+}) {
+  const resolved = draft.status === 'sent' || draft.status === 'discarded';
+  const inFlight = sending || draft.status === 'sending';
+  const actionsDisabled = resolved || inFlight;
+
+  // The LLM picks per draft which actions are available. Show
+  // textarea + Refine + Revert only when at least one action
+  // consumes the body — body-less drafts (pure archive) hide them.
+  const hasBodyAction = draft.actions.some((a) => a.requiresBody !== false);
+  // Treat the first action with `primary: true` as the highlighted
+  // one. Fall back to the first action so something always pops.
+  const primaryActionId =
+    draft.actions.find((a) => a.primary)?.id ?? draft.actions[0]?.id;
+
+  return (
+    <div
+      style={{
+        padding: '0 16px 16px 16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+      }}
+    >
+      {draft.contextFull && (
+        <details>
+          <summary
+            style={{ fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}
+          >
+            Show original
+          </summary>
+          <pre
+            style={{
+              margin: '8px 0 0 0',
+              padding: 12,
+              background: 'rgba(0,0,0,0.2)',
+              borderRadius: 6,
+              fontSize: 12,
+              whiteSpace: 'pre-wrap',
+              maxHeight: 240,
+              overflow: 'auto',
+            }}
+          >
+            {draft.contextFull}
+          </pre>
+        </details>
+      )}
+      {!hasBodyAction && draft.why && (
+        <div
+          style={{
+            padding: 12,
+            background: 'rgba(255, 165, 0, 0.04)',
+            border: '1px solid rgba(255, 165, 0, 0.2)',
+            borderRadius: 6,
+            fontSize: 12.5,
+            color: 'var(--text)',
+            lineHeight: 1.5,
+          }}
+        >
+          <strong style={{ color: '#ffa500' }}>Why:</strong> {draft.why}
+        </div>
+      )}
+      {hasBodyAction && (
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          onBlur={() => void onSave()}
+          disabled={resolved}
+          style={{
+            width: '100%',
+            minHeight: 140,
+            padding: 12,
+            background: 'var(--input-bg, rgba(0,0,0,0.2))',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            color: 'var(--text)',
+            fontSize: 13,
+            fontFamily: 'inherit',
+            resize: 'vertical',
+            boxSizing: 'border-box',
+          }}
+        />
+      )}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {draft.actions.map((action) => {
+          const isPrimary = action.id === primaryActionId;
+          const busyLabel = inFlight ? `${action.label}…` : action.label;
+          return (
+            <button
+              key={action.id}
+              onClick={() => void onAction(action.id)}
+              disabled={actionsDisabled}
+              title={action.description}
+              style={{
+                padding: '8px 16px',
+                background: isPrimary ? 'var(--accent)' : 'transparent',
+                color: isPrimary ? '#000' : 'var(--text)',
+                border: isPrimary ? 'none' : '1px solid var(--border)',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: isPrimary ? 500 : 400,
+                cursor: actionsDisabled ? 'not-allowed' : 'pointer',
+                opacity: actionsDisabled ? 0.5 : 1,
+              }}
+            >
+              {busyLabel}
+            </button>
+          );
+        })}
+        {hasBodyAction && (
+          <button
+            onClick={onOpenRefine}
+            disabled={resolved}
+            style={{
+              padding: '8px 16px',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              color: 'var(--text)',
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            Refine with prompt…
+          </button>
+        )}
+        {hasBodyAction && (
+          <button
+            onClick={() => void onRevert()}
+            disabled={resolved || body === draft.originalBody}
+            style={{
+              padding: '8px 16px',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              color: 'var(--text)',
+              fontSize: 13,
+              cursor: 'pointer',
+              opacity: body === draft.originalBody ? 0.4 : 1,
+            }}
+          >
+            Revert
+          </button>
+        )}
+        <button
+          onClick={() => void onDiscard()}
+          style={{
+            marginLeft: 'auto',
+            padding: '8px 16px',
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            color: 'var(--muted)',
+            fontSize: 13,
+            cursor: 'pointer',
+          }}
+          title="Dismiss this draft without acting"
+        >
+          Discard
+        </button>
+      </div>
+    </div>
   );
 }
 

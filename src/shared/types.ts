@@ -1099,18 +1099,60 @@ export type DraftStatus =
   | 'discarded';
 
 /**
- * What the user is reviewing in this draft. Drives the UI affordance:
- *
- *   - **reply** (default): the user edits a textarea body + clicks
- *     Send. The `sendAction` posts the body to the channel.
- *   - **archive**: there's nothing to write — the agent flagged this
- *     for archiving (newsletter, automated, low-signal). The UI
- *     shows an Archive button instead of Send, hides the body
- *     textarea, and surfaces the agent's "why" prominently. The
- *     `sendAction` calls the channel's "remove from inbox" tool
- *     (e.g. gmail.modify_labels with removeLabelIds: ['INBOX']).
+ * Legacy intent enum. Kept for type compatibility with already-stored
+ * rows; new code reads `Draft.actions` instead. Drafts migrated from
+ * the old schema synthesise an `actions` array from intent +
+ * sendAction at read time.
  */
 export type DraftIntent = 'reply' | 'archive';
+
+/**
+ * One possible resolution for a draft. The LLM emits 1-N actions per
+ * draft based on what makes sense for the message. Each action carries
+ * its own UI label and its own dispatch template (`sendAction`).
+ *
+ * Example — a Gmail message that's borderline spam might get:
+ *   [
+ *     { id: 'send', label: 'Reply anyway', primary: true,
+ *       requiresBody: true, sendAction: <gmail send_message> },
+ *     { id: 'archive', label: 'Archive (spam)',
+ *       requiresBody: false, sendAction: <gmail modify_labels> },
+ *   ]
+ *
+ * A Slack DM from a co-worker about a PM-team topic might get:
+ *   [
+ *     { id: 'send', label: 'Reply', primary: true,
+ *       requiresBody: true, sendAction: <slack send_message> },
+ *     { id: 'forward-pm', label: 'Forward to #pm',
+ *       requiresBody: false, sendAction: <slack send_message
+ *                                          to #pm with quote> },
+ *   ]
+ *
+ * The user picks one — clicking an action resolves the draft (status
+ * goes to 'sent' / 'failed'). Actions are mutually exclusive.
+ */
+export interface DraftAction {
+  /** Stable id within the draft. Used as the API selector when the
+   *  user picks this action (sendDraft(draftId, actionId)). Examples:
+   *  'send', 'archive', 'forward-pm', 'star-and-archive'. */
+  id: string;
+  /** Button text the user clicks. Keep it short (≤ 24 chars). */
+  label: string;
+  /** Optional one-liner shown as tooltip / secondary text. */
+  description?: string;
+  /** Exactly one action per draft can be marked primary — it gets
+   *  the accent color in the UI. If none is primary, the first
+   *  in the array is treated as primary. */
+  primary?: boolean;
+  /** When true (or omitted, default true), the action consumes the
+   *  user-editable body — the UI shows the textarea + Refine, and
+   *  the body is substituted into the sendAction at dispatch time.
+   *  Set false for body-less actions (archive, label-as, star,
+   *  forward-to-fixed-recipient). When ALL actions have
+   *  requiresBody=false, the UI hides the textarea entirely. */
+  requiresBody?: boolean;
+  sendAction: SendAction;
+}
 
 /**
  * Channel-specific dispatch template carried on each draft. Two shapes:
@@ -1188,25 +1230,29 @@ export interface Draft {
    *  unique index. */
   sourceItemId?: string | null;
   status: DraftStatus;
-  /** What kind of action the user is reviewing. 'reply' = the user
-   *  edits + sends a body; 'archive' = one-click destructive action
-   *  (calls modify_labels or equivalent). See DraftIntent. */
-  intent: DraftIntent;
+  /** Possible resolutions for the user to pick from. The LLM emits 1-N
+   *  per draft based on what makes sense for the message. The UI
+   *  renders one button per action; clicking dispatches that action's
+   *  sendAction and resolves the draft. */
+  actions: DraftAction[];
+  /** Legacy: classification before actions[] existed. New code
+   *  ignores this; reads carry it for compat only. Synthesized into
+   *  actions[] for old rows during DB read. */
+  intent?: DraftIntent;
   title: string;
   /** Short context line shown in the collapsed row. */
   contextSummary?: string | null;
   /** Full upstream content (original email body, slack thread excerpt)
    *  — surfaced when the row expands and fed to the refine engine. */
   contextFull?: string | null;
-  /** Current editable body — what would be sent if the user clicks Send.
-   *  For intent='archive' this is just the agent's "why" text; the
-   *  UI hides the textarea and the sendAction ignores it. */
+  /** Current editable body — what an action with requiresBody=true
+   *  will substitute into its sendAction at dispatch time. Hidden by
+   *  the UI when no action consumes a body. */
   currentBody: string;
   /** AI's first draft. Drives the Revert button. */
   originalBody: string;
   /** One-sentence reasoning from the triage skill. */
   why?: string | null;
-  sendAction: SendAction;
   /** Workflow run that produced this draft, if any. Audit trail. */
   workflowId?: string | null;
   createdAt: number;
@@ -1221,14 +1267,19 @@ export interface NewDraft {
   source: string;
   channel: string;
   sourceItemId?: string | null;
-  /** Defaults to 'reply' when omitted. */
-  intent?: DraftIntent;
   title: string;
   contextSummary?: string | null;
   contextFull?: string | null;
+  /** The default body for actions that consume one. Substituted into
+   *  `sendAction.args[bodyKey]` at dispatch time. Pass an empty
+   *  string when no action requires a body. */
   body: string;
   why?: string | null;
-  sendAction: SendAction;
+  /** Possible resolutions for this draft. At least one required.
+   *  If the producer hasn't migrated to actions[] yet, the
+   *  workflow node synthesises one from a legacy { intent,
+   *  sendAction } pair. */
+  actions: DraftAction[];
   workflowId?: string | null;
 }
 

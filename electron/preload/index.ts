@@ -784,8 +784,9 @@ const api = {
     ipcRenderer.invoke(IpcChannels.refineDraft, id, prompt),
   sendDraft: (
     id: string,
+    actionId?: string,
   ): Promise<{ ok: boolean; draft?: Draft | null; message?: string }> =>
-    ipcRenderer.invoke(IpcChannels.sendDraft, id),
+    ipcRenderer.invoke(IpcChannels.sendDraft, id, actionId),
   discardDraft: (id: string): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.discardDraft, id),
   revertDraft: (id: string): Promise<Draft | null> =>

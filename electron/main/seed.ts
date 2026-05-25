@@ -155,13 +155,34 @@ const SKILL_BODY_DETECTORS: Record<string, (body: string) => boolean> = {
   // as drafts whose BODY was "(suggest archive — reason)". The Drafts
   // UI's Send button then mailed that body to the original sender as
   // a reply. v2 introduces an explicit intent='archive' + modify_labels
-  // sendAction; detect the v1 string and rewrite. Matching is safe
-  // because no user would copy this exact phrase into a customized
-  // skill body.
+  // sendAction; v3 generalizes to actions[] per draft. Detect any
+  // pre-actions[] shape and rewrite.
   'gmail-triage': (body) =>
     body.includes('(suggest archive — reason)') ||
     body.includes("'(suggest archive — Substack newsletter)'") ||
-    body.includes('the \'(suggest archive — reason)\' line'),
+    body.includes("the '(suggest archive — reason)' line") ||
+    // v2 (intent-based) → migrate to v3 (actions[])
+    (body.includes('"intent": "reply"') && !body.includes('"actions":')) ||
+    (body.includes('"intent": "archive"') && !body.includes('"actions":')),
+  // slack-dm-ack v1/v2 used { intent, sendAction } shape. v3 emits
+  // actions[]. Detect the older shape by the absence of "actions":
+  // in the OUTPUT PROTOCOL section while still mentioning sendAction.
+  'slack-dm-ack': (body) =>
+    body.includes('"sendAction":') &&
+    !body.includes('"actions":') &&
+    body.includes('slack-dm-ack'),
+  // pr-comments-triage v1 used a top-level sendAction. v2 emits
+  // actions[] with a single 'reply' action.
+  'pr-comments-triage': (body) =>
+    body.includes('"sendAction":') &&
+    !body.includes('"actions":') &&
+    body.includes('pulls/<num>/comments/<comment-id>/replies'),
+  // pr-review-triage v1 used top-level sendAction. v2 emits actions[]
+  // with a single 'submit' action.
+  'pr-review-triage': (body) =>
+    body.includes('"sendAction":') &&
+    !body.includes('"actions":') &&
+    body.includes('pulls/<num>/reviews'),
 };
 
 /**
