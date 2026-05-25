@@ -31,20 +31,40 @@ interface TodoItem {
   status: TodoStatus;
   /** Button label — "Connect" / "Enable" / "Edit" / etc. */
   actionLabel: string;
-  /** Where clicking the action takes the user. Either a tab or a
-   *  Settings section. */
-  navigate:
-    | { tab: string }
-    | { tab: 'settings'; settingsSection: string };
+  /** Free-form callback so each todo can do the right thing —
+   *  navigate to a tab, reveal a file in Finder, launch a
+   *  calibrate skill, etc. Beats forcing every action into a
+   *  fixed nav shape that doesn't fit (e.g. policy files have no
+   *  dedicated UI editor — they need a reveal or a slash skill). */
+  onAction: () => void;
 }
 
-function dispatchNavigate(payload: {
+/** Switch to a tab + optionally a Settings sub-section. */
+function navigateTo(payload: {
   tab?: string;
   settingsSection?: string;
 }): void {
   window.dispatchEvent(
     new CustomEvent('jarvis:navigate', { detail: payload }),
   );
+}
+
+/** Launch a calibrate-style skill (e.g. triage-calibrate,
+ *  inbox-calibrate) so the user gets a guided convo to refine the
+ *  underlying markdown file. Lands in AI Agent with the running task. */
+function launchCalibrate(skillId: string, prompt: string): void {
+  window.jarvis
+    .launchTask({ skillId, prompt, origin: 'palette' })
+    .then(() => {
+      // Navigate to AI Agent so the user can see the conversation
+      // unfold + reply to the skill's questions.
+      window.dispatchEvent(
+        new CustomEvent('jarvis:navigate', { detail: { tab: 'ai-agent' } }),
+      );
+    })
+    .catch((err) =>
+      console.error('[building-home] launchCalibrate failed', err),
+    );
 }
 
 export function BuildingHome() {
@@ -103,7 +123,9 @@ export function BuildingHome() {
   const todos: TodoItem[] = useMemo(() => {
     const list: TodoItem[] = [];
 
-    // Auth — pending if no token of the active mode
+    // Auth — pending if no token of the active mode.
+    // Settings → General has the auth-mode panel + Anthropic key
+    // entry; that's the right landing for "sign in".
     const authDone =
       (status?.authMode === 'subscription' && status?.hasSubscriptionToken) ||
       (status?.authMode === 'api-key' && status?.hasApiKey);
@@ -115,7 +137,8 @@ export function BuildingHome() {
           'Subscription mode (recommended — billed via Claude.ai plan) or an Anthropic API key.',
         status: 'pending',
         actionLabel: 'Sign in',
-        navigate: { tab: 'settings', settingsSection: 'general' },
+        onAction: () =>
+          navigateTo({ tab: 'settings', settingsSection: 'general' }),
       });
     }
 
@@ -136,7 +159,8 @@ export function BuildingHome() {
         description: connectorWhy(c.id),
         status: 'pending',
         actionLabel: 'Connect',
-        navigate: { tab: 'settings', settingsSection: 'integrations' },
+        onAction: () =>
+          navigateTo({ tab: 'settings', settingsSection: 'integrations' }),
       });
     }
 
@@ -150,24 +174,32 @@ export function BuildingHome() {
         description: `${autopilots.length} autopilots installed (Gmail / Slack / PR comments / PR review) but none enabled. Flip one on under Workflows, then set the tray to Autopilot mode to let it fire.`,
         status: 'partial',
         actionLabel: 'Enable',
-        navigate: { tab: 'workflows' },
+        onAction: () => navigateTo({ tab: 'workflows' }),
       });
     }
 
-    // Triage policy — partial if untouched default
+    // Triage policy — partial if untouched default.
+    // ~/.jarvis/triage-policy.md has no dedicated Settings editor;
+    // launching the triage-calibrate skill gives the user a guided
+    // conversation that edits the file for them.
     if (triagePolicyCustom === false) {
       list.push({
         id: 'triage-policy',
         title: 'Customize triage policy',
         description:
-          'Tell the triage skills who you draft for, what to archive, and your tone. Default placeholder — edit before running the autopilots.',
+          'Tell the triage skills who you draft for, what to archive, and your tone. Default placeholder — refine before running the autopilots.',
         status: 'partial',
-        actionLabel: 'Edit',
-        navigate: { tab: 'settings', settingsSection: 'preferences' },
+        actionLabel: 'Refine',
+        onAction: () =>
+          launchCalibrate(
+            'triage-calibrate',
+            'Walk me through tuning my triage policy.',
+          ),
       });
     }
 
-    // Inbox priorities — partial if untouched default
+    // Inbox priorities — partial if untouched default.
+    // Same pattern: no UI editor; inbox-calibrate skill drives it.
     if (inboxPrioritiesCustom === false) {
       list.push({
         id: 'inbox-priorities',
@@ -175,12 +207,18 @@ export function BuildingHome() {
         description:
           'Tell the smart-inbox curator who matters and what to mute. Default placeholder.',
         status: 'partial',
-        actionLabel: 'Edit',
-        navigate: { tab: 'settings', settingsSection: 'preferences' },
+        actionLabel: 'Refine',
+        onAction: () =>
+          launchCalibrate(
+            'inbox-calibrate',
+            'Walk me through tuning my inbox priorities.',
+          ),
       });
     }
 
-    // Working hours — pure info, only surface if completely default
+    // Working hours — pure info, only surface if completely default.
+    // Settings → PREFERENCES (not General) hosts the WorkingHoursPanel
+    // alongside the preferences.md editor.
     const defaultHours = { startHour: 9, endHour: 18, daysOfWeek: '1-5' };
     if (
       workingHours &&
@@ -195,7 +233,8 @@ export function BuildingHome() {
           'Currently 09:00–18:00 Mon–Fri (the default). Every inbox-sync workflow uses this to fire only when you might look.',
         status: 'partial',
         actionLabel: 'Adjust',
-        navigate: { tab: 'settings', settingsSection: 'general' },
+        onAction: () =>
+          navigateTo({ tab: 'settings', settingsSection: 'preferences' }),
       });
     }
 
@@ -261,7 +300,7 @@ export function BuildingHome() {
                 <button
                   type="button"
                   className={`building-home__todo-action building-home__todo-action--${t.status}`}
-                  onClick={() => dispatchNavigate(t.navigate)}
+                  onClick={() => t.onAction()}
                 >
                   {t.actionLabel}
                 </button>
