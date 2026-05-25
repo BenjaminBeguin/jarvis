@@ -20,8 +20,45 @@ const CHANNEL_BADGE: Record<string, string> = {
   linear: 'Linear',
 };
 
+/** Brand-flavoured chip color (BG / FG) per channel. The values are
+ *  intentionally muted so they sit alongside the surface without
+ *  shouting — accent comes from the row's status border, not these. */
+const CHANNEL_STYLE: Record<
+  string,
+  { bg: string; fg: string; glyph: string }
+> = {
+  gmail: { bg: 'rgba(234, 67, 53, 0.16)', fg: '#ea4335', glyph: '✉' },
+  slack: { bg: 'rgba(74, 21, 75, 0.32)', fg: '#cbb1ce', glyph: '#' },
+  github: { bg: 'rgba(255, 255, 255, 0.08)', fg: '#d0d0d0', glyph: '◷' },
+  linear: { bg: 'rgba(94, 106, 210, 0.18)', fg: '#9aa6ff', glyph: 'L' },
+};
+
 function channelLabel(channel: string): string {
   return CHANNEL_BADGE[channel] ?? channel;
+}
+
+function channelStyle(channel: string): { bg: string; fg: string; glyph: string } {
+  return (
+    CHANNEL_STYLE[channel] ?? {
+      bg: 'rgba(255, 255, 255, 0.08)',
+      fg: 'var(--muted)',
+      glyph: channel.charAt(0).toUpperCase() || '·',
+    }
+  );
+}
+
+function ChannelChip({ channel }: { channel: string }) {
+  const style = channelStyle(channel);
+  return (
+    <span
+      className="draft-row__channel"
+      style={{ background: style.bg, color: style.fg }}
+      title={channelLabel(channel)}
+      aria-label={channelLabel(channel)}
+    >
+      {style.glyph}
+    </span>
+  );
 }
 
 function timeAgo(ms: number): string {
@@ -399,18 +436,7 @@ function DraftRow({
         }}
         onClick={onToggle}
       >
-        <span
-          style={{
-            padding: '2px 8px',
-            borderRadius: 4,
-            background: 'rgba(255,255,255,0.06)',
-            fontSize: 11,
-            fontWeight: 500,
-            flexShrink: 0,
-          }}
-        >
-          {channelLabel(draft.channel)}
-        </span>
+        <ChannelChip channel={draft.channel} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{

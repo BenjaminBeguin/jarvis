@@ -19,6 +19,7 @@ import { Drafts } from './Drafts';
 import { FlowStream } from './FlowStream';
 import { Settings } from './Settings';
 import { SetupGuide } from './SetupGuide';
+import { SetupNudge } from './SetupNudge';
 import { Sidebar, type SidebarSection } from './Sidebar';
 import { Skills } from './Skills';
 import { Workflows } from './Workflows';
@@ -869,6 +870,9 @@ export function Shell({ status }: Props) {
       <div className="shell__main">
         <Sidebar sections={sidebarSections} />
         <div className="shell__body">
+        {uiMode === 'working' && (
+          <SetupNudge onSwitchToSetup={() => switchMode('setup')} />
+        )}
         {openModuleId && PageComponent ? (
           <PageComponent />
         ) : tab === 'dashboard' ? (

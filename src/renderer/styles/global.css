@@ -20696,6 +20696,143 @@ button:disabled:hover {
   filter: brightness(1.1);
 }
 
+/* ─── Setup nudge banner (Working mode only) ──────────────────── */
+
+.setup-nudge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 24px 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 165, 0, 0.32);
+  border-left: 3px solid var(--accent);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 165, 0, 0.08),
+    rgba(255, 165, 0, 0.02)
+  );
+  border-radius: 6px;
+  font-size: 13px;
+  animation: setupNudgeIn 320ms ease-out;
+}
+
+@keyframes setupNudgeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.setup-nudge__icon {
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.setup-nudge__text {
+  flex: 1;
+  color: var(--text);
+}
+
+.setup-nudge__action {
+  appearance: none;
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent);
+  color: #000;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter 120ms ease;
+}
+
+.setup-nudge__action:hover {
+  filter: brightness(1.1);
+}
+
+.setup-nudge__dismiss {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.setup-nudge__dismiss:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+/* ─── Draft row channel chip + hover lift ──────────────────────── */
+
+.draft-row {
+  position: relative;
+  transition:
+    border-color 140ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms ease;
+}
+
+.draft-row:hover {
+  border-color: var(--border-strong) !important;
+  transform: translateY(-1px);
+  box-shadow:
+    0 6px 18px -10px rgba(0, 0, 0, 0.6),
+    0 2px 6px -3px rgba(0, 0, 0, 0.4);
+}
+
+.draft-row__channel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+  user-select: none;
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.draft-row:hover .draft-row__channel {
+  transform: scale(1.05);
+}
+
+/* ─── Tab cross-fade — the body content fades in on tab change ── */
+
+@keyframes shellBodyFade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.shell__body > *:not(.setup-nudge) {
+  animation: shellBodyFade 220ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell__body > *:not(.setup-nudge) {
+    animation: none;
+  }
+}
+
 /* ─── Draft row slide-in (new arrivals) ────────────────────────── */
 
 @keyframes draftRowSlideIn {
