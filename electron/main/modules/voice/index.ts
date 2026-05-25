@@ -32,6 +32,16 @@ export const voiceModule: Module = {
   description:
     'Local Whisper transcription (forked worker, crash-isolated) + macOS say TTS for dictation and read-back.',
   version: '1.0.0',
+  memory: [
+    {
+      label: 'Whisper model cache',
+      location: '~/.jarvis/models/',
+      kind: 'directory',
+      access: 'read-write',
+      notes:
+        'ONNX-quantised whisper-base lazily downloaded by Transformers.js on first dictation. ~150 MB. Safe to delete; will re-download.',
+    },
+  ],
   intents: [
     {
       id: 'speak',

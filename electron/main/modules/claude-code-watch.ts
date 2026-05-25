@@ -249,6 +249,24 @@ export class ClaudeCodeWatchModule implements Module {
   readonly description =
     'Surface live Claude Code sessions from ~/.claude/projects/ in the observatory';
   readonly version = '1.0.0';
+  readonly memory = [
+    {
+      label: 'Claude Code session logs (Anthropic-owned)',
+      location: '~/.claude/projects/<project>/<sessionId>.jsonl',
+      kind: 'directory' as const,
+      access: 'read' as const,
+      notes:
+        'Written by the Claude Code CLI. We only TAIL these — never write. Polled every 1.5s. Files Jarvis owns (own session IDs) are filtered out so the same task doesn\'t appear twice.',
+    },
+    {
+      label: 'Watched session positions',
+      location: 'In-memory (session-scoped)',
+      kind: 'memory' as const,
+      access: 'read-write' as const,
+      notes:
+        'Per-file byte offset + last-event metadata so we resume reading where we left off without re-streaming the whole jsonl. Reset on app restart (re-scan reconstructs).',
+    },
+  ];
 
   private ctx: ModuleContext | null = null;
   private poll: ReturnType<typeof setInterval> | null = null;

@@ -111,6 +111,33 @@ export const telegramBotModule: Module = {
     'Pilot Jarvis from your phone via a Telegram bot. Trigger skills, get reminders + awaiting-input prompts with [Approve]/[Edit]/[Cancel] buttons, continue tasks by replying.',
   version: '1.0.0',
 
+  memory: [
+    {
+      label: 'Bot token',
+      location: 'Keychain · telegram-bot-token',
+      kind: 'keychain',
+      access: 'read-write',
+      notes:
+        'BotFather HTTP API token. Service is app.jarvis. Never crosses IPC to the renderer.',
+    },
+    {
+      label: 'Allowlist + send-as preference',
+      location: 'config.json · moduleSettings.telegram-bot',
+      kind: 'config',
+      access: 'read-write',
+      notes:
+        'Allowed chat IDs (newline list) + "send as" toggle (bot vs user). Plaintext — no secrets.',
+    },
+    {
+      label: 'Chat ↔ taskId session map',
+      location: 'In-memory (session-scoped)',
+      kind: 'memory',
+      access: 'read-write',
+      notes:
+        'Maps a Telegram chat to the most-recent Jarvis taskId so "reply to the bot" continues the same SDK session. Lost on restart — replies after restart start a new task.',
+    },
+  ],
+
   settings: {
     description: [
       'Pilot Jarvis from your phone via a Telegram bot. One-time setup (~5 minutes).',

@@ -837,6 +837,19 @@ export interface PaletteIntentSummary {
   placeholder?: string;
 }
 
+/**
+ * Renderer mirror of the main-side `ModuleMemoryRef`. Same fields,
+ * lives here because it crosses IPC. See
+ * electron/main/modules/types.ts for the authoritative definition.
+ */
+export interface ModuleMemorySummary {
+  label: string;
+  location: string;
+  kind: 'file' | 'directory' | 'keychain' | 'sqlite' | 'config' | 'memory';
+  access: 'read' | 'write' | 'read-write';
+  notes?: string;
+}
+
 export interface ModuleSummary {
   id: string;
   name: string;
@@ -852,6 +865,9 @@ export interface ModuleSummary {
   /** Current persisted values for the above, merged with defaults
    *  for any keys the user hasn't set explicitly. */
   settingsValues?: ModuleSettingsValues;
+  /** Declared storage footprint — rendered as "Where this lives"
+   *  in Settings → Modules → [module]. */
+  memory?: ModuleMemorySummary[];
 }
 
 export interface DispatchIntentResult {

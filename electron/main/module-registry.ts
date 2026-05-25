@@ -146,6 +146,7 @@ export class ModuleRegistry extends EventEmitter {
       settingsValues: module.settings
         ? mergeWithDefaults(module.settings, loadModuleSettings(module.id))
         : undefined,
+      memory: module.memory,
     }));
   }
 

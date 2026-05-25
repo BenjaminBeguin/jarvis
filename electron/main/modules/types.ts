@@ -236,6 +236,36 @@ export interface PaletteIntent {
 }
 
 /**
+ * Declared storage footprint for a module. Surfaced in Settings →
+ * Modules under "Where this lives" so the user can answer "what does
+ * this module remember about me?" without grepping the source.
+ *
+ * Modules SHOULD declare any disk / Keychain / SQLite location they
+ * own OR read — even read-only sources count (helps the user follow
+ * the data flow). Pure-RAM modules can omit.
+ */
+export interface ModuleMemoryRef {
+  /** Human label, e.g. "Meeting transcripts". */
+  label: string;
+  /**
+   * Where it lives. Free-form string, but follow these conventions
+   * so the UI groups them sensibly:
+   *   - File / directory: `~/.jarvis/meetings/<date>-<slug>.md`
+   *   - Keychain: `Keychain · <account>` (service is always app.jarvis)
+   *   - SQLite: `jarvis.sqlite · <table>`
+   *   - Config: `config.json · moduleSettings.<id>`
+   *   - In-RAM only: `In-memory (session-scoped)`
+   */
+  location: string;
+  /** Kind for icon + grouping in the UI. */
+  kind: 'file' | 'directory' | 'keychain' | 'sqlite' | 'config' | 'memory';
+  /** Read-only / write-only / both. Drives the access badge. */
+  access: 'read' | 'write' | 'read-write';
+  /** Optional context — what populates it, retention, format. */
+  notes?: string;
+}
+
+/**
  * The thing every module exports. Keep it small and code-only; manifests
  * masquerading as data are a footgun once you have many modules.
  */
@@ -249,6 +279,10 @@ export interface Module {
    *  Renderer auto-draws a panel in Settings → Modules under the
    *  module's row. Values are persisted in config.json. */
   settings?: ModuleSettingsSpec;
+  /** Declared storage locations the module reads/writes. Surfaced as
+   *  a "Where this lives" section in Settings → Modules. See
+   *  [docs/memory.md](../../docs/memory.md) for the global map. */
+  memory?: ModuleMemoryRef[];
   onLoad?(ctx: ModuleContext): void | Promise<void>;
   onUnload?(): void | Promise<void>;
 }

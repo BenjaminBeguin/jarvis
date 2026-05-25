@@ -60,6 +60,30 @@ export const quickNoteModule: Module = {
     ],
   },
   version: '1.0.0',
+  memory: [
+    {
+      label: 'Notes (global daily journal)',
+      location: '~/.jarvis/notes/<YYYY-MM-DD>.md',
+      kind: 'file',
+      access: 'write',
+      notes: '/note appends a timestamped entry to today\'s file. Markdown.',
+    },
+    {
+      label: 'Notes (per-project)',
+      location: '~/.jarvis/notes/<project-slug>/<YYYY-MM-DD>.md',
+      kind: 'file',
+      access: 'write',
+      notes:
+        'Created when /note input starts with "<alias>:" — routes the entry under the matching project.',
+    },
+    {
+      label: 'Module preferences',
+      location: 'config.json · moduleSettings.quick-note',
+      kind: 'config',
+      access: 'read-write',
+      notes: 'dedupeCadence + dedupeSensitivity (Settings → Modules).',
+    },
+  ],
   intents: [
     {
       id: 'note',

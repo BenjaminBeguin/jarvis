@@ -14649,6 +14649,84 @@ button:disabled:hover {
      sentence are unaffected. */
   white-space: pre-line;
 }
+.module-memory {
+  background: rgba(0, 0, 0, 0.18);
+}
+.module-memory__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.module-memory__row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+}
+.module-memory__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.module-memory__kind {
+  font-size: 13px;
+  width: 18px;
+  text-align: center;
+  flex: 0 0 auto;
+}
+.module-memory__label {
+  flex: 1 1 auto;
+  font-size: 12.5px;
+  color: var(--text);
+  font-weight: 500;
+}
+.module-memory__access {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+}
+.module-memory__access--read {
+  color: #7ec0ff;
+  border-color: rgba(126, 192, 255, 0.35);
+}
+.module-memory__access--write {
+  color: #ffa07a;
+  border-color: rgba(255, 160, 122, 0.35);
+}
+.module-memory__access--read-write {
+  color: var(--accent);
+  border-color: rgba(0, 212, 255, 0.35);
+}
+.module-memory__location {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #cfeaff;
+  word-break: break-all;
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid rgba(0, 217, 255, 0.18);
+  border-radius: 3px;
+  padding: 3px 6px;
+  display: inline-block;
+}
+.module-memory__notes {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
 .module-settings-modal__empty,
 .module-settings-modal__loading {
   font-size: 12px;

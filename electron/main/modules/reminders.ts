@@ -34,6 +34,16 @@ export const remindersModule: Module = {
   description:
     'Create reminders via /remind and browse them via /reminders. Both reminder-style nudges and scheduled actions ("in 2h, …") are supported.',
   version: '1.0.0',
+  memory: [
+    {
+      label: 'Reminders (pending + history)',
+      location: '~/.jarvis/reminders.json',
+      kind: 'file',
+      access: 'read-write',
+      notes:
+        'Owned by ReminderStore in core. Persists across restarts; past-due fires re-arm on boot.',
+    },
+  ],
   onLoad(ctx) {
     savedCtx = ctx;
     ctx.registerContextProvider({

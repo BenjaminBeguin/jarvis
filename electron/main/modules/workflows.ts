@@ -19,6 +19,24 @@ export const workflowsModule: Module = {
   description:
     'Run JSON-defined pipelines from the palette. Type /wf to list, /wf <id> to fire.',
   version: '1.0.0',
+  memory: [
+    {
+      label: 'Workflow definitions',
+      location: '~/.jarvis/workflows/<id>.json',
+      kind: 'directory',
+      access: 'read',
+      notes:
+        'Chokidar-watched. Defs are seeded on first launch (calendar-sync, inbox-curate, linear/slack pollers, PR autopilot) and the user can drop more. The module just dispatches; the WorkflowStore owns the files.',
+    },
+    {
+      label: 'Workflow run history',
+      location: 'jarvis.sqlite · workflow_runs',
+      kind: 'sqlite',
+      access: 'read',
+      notes:
+        'Per-run timing + per-step inputs/outputs. Pruned hourly to 200 rows per workflow + 30 days. Backs the "Latest run" panel in the workflow detail page.',
+    },
+  ],
   intents: [
     {
       id: 'run',

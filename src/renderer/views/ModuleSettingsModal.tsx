@@ -71,10 +71,74 @@ export function ModuleSettingsModal({
 
         <SettingsPanel module={m} />
 
+        <MemoryPanel module={m} />
+
         <HistoryPane moduleId={m.id} />
       </div>
     </div>
   );
+}
+
+/**
+ * "Where this lives" — declarative storage footprint the module
+ * advertised via `Module.memory`. Renders a compact table the user
+ * can scan to answer "what does this module remember about me?"
+ * without grepping. Modules without any declared storage skip the
+ * section entirely (vs showing an empty state — silence is the
+ * honest signal there).
+ */
+function MemoryPanel({ module: m }: { module: ModuleSummary }) {
+  const refs = m.memory ?? [];
+  if (refs.length === 0) return null;
+  return (
+    <section className="module-settings-modal__section module-memory">
+      <h3>Where this lives</h3>
+      <p className="module-settings-modal__hint">
+        Storage this module reads or writes. Same convention used in{' '}
+        <code>docs/memory.md</code>.
+      </p>
+      <ul className="module-memory__list">
+        {refs.map((r, i) => (
+          <li key={`${r.location}-${i}`} className="module-memory__row">
+            <div className="module-memory__head">
+              <span
+                className={`module-memory__kind module-memory__kind--${r.kind}`}
+                title={r.kind}
+              >
+                {kindGlyph(r.kind)}
+              </span>
+              <span className="module-memory__label">{r.label}</span>
+              <span
+                className={`module-memory__access module-memory__access--${r.access}`}
+                title={`access: ${r.access}`}
+              >
+                {r.access}
+              </span>
+            </div>
+            <code className="module-memory__location">{r.location}</code>
+            {r.notes && <p className="module-memory__notes">{r.notes}</p>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function kindGlyph(kind: NonNullable<ModuleSummary['memory']>[number]['kind']): string {
+  switch (kind) {
+    case 'file':
+      return '📄';
+    case 'directory':
+      return '📁';
+    case 'keychain':
+      return '🔐';
+    case 'sqlite':
+      return '🗃';
+    case 'config':
+      return '⚙';
+    case 'memory':
+      return '◉';
+  }
 }
 
 /**

@@ -31,6 +31,24 @@ export const meetingRecorderModule: Module = {
   description:
     'Record a meeting, transcribe locally via Whisper, save as a markdown transcript you can push to Claude',
   version: '1.0.0',
+  memory: [
+    {
+      label: 'Meeting transcripts (global)',
+      location: '~/.jarvis/meetings/<ts>-<slug>.md',
+      kind: 'file',
+      access: 'write',
+      notes:
+        'Markdown transcript + auto-debrief. One file per recorded meeting; never overwritten.',
+    },
+    {
+      label: 'Meeting transcripts (per-project)',
+      location: '~/.jarvis/meetings/<project-slug>/<ts>-<slug>.md',
+      kind: 'file',
+      access: 'write',
+      notes:
+        'When a project scope is set at /meeting time, the transcript files under that project instead of the global folder.',
+    },
+  ],
   intents: [
     {
       id: 'start',

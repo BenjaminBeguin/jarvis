@@ -16,6 +16,32 @@ export const skillSuggesterModule: Module = {
   description:
     'Watches your recent prompts and proposes reusable skills you can accept with one click',
   version: '1.0.0',
+  memory: [
+    {
+      label: 'Skill suggestions queue',
+      location: '~/.jarvis/skill-suggestions.json',
+      kind: 'file',
+      access: 'read-write',
+      notes:
+        'Accepted/dismissed/pending suggestions surfaced in the Inbox. Owned by SkillSuggestionStore.',
+    },
+    {
+      label: 'Analysis drop file (transient)',
+      location: '~/.jarvis/.skill-batch.json',
+      kind: 'file',
+      access: 'read-write',
+      notes:
+        'Where the skill-author skill writes its proposals. Watched + ingested into skill-suggestions.json, then deleted.',
+    },
+    {
+      label: 'Accepted skills (written elsewhere)',
+      location: '~/.jarvis/skills/<name>/SKILL.md',
+      kind: 'directory',
+      access: 'write',
+      notes:
+        'On "accept", the suggestion is committed as a real skill. From there it\'s available to every Claude task.',
+    },
+  ],
   intents: [
     {
       id: 'suggest-skills',

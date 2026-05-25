@@ -31,6 +31,16 @@ export const calendarModule: Module = {
   description:
     'Month / Week / Day / Agenda views over Google Calendar + reminders + routine fires. Also injects upcoming calendar context into every Claude turn.',
   version: '1.0.0',
+  memory: [
+    {
+      label: 'Calendar events (rolling 14-day window)',
+      location: '~/.jarvis/inbox/calendar.json',
+      kind: 'file',
+      access: 'read',
+      notes:
+        'Written by the calendar-today-sync workflow every 10 min. Module reads it for the agenda views + the ambient context provider.',
+    },
+  ],
   onLoad(ctx) {
     savedCtx = ctx;
     ctx.registerContextProvider({
