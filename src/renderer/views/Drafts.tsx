@@ -504,7 +504,104 @@ function DraftRow({
         </div>
       </header>
 
-      {expanded && (
+      {expanded && draft.intent === 'archive' && (
+        <div
+          style={{
+            padding: '0 16px 16px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}
+        >
+          {draft.contextFull && (
+            <details>
+              <summary
+                style={{
+                  fontSize: 12,
+                  color: 'var(--muted)',
+                  cursor: 'pointer',
+                }}
+              >
+                Show original
+              </summary>
+              <pre
+                style={{
+                  margin: '8px 0 0 0',
+                  padding: 12,
+                  background: 'rgba(0,0,0,0.2)',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  whiteSpace: 'pre-wrap',
+                  maxHeight: 240,
+                  overflow: 'auto',
+                }}
+              >
+                {draft.contextFull}
+              </pre>
+            </details>
+          )}
+          <div
+            style={{
+              padding: 12,
+              background: 'rgba(255, 165, 0, 0.04)',
+              border: '1px solid rgba(255, 165, 0, 0.2)',
+              borderRadius: 6,
+              fontSize: 12.5,
+              color: 'var(--text)',
+              lineHeight: 1.5,
+            }}
+          >
+            <strong style={{ color: '#ffa500' }}>Why archive:</strong>{' '}
+            {draft.why ?? 'looks like junk'}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => void onSend()}
+              disabled={
+                sending ||
+                draft.status === 'sent' ||
+                draft.status === 'discarded' ||
+                draft.status === 'sending'
+              }
+              style={{
+                padding: '8px 16px',
+                background: 'var(--accent)',
+                color: '#000',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: 'pointer',
+                opacity:
+                  sending ||
+                  (draft.status !== 'pending' && draft.status !== 'failed')
+                    ? 0.5
+                    : 1,
+              }}
+            >
+              {sending ? 'Archiving…' : 'Archive'}
+            </button>
+            <button
+              onClick={() => void onDiscard()}
+              style={{
+                marginLeft: 'auto',
+                padding: '8px 16px',
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                color: 'var(--muted)',
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+              title="Keep in inbox; don't archive"
+            >
+              Keep in inbox
+            </button>
+          </div>
+        </div>
+      )}
+
+      {expanded && draft.intent !== 'archive' && (
         <div
           style={{
             padding: '0 16px 16px 16px',

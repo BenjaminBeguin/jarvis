@@ -44,6 +44,7 @@ interface DraftStoreWriteParams {
 
 interface IncomingDraft {
   sourceItemId?: string | null;
+  intent?: unknown;
   channel?: unknown;
   title?: unknown;
   contextSummary?: unknown;
@@ -60,14 +61,16 @@ function isSendAction(v: unknown): v is SendAction {
   if (r.kind === 'shell') {
     return typeof r.cmd === 'string' && Array.isArray(r.args);
   }
-  // MCP variant (default) — needs mcp + tool + bodyKey + args object
+  // MCP variant (default) — needs mcp + tool + args object. bodyKey
+  // is optional: present for body-carrying sends (reply); absent
+  // for body-less actions like archive (modify_labels).
   return (
     typeof r.mcp === 'string' &&
     typeof r.tool === 'string' &&
-    typeof r.bodyKey === 'string' &&
     r.args !== null &&
     typeof r.args === 'object' &&
-    !Array.isArray(r.args)
+    !Array.isArray(r.args) &&
+    (r.bodyKey === undefined || typeof r.bodyKey === 'string')
   );
 }
 
@@ -101,10 +104,14 @@ export const draftStoreWriteNode = fromPromise<
       continue;
     }
     if (!isSendAction(raw.sendAction)) continue;
+    const intentRaw = coerceString(raw.intent);
+    const intent: 'reply' | 'archive' =
+      intentRaw === 'archive' ? 'archive' : 'reply';
     const newDraft: NewDraft = {
       source: params.source,
       channel,
       sourceItemId: coerceString(raw.sourceItemId) ?? null,
+      intent,
       title,
       contextSummary: coerceString(raw.contextSummary) ?? null,
       contextFull: coerceString(raw.contextFull) ?? null,

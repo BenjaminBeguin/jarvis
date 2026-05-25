@@ -145,10 +145,31 @@ function migrateWorkflowIfStale(workflowsRoot: string, wf: WorkflowDef): void {
 }
 
 /**
+ * Per-built-in skill detectors that recognise a previous broken shape
+ * on disk and authorize replacement with the latest body. Conservative:
+ * a detector must fingerprint something we KNOW we shipped wrong, not
+ * "the user might have customized this." Matching = overwrite.
+ */
+const SKILL_BODY_DETECTORS: Record<string, (body: string) => boolean> = {
+  // gmail-triage v1 told the model to surface archive-worthy messages
+  // as drafts whose BODY was "(suggest archive — reason)". The Drafts
+  // UI's Send button then mailed that body to the original sender as
+  // a reply. v2 introduces an explicit intent='archive' + modify_labels
+  // sendAction; detect the v1 string and rewrite. Matching is safe
+  // because no user would copy this exact phrase into a customized
+  // skill body.
+  'gmail-triage': (body) =>
+    body.includes('(suggest archive — reason)') ||
+    body.includes("'(suggest archive — Substack newsletter)'") ||
+    body.includes('the \'(suggest archive — reason)\' line'),
+};
+
+/**
  * Seed a built-in skill on first launch. If the file exists but its YAML
  * frontmatter no longer parses (almost always a bug in a prior seed string,
  * not an intentional user edit), overwrite it with the current known-good
- * body. We never touch user-authored skills.
+ * body. We never touch user-authored skills — unless a per-skill detector
+ * matches a known-broken shape we shipped (see SKILL_BODY_DETECTORS).
  */
 function writeSkill(skillsRoot: string, name: string, body: string): void {
   const dir = join(skillsRoot, name);
@@ -157,6 +178,20 @@ function writeSkill(skillsRoot: string, name: string, body: string): void {
   if (!existsSync(path)) {
     writeFileSync(path, body, 'utf8');
     return;
+  }
+  // Body-level migration for known-broken seeded skills.
+  const detector = SKILL_BODY_DETECTORS[name];
+  if (detector) {
+    try {
+      const existing = readFileSync(path, 'utf8');
+      if (detector(existing)) {
+        writeFileSync(path, body, 'utf8');
+        console.info(`[seed] migrated stale skill seed: ${name}`);
+        return;
+      }
+    } catch {
+      // fall through to frontmatter check
+    }
   }
   try {
     matter(readFileSync(path, 'utf8'));

@@ -195,11 +195,12 @@ export function registerDraftsIpc({ drafts, mcp, runner }: IpcDeps): void {
         };
       }
       drafts.markSending(id);
-      // Substitute the editable body into the configured arg slot.
-      const args: Record<string, unknown> = {
-        ...sendAction.args,
-        [sendAction.bodyKey]: draft.currentBody,
-      };
+      // Substitute the editable body into the configured arg slot
+      // when bodyKey is set. Body-less actions (archive, label-as,
+      // etc.) omit bodyKey and the args go through verbatim.
+      const args: Record<string, unknown> = sendAction.bodyKey
+        ? { ...sendAction.args, [sendAction.bodyKey]: draft.currentBody }
+        : { ...sendAction.args };
       const result = await invokeMcpTool(
         mcp,
         sendAction.mcp,

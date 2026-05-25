@@ -104,6 +104,12 @@ const MIGRATIONS = [
   // omit source_item_id and get a non-dedup'd row.
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_drafts_dedupe
     ON ai_drafts(source, source_item_id) WHERE source_item_id IS NOT NULL;`,
+  // Intent — what kind of action the user is reviewing. Default
+  // 'reply' (the channel-specific send) for backwards compat; new
+  // kinds like 'archive' (calls modify_labels) get a different
+  // sendAction shape AND a different UI affordance (Archive button
+  // instead of Send, no body textarea).
+  `ALTER TABLE ai_drafts ADD COLUMN intent TEXT NOT NULL DEFAULT 'reply';`,
 ];
 
 let db: DatabaseType | null = null;

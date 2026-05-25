@@ -1,7 +1,13 @@
 import { EventEmitter } from 'node:events';
 import { nanoid } from 'nanoid';
 
-import type { Draft, DraftStatus, NewDraft, SendAction } from '@shared/types';
+import type {
+  Draft,
+  DraftIntent,
+  DraftStatus,
+  NewDraft,
+  SendAction,
+} from '@shared/types';
 
 import { getDb } from './db.js';
 
@@ -11,6 +17,7 @@ interface DraftRow {
   channel: string;
   source_item_id: string | null;
   status: string;
+  intent: string;
   title: string;
   context_summary: string | null;
   context_full: string | null;
@@ -40,12 +47,15 @@ function rowToDraft(row: DraftRow): Draft {
       sentResult = row.sent_result;
     }
   }
+  const intent: DraftIntent =
+    row.intent === 'archive' ? 'archive' : 'reply';
   return {
     id: row.id,
     source: row.source,
     channel: row.channel,
     sourceItemId: row.source_item_id,
     status: row.status as DraftStatus,
+    intent,
     title: row.title,
     contextSummary: row.context_summary,
     contextFull: row.context_full,
@@ -144,12 +154,12 @@ export class DraftsStore extends EventEmitter {
     const id = `dft-${nanoid(10)}`;
     db.prepare(
       `INSERT INTO ai_drafts (
-        id, source, channel, source_item_id, status, title,
+        id, source, channel, source_item_id, status, intent, title,
         context_summary, context_full, current_body, original_body,
         why, send_action, workflow_id, created_at, updated_at,
         sent_at, sent_result
       ) VALUES (
-        @id, @source, @channel, @sourceItemId, 'pending', @title,
+        @id, @source, @channel, @sourceItemId, 'pending', @intent, @title,
         @contextSummary, @contextFull, @body, @body,
         @why, @sendAction, @workflowId, @now, @now,
         NULL, NULL
@@ -159,6 +169,7 @@ export class DraftsStore extends EventEmitter {
       source: input.source,
       channel: input.channel,
       sourceItemId: input.sourceItemId ?? null,
+      intent: input.intent ?? 'reply',
       title: input.title,
       contextSummary: input.contextSummary ?? null,
       contextFull: input.contextFull ?? null,

@@ -1099,6 +1099,20 @@ export type DraftStatus =
   | 'discarded';
 
 /**
+ * What the user is reviewing in this draft. Drives the UI affordance:
+ *
+ *   - **reply** (default): the user edits a textarea body + clicks
+ *     Send. The `sendAction` posts the body to the channel.
+ *   - **archive**: there's nothing to write — the agent flagged this
+ *     for archiving (newsletter, automated, low-signal). The UI
+ *     shows an Archive button instead of Send, hides the body
+ *     textarea, and surfaces the agent's "why" prominently. The
+ *     `sendAction` calls the channel's "remove from inbox" tool
+ *     (e.g. gmail.modify_labels with removeLabelIds: ['INBOX']).
+ */
+export type DraftIntent = 'reply' | 'archive';
+
+/**
  * Channel-specific dispatch template carried on each draft. Two shapes:
  *
  *   - `kind: 'mcp'` (default) — invoke an MCP tool. The editable body
@@ -1127,8 +1141,10 @@ export type SendAction =
        *  not stored here. */
       args: Record<string, unknown>;
       /** Which key of `args` the body slots into (e.g. 'body' for
-       *  Gmail, 'text' for Slack). */
-      bodyKey: string;
+       *  Gmail, 'text' for Slack). Omit for actions that have no
+       *  user-editable body (e.g. archive/modify_labels) — the args
+       *  are sent as-is. */
+      bodyKey?: string;
     }
   | {
       kind: 'shell';
@@ -1172,13 +1188,19 @@ export interface Draft {
    *  unique index. */
   sourceItemId?: string | null;
   status: DraftStatus;
+  /** What kind of action the user is reviewing. 'reply' = the user
+   *  edits + sends a body; 'archive' = one-click destructive action
+   *  (calls modify_labels or equivalent). See DraftIntent. */
+  intent: DraftIntent;
   title: string;
   /** Short context line shown in the collapsed row. */
   contextSummary?: string | null;
   /** Full upstream content (original email body, slack thread excerpt)
    *  — surfaced when the row expands and fed to the refine engine. */
   contextFull?: string | null;
-  /** Current editable body — what would be sent if the user clicks Send. */
+  /** Current editable body — what would be sent if the user clicks Send.
+   *  For intent='archive' this is just the agent's "why" text; the
+   *  UI hides the textarea and the sendAction ignores it. */
   currentBody: string;
   /** AI's first draft. Drives the Revert button. */
   originalBody: string;
@@ -1199,6 +1221,8 @@ export interface NewDraft {
   source: string;
   channel: string;
   sourceItemId?: string | null;
+  /** Defaults to 'reply' when omitted. */
+  intent?: DraftIntent;
   title: string;
   contextSummary?: string | null;
   contextFull?: string | null;
