@@ -16,6 +16,7 @@ import type {
 
 const VALID_ITEM_KINDS = new Set<DashboardItem['kind']>([
   'inbox',
+  'drafts',
   'routine',
   'calendar',
   'spend',
