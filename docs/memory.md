@@ -27,6 +27,7 @@ Settings or grep this file.
   projects/<slug>/memory/*.md       # core — per-project growing scratchpad + profile
   inbox/*.json                      # core — feeds: pr, slack, linear, calendar, smart, reminders
   inbox-priorities.md               # core — smart-inbox calibration (people / projects / topics)
+  triage-policy.md                  # core — drafts triage rules (people / archive / topics / tone)
   workflows/<id>.json               # core — workflow defs (chokidar-watched)
   routines.json                     # core — recurring crons of skill tasks
   reminders.json                    # MODULE: reminders — one-shot + recurring fires
@@ -160,6 +161,13 @@ These are intent-only or pure-RAM and don't declare `memory`:
 | `~/.jarvis/inbox-priorities.md` | calibration file for the smart-inbox curator (people / projects / topics / mutes) | user-editable; `/inbox-calibrate` writes |
 | `~/.jarvis/intent-cache.json` | sha1 → classification cache for the awaiting-input classifier | `IntentClassifier` |
 
+### Drafts
+
+| Path | What | Owner |
+|---|---|---|
+| `jarvis.sqlite · ai_drafts` | one row per AI-generated draft awaiting review (Gmail / Slack DM / PR comment / PR review). Holds editable body + original body + context + channel-specific `sendAction` (mcp or shell). | `DraftsStore` |
+| `~/.jarvis/triage-policy.md` | per-channel triage rules read by every triage skill (`gmail-triage`, `slack-dm-ack`, `pr-comments-triage`, `pr-review-triage`). People / archive rules / topics / tone / availability. | user-editable; `/triage-calibrate` writes |
+
 ### Scheduling
 
 | Path | What | Owner |
@@ -185,6 +193,7 @@ Tables, all in WAL mode, foreign-keys on. Migrations are append-only in
 | `task_events` | Every SDKMessage the agent emitted — backfills the conversation view on remount |
 | `activity_events` | Non-agent side-effects: meeting started, note archived, MCP disabled, autopilot decision, … |
 | `workflow_runs` | Per-run history (steps + inputs/outputs + timing). Pruned hourly to 200/workflow + 30 days. |
+| `ai_drafts` | One row per AI-generated draft (Gmail / Slack / PR reply, …) awaiting review. Holds the editable body, original body (for revert), context, and the channel-specific `sendAction` template (mcp or shell). Pruned hourly: sent/discarded older than 30 days drop; pending/sending/failed never auto-prune. |
 
 ### Keychain (service `app.jarvis`)
 
@@ -219,6 +228,9 @@ lives here, never in plaintext config.
   add a new one.
 - **Workflow run history** is pruned hourly: 200 rows per workflow +
   30 days. Tunable in `pruneWorkflowRuns()`.
+- **AI drafts** are pruned hourly: sent/discarded older than 30 days
+  drop; pending/sending/failed never auto-prune (those need user
+  attention). Tunable in `DraftsStore.prune()`.
 - **Task runner** sweeps orphaned `status='running'` tasks every 5 min
   (30-min idle cutoff) so the UI doesn't show ghost live cards forever.
 - **Subscription tokens** get refreshed automatically by the
