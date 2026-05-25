@@ -206,7 +206,8 @@ We follow `~/.claude/plans/hey-i-would-love-staged-dewdrop.md`:
 - Phase 3.5 ✅ Telegram bot module (pilot from phone) + AFK mode + notifier singleton + `ctx.routePrompt` / `awaitTurnResult` / `sendMessageToTask` / `abortTask` capabilities + `secret` settings field type. See [docs/telegram.md](docs/telegram.md).
 - Phase 4 ✅ Workflows — XState-backed JSON pipelines (`http-fetch` → `transform` → `inbox-write` etc.), graph-first UI with React Flow, palette `/wf` + `mcp__jarvis__run_workflow` access surfaces. Linear / Slack / Calendar inbox feeds run as workflows. See [docs/workflows.md](docs/workflows.md).
 - Phase 4.5 ✅ Smart inbox — `inbox-curate` skill on haiku reads raw feeds + `inbox-priorities.md` calibration and writes a ranked + annotated Smart section to the Inbox. `/inbox-calibrate` refines priorities conversationally; nudge surfaces the loop on first run. Working-hours preference (`config.json.workingHours` + `{businessHours}` cron token) drives every inbox feed's cadence. Task-runner orphan sweep + workflow-run history pruning keep long-lived state bounded.
-- Phase 5 — next: skill-to-skill chaining, branching/parallel in workflows, calendar-aware briefings, whisper.cpp swap, external/community modules, mobile PWA dashboard over Tailscale (the natural extension to remote control beyond chat).
+- Phase 4.75 ✅ Mobile PWA — touch-tuned Inbox + Threads + Dictate + Reply composer + Web Push, served from the existing `/mobile` route over Tailscale. HTTP server binds `0.0.0.0:4747`; SSE pushes status + notifs + task transitions; VAPID fan-out mirrors every `notifier.post()` to subscribed phones. Pairing is a QR in Settings → Mobile (`{ baseUrl, token }` base64). See [docs/mobile.md](docs/mobile.md).
+- Phase 5 — next: skill-to-skill chaining, branching/parallel in workflows, calendar-aware briefings, whisper.cpp swap, external/community modules.
 
 ## What's _not_ in here
 

@@ -143,6 +143,28 @@ export function updateTaskStatus(
     .run(status, endedAt, costUsd, sdkSessionId ?? null, id);
 }
 
+/**
+ * One-shot startup cleanup: any task row left with `status='running'`
+ * from a previous process is a zombie — the runner doesn't keep state
+ * across restarts, so nothing is actually driving the query loop. Mark
+ * them all errored so they stop appearing as live in the AI Agent UI
+ * (and stop counting toward "live" badges). Returns the row count.
+ *
+ * Idempotent on a clean boot (no `running` rows ⇒ zero update).
+ */
+export function reapZombieRunningTasks(): number {
+  const now = Date.now();
+  const result = getDb()
+    .prepare(
+      `UPDATE tasks
+         SET status = 'errored',
+             ended_at = COALESCE(ended_at, ?)
+       WHERE status = 'running'`,
+    )
+    .run(now);
+  return Number(result.changes ?? 0);
+}
+
 export function appendTaskEvent(taskId: string, event: TaskEvent): void {
   getDb()
     .prepare(

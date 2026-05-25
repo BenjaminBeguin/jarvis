@@ -117,7 +117,8 @@ function readViewFromHash(): MobileView {
     view === 'inbox' ||
     view === 'conversations' ||
     view === 'conversation' ||
-    view === 'dictate'
+    view === 'dictate' ||
+    view === 'help'
   ) {
     return view;
   }

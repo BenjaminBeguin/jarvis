@@ -119,6 +119,12 @@ export default defineConfig({
       // CORS is already permissive on the HTTP API, so cross-origin
       // calls from the dev URL to :4747 work.
       host: '0.0.0.0',
+      // Vite 5 rejects any Host header that isn't an explicit allowlist
+      // entry as a defence against DNS-rebinding attacks. Tailscale
+      // tailnets all live under `.ts.net`, so a single wildcard lets
+      // the phone hit `<mac>.<tail-net>.ts.net:3010` without us having
+      // to hard-code the user's specific hostname.
+      allowedHosts: ['.ts.net', 'localhost', '.local'],
     },
     build: {
       rollupOptions: {

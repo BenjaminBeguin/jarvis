@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import type { TaskEvent } from '../../shared/types';
+import { openTaskOverlay } from '../task-overlay-store';
 import { MarkdownDoc } from './MarkdownText';
 
 /**
@@ -93,7 +94,7 @@ export function TaskAnswerPreview({
         </span>
         <button
           className="briefings__schedule-link"
-          onClick={() => void window.jarvis.openObservatory(taskId)}
+          onClick={() => openTaskOverlay(taskId)}
         >
           {openLabel}
         </button>

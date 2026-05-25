@@ -49,22 +49,49 @@ export function MobileLogin({ onPaired }: Props) {
       <div className="mobile-login__brand">◢ JARVIS</div>
       <h1>Connect your phone</h1>
       <p>
-        Open <strong>Settings → Mobile</strong> on your Mac and scan the
-        QR code with your camera. If you've already done that and landed
-        here, paste the pairing string below.
+        This is the Jarvis mobile PWA. Pairing is one-shot — once you've
+        scanned the QR, the phone stays signed in until you sign out.
       </p>
-      <textarea
-        value={raw}
-        onChange={(e) => setRaw(e.target.value)}
-        placeholder="Pairing string (base64 or JSON)"
-        rows={4}
-        spellCheck={false}
-        autoCapitalize="off"
-      />
-      {error && <div className="mobile-login__error">{error}</div>}
-      <button type="button" className="mobile-login__submit" onClick={submit}>
-        Sign in
-      </button>
+
+      <ol className="mobile-login__steps">
+        <li>
+          Both devices must be on the same <strong>Tailscale</strong>{' '}
+          tailnet. App Store / Play Store → install, sign in.
+        </li>
+        <li>
+          On the Mac, open Jarvis → ⚙ <strong>Settings → Mobile</strong>.
+        </li>
+        <li>
+          Enter your Mac's Tailscale hostname, leave the target on{' '}
+          <em>Dev</em> (if running <code>pnpm dev</code>) or{' '}
+          <em>Production</em>, then scan the QR with this phone's camera.
+        </li>
+      </ol>
+
+      <details className="mobile-login__manual">
+        <summary>Or paste the pairing string manually</summary>
+        <textarea
+          value={raw}
+          onChange={(e) => setRaw(e.target.value)}
+          placeholder="Pairing string (base64 or JSON)"
+          rows={4}
+          spellCheck={false}
+          autoCapitalize="off"
+        />
+        {error && <div className="mobile-login__error">{error}</div>}
+        <button
+          type="button"
+          className="mobile-login__submit"
+          onClick={submit}
+        >
+          Sign in
+        </button>
+      </details>
+
+      <p className="mobile-login__foot">
+        After sign-in: <strong>Add to Home Screen</strong> so notifications
+        + standalone display work.
+      </p>
     </div>
   );
 }

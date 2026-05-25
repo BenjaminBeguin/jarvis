@@ -883,3 +883,226 @@ body:has(.mobile-bootstrap) {
 .mobile-login__submit:active {
   background: rgba(0, 212, 255, 0.18);
 }
+
+.mobile-login__steps {
+  margin: 4px 0 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #88a7bd;
+}
+
+.mobile-login__steps li::marker {
+  color: #00d4ff;
+  font-family: inherit;
+}
+
+.mobile-login__steps strong {
+  color: #d8eefb;
+  font-weight: 500;
+}
+
+.mobile-login__steps code {
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 11px;
+  color: #cfeaff;
+}
+
+.mobile-login__manual {
+  border: 1px solid rgba(0, 217, 255, 0.18);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.mobile-login__manual > summary {
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #88a7bd;
+  outline: 0;
+}
+
+.mobile-login__manual[open] > summary {
+  color: #00d4ff;
+}
+
+.mobile-login__foot {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #5d7c91;
+  text-align: center;
+}
+
+.mobile-login__foot strong {
+  color: #88a7bd;
+  font-weight: 500;
+}
+
+/* ─────────────────── Mobile help / setup ─────────────────── */
+
+.mobile-help {
+  padding: 16px 18px 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: 540px;
+  margin: 0 auto;
+}
+
+.mobile-help__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.mobile-help__head h2 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #00d4ff;
+}
+
+.mobile-help__back {
+  background: transparent;
+  border: 1px solid rgba(0, 217, 255, 0.3);
+  color: #00d4ff;
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mobile-help__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(0, 217, 255, 0.08);
+}
+
+.mobile-help__section:last-of-type {
+  border-bottom: none;
+}
+
+.mobile-help__section h3 {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #5d7c91;
+}
+
+.mobile-help__section p,
+.mobile-help__section li {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #d8eefb;
+}
+
+.mobile-help__section ol,
+.mobile-help__section ul {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mobile-help__section ol li::marker,
+.mobile-help__section ul li::marker {
+  color: #00d4ff;
+}
+
+.mobile-help__section strong {
+  color: #d8eefb;
+  font-weight: 500;
+}
+
+.mobile-help__section code {
+  background: rgba(0, 212, 255, 0.06);
+  border: 1px solid rgba(0, 217, 255, 0.2);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 11px;
+  color: #cfeaff;
+  word-break: break-all;
+}
+
+.mobile-help__dim {
+  color: #88a7bd !important;
+  font-size: 12px !important;
+}
+
+.mobile-help__code {
+  display: block;
+  padding: 8px 10px;
+  border: 1px solid rgba(0, 217, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 11.5px;
+  color: #00d4ff;
+  word-break: break-all;
+}
+
+.mobile-help__btn {
+  align-self: flex-start;
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid #00d4ff;
+  color: #00d4ff;
+  padding: 10px 14px;
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mobile-help__btn:active {
+  background: rgba(0, 212, 255, 0.18);
+}
+
+.mobile-help__btn--danger {
+  border-color: #ff5577;
+  color: #ff5577;
+  background: rgba(255, 85, 119, 0.08);
+}
+
+.mobile-help__btn--danger:active {
+  background: rgba(255, 85, 119, 0.18);
+}
+
+.mobile-help__list {
+  list-style: none !important;
+  padding-left: 0 !important;
+}
+
+.mobile-help__list li {
+  position: relative;
+  padding-left: 14px;
+}
+
+.mobile-help__list li::before {
+  content: '▸';
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #00d4ff;
+}

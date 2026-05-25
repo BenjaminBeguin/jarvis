@@ -4,9 +4,16 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-import type { TaskSummary } from '@shared/types';
+import type {
+  InboxItem,
+  Reminder,
+  TaskSummary,
+  TrayMenuState,
+} from '@shared/types';
 
+import type { InboxStore } from './inbox.js';
 import type { ProjectStore } from './projects.js';
+import type { ReminderStore } from './reminders.js';
 import type { TaskRunner } from './task-runner.js';
 
 const execFileAsync = promisify(execFile);
@@ -182,8 +189,10 @@ export function projectsProvider(projects: ProjectStore): UserContextProvider {
 }
 
 /**
- * Last completed/running task. Helps the agent realise it's the continuation
- * of recent work ("an hour ago I asked Claude to review PRs, now I want…").
+ * Recent task activity — the last 3 user-launched tasks. Helps the agent
+ * realise it's the continuation of recent work ("an hour ago I asked
+ * Claude to review PRs, now I want…") AND answers "what did I do
+ * yesterday?" / "what did I just run?" without a tool round-trip.
  */
 export function recentTaskProvider(runner: TaskRunner): UserContextProvider {
   return {
@@ -194,16 +203,275 @@ export function recentTaskProvider(runner: TaskRunner): UserContextProvider {
       // claude-code-watch mirror — too noisy as context).
       const owned = tasks.filter((t: TaskSummary) => t.origin !== 'external');
       if (owned.length === 0) return null;
-      const last = owned[0];
-      if (!last) return null;
-      const ageMs = Date.now() - (last.endedAt ?? last.startedAt);
-      const ageMin = Math.round(ageMs / 60_000);
-      const ageLabel =
-        ageMin < 1 ? 'just now' : ageMin < 60 ? `${ageMin} min ago` : `${Math.round(ageMin / 60)}h ago`;
-      const title = last.title.length > 60 ? `${last.title.slice(0, 60)}…` : last.title;
-      return `- Last task (${last.status}, ${ageLabel}): ${title}`;
+      const top = owned.slice(0, 3);
+      const lines = top.map((t) => {
+        const ageMs = Date.now() - (t.endedAt ?? t.startedAt);
+        const ageMin = Math.round(ageMs / 60_000);
+        const ageLabel =
+          ageMin < 1
+            ? 'just now'
+            : ageMin < 60
+              ? `${ageMin}m ago`
+              : ageMin < 60 * 24
+                ? `${Math.round(ageMin / 60)}h ago`
+                : `${Math.round(ageMin / (60 * 24))}d ago`;
+        const title = t.title.length > 60 ? `${t.title.slice(0, 60)}…` : t.title;
+        return `  - ${t.status} ${ageLabel}: ${title}`;
+      });
+      return `- Recent tasks:\n${lines.join('\n')}`;
     },
   };
+}
+
+/**
+ * Calendar context — next meeting, today's events, tomorrow + week shape.
+ * Reads from the inbox (source='calendar', written by the calendar-today-sync
+ * workflow). No live MCP call → cheap + cached. Falls back to silence if no
+ * calendar events have been synced yet (no connected Google account, paused,
+ * etc.).
+ *
+ * Format is deliberately compact — the agent only needs enough to answer
+ * "what's my plan today / when's my next meeting / how busy am I" without
+ * a tool call. For deep dives ("who's on the standup?"), the agent can
+ * still call the calendar MCP.
+ */
+export function calendarProvider(inbox: InboxStore): UserContextProvider {
+  return {
+    name: 'calendar',
+    build() {
+      const items = inbox
+        .list()
+        .filter((i) => i.source === 'calendar' && typeof i.fireAt === 'number')
+        .sort((a, b) => (a.fireAt ?? 0) - (b.fireAt ?? 0));
+      if (items.length === 0) return null;
+
+      const now = Date.now();
+      const startOfToday = startOfDay(now);
+      const startOfTomorrow = startOfToday + 24 * 60 * 60 * 1000;
+      const startOfDayAfter = startOfTomorrow + 24 * 60 * 60 * 1000;
+      const endOfWeek = startOfToday + 7 * 24 * 60 * 60 * 1000;
+
+      const upcoming = items.filter((i) => (i.fireAt ?? 0) >= now - 60_000);
+      const todays = upcoming.filter(
+        (i) => (i.fireAt ?? 0) < startOfTomorrow,
+      );
+      const tomorrows = upcoming.filter(
+        (i) =>
+          (i.fireAt ?? 0) >= startOfTomorrow &&
+          (i.fireAt ?? 0) < startOfDayAfter,
+      );
+      const weekRest = upcoming.filter((i) => (i.fireAt ?? 0) < endOfWeek);
+
+      const lines: string[] = ['- Calendar (auto-synced):'];
+
+      const next = upcoming[0];
+      if (next) {
+        const startMs = next.fireAt ?? 0;
+        const mins = Math.round((startMs - now) / 60_000);
+        const when =
+          mins <= 0
+            ? 'now'
+            : mins < 60
+              ? `in ${mins}m`
+              : `at ${hhmm(startMs)}${mins < 24 * 60 ? '' : ' tomorrow'}`;
+        lines.push(`  - Next: ${trimTitle(next.title)} ${when}`);
+      } else {
+        lines.push('  - Next: (nothing on the horizon)');
+      }
+
+      if (todays.length > 0) {
+        const compact = todays
+          .slice(0, 5)
+          .map((i) => `${hhmm(i.fireAt ?? 0)} ${trimTitle(i.title, 40)}`)
+          .join('; ');
+        lines.push(`  - Today (${todays.length}): ${compact}`);
+      } else {
+        lines.push('  - Today: nothing left');
+      }
+
+      if (tomorrows.length > 0) {
+        const compact = tomorrows
+          .slice(0, 5)
+          .map((i) => `${hhmm(i.fireAt ?? 0)} ${trimTitle(i.title, 40)}`)
+          .join('; ');
+        lines.push(`  - Tomorrow (${tomorrows.length}): ${compact}`);
+      }
+
+      // Week-shape: dump per-day counts so the agent can say "heavy
+      // Wed/Thu, light Friday" without us doing the heuristic for it.
+      if (weekRest.length > 0) {
+        const byDay = new Map<string, number>();
+        for (const i of weekRest) {
+          const d = new Date(i.fireAt ?? 0);
+          const key = d.toLocaleDateString(undefined, { weekday: 'short' });
+          byDay.set(key, (byDay.get(key) ?? 0) + 1);
+        }
+        const summary = Array.from(byDay.entries())
+          .map(([day, n]) => `${day}:${n}`)
+          .join(' ');
+        lines.push(`  - Week-shape (next 7d, meetings/day): ${summary}`);
+      }
+
+      return lines.join('\n');
+    },
+  };
+}
+
+/**
+ * Inbox highlights — top items the smart-curate loop flagged + any
+ * fire-soon time-pressured items. So the agent answers "who's waiting
+ * on me / what's urgent / what should I do next" from cached context.
+ *
+ * Prefers `source === 'smart'` (the haiku-ranked + annotated picks)
+ * when present; otherwise falls back to the top mixed feed sorted by
+ * (fireAt soonest, then most recent).
+ */
+export function inboxHighlightsProvider(
+  inbox: InboxStore,
+): UserContextProvider {
+  return {
+    name: 'inbox-highlights',
+    build() {
+      const all = inbox.list();
+      if (all.length === 0) return null;
+
+      const smart = all
+        .filter((i) => i.source === 'smart')
+        .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+
+      const picks: InboxItem[] =
+        smart.length > 0
+          ? smart.slice(0, 5)
+          : all
+              .filter((i) => i.source !== 'calendar' && i.source !== 'smart')
+              .sort((a, b) => {
+                // fireAt-bearing items first, soonest fire wins.
+                const fa = a.fireAt ?? Number.POSITIVE_INFINITY;
+                const fb = b.fireAt ?? Number.POSITIVE_INFINITY;
+                if (fa !== fb) return fa - fb;
+                return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+              })
+              .slice(0, 5);
+
+      if (picks.length === 0) return null;
+
+      const lines = picks.map((i) => {
+        const src = i.source.toUpperCase();
+        const title = trimTitle(i.title, 60);
+        const sub = i.subtitle ? ` (${trimTitle(i.subtitle, 50)})` : '';
+        return `  - [${src}] ${title}${sub}`;
+      });
+      const header =
+        smart.length > 0
+          ? `- Inbox highlights (smart-curated top ${picks.length}):`
+          : `- Inbox top ${picks.length}:`;
+      return `${header}\n${lines.join('\n')}`;
+    },
+  };
+}
+
+/**
+ * Runtime state — mode + AFK + spend + counts + pinned threads. One block
+ * so the agent has the full "cockpit snapshot" without us splitting it
+ * into four small providers. Sourced from the tray state getter so it
+ * stays in lockstep with what the menu-bar shows.
+ */
+export function runtimeProvider(
+  getStatus: () => TrayMenuState,
+): UserContextProvider {
+  return {
+    name: 'runtime',
+    build() {
+      let s: TrayMenuState;
+      try {
+        s = getStatus();
+      } catch {
+        return null;
+      }
+      const lines: string[] = [];
+      const mode = s.appMode;
+      const flags: string[] = [];
+      if (s.afk) flags.push('AFK');
+      if (s.runningTasks > 0) flags.push(`${s.runningTasks} running`);
+      if (s.awaitingReplies > 0) flags.push(`${s.awaitingReplies} awaiting`);
+      const flagStr = flags.length ? ` · ${flags.join(' · ')}` : '';
+      const spend =
+        s.todaySpendUsd > 0
+          ? ` · $${s.todaySpendUsd.toFixed(s.todaySpendUsd >= 0.01 ? 2 : 4)} today`
+          : '';
+      lines.push(`- Jarvis state: ${mode}${flagStr}${spend}`);
+
+      if (s.pinned.length > 0) {
+        const pinned = s.pinned
+          .slice(0, 5)
+          .map((p) => `${p.title}${p.reduced ? ' (reduced)' : ''}`)
+          .join('; ');
+        lines.push(`- Pinned threads: ${pinned}`);
+      }
+      return lines.join('\n');
+    },
+  };
+}
+
+/**
+ * Reminders firing in the next 24h. So the agent can answer "what
+ * reminders do I have set?" without polling the store, and so any skill
+ * that drafts a plan ("can you brief me?") naturally weaves in scheduled
+ * actions.
+ *
+ * Past-due (status='pending' but fireAt < now) are included with a `late`
+ * marker — they didn't fire (likely because Jarvis was paused at the
+ * time) and the user might want to act on them.
+ */
+export function remindersProvider(
+  reminders: ReminderStore,
+): UserContextProvider {
+  return {
+    name: 'reminders',
+    build() {
+      const now = Date.now();
+      const horizon = now + 24 * 60 * 60 * 1000;
+      const due = reminders
+        .list()
+        .filter(
+          (r: Reminder) =>
+            r.status === 'pending' && r.fireAt <= horizon,
+        )
+        .sort((a, b) => a.fireAt - b.fireAt)
+        .slice(0, 5);
+      if (due.length === 0) return null;
+      const lines = due.map((r) => {
+        const late = r.fireAt < now - 60_000 ? ' (LATE)' : '';
+        const when = hhmm(r.fireAt);
+        const kind = r.mode === 'scheduled' ? 'action' : 'nudge';
+        const body =
+          r.body.length > 70 ? `${r.body.slice(0, 70)}…` : r.body;
+        return `  - ${when}${late} [${kind}] ${body}`;
+      });
+      return `- Reminders next 24h:\n${lines.join('\n')}`;
+    },
+  };
+}
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+function startOfDay(ms: number): number {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function hhmm(ms: number): string {
+  const d = new Date(ms);
+  return d.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function trimTitle(s: string, max = 60): string {
+  return s.length > max ? `${s.slice(0, max)}…` : s;
 }
 
 /**

@@ -73,9 +73,7 @@ export function CapturePage({ initial = 'notes' }: Props = {}) {
       <header className="capture-page__header">
         <h2>NOTES &amp; REMINDERS</h2>
         <p className="capture-page__hint">
-          Free-form notes <em>and</em> time-pressured reminders, same page.
-          Use <code>/note &lt;text&gt;</code> to journal, "remind me in …" /
-          "in 2h, …" to schedule.
+          <code>/note &lt;text&gt;</code> to journal · "remind me in …" to schedule.
         </p>
       </header>
       <div className="capture-page__split">

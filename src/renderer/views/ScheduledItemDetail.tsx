@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 import type { Reminder, RoutineDef } from '../../shared/types';
+import { openTaskOverlay } from '../task-overlay-store';
 import { KIND_LABEL, type ScheduledItem } from './scheduled-items';
 import { toast } from './Toaster';
 
@@ -135,7 +136,7 @@ function ItemActions({
       buttons.push({
         label: '↗ View output',
         onClick: () => {
-          void window.jarvis.openObservatory(routine.lastTaskId!);
+          openTaskOverlay(routine.lastTaskId!);
           onAfter();
         },
       });

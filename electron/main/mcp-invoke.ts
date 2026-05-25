@@ -175,10 +175,17 @@ export async function invokeMcpTool(
 
 /**
  * SDK-managed in-process MCP servers (Google / Slack / Notion / Linear
- * from OAuth) keep their registered tools on `instance._registeredTools`
- * as `{ name, description, inputSchema, handler }`. The handler is the
- * async function we passed to `tool(...)` in the connector factory; it
- * returns `{ content, isError? }` directly.
+ * from OAuth) keep their registered tools on the underlying McpServer's
+ * `_registeredTools` map as `{ name, description, inputSchema, handler }`.
+ * The handler is the async function we passed to `tool(...)` in the
+ * connector factory; it returns `{ content, isError? }` directly.
+ *
+ * Layout note: `cfg.instance` in our config wrapper is the Agent SDK's
+ * `McpSdkServerConfigWithInstance` ({ type, name, instance: McpServer }),
+ * so the actual `McpServer` lives at `cfg.instance.instance`. The
+ * Jarvis-side `SdkConfig.instance` name collides with the SDK's
+ * `instance` field — we look in both spots so a future SDK reshuffle
+ * doesn't silently break.
  *
  * We reach in rather than spinning an in-memory transport because the
  * @modelcontextprotocol/sdk isn't a direct dep here — the Agent SDK
@@ -186,30 +193,46 @@ export async function invokeMcpTool(
  * from the upstream MCP server class) that this is a reasonable
  * tradeoff vs. duplicating the dependency.
  */
+type RegisteredToolMap = Record<
+  string,
+  {
+    enabled?: boolean;
+    handler: (
+      args: Record<string, unknown>,
+      extra: Record<string, unknown>,
+    ) => Promise<{ content?: unknown; isError?: boolean }>;
+  }
+>;
+
+interface MaybeMcpServer {
+  _registeredTools?: RegisteredToolMap;
+  instance?: MaybeMcpServer;
+  server?: MaybeMcpServer;
+}
+
+function resolveToolRegistry(top: MaybeMcpServer): RegisteredToolMap | null {
+  if (top._registeredTools) return top._registeredTools;
+  if (top.instance?._registeredTools) return top.instance._registeredTools;
+  if (top.server?._registeredTools) return top.server._registeredTools;
+  if (top.instance?.server?._registeredTools) return top.instance.server._registeredTools;
+  return null;
+}
+
 async function invokeSdkTool(
   cfg: Extract<McpServerConfig, { type: 'sdk' }>,
   toolName: string,
   args: Record<string, unknown>,
 ): Promise<InvokeResult> {
   const started = Date.now();
-  const instance = cfg.instance as unknown as {
-    _registeredTools?: Record<
-      string,
-      {
-        enabled?: boolean;
-        handler: (
-          args: Record<string, unknown>,
-          extra: Record<string, unknown>,
-        ) => Promise<{ content?: unknown; isError?: boolean }>;
-      }
-    >;
-  };
-  const registry = instance._registeredTools;
+  const top = cfg.instance as unknown as MaybeMcpServer;
+  const registry = resolveToolRegistry(top);
   if (!registry) {
+    const ownKeys = top ? Object.keys(top) : [];
+    const innerKeys = top?.instance ? Object.keys(top.instance) : [];
     return {
       ok: false,
       message:
-        'SDK MCP instance is missing _registeredTools — Agent SDK upgrade likely broke direct invocation.',
+        `SDK MCP instance is missing _registeredTools (cfg.instance keys: [${ownKeys.join(', ')}]; cfg.instance.instance keys: [${innerKeys.join(', ')}]).`,
       durationMs: Date.now() - started,
     };
   }

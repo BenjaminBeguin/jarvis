@@ -134,8 +134,12 @@ import { voiceModule } from './modules/voice/index.js';
 import {
   activeProjectProfileProvider,
   activeProjectProvider,
+  calendarProvider,
+  inboxHighlightsProvider,
   projectsProvider,
   recentTaskProvider,
+  remindersProvider,
+  runtimeProvider,
   timeProvider,
   UserContextStore,
 } from './user-context.js';
@@ -308,14 +312,22 @@ ipcMain.handle(IpcChannels.voiceOrbHide, () => {
 meetingActivity.on('status', (status) => {
   broadcast(IpcChannels.meetingDetectionChanged, status);
 });
-// Built-in context providers: time + active project (set from renderer) +
-// projects list + recent task. Order matters — first registered is first
-// in the prepended block. Modules can add more via
+// Built-in context providers — ambient signal injected into every Claude
+// turn so the agent answers daily questions ("what's my plan today?",
+// "who's waiting on me?", "are you paused?") from cached context instead
+// of round-tripping through tools.
+//
+// Order matters — first registered is first in the prepended block, which
+// also fixes the prompt-cache prefix shape. Modules can add more via
 // `ctx.registerContextProvider(...)`.
 userContext.register(timeProvider);
+userContext.register(runtimeProvider(() => getTrayMenuState()));
 userContext.register(activeProjectProvider(userContext));
 userContext.register(activeProjectProfileProvider(userContext, projects));
 userContext.register(projectsProvider(projects));
+userContext.register(calendarProvider(inbox));
+userContext.register(inboxHighlightsProvider(inbox));
+userContext.register(remindersProvider(reminders));
 userContext.register(recentTaskProvider(runner));
 
 // Built-in inbox sources — all direct JS, no agent fires.

@@ -29,8 +29,8 @@ import type { WorkflowDef } from '@shared/types';
 
 // list_events defaults to "next 14 days, 25 results ordered by
 // startTime" when no timeMin/timeMax is passed (see google-mcp/
-// calendar.ts). We bump maxResults so a busy week doesn't truncate
-// before the transform can window down to the next 12h.
+// calendar.ts). We bump maxResults so a busy fortnight doesn't
+// truncate before the transform can window down.
 const CAL_TRANSFORM = `((() => {
   const MEETING_URL_RE = /https?:\\/\\/[a-z0-9.-]*(?:meet\\.google|zoom\\.us|teams\\.microsoft|webex|whereby|jitsi)[^\\s<>\"']*/i;
   const hhmm = (iso) => {
@@ -46,7 +46,11 @@ const CAL_TRANSFORM = `((() => {
   for (const b of blocks) {
     if (Array.isArray(b)) events.push(...b);
   }
-  const LOOKAHEAD_MS = 12 * 60 * 60 * 1000;
+  // 14-day window: covers the rest of this week + all of next week,
+  // regardless of which day the user opens the app. Earlier 12h /
+  // 24h windows silently dropped meetings any time you checked
+  // outside of the same-day window.
+  const LOOKAHEAD_MS = 14 * 24 * 60 * 60 * 1000;
   const now = Date.now();
   const horizon = now + LOOKAHEAD_MS;
   return events
@@ -56,8 +60,10 @@ const CAL_TRANSFORM = `((() => {
       const endIso = evt.end;
       const startMs = startIso ? new Date(startIso).getTime() : NaN;
       if (!Number.isFinite(startMs)) return null;
-      // Skip past events + anything beyond the 12-hour window. The
-      // mcp tool returns up to 14 days; we want today-ish only.
+      // Skip past events + anything beyond the 14-day window. The
+      // mcp tool returns up to 14 days by default; we keep the
+      // filter so a future MCP that returns more (e.g. 30 days)
+      // still respects the workflow's stated horizon.
       if (startMs < now - 60_000) return null;
       if (startMs > horizon) return null;
       // All-day events have date (YYYY-MM-DD) on start/end instead of
@@ -88,9 +94,9 @@ const CAL_TRANSFORM = `((() => {
 
 export const CALENDAR_TODAY_WORKFLOW: WorkflowDef = {
   id: 'calendar-today-sync',
-  name: 'Sync Calendar today',
+  name: 'Sync Calendar (2 weeks)',
   description:
-    'Every 10 minutes, pull upcoming Google Calendar events for the next 12 hours via the OAuth-managed calendar MCP. Requires a connected Google account.',
+    'Every 10 minutes, pull upcoming Google Calendar events for the next 14 days (this week + next week) via the OAuth-managed calendar MCP. Requires a connected Google account.',
   enabled: true,
   trigger: { kind: 'cron', every: '10m' },
   pipeline: [
@@ -109,7 +115,7 @@ export const CALENDAR_TODAY_WORKFLOW: WorkflowDef = {
     },
     {
       type: 'inbox-write',
-      params: { source: 'calendar', label: 'Calendar today' },
+      params: { source: 'calendar', label: 'Calendar' },
     },
   ],
 };

@@ -8,7 +8,8 @@ export type MobileView =
   | 'inbox'
   | 'conversations'
   | 'conversation'
-  | 'dictate';
+  | 'dictate'
+  | 'help';
 
 export interface MobileAuth {
   /** Base URL of the Mac's HTTP API. e.g. `http://laptop.tail-net.ts.net:4747` */

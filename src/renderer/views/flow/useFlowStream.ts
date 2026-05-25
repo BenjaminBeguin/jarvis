@@ -166,6 +166,14 @@ function stageForTask(t: TaskSummary): Stage {
     return 'result';
   }
   if (t.status === 'running') {
+    // Multi-turn tasks stay `running + awaitingInput=true` between
+    // turns so the SDK session can be resumed — from the runner's
+    // perspective the loop is still alive, but from the user's
+    // perspective the agent answered and is now idle. Treat that as
+    // RESULT so the orb advances + starts its fade, instead of
+    // hanging at AGENT forever waiting for a terminal status that
+    // may never come.
+    if (t.awaitingInput) return 'result';
     // Once we have an sdkSessionId the SDK has handshaked and we're in
     // the agent loop. Before that we're still booting (launch).
     return t.sdkSessionId ? 'agent' : 'launch';

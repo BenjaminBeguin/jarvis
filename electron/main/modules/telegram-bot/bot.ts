@@ -763,12 +763,20 @@ export class TelegramBot {
       }
     }
     // 'reminders' (legacy default).
+    //
+    // task-awaiting is intentionally AFK-gated here: when the user is at
+    // their desk the OS toast fires and the Observatory is one click
+    // away, so a duplicate Telegram ping is just noise. The cockpit
+    // ("pilot from phone") use case is exactly what AFK is for.
+    // Reminders, scheduled-actions, and cost-guardrail stay always-on
+    // because those are the time-bound / money-bound signals the
+    // legacy default was named after.
     switch (source) {
       case 'reminder':
       case 'scheduled-action':
-      case 'task-awaiting':
       case 'cost-guardrail':
         return true;
+      case 'task-awaiting':
       case 'task-complete':
       case 'task-errored':
       case 'meeting-heads-up':

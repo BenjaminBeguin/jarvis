@@ -224,8 +224,9 @@ export function QuickNotePage({ compact = false }: { compact?: boolean } = {}) {
  *   - Done: not archived, binding completed
  *   - Archived: archived (regardless of binding state)
  *
- * Done + Archived are collapsed by default so the Active list stays
- * focused. Archived entries can be Restored or permanently deleted. */
+ * Done + Archived live together inside a single History drawer
+ * (collapsed by default) so terminal state never crowds the active
+ * list. Archived entries can be Restored or permanently deleted. */
 function NoteSections({
   files,
   bindings,
@@ -243,8 +244,7 @@ function NoteSections({
   onRestore: (date: string, entry: NoteEntry) => Promise<void> | void;
   onPermaDelete: (date: string, entry: NoteEntry) => Promise<void> | void;
 }) {
-  const [showDone, setShowDone] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const isDone = (key: string): boolean => {
     const b = bindings.get(key);
@@ -277,6 +277,8 @@ function NoteSections({
     if (ar.length > 0) archived.push({ file, entries: ar });
   }
 
+  const historyTotal = doneCount + archivedCount;
+
   return (
     <>
       <div className="module-page__list">
@@ -293,73 +295,71 @@ function NoteSections({
         ))}
       </div>
 
-      {/* Always render Done + Archived buckets so the user knows
-          where future archives/done items will land — even when empty. */}
-      <section className="note-done">
-        <button
-          className="note-done__head"
-          onClick={() => setShowDone((v) => !v)}
-          title={showDone ? 'Collapse done notes' : 'Expand done notes'}
-        >
-          <span className="note-done__caret">{showDone ? '▾' : '▸'}</span>
-          <span className="note-done__label">Done</span>
-          <span className="note-done__count">{doneCount}</span>
-        </button>
-        {showDone && (
-          doneCount === 0 ? (
-            <div className="note-done__empty">
-              Notes you push to Claude land here once the task completes.
+      <section className="column-drawer">
+        <div className="column-drawer__head-row">
+          <button
+            className="column-drawer__head"
+            onClick={() => setShowHistory((v) => !v)}
+            title={showHistory ? 'Collapse history' : 'Expand history'}
+          >
+            <span className="column-drawer__caret">{showHistory ? '▾' : '▸'}</span>
+            <span className="column-drawer__label">History</span>
+            <span className="column-drawer__count">{historyTotal}</span>
+            {showHistory && historyTotal > 0 && (
+              <span className="column-drawer__breakdown">
+                Done {doneCount} · Archived {archivedCount}
+              </span>
+            )}
+          </button>
+        </div>
+        {showHistory && (
+          historyTotal === 0 ? (
+            <div className="column-drawer__empty">
+              Notes you push to Claude land under Done once they complete.
+              Click × on an active note to archive it (soft-delete) — restore
+              from here anytime.
             </div>
           ) : (
-            <div className="module-page__list note-done__list">
-              {done.map(({ file, entries }) => (
-                <NoteFileCard
-                  key={`done-${file.date}`}
-                  file={file}
-                  entries={entries}
-                  bindings={bindings}
-                  pushing={pushing}
-                  onPush={onPush}
-                  onArchive={onArchive}
-                  dimmed
-                />
-              ))}
-            </div>
-          )
-        )}
-      </section>
-
-      <section className="note-done">
-        <button
-          className="note-done__head"
-          onClick={() => setShowArchived((v) => !v)}
-          title={showArchived ? 'Collapse archived' : 'Expand archived'}
-        >
-          <span className="note-done__caret">
-            {showArchived ? '▾' : '▸'}
-          </span>
-          <span className="note-done__label">Archived</span>
-          <span className="note-done__count note-done__count--archived">
-            {archivedCount}
-          </span>
-        </button>
-        {showArchived && (
-          archivedCount === 0 ? (
-            <div className="note-done__empty">
-              Click × on an active note to archive it (soft-delete) —
-              restore from here anytime.
-            </div>
-          ) : (
-            <div className="module-page__list note-done__list">
-              {archived.map(({ file, entries }) => (
-                <ArchivedNoteFileCard
-                  key={`archived-${file.date}`}
-                  file={file}
-                  entries={entries}
-                  onRestore={onRestore}
-                  onPermaDelete={onPermaDelete}
-                />
-              ))}
+            <div className="column-drawer__body">
+              {doneCount > 0 && (
+                <div className="column-drawer__subgroup">
+                  <h4 className="column-drawer__subgroup-label">
+                    Done <span className="column-drawer__subgroup-count">{doneCount}</span>
+                  </h4>
+                  <div className="module-page__list">
+                    {done.map(({ file, entries }) => (
+                      <NoteFileCard
+                        key={`done-${file.date}`}
+                        file={file}
+                        entries={entries}
+                        bindings={bindings}
+                        pushing={pushing}
+                        onPush={onPush}
+                        onArchive={onArchive}
+                        dimmed
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {archivedCount > 0 && (
+                <div className="column-drawer__subgroup">
+                  <h4 className="column-drawer__subgroup-label">
+                    Archived <span className="column-drawer__subgroup-count column-drawer__subgroup-count--warn">{archivedCount}</span>
+                  </h4>
+                  <div className="module-page__list">
+                    {archived.map(({ file, entries }) => (
+                      <ArchivedNoteFileCard
+                        key={`archived-${file.date}`}
+                        file={file}
+                        entries={entries}
+                        onRestore={onRestore}
+                        onPermaDelete={onPermaDelete}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )
         )}

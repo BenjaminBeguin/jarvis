@@ -110,15 +110,38 @@ export function MobilePairingPanel() {
     }
   };
 
+  const isLocalhost =
+    cleanedHost === 'localhost' || cleanedHost === '127.0.0.1';
+
   return (
     <div className="mobile-pairing">
       <h3>Pair phone</h3>
-      <p className="settings__hint">
-        Scan this QR from your phone (Camera app on iOS, Google Lens
-        on Android) once Tailscale is installed on both devices and
-        signed into the same account. The PWA opens, saves the
-        token, and stays signed in.
-      </p>
+
+      <ol className="mobile-pairing__steps">
+        <li>
+          Install <strong>Tailscale</strong> on the Mac
+          (<code>brew install --cask tailscale</code>) AND on your phone
+          (App Store / Play Store). Sign both into the same account.
+        </li>
+        <li>
+          Find your Mac's Tailscale hostname from the Tailscale menu-bar
+          icon → it's listed under "This device" (e.g.{' '}
+          <code>laptop.tail-net.ts.net</code>). Paste it below.
+        </li>
+        <li>
+          Pick the right target (Dev while you run <code>pnpm dev</code>,
+          Production for a built app).
+        </li>
+        <li>
+          Scan the QR with your phone's <strong>Camera</strong> (iOS) or{' '}
+          <strong>Google Lens</strong> (Android). The PWA opens and saves
+          the bearer token.
+        </li>
+        <li>
+          On the phone: <strong>Add to Home Screen</strong> (iOS Share →
+          Add, Android ⋮ → Install app) so notifications work standalone.
+        </li>
+      </ol>
 
       <label className="mobile-pairing__field">
         <span>Mac Tailscale hostname</span>
@@ -131,8 +154,8 @@ export function MobilePairingPanel() {
           autoCapitalize="off"
         />
         <span className="settings__hint settings__hint--dim">
-          From Tailscale's menu-bar app → your Mac. Without the
-          protocol or port.
+          Without protocol or port. Use <code>localhost</code> to test
+          from a Chrome tab on this Mac instead of the phone.
         </span>
       </label>
 
@@ -180,14 +203,61 @@ export function MobilePairingPanel() {
           >
             Copy full URL
           </button>
+          {isLocalhost && (
+            <p className="settings__hint settings__hint--dim">
+              Paste this URL into Chrome on the Mac to test the PWA
+              without involving Tailscale or the phone.
+            </p>
+          )}
         </div>
       )}
 
       {!cleanedHost && (
         <div className="settings__hint settings__hint--dim">
-          Enter your Tailscale hostname above to generate the QR.
+          Enter your Tailscale hostname (or <code>localhost</code>) above
+          to generate the QR.
         </div>
       )}
+
+      <details className="mobile-pairing__troubleshoot">
+        <summary>Troubleshooting</summary>
+        <ul>
+          <li>
+            <strong>"Failed to fetch" on the phone:</strong> the saved API
+            base URL can't reach <code>:{API_PORT}</code>. Confirm the
+            hostname is right, then re-pair (the new QR overwrites the
+            stored value).
+          </li>
+          <li>
+            <strong>Vite refuses the connection in dev:</strong>{' '}
+            <code>server.allowedHosts</code> in{' '}
+            <code>electron.vite.config.ts</code> defaults to{' '}
+            <code>.ts.net</code>, <code>localhost</code>, and{' '}
+            <code>.local</code>. Add yours if it's different.
+          </li>
+          <li>
+            <strong>Push notifications never arrive:</strong> iOS needs
+            16.4+ AND the PWA installed to the home screen. Grant
+            notifications when prompted on first launch.
+          </li>
+          <li>
+            <strong>Re-pairing the same phone</strong> works fine — the
+            new <code>?pair=</code> payload overwrites the old one in
+            localStorage.
+          </li>
+          <li>
+            Full reference:{' '}
+            <a
+              href="https://github.com/benbeguin/jarvis/blob/main/docs/mobile.md"
+              target="_blank"
+              rel="noreferrer"
+            >
+              docs/mobile.md
+            </a>
+            .
+          </li>
+        </ul>
+      </details>
     </div>
   );
 }

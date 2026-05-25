@@ -5,6 +5,7 @@ import { api } from './api';
 import { MobileConversation } from './MobileConversation';
 import { MobileConversations } from './MobileConversations';
 import { MobileDictate } from './MobileDictate';
+import { MobileHelp } from './MobileHelp';
 import { MobileInbox } from './MobileInbox';
 import { navigateMobile } from './MobileApp';
 import { useSse } from './useSse';
@@ -45,13 +46,14 @@ export function MobileShell({ auth, view, conversationId, onSignOut }: Props) {
 
   return (
     <div className="mobile-shell">
-      <Header status={status} connected={connected} onSignOut={onSignOut} />
+      <Header status={status} connected={connected} />
       <main className="mobile-shell__body">
         <ViewBody
           view={view}
           auth={auth}
           conversationId={conversationId}
           status={status}
+          onSignOut={onSignOut}
         />
       </main>
       <nav className="mobile-shell__tabs">
@@ -71,11 +73,9 @@ export function MobileShell({ auth, view, conversationId, onSignOut }: Props) {
 function Header({
   status,
   connected,
-  onSignOut,
 }: {
   status: TrayMenuState | null;
   connected: boolean;
-  onSignOut: () => void;
 }) {
   const modeGlyph =
     status?.appMode === 'paused'
@@ -105,11 +105,11 @@ function Header({
       <button
         type="button"
         className="mobile-shell__signout"
-        onClick={onSignOut}
-        aria-label="Sign out"
-        title="Sign out"
+        onClick={() => navigateMobile('help')}
+        aria-label="Help and setup"
+        title="Help & setup"
       >
-        ⏻
+        ?
       </button>
       {status && <StatChips status={status} />}
     </header>
@@ -157,11 +157,13 @@ function ViewBody({
   auth,
   conversationId,
   status,
+  onSignOut,
 }: {
   view: MobileView;
   auth: MobileAuth;
   conversationId: string | null;
   status: TrayMenuState | null;
+  onSignOut: () => void;
 }) {
   if (view === 'inbox') return <MobileInbox auth={auth} />;
   if (view === 'conversations')
@@ -169,6 +171,7 @@ function ViewBody({
   if (view === 'conversation' && conversationId)
     return <MobileConversation auth={auth} taskId={conversationId} />;
   if (view === 'dictate') return <MobileDictate auth={auth} />;
+  if (view === 'help') return <MobileHelp auth={auth} onSignOut={onSignOut} />;
   return (
     <div className="mobile-shell__placeholder">
       <h2>Pick a thread first.</h2>
