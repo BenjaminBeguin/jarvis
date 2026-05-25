@@ -3,8 +3,6 @@ name: gmail-triage
 description: Classify Gmail messages and produce drafts ready for human review
 allowed-tools:
   - Read
-mcp-servers:
-  - "*"
 model: claude-haiku-4-5
 ---
 
@@ -42,9 +40,11 @@ the workflow's \`list_messages\` call. Each row has:
 }
 \`\`\`
 
-If you need the full body (long messages, ambiguous classification),
-call the \`get_message\` tool on the Gmail MCP. Don't call it for
-every row — only when the snippet is genuinely insufficient.
+The snippet is your only window into each message — this skill is
+read-only at the file level (no MCP tools allowed) so the classifier
+stays fast. If a snippet is too short to decide, default to drafting:
+the user can discard a draft cheaply, but can't easily recover an
+ignored message.
 
 ## Classification
 

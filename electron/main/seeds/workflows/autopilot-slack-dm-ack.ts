@@ -1,14 +1,16 @@
 import type { WorkflowDef } from '@shared/types';
 
 /**
- * Autopilot scenario — draft short replies to unread, recent Slack
- * DMs / @-mentions.
+ * Autopilot scenario — triage unread, recent Slack DMs / @-mentions
+ * and produce drafts ready to send from the Drafts tab.
  *
  *   trigger:  autopilot · cron 5m (gated by appMode === 'autopilot')
  *   pipeline: mcp-call(search.messages is:unread)
- *             → transform (filter bots + recency)
- *             → run-skill (slack-dm-ack returns JSON array)
- *             → batch-prompt-output (table HUD, per-row Accept/Reject)
+ *             → transform (unwrap text block)
+ *             → transform (filter bots + recency, project for skill)
+ *             → run-skill (slack-dm-ack returns Draft-shaped JSON)
+ *             → transform (parse JSON)
+ *             → draft-store-write (writes to ai_drafts table)
  *
  * Filter logic:
  *   - Slack search modifier `is:unread` does the unread gate
@@ -19,12 +21,10 @@ import type { WorkflowDef } from '@shared/types';
  *   - 30-minute recency window (RECENT_MS) keeps the workflow from
  *     pinging the user about stale messages.
  *
- * The pipeline ENDS at batch-prompt-output by design. Accept saves
- * the draft as positive feedback to the per-workflow memory file —
- * the message is NOT posted. The user reads + sends manually (or
- * appends a `mcp-call slack send_message` step that fans the
- * accepted rows out, if they want to flip this scenario to auto-
- * send later).
+ * The skill emits each row with an `mcp` sendAction targeting Slack's
+ * `send_message` tool (channel + threadTs baked in, body substituted
+ * at send time). Send from the Drafts view dispatches via the slack
+ * MCP — no manual mcp-call step needed in this pipeline.
  *
  * Default `enabled: false`.
  */

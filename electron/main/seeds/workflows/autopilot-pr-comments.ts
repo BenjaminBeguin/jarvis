@@ -92,7 +92,11 @@ export const AUTOPILOT_PR_COMMENTS_WORKFLOW: WorkflowDef = {
       params: { fn: FILTER_FN },
     },
     {
+      // FILTER_FN returns null when the user has no open PRs. Skip
+      // the agent turn in that case rather than feeding the literal
+      // string "null" into the prompt.
       type: 'run-skill',
+      optional: true,
       params: { skillId: 'pr-comments-triage', prompt: AGENT_PROMPT },
     },
     {

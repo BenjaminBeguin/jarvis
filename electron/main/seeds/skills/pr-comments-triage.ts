@@ -7,7 +7,7 @@ allowed-tools:
 
 You triage review comments on one of the user's open PRs and
 produce drafts that the user reviews + sends from the Drafts tab.
-Output a JSON array shoped for the \`draft-store-write\` workflow
+Output a JSON array shaped for the \`draft-store-write\` workflow
 node. The sendAction is a shell call to \`gh api\` that posts the
 reply to the right inline comment thread.
 

@@ -25,14 +25,19 @@ interface ShellSendResult {
 }
 
 /**
- * Replace both substitution tokens in a string.
+ * Replace both substitution tokens in a string in a single pass.
  *   - `{body}`      → literal body
  *   - `{body_json}` → JSON.stringify(body)  (with surrounding quotes)
+ *
+ * Single-pass is required: a sequential two-pass approach (replace
+ * `{body_json}` first, then `{body}`) corrupts the result if the
+ * user's body itself contains the literal string `{body}` — the
+ * second pass would re-substitute inside the just-encoded JSON.
  */
 function substituteTokens(s: string, body: string): string {
-  return s
-    .split('{body_json}').join(JSON.stringify(body))
-    .split('{body}').join(body);
+  return s.replace(/\{body_json\}|\{body\}/g, (token) =>
+    token === '{body_json}' ? JSON.stringify(body) : body,
+  );
 }
 
 function runShellSend(
