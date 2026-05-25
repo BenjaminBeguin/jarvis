@@ -153,7 +153,20 @@ export function Drafts() {
   );
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 960, margin: '0 auto' }}>
+    <div
+      style={{
+        // Fill the shell__body and scroll independently. Without
+        // these, content past the viewport silently gets clipped
+        // (shell__body is flex with no overflow of its own).
+        flex: 1,
+        overflowY: 'auto',
+        padding: '24px 32px',
+        // Center content while keeping the scrollable column at full
+        // width — width caps the column, marginInline auto centers it.
+        boxSizing: 'border-box',
+      }}
+    >
+      <div style={{ maxWidth: 960, margin: '0 auto' }}>
       <header style={{ marginBottom: 24 }}>
         <h1 style={{ margin: '0 0 8px 0', fontSize: 20, fontWeight: 600 }}>
           Drafts
@@ -250,6 +263,7 @@ export function Drafts() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

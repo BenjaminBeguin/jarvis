@@ -20472,6 +20472,10 @@ button:disabled:hover {
   border: 1px solid var(--border-strong);
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.18);
+  /* shell__nav is the window-drag region in Electron; without
+     no-drag, the toggle pills swallow clicks into the OS drag
+     handler. Same pattern as the back/forward arrows. */
+  -webkit-app-region: no-drag;
 }
 
 .shell__mode-tab {
@@ -20489,6 +20493,7 @@ button:disabled:hover {
   transition:
     color 140ms ease,
     background 140ms ease;
+  -webkit-app-region: no-drag;
 }
 
 .shell__mode-tab:hover:not(.shell__mode-tab--active) {
