@@ -20691,6 +20691,143 @@ button:disabled:hover {
   filter: brightness(1.1);
 }
 
+/* ─── Drafts widget (Dashboard) ────────────────────────────────── */
+
+.drafts-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.drafts-widget--empty {
+  padding: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+
+.drafts-widget__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.drafts-widget__row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  column-gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.drafts-widget__row:hover {
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.drafts-widget__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
+
+.drafts-widget__chip--gmail {
+  background: rgba(234, 67, 53, 0.16);
+  color: #ea4335;
+}
+.drafts-widget__chip--slack {
+  background: rgba(74, 21, 75, 0.32);
+  color: #cbb1ce;
+}
+.drafts-widget__chip--github {
+  background: rgba(255, 255, 255, 0.08);
+  color: #d0d0d0;
+}
+.drafts-widget__chip--linear {
+  background: rgba(94, 106, 210, 0.18);
+  color: #9aa6ff;
+}
+
+.drafts-widget__text {
+  min-width: 0;
+}
+
+.drafts-widget__title {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drafts-widget__why {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-style: italic;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drafts-widget__action {
+  appearance: none;
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent);
+  color: #000;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter 120ms ease;
+}
+
+.drafts-widget__action:hover {
+  filter: brightness(1.1);
+}
+
+.drafts-widget__action:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.drafts-widget__foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.drafts-widget__open {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  font-family: var(--mono);
+}
+
+.drafts-widget__open:hover {
+  color: var(--accent);
+}
+
 /* ─── System pulse — at-a-glance status strip ─────────────────── */
 
 .system-pulse {

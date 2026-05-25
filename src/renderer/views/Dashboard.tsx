@@ -11,6 +11,7 @@ import type {
   RoutineDef,
   SkillSummary,
 } from '../../shared/types';
+import { DraftsWidget } from './DraftsWidget';
 import { Inbox } from './Inbox';
 import { MarkdownDoc } from './MarkdownText';
 import {
@@ -438,6 +439,7 @@ function ItemView({
         />
       )}
       {item.kind === 'inbox' && <Inbox compact />}
+      {item.kind === 'drafts' && <DraftsWidget limit={item.limit ?? 6} />}
       {item.kind === 'routine' && <RoutineItem routineId={item.routineId} />}
       {item.kind === 'calendar' && (
         <CalendarTimeline horizon={item.horizon ?? 'week'} />
@@ -1076,6 +1078,7 @@ function ItemPicker({
   );
 
   const hasInbox = existing.some((it) => it.kind === 'inbox');
+  const hasDrafts = existing.some((it) => it.kind === 'drafts');
   const hasCalendar = existing.some((it) => it.kind === 'calendar');
   const hasSpend = existing.some((it) => it.kind === 'spend');
   const pinnedRoutineIds = new Set(
@@ -1094,6 +1097,18 @@ function ItemPicker({
         >
           <div className="dash-picker__name">Inbox</div>
           <div className="dash-picker__hint">All current inbox items</div>
+        </button>
+      )}
+      {!hasDrafts && (
+        <button
+          className="dash-picker__row"
+          onClick={() => onPick({ kind: 'drafts' })}
+        >
+          <div className="dash-picker__name">Drafts</div>
+          <div className="dash-picker__hint">
+            AI drafts waiting for your review · primary action per row,
+            one-click to send
+          </div>
         </button>
       )}
       {!hasCalendar && (

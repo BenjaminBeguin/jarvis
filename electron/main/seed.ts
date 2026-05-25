@@ -161,9 +161,14 @@ const SKILL_BODY_DETECTORS: Record<string, (body: string) => boolean> = {
     body.includes('(suggest archive — reason)') ||
     body.includes("'(suggest archive — Substack newsletter)'") ||
     body.includes("the '(suggest archive — reason)' line") ||
-    // v2 (intent-based) → migrate to v3 (actions[])
+    // v2 (intent-based) → migrate to v3+ (actions[])
     (body.includes('"intent": "reply"') && !body.includes('"actions":')) ||
-    (body.includes('"intent": "archive"') && !body.includes('"actions":')),
+    (body.includes('"intent": "archive"') && !body.includes('"actions":')) ||
+    // v3 (basic actions[] — Send + maybe Archive) → migrate to v4
+    // which encourages richer per-message action menus.
+    (body.includes('"actions":') &&
+      !body.includes('Patterns to recognise') &&
+      !body.includes('Patterns to recognize')),
   // slack-dm-ack v1/v2 used { intent, sendAction } shape. v3 emits
   // actions[]. Detect the older shape by the absence of "actions":
   // in the OUTPUT PROTOCOL section while still mentioning sendAction.

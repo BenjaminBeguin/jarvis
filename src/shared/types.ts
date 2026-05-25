@@ -441,6 +441,14 @@ export type CalendarHorizon = 'today' | 'tomorrow' | 'week' | 'month';
 
 export type DashboardItem =
   | { kind: 'inbox' }
+  | {
+      /** Compact list of pending AI drafts. Title + the primary
+       *  LLM-chosen action per row, clickable to act in-place;
+       *  "Open Drafts" link at the bottom goes to the full view. */
+      kind: 'drafts';
+      /** Cap how many rows the widget shows. Default 6. */
+      limit?: number;
+    }
   | { kind: 'routine'; routineId: string }
   | {
       /** Unified time-sorted view: calendar events, reminders, scheduled
