@@ -40,6 +40,51 @@ type Tab =
   | 'workflows'
   | 'settings';
 
+/**
+ * Top-level UI mode — three lenses on Jarvis, each with its own
+ * sidebar.
+ *
+ *   - **working**: get stuff done. Dashboard, Inbox, Drafts, plus
+ *     capture-style module pages (Notes, Meetings, Calendar).
+ *   - **observing**: see what Jarvis is doing. Observatory (live
+ *     event stream), AI Agent (running + recent tasks), Activity.
+ *   - **building**: configure. Routines, Skills, Workflows,
+ *     Projects.
+ *
+ * Settings reachable from any mode via the auth-badge dropdown.
+ * Persisted in localStorage; default 'working' on fresh launches.
+ */
+type UiMode = 'working' | 'observing' | 'building';
+
+const UI_MODE_KEY = 'jarvis.uiMode';
+
+function loadUiMode(): UiMode {
+  try {
+    const v = window.localStorage.getItem(UI_MODE_KEY);
+    if (v === 'observing' || v === 'building') return v;
+    return 'working';
+  } catch {
+    return 'working';
+  }
+}
+
+function saveUiMode(mode: UiMode): void {
+  try {
+    window.localStorage.setItem(UI_MODE_KEY, mode);
+  } catch {
+    // ignore
+  }
+}
+
+/** Per-mode landing tab — clicking the mode toggle lands the user
+ *  on the canonical first tab of that mode so they're not stranded
+ *  on a tab the new mode hides. */
+const MODE_DEFAULT_TAB: Record<UiMode, Tab> = {
+  working: 'dashboard',
+  observing: 'observatory',
+  building: 'workflows',
+};
+
 interface Props {
   status: AppStatus;
 }
@@ -48,8 +93,16 @@ export function Shell({ status }: Props) {
   // Dashboard is the home. The retired Now tab's bands collapsed back
   // into the Inbox (Meeting strip + Awaiting strip) — that surface
   // wasn't worth the duplication.
-  const [tab, setTab] = useState<Tab>('dashboard');
+  const [uiMode, setUiMode] = useState<UiMode>(() => loadUiMode());
+  const [tab, setTab] = useState<Tab>(() => MODE_DEFAULT_TAB[loadUiMode()]);
   const [openModuleId, setOpenModuleId] = useState<string | null>(null);
+  const switchMode = (next: UiMode): void => {
+    if (next === uiMode) return;
+    setUiMode(next);
+    saveUiMode(next);
+    setTab(MODE_DEFAULT_TAB[next]);
+    setOpenModuleId(null);
+  };
   /** When set, the Skills view opens with this skill selected and scrolls
    * the list to it. Set by deep-link nav from Briefings / Routines. */
   const [focusedSkillId, setFocusedSkillId] = useState<string | null>(null);
@@ -463,127 +516,157 @@ export function Shell({ status }: Props) {
     calendar: 'C',
   };
 
-  // Three groups so the vertical rail reads at a glance: main pages
-  // on top, capture-style module pages, automation authoring at the
-  // bottom. Module pages get shorter labels here than module.name
-  // (e.g. "Notes" instead of "Notes & Reminders") so they fit cleanly.
-  const sidebarSections: SidebarSection[] = [
-    {
-      id: 'main',
-      items: [
-        {
-          id: 'dashboard',
-          label: 'Dashboard',
-          icon: 'D',
-          isActive: tab === 'dashboard' && !openModuleId,
-          onClick: () => {
-            setTab('dashboard');
-            setOpenModuleId(null);
-          },
-          title: '⌘1 · Curated home — pinned briefings + inbox + routines',
+  // Sidebar is mode-aware. Each mode is one lens on Jarvis with its
+  // own curated tabs. Module pages live under Working (capture
+  // surfaces — Notes, Meetings, Calendar).
+  const workingSection: SidebarSection = {
+    id: 'main',
+    items: [
+      {
+        id: 'dashboard',
+        label: 'Dashboard',
+        icon: 'D',
+        isActive: tab === 'dashboard' && !openModuleId,
+        onClick: () => {
+          setTab('dashboard');
+          setOpenModuleId(null);
         },
-        {
-          id: 'inbox',
-          label: 'Inbox',
-          icon: 'I',
-          isActive: tab === 'inbox' && !openModuleId,
-          onClick: () => {
-            setTab('inbox');
-            setOpenModuleId(null);
-          },
-          title: '⌘3 · Triage feed (PRs / reminders / Linear / failed routines)',
+        title: '⌘1 · Curated home — pinned briefings + inbox + routines',
+      },
+      {
+        id: 'inbox',
+        label: 'Inbox',
+        icon: 'I',
+        isActive: tab === 'inbox' && !openModuleId,
+        onClick: () => {
+          setTab('inbox');
+          setOpenModuleId(null);
         },
-        {
-          id: 'drafts',
-          label: 'Drafts',
-          icon: 'D',
-          isActive: tab === 'drafts' && !openModuleId,
-          onClick: () => {
-            setTab('drafts');
-            setOpenModuleId(null);
-          },
-          title: 'AI-generated drafts waiting for your review',
-          count: draftsPending,
+        title: '⌘3 · Triage feed (PRs / reminders / Linear / failed routines)',
+      },
+      {
+        id: 'drafts',
+        label: 'Drafts',
+        icon: 'D',
+        isActive: tab === 'drafts' && !openModuleId,
+        onClick: () => {
+          setTab('drafts');
+          setOpenModuleId(null);
         },
-        {
-          id: 'observatory',
-          label: 'Observatory',
-          icon: 'O',
-          isActive: tab === 'observatory' && !openModuleId,
-          onClick: () => {
-            setTab('observatory');
-            setOpenModuleId(null);
-          },
-          title: 'Live river of events flowing through Jarvis',
+        title: 'AI-generated drafts waiting for your review',
+        count: draftsPending,
+      },
+    ],
+  };
+  const captureSection: SidebarSection = {
+    id: 'capture',
+    label: 'Capture',
+    items: moduleList
+      .filter((m) => m.hasPage && m.enabled)
+      .map((m) => ({
+        id: `module:${m.id}`,
+        label: MODULE_SHORT_LABEL[m.id] ?? m.name,
+        icon: MODULE_ICON[m.id] ?? m.name.charAt(0).toUpperCase(),
+        isActive: openModuleId === m.id,
+        onClick: () => setOpenModuleId(m.id),
+        title: m.description,
+      })),
+  };
+  const observingSection: SidebarSection = {
+    id: 'observe',
+    items: [
+      {
+        id: 'observatory',
+        label: 'Observatory',
+        icon: 'O',
+        isActive: tab === 'observatory' && !openModuleId,
+        onClick: () => {
+          setTab('observatory');
+          setOpenModuleId(null);
         },
-        {
-          id: 'ai-agent',
-          label: 'AI Agent',
-          icon: 'A',
-          isActive: tab === 'ai-agent' && !openModuleId,
-          onClick: () => {
-            setTab('ai-agent');
-            setOpenModuleId(null);
-          },
-          title: 'Recent + running agent tasks · constellation + list view',
+        title: 'Live river of events flowing through Jarvis',
+      },
+      {
+        id: 'ai-agent',
+        label: 'AI Agent',
+        icon: 'A',
+        isActive: tab === 'ai-agent' && !openModuleId,
+        onClick: () => {
+          setTab('ai-agent');
+          setOpenModuleId(null);
         },
-      ],
-    },
-    {
-      id: 'capture',
-      label: 'Capture',
-      items: moduleList
-        .filter((m) => m.hasPage && m.enabled)
-        .map((m) => ({
-          id: `module:${m.id}`,
-          label: MODULE_SHORT_LABEL[m.id] ?? m.name,
-          icon: MODULE_ICON[m.id] ?? m.name.charAt(0).toUpperCase(),
-          isActive: openModuleId === m.id,
-          onClick: () => setOpenModuleId(m.id),
-          title: m.description,
-        })),
-    },
-    {
-      id: 'build',
-      label: 'Build',
-      items: [
-        {
-          id: 'routines',
-          label: 'Routines',
-          icon: 'R',
-          isActive: tab === 'routines' && !openModuleId,
-          onClick: () => {
-            setTab('routines');
-            setOpenModuleId(null);
-          },
-          title: 'Skills on a schedule',
+        title: 'Recent + running agent tasks · constellation + list view',
+      },
+      {
+        id: 'activity',
+        label: 'Activity',
+        icon: 'L',
+        isActive: tab === 'activity' && !openModuleId,
+        onClick: () => {
+          setTab('activity');
+          setOpenModuleId(null);
         },
-        {
-          id: 'skills',
-          label: 'Skills',
-          icon: 'S',
-          isActive: tab === 'skills' && !openModuleId,
-          onClick: () => {
-            setTab('skills');
-            setOpenModuleId(null);
-            setFocusedSkillId(null);
-          },
-          title: 'SKILL.md prompts (the things Jarvis runs)',
+        title: 'Log of side-effects Jarvis recorded',
+      },
+    ],
+  };
+  const buildingSection: SidebarSection = {
+    id: 'build',
+    items: [
+      {
+        id: 'routines',
+        label: 'Routines',
+        icon: 'R',
+        isActive: tab === 'routines' && !openModuleId,
+        onClick: () => {
+          setTab('routines');
+          setOpenModuleId(null);
         },
-        {
-          id: 'workflows',
-          label: 'Workflows',
-          icon: 'W',
-          isActive: tab === 'workflows' && !openModuleId,
-          onClick: () => {
-            setTab('workflows');
-            setOpenModuleId(null);
-          },
-          title: 'Trigger + pipeline of nodes — every cron-fetch workflow lives here',
+        title: 'Skills on a schedule',
+      },
+      {
+        id: 'skills',
+        label: 'Skills',
+        icon: 'S',
+        isActive: tab === 'skills' && !openModuleId,
+        onClick: () => {
+          setTab('skills');
+          setOpenModuleId(null);
+          setFocusedSkillId(null);
         },
-      ],
-    },
-  ];
+        title: 'SKILL.md prompts (the things Jarvis runs)',
+      },
+      {
+        id: 'workflows',
+        label: 'Workflows',
+        icon: 'W',
+        isActive: tab === 'workflows' && !openModuleId,
+        onClick: () => {
+          setTab('workflows');
+          setOpenModuleId(null);
+        },
+        title: 'Trigger + pipeline of nodes — every cron-fetch workflow lives here',
+      },
+      {
+        id: 'projects',
+        label: 'Projects',
+        icon: 'P',
+        isActive: tab === 'projects' && !openModuleId,
+        onClick: () => {
+          setTab('projects');
+          setOpenModuleId(null);
+        },
+        title: 'Project scopes for task cwd + memory',
+      },
+    ],
+  };
+
+  const sidebarSections: SidebarSection[] =
+    uiMode === 'working'
+      ? [workingSection, captureSection]
+      : uiMode === 'observing'
+        ? [observingSection]
+        : [buildingSection];
 
   return (
     <div className="shell">
@@ -610,6 +693,42 @@ export function Shell({ status }: Props) {
             aria-label="Navigate forward"
           >
             →
+          </button>
+        </div>
+        <div
+          className="shell__mode-toggle"
+          role="tablist"
+          aria-label="UI mode"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={uiMode === 'working'}
+            className={`shell__mode-tab${uiMode === 'working' ? ' shell__mode-tab--active' : ''}`}
+            onClick={() => switchMode('working')}
+            title="Daily-driver: Dashboard, Inbox, Drafts, Notes"
+          >
+            Working
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={uiMode === 'observing'}
+            className={`shell__mode-tab${uiMode === 'observing' ? ' shell__mode-tab--active' : ''}`}
+            onClick={() => switchMode('observing')}
+            title="See what Jarvis is doing: Observatory, AI Agent, Activity"
+          >
+            Observing
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={uiMode === 'building'}
+            className={`shell__mode-tab${uiMode === 'building' ? ' shell__mode-tab--active' : ''}`}
+            onClick={() => switchMode('building')}
+            title="Configure: Routines, Skills, Workflows, Projects"
+          >
+            Building
           </button>
         </div>
         <div className="shell__right">
