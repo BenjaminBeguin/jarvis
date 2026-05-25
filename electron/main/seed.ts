@@ -109,6 +109,21 @@ const WORKFLOW_STALE_DETECTORS: Record<
     const last = def.pipeline[def.pipeline.length - 1];
     return last?.type === 'batch-prompt-output';
   },
+  // Gmail autopilot v1 AGENT_PROMPT told the skill to emit
+  // archive items as drafts whose BODY was "(suggest archive —
+  // reason)". The skill (gmail-triage) has since migrated to v4
+  // LLM-chosen actions[], but the workflow's run-skill prompt was
+  // still overriding it with the v1 instruction — producing drafts
+  // with that literal body and a single Send button. Detect that
+  // exact phrase in the run-skill node and rewrite.
+  'autopilot-gmail-triage': (def) => {
+    const runSkill = def.pipeline.find((n) => n.type === 'run-skill');
+    if (!runSkill) return false;
+    const prompt = (runSkill.params as { prompt?: string })?.prompt;
+    return (
+      typeof prompt === 'string' && prompt.includes('(suggest archive — reason)')
+    );
+  },
 };
 
 /**

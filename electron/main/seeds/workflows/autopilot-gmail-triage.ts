@@ -47,9 +47,15 @@ const PROJECT_FN = `(() => {
   }).filter((r) => r.id && r.threadId && r.from);
 })()`;
 
-const AGENT_PROMPT = `You triage the following Gmail messages. Read \`~/.jarvis/triage-policy.md\` first; it governs what to archive, what to draft, and what tone to use.
+const AGENT_PROMPT = `Triage the following Gmail messages. Read \`~/.jarvis/triage-policy.md\` first; it governs what to archive, what to draft, what tone to use, and any per-person overrides.
 
-Apply the rules and output a JSON array of draft objects shaped exactly for the \`draft-store-write\` node (see your system prompt for the full schema). Rows you'd \`ignore\` are dropped entirely; rows you'd \`archive\` still appear with a \`(suggest archive — reason)\` body so I can confirm.
+Output a JSON array shaped exactly as your system prompt specifies — one row per non-ignored message, each carrying 1-3 LLM-chosen \`actions\` (Send / Archive / Star / Forward / Decline / Snooze / …) that match what THIS user would actually want to do with THIS message. Don't default to a single Send button.
+
+Rules to internalize:
+- For messages you'd \`ignore\` (receipts, password resets, transactional): drop the row entirely.
+- For archive-worthy messages (newsletters, bot notifications, irrelevant promos): emit a row whose PRIMARY action is \`archive\` — \`requiresBody: false\` + sendAction \`modify_labels\` with \`removeLabelIds: ["INBOX"]\`. NEVER put \`(suggest archive — reason)\` in the body — archive is a real, dispatchable action now, not a hint.
+- For real correspondence: emit a reply action as primary with a draft body the user can edit, plus contextual alternatives (Archive instead / Decline politely / Forward to X / Star for later) based on the message.
+- The \`body\` field is what gets sent if the user picks any \`requiresBody: true\` action. Use it for reply text only. For archive-only rows: empty string.
 
 Input messages:
 \`\`\`json
