@@ -1,7 +1,14 @@
-import type { Module } from './types.js';
+import type { Reminder } from '@shared/types';
+
+import type { Module, ModuleContext } from './types.js';
+
+// Captured in onLoad so onUnload — which doesn't receive ctx — can
+// still call unregister. Module is a singleton; safe to hold one ref.
+let savedCtx: ModuleContext | null = null;
 
 /**
- * The Reminders module ships two palette intents:
+ * The Reminders module ships two palette intents + the reminders
+ * ambient-context provider.
  *
  *   /remind <body with time> — create a reminder or scheduled action.
  *     Parses the body via the shared free-text intent router; reuses
@@ -13,6 +20,10 @@ import type { Module } from './types.js';
  *   /reminders — open the merged Notes & Reminders page on the
  *     Reminders tab. Pure navigation.
  *
+ * The context provider surfaces pending reminders firing in the next
+ * 24h so any Claude turn can answer "what do I have set?" / "what
+ * fires today?" from cached context — no tool round-trip.
+ *
  * Reminders themselves are owned by ReminderStore in main, surfaced
  * through the existing list / cancel / remove / fireNow / markDone
  * IPC handlers.
@@ -23,6 +34,17 @@ export const remindersModule: Module = {
   description:
     'Create reminders via /remind and browse them via /reminders. Both reminder-style nudges and scheduled actions ("in 2h, …") are supported.',
   version: '1.0.0',
+  onLoad(ctx) {
+    savedCtx = ctx;
+    ctx.registerContextProvider({
+      name: 'reminders',
+      build: () => buildRemindersContext(ctx.listReminders()),
+    });
+  },
+  onUnload() {
+    savedCtx?.unregisterContextProvider('reminders');
+    savedCtx = null;
+  },
   intents: [
     {
       id: 'create',
@@ -117,3 +139,32 @@ export const remindersModule: Module = {
     },
   ],
 };
+
+/**
+ * Pending reminders firing in the next 24h. Past-due ones (status
+ * pending but fireAt < now) are included with a LATE marker — they
+ * didn't fire (likely because Jarvis was paused at the time) and the
+ * user might want to act on them. Returns null when nothing's queued,
+ * so the provider stays silent.
+ */
+function buildRemindersContext(reminders: Reminder[]): string | null {
+  const now = Date.now();
+  const horizon = now + 24 * 60 * 60 * 1000;
+  const due = reminders
+    .filter((r) => r.status === 'pending' && r.fireAt <= horizon)
+    .sort((a, b) => a.fireAt - b.fireAt)
+    .slice(0, 5);
+  if (due.length === 0) return null;
+  const lines = due.map((r) => {
+    const late = r.fireAt < now - 60_000 ? ' (LATE)' : '';
+    const when = new Date(r.fireAt).toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    const kind = r.mode === 'scheduled' ? 'action' : 'nudge';
+    const body = r.body.length > 70 ? `${r.body.slice(0, 70)}…` : r.body;
+    return `  - ${when}${late} [${kind}] ${body}`;
+  });
+  return `- Reminders next 24h:\n${lines.join('\n')}`;
+}

@@ -134,11 +134,9 @@ import { voiceModule } from './modules/voice/index.js';
 import {
   activeProjectProfileProvider,
   activeProjectProvider,
-  calendarProvider,
   inboxHighlightsProvider,
   projectsProvider,
   recentTaskProvider,
-  remindersProvider,
   runtimeProvider,
   timeProvider,
   UserContextStore,
@@ -318,16 +316,16 @@ meetingActivity.on('status', (status) => {
 // of round-tripping through tools.
 //
 // Order matters — first registered is first in the prepended block, which
-// also fixes the prompt-cache prefix shape. Modules can add more via
-// `ctx.registerContextProvider(...)`.
+// also fixes the prompt-cache prefix shape. Module-owned providers (e.g.
+// calendar, reminders) register themselves in their module's onLoad, so
+// they land AFTER these core ones in the final block — see
+// modules/calendar.ts and modules/reminders.ts for the reference pattern.
 userContext.register(timeProvider);
 userContext.register(runtimeProvider(() => getTrayMenuState()));
 userContext.register(activeProjectProvider(userContext));
 userContext.register(activeProjectProfileProvider(userContext, projects));
 userContext.register(projectsProvider(projects));
-userContext.register(calendarProvider(inbox));
 userContext.register(inboxHighlightsProvider(inbox));
-userContext.register(remindersProvider(reminders));
 userContext.register(recentTaskProvider(runner));
 
 // Built-in inbox sources — all direct JS, no agent fires.
@@ -1149,6 +1147,7 @@ app.whenReady().then(async () => {
     },
     broadcast: (channel, payload) => broadcast(channel, payload),
     registerContextProvider: (provider) => userContext.register(provider),
+    unregisterContextProvider: (name) => userContext.unregister(name),
     logActivity: (event) => activity.record(event),
     routePrompt: (input, opts) =>
       routePrompt(input, opts ?? {}, {
@@ -1194,6 +1193,7 @@ app.whenReady().then(async () => {
         detail: { paused: value },
       });
     },
+    listInboxItems: () => inbox.list(),
     listReminders: () => reminders.list(),
     markReminderDone: (id) => {
       const before = reminders.list().find((r) => r.id === id);

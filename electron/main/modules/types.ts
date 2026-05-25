@@ -1,6 +1,7 @@
 import type {
   ActivityEventInput,
   CostBreakdown,
+  InboxItem,
   LaunchTaskRequest,
   ModuleSettingsSpec,
   ProjectDef,
@@ -103,10 +104,19 @@ export interface ModuleContext {
    * Add a provider to the ambient user-context block that's prepended to
    * every task's system prompt. Examples: calendar event in progress,
    * currently-open app, weather. Provider's `build()` is called on every
-   * task launch, so keep it cheap (cache where possible). Re-registering
-   * by the same `name` replaces the previous instance.
+   * task launch, so keep it cheap (<5ms; read RAM / cached files only).
+   * Re-registering by the same `name` replaces the previous instance.
+   *
+   * Modules SHOULD pair this with an `unregisterContextProvider` call in
+   * `onUnload` so disabling the module also drops its ambient context.
+   * The reference implementations live in `modules/calendar.ts` and
+   * `modules/reminders.ts`.
    */
   registerContextProvider(provider: UserContextProvider): void;
+  /** Remove a previously-registered provider by name. Use in `onUnload`
+   *  so disabling the module cleans up its ambient context. Safe to call
+   *  for an unregistered name (no-op). */
+  unregisterContextProvider(name: string): void;
   /**
    * Record a non-agent side-effect for the Activity tab — meeting
    * started, note archived, MCP disabled, etc. Cheap; fire-and-forget.
@@ -153,6 +163,12 @@ export interface ModuleContext {
   isPaused(): boolean;
   /** Flip the global pause flag. Broadcasts; tray + UI react. */
   setPaused(value: boolean): void;
+  /** Snapshot of every inbox item across every source (pr, slack,
+   *  linear, calendar, smart, reminders, …). Read-only; mutations
+   *  belong to the source workflows / skills that own the writes.
+   *  Used by context providers and module surfaces that want to
+   *  reason over the unified feed. */
+  listInboxItems(): InboxItem[];
   /** Snapshot of all reminders, newest pending first (same ordering as
    *  the Reminders page). Used by the Telegram bot for /reminders list
    *  and for snooze button context. */

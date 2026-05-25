@@ -6,14 +6,12 @@ import { promisify } from 'node:util';
 
 import type {
   InboxItem,
-  Reminder,
   TaskSummary,
   TrayMenuState,
 } from '@shared/types';
 
 import type { InboxStore } from './inbox.js';
 import type { ProjectStore } from './projects.js';
-import type { ReminderStore } from './reminders.js';
 import type { TaskRunner } from './task-runner.js';
 
 const execFileAsync = promisify(execFile);
@@ -48,6 +46,11 @@ export class UserContextStore {
     const i = this.providers.findIndex((p) => p.name === provider.name);
     if (i >= 0) this.providers[i] = provider;
     else this.providers.push(provider);
+  }
+
+  unregister(name: string): void {
+    const i = this.providers.findIndex((p) => p.name === name);
+    if (i >= 0) this.providers.splice(i, 1);
   }
 
   setActiveProject(name: string | null): void {
@@ -224,100 +227,6 @@ export function recentTaskProvider(runner: TaskRunner): UserContextProvider {
 }
 
 /**
- * Calendar context — next meeting, today's events, tomorrow + week shape.
- * Reads from the inbox (source='calendar', written by the calendar-today-sync
- * workflow). No live MCP call → cheap + cached. Falls back to silence if no
- * calendar events have been synced yet (no connected Google account, paused,
- * etc.).
- *
- * Format is deliberately compact — the agent only needs enough to answer
- * "what's my plan today / when's my next meeting / how busy am I" without
- * a tool call. For deep dives ("who's on the standup?"), the agent can
- * still call the calendar MCP.
- */
-export function calendarProvider(inbox: InboxStore): UserContextProvider {
-  return {
-    name: 'calendar',
-    build() {
-      const items = inbox
-        .list()
-        .filter((i) => i.source === 'calendar' && typeof i.fireAt === 'number')
-        .sort((a, b) => (a.fireAt ?? 0) - (b.fireAt ?? 0));
-      if (items.length === 0) return null;
-
-      const now = Date.now();
-      const startOfToday = startOfDay(now);
-      const startOfTomorrow = startOfToday + 24 * 60 * 60 * 1000;
-      const startOfDayAfter = startOfTomorrow + 24 * 60 * 60 * 1000;
-      const endOfWeek = startOfToday + 7 * 24 * 60 * 60 * 1000;
-
-      const upcoming = items.filter((i) => (i.fireAt ?? 0) >= now - 60_000);
-      const todays = upcoming.filter(
-        (i) => (i.fireAt ?? 0) < startOfTomorrow,
-      );
-      const tomorrows = upcoming.filter(
-        (i) =>
-          (i.fireAt ?? 0) >= startOfTomorrow &&
-          (i.fireAt ?? 0) < startOfDayAfter,
-      );
-      const weekRest = upcoming.filter((i) => (i.fireAt ?? 0) < endOfWeek);
-
-      const lines: string[] = ['- Calendar (auto-synced):'];
-
-      const next = upcoming[0];
-      if (next) {
-        const startMs = next.fireAt ?? 0;
-        const mins = Math.round((startMs - now) / 60_000);
-        const when =
-          mins <= 0
-            ? 'now'
-            : mins < 60
-              ? `in ${mins}m`
-              : `at ${hhmm(startMs)}${mins < 24 * 60 ? '' : ' tomorrow'}`;
-        lines.push(`  - Next: ${trimTitle(next.title)} ${when}`);
-      } else {
-        lines.push('  - Next: (nothing on the horizon)');
-      }
-
-      if (todays.length > 0) {
-        const compact = todays
-          .slice(0, 5)
-          .map((i) => `${hhmm(i.fireAt ?? 0)} ${trimTitle(i.title, 40)}`)
-          .join('; ');
-        lines.push(`  - Today (${todays.length}): ${compact}`);
-      } else {
-        lines.push('  - Today: nothing left');
-      }
-
-      if (tomorrows.length > 0) {
-        const compact = tomorrows
-          .slice(0, 5)
-          .map((i) => `${hhmm(i.fireAt ?? 0)} ${trimTitle(i.title, 40)}`)
-          .join('; ');
-        lines.push(`  - Tomorrow (${tomorrows.length}): ${compact}`);
-      }
-
-      // Week-shape: dump per-day counts so the agent can say "heavy
-      // Wed/Thu, light Friday" without us doing the heuristic for it.
-      if (weekRest.length > 0) {
-        const byDay = new Map<string, number>();
-        for (const i of weekRest) {
-          const d = new Date(i.fireAt ?? 0);
-          const key = d.toLocaleDateString(undefined, { weekday: 'short' });
-          byDay.set(key, (byDay.get(key) ?? 0) + 1);
-        }
-        const summary = Array.from(byDay.entries())
-          .map(([day, n]) => `${day}:${n}`)
-          .join(' ');
-        lines.push(`  - Week-shape (next 7d, meetings/day): ${summary}`);
-      }
-
-      return lines.join('\n');
-    },
-  };
-}
-
-/**
  * Inbox highlights — top items the smart-curate loop flagged + any
  * fire-soon time-pressured items. So the agent answers "who's waiting
  * on me / what's urgent / what should I do next" from cached context.
@@ -413,62 +322,7 @@ export function runtimeProvider(
   };
 }
 
-/**
- * Reminders firing in the next 24h. So the agent can answer "what
- * reminders do I have set?" without polling the store, and so any skill
- * that drafts a plan ("can you brief me?") naturally weaves in scheduled
- * actions.
- *
- * Past-due (status='pending' but fireAt < now) are included with a `late`
- * marker — they didn't fire (likely because Jarvis was paused at the
- * time) and the user might want to act on them.
- */
-export function remindersProvider(
-  reminders: ReminderStore,
-): UserContextProvider {
-  return {
-    name: 'reminders',
-    build() {
-      const now = Date.now();
-      const horizon = now + 24 * 60 * 60 * 1000;
-      const due = reminders
-        .list()
-        .filter(
-          (r: Reminder) =>
-            r.status === 'pending' && r.fireAt <= horizon,
-        )
-        .sort((a, b) => a.fireAt - b.fireAt)
-        .slice(0, 5);
-      if (due.length === 0) return null;
-      const lines = due.map((r) => {
-        const late = r.fireAt < now - 60_000 ? ' (LATE)' : '';
-        const when = hhmm(r.fireAt);
-        const kind = r.mode === 'scheduled' ? 'action' : 'nudge';
-        const body =
-          r.body.length > 70 ? `${r.body.slice(0, 70)}…` : r.body;
-        return `  - ${when}${late} [${kind}] ${body}`;
-      });
-      return `- Reminders next 24h:\n${lines.join('\n')}`;
-    },
-  };
-}
-
 // ─── helpers ─────────────────────────────────────────────────────────────────
-
-function startOfDay(ms: number): number {
-  const d = new Date(ms);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function hhmm(ms: number): string {
-  const d = new Date(ms);
-  return d.toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-}
 
 function trimTitle(s: string, max = 60): string {
   return s.length > max ? `${s.slice(0, max)}…` : s;
