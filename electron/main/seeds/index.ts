@@ -29,6 +29,8 @@ import skillAuthor from './skills/skill-author.js';
 import slackDmAck from './skills/slack-dm-ack.js';
 import slackInbox from './skills/slack-inbox.js';
 import status from './skills/status.js';
+import techWatch from './skills/tech-watch.js';
+import techWatchCalibrate from './skills/tech-watch-calibrate.js';
 import ticketToPr from './skills/ticket-to-pr.js';
 import triageCalibrate from './skills/triage-calibrate.js';
 import todayFocus from './skills/today-focus.js';
@@ -62,6 +64,8 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'slack-dm-ack', body: slackDmAck },
   { name: 'slack-inbox', body: slackInbox },
   { name: 'status', body: status },
+  { name: 'tech-watch', body: techWatch },
+  { name: 'tech-watch-calibrate', body: techWatchCalibrate },
   { name: 'ticket-to-pr', body: ticketToPr },
   { name: 'triage-calibrate', body: triageCalibrate },
   { name: 'today-focus', body: todayFocus },
@@ -73,5 +77,6 @@ export {
   SAMPLE_INBOX_PRIORITIES,
   SAMPLE_MCP_CONFIG,
   SAMPLE_PROJECTS,
+  SAMPLE_TECH_WATCH,
   SAMPLE_TRIAGE_POLICY,
 } from './samples.js';

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import type {
   AppMode,
@@ -382,7 +382,37 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
 
       {error && <div className="inbox__error">{error}</div>}
 
-      <SmartInboxNudge />
+      <CalibrationNudge
+        filename="inbox-priorities.md"
+        placeholderSubstrings={['(e.g. "Manager', '(e.g. "ship-q4']}
+        skillId="inbox-calibrate"
+        prompt='Walk me through calibrating the Smart inbox. Read my recent items + priorities and ask 3-5 focused questions.'
+        headline="Smart inbox needs calibration."
+        body={
+          <>
+            The curator is running on weak defaults until you tell it who +
+            what matters to you. Run <code>/inbox-calibrate</code> (3-5 quick
+            questions) and the Smart section sharpens up on the next 15-min
+            tick.
+          </>
+        }
+        ctaLabel="Calibrate now →"
+      />
+      <CalibrationNudge
+        filename="tech-watch.md"
+        placeholderSubstrings={['(e.g. "AI infra', '(e.g. "https://news.ycombinator.com']}
+        skillId="tech-watch-calibrate"
+        prompt='Walk me through setting up tech-watch. Help me list topics, RSS feeds, and newsletter senders.'
+        headline="Tech watch needs setup."
+        body={
+          <>
+            Tell me what to watch and I'll pull a daily digest from RSS +
+            your newsletters at 8 AM. Run <code>/tech-watch-calibrate</code>{' '}
+            (3 quick questions) — the next morning's digest reflects it.
+          </>
+        }
+        ctaLabel="Set up tech watch →"
+      />
 
 
       {items.length === 0 && refreshing && (
@@ -863,6 +893,7 @@ const SOURCE_ORDER: Record<string, { rank: number; label: string }> = {
   slack: { rank: 5, label: 'Slack · waiting on you' },
   calendar: { rank: 6, label: 'Calendar' },
   'meeting-activity': { rank: 7, label: 'Mic active' },
+  'tech-watch': { rank: 7.5, label: 'Tech watch · industry' },
   dedupe: { rank: 8, label: 'Possible duplicates' },
 };
 
@@ -1109,31 +1140,40 @@ function InboxSettingsPopover({
 }
 
 /**
- * Discoverability nudge for the Smart inbox curation loop. Surfaces a
- * one-time callout when `~/.jarvis/inbox-priorities.md` still matches
- * the seeded placeholder — i.e. the user hasn't told the curator
- * what matters to them yet, so the Smart section is running on weak
- * heuristics. Click "Calibrate now" fires the inbox-calibrate skill.
+ * Discoverability nudge for any markdown-config calibration loop —
+ * Smart inbox today, tech-watch tomorrow. Surfaces a one-time callout
+ * when the config file at `~/.jarvis/<filename>` still matches a
+ * seeded placeholder substring, then disappears once the user edits
+ * the file (no second-guessing their prefs).
  *
- * Hidden as soon as the file diverges from the placeholder (no
- * second-guessing the user's prefs).
+ * Clicking the CTA launches the named skill as a multi-turn task and
+ * pops the global TaskOverlay (the Answer HUD is too easy to miss on
+ * a big screen, and history showed users rage-clicking nudges they
+ * thought weren't doing anything).
  */
-function SmartInboxNudge() {
+function CalibrationNudge(props: {
+  filename: string;
+  placeholderSubstrings: string[];
+  skillId: string;
+  prompt: string;
+  headline: string;
+  body: ReactNode;
+  ctaLabel: string;
+}) {
+  const { filename, placeholderSubstrings, skillId, prompt, headline, body, ctaLabel } = props;
   const [needsCalibration, setNeedsCalibration] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const stillPlaceholder = (contents: string): boolean =>
+    placeholderSubstrings.some((s) => contents.includes(s));
 
   useEffect(() => {
     let cancelled = false;
     void window.jarvis
-      .readJarvisFile('inbox-priorities.md')
+      .readJarvisFile(filename)
       .then((contents) => {
         if (cancelled) return;
-        // The seeded scaffold uses these literal placeholder bullets
-        // — they only stay in the file if the user hasn't edited it.
-        const isPlaceholder =
-          contents.includes('(e.g. "Manager') ||
-          contents.includes('(e.g. "ship-q4');
-        setNeedsCalibration(isPlaceholder);
+        setNeedsCalibration(stillPlaceholder(contents));
       })
       .catch(() => {
         // File missing (pre-seed install): suggest calibration too.
@@ -1142,7 +1182,8 @@ function SmartInboxNudge() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filename, placeholderSubstrings.join('|')]);
 
   if (!needsCalibration) return null;
 
@@ -1150,28 +1191,18 @@ function SmartInboxNudge() {
     setBusy(true);
     try {
       const summary = await window.jarvis.launchTask({
-        skillId: 'inbox-calibrate',
-        prompt:
-          'Walk me through calibrating the Smart inbox. Read my recent items + priorities and ask 3-5 focused questions.',
+        skillId,
+        prompt,
         origin: 'palette',
       });
-      // Calibration is a multi-turn conversation. The Answer HUD
-      // ships a tiny top-right card that's easy to miss on a big
-      // screen — and history shows users rage-click the nudge
-      // multiple times because they don't notice it. Pop the global
-      // TaskOverlay (full transcript, big reply box, can't be missed)
-      // over the current view; HUD stays as a secondary surface.
       void window.jarvis.showAnswerHud(summary.id);
       openTaskOverlay(summary.id);
     } finally {
       setBusy(false);
-      // Re-check the file after the calibrator runs (the skill
-      // appends; if anything landed the nudge auto-hides).
       void window.jarvis
-        .readJarvisFile('inbox-priorities.md')
+        .readJarvisFile(filename)
         .then((c) => {
-          const stillPlaceholder = c.includes('(e.g. "Manager');
-          setNeedsCalibration(stillPlaceholder);
+          setNeedsCalibration(stillPlaceholder(c));
         })
         .catch(() => undefined);
     }
@@ -1180,20 +1211,15 @@ function SmartInboxNudge() {
   return (
     <div className="inbox__nudge">
       <div className="inbox__nudge-body">
-        <strong>Smart inbox needs calibration.</strong>
-        <p>
-          The curator is running on weak defaults until you tell it who +
-          what matters to you. Run <code>/inbox-calibrate</code> (3-5 quick
-          questions) and the Smart section sharpens up on the next 15-min
-          tick.
-        </p>
+        <strong>{headline}</strong>
+        <p>{body}</p>
       </div>
       <button
         className="inbox__nudge-cta"
         onClick={() => void runCalibrate()}
         disabled={busy}
       >
-        {busy ? 'Launching…' : 'Calibrate now →'}
+        {busy ? 'Launching…' : ctaLabel}
       </button>
     </div>
   );

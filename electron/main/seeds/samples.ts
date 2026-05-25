@@ -144,6 +144,62 @@ defaults above.)
 Calibration appends timestamped entries here.
 `;
 
+/**
+ * Initial calibration file for the tech-watch loop. Lives at
+ * `~/.jarvis/tech-watch.md`. The `tech-watch` skill reads it on each
+ * fire (8 AM weekdays) to pull RSS feeds, run a topic-grounded
+ * WebSearch fallback, and summarise newsletters from the listed
+ * Gmail senders. `/tech-watch-calibrate` walks the user through
+ * filling it in.
+ *
+ * Same `(e.g. "...")` placeholder convention as inbox-priorities.md —
+ * the Inbox nudge substring-matches one of these to know the file
+ * hasn't been customised yet.
+ */
+export const SAMPLE_TECH_WATCH = `# Tech watch
+
+The tech-watch loop reads this file once a day (8 AM weekdays) and
+writes a ranked digest to your Inbox under "Tech watch · industry".
+Edit freely. Run \`/tech-watch-calibrate\` for a guided setup.
+
+## Topics
+
+What's your industry / what should I be watching? Free text bullets.
+Used to score RSS items and (when feeds are thin) to drive a
+WebSearch fallback.
+
+- (e.g. "AI infra: LLMs, embeddings, vector DBs, inference cost")
+- (e.g. "Productivity software, project management, async work")
+
+## RSS feeds
+
+URLs, one per line. Anything Atom or RSS is fine. Examples below —
+delete and replace with your own. Keep this list short: 5–10 feeds is
+enough to fill the daily digest without bloat.
+
+- (e.g. "https://news.ycombinator.com/rss")
+- (e.g. "https://stratechery.com/feed/")
+
+## Newsletter senders
+
+Gmail \`from:\` patterns — exact addresses or domains. Only senders
+listed here get checked; nothing else from your inbox is touched.
+
+- (e.g. "from:newsletter@stratechery.com")
+- (e.g. "from:noreply@substack.com")
+
+## Mute
+
+Terms in title or body that should drop an item from the digest.
+
+- (e.g. "crypto, NFT, web3")
+- (e.g. "show HN")
+
+## Running notes
+
+(Calibration appends timestamped entries here.)
+`;
+
 export const SAMPLE_MCP_CONFIG = `{
   "//": "Define custom MCP servers globally; skills opt-in via mcp-servers: [name] in their frontmatter, or 'mcp-servers: [\\"*\\"]' to inherit everything here. Copy this file to ~/.jarvis/mcp.json (drop the .example) and fill in any tokens.",
 

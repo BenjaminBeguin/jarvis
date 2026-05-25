@@ -8,6 +8,7 @@ import {
   SAMPLE_INBOX_PRIORITIES,
   SAMPLE_MCP_CONFIG,
   SAMPLE_PROJECTS,
+  SAMPLE_TECH_WATCH,
   SAMPLE_TRIAGE_POLICY,
 } from './seeds/index.js';
 import { BUILTIN_WORKFLOWS } from './seeds/workflows/index.js';
@@ -289,6 +290,10 @@ export function seedDefaultsIfEmpty(): void {
   // for people / defaults / tone. Seeded once with placeholders; the
   // user edits and the next workflow tick reflects the changes.
   writeIfMissing(join(root, 'triage-policy.md'), SAMPLE_TRIAGE_POLICY);
+  // Tech-watch calibration: read by the tech-watch skill on every
+  // run to discover RSS feeds, newsletter senders and topic interests.
+  // /tech-watch-calibrate walks the user through filling it in.
+  writeIfMissing(join(root, 'tech-watch.md'), SAMPLE_TECH_WATCH);
 
   // Each built-in skill seeds only if missing. New built-ins added in later
   // versions show up automatically; user-authored skills are never touched.
