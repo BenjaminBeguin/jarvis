@@ -3,16 +3,14 @@ import { useEffect, useState } from 'react';
 import type { AppStatus, ConnectorSummary, WorkflowDef } from '../../shared/types';
 
 /**
- * Slim banner shown at the top of Working mode when the user has
- * critical setup gaps. Quietly disappears once everything's in place.
+ * Slim banner shown at the top of the shell body whenever the user
+ * has critical setup gaps. Quietly disappears once everything's in
+ * place.
  *
  * Heuristic — show only when at least ONE of these is missing:
  *   - auth (no signed-in mode)
  *   - any of the three major integrations (google, slack, github)
  *   - any enabled autopilot workflow
- *
- * Less critical items (working hours, policy customization) still
- * surface in the Setup checklist itself, but don't trigger the nudge.
  *
  * Dismissable for the session — the close button hides it until the
  * user reopens the app. Storing in sessionStorage instead of
@@ -111,7 +109,7 @@ export function SetupNudge({ onSwitchToSetup }: Props) {
         className="setup-nudge__action"
         onClick={onSwitchToSetup}
       >
-        Open Setup
+        Configure
       </button>
       <button
         type="button"

@@ -20461,258 +20461,79 @@ button:disabled:hover {
   border-bottom: 1px dotted var(--accent);
 }
 
-/* ─── UI mode toggle (header pill) ─────────────────────────────── */
+/* ─── System pulse — at-a-glance Dashboard status strip ───────── */
 
-.shell__mode-toggle {
+.system-pulse {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 24px 16px;
+}
+
+.system-pulse__chip {
+  appearance: none;
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 0;
-  margin: 0 12px;
-  padding: 2px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.18);
-  /* shell__nav is the window-drag region in Electron; without
-     no-drag, the toggle pills swallow clicks into the OS drag
-     handler. Same pattern as the back/forward arrows. */
-  -webkit-app-region: no-drag;
-}
-
-.shell__mode-tab {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 4px 12px;
-  border-radius: 999px;
-  cursor: pointer;
-  transition:
-    color 140ms ease,
-    background 140ms ease;
-  -webkit-app-region: no-drag;
-}
-
-.shell__mode-tab:hover:not(.shell__mode-tab--active) {
-  color: var(--text);
-}
-
-.shell__mode-tab--active {
-  background: var(--accent);
-  color: #000;
-  box-shadow: 0 0 12px rgba(255, 165, 0, 0.25);
-}
-
-/* ─── Setup guide page ─────────────────────────────────────────── */
-
-/* The shell body is a flex container with no overflow of its own —
-   the view itself has to be the scroll container. Without flex: 1
-   + overflow-y: auto, long checklists clip silently when the
-   viewport is shorter than the content. */
-.setup-guide {
-  flex: 1;
-  overflow-y: auto;
-  padding: 28px 32px 60px;
-}
-
-.setup-guide__hero,
-.setup-guide__groups {
-  max-width: 880px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.setup-guide__hero {
-  margin-bottom: 28px;
-}
-
-.setup-guide__title {
-  margin: 0 0 6px 0;
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.setup-guide__subtitle {
-  margin: 0 0 18px 0;
-  font-size: 13px;
-  color: var(--muted);
-  max-width: 620px;
-  line-height: 1.5;
-}
-
-.setup-guide__progress {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.setup-guide__progress-bar {
-  position: relative;
-  flex: 1;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.setup-guide__progress-fill {
-  height: 100%;
-  background: linear-gradient(
-    90deg,
-    var(--accent),
-    rgba(255, 165, 0, 0.7)
-  );
-  border-radius: 2px;
-  transition: width 320ms ease;
-}
-
-.setup-guide__progress-label {
-  display: flex;
-  gap: 10px;
-  font-family: var(--mono);
-  font-size: 11px;
-}
-
-.setup-guide__stat--done {
-  color: #9ece6a;
-}
-.setup-guide__stat--partial {
-  color: #ffa500;
-}
-.setup-guide__stat--pending {
-  color: var(--muted);
-}
-
-.setup-guide__groups {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-}
-
-.setup-group__title {
-  margin: 0 0 10px 0;
-  font-size: 11px;
-  font-family: var(--mono);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.setup-group__items {
-  display: flex;
-  flex-direction: column;
   gap: 8px;
-}
-
-.setup-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 14px 16px;
+  padding: 6px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.02);
-  transition: border-color 140ms ease, background 140ms ease;
-}
-
-.setup-card:hover {
-  border-color: var(--border-strong);
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.setup-card--done {
-  border-left: 2px solid #9ece6a;
-}
-.setup-card--partial {
-  border-left: 2px solid #ffa500;
-}
-.setup-card--pending {
-  border-left: 2px solid rgba(255, 255, 255, 0.18);
-}
-
-.setup-card__head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.setup-card__status {
-  font-family: var(--mono);
-  font-size: 14px;
-  line-height: 1;
-}
-.setup-card__status--done {
-  color: #9ece6a;
-}
-.setup-card__status--partial {
-  color: #ffa500;
-}
-.setup-card__status--pending {
-  color: rgba(255, 255, 255, 0.35);
-}
-
-.setup-card__title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.setup-card__description {
-  margin: 0;
-  padding-left: 24px;
-  color: var(--muted);
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-
-.setup-card__foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-left: 24px;
-  gap: 12px;
-}
-
-.setup-card__hint {
-  color: var(--muted);
-  font-size: 11px;
-  font-family: var(--mono);
-}
-
-.setup-card__action {
-  appearance: none;
-  padding: 5px 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  background: transparent;
   color: var(--text);
   font-size: 12px;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease;
 }
 
-.setup-card__action:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: var(--accent);
+.system-pulse__chip:hover {
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.04);
+  transform: translateY(-1px);
 }
 
-.setup-card__action--pending {
-  background: var(--accent);
-  color: #000;
-  border-color: var(--accent);
+.system-pulse__chip-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
-.setup-card__action--pending:hover {
-  background: var(--accent);
-  filter: brightness(1.1);
+.system-pulse__chip-value {
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--text);
 }
 
-/* ─── Setup nudge banner (Working mode only) ──────────────────── */
+.system-pulse__chip--accent .system-pulse__chip-value {
+  color: var(--accent);
+}
+
+.system-pulse__chip--alert {
+  border-color: rgba(255, 165, 0, 0.32);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 165, 0, 0.06),
+    rgba(255, 165, 0, 0.01)
+  );
+}
+
+.system-pulse__chip--alert .system-pulse__chip-label {
+  color: var(--accent);
+}
+
+.system-pulse__chip-dot {
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+  margin-left: -2px;
+}
+
+/* ─── Setup nudge banner ───────────────────────────────────────── */
 
 .setup-nudge {
   display: flex;

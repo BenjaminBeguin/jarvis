@@ -13,6 +13,7 @@ import type {
 } from '../../shared/types';
 import { Inbox } from './Inbox';
 import { MarkdownDoc } from './MarkdownText';
+import { SystemPulse } from './SystemPulse';
 import {
   ScheduledItemDetail,
   formatClockTime,
@@ -173,6 +174,8 @@ export function Dashboard() {
           </button>
         </div>
       </header>
+
+      <SystemPulse />
 
       {config.sections.length === 0 && (
         <div className="dash__empty">
