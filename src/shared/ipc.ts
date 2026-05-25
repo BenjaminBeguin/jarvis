@@ -270,6 +270,16 @@ export const IpcChannels = {
   testIntegrationAccount: 'integrations:testAccount',
   integrationsChanged: 'integrations:changed',
 
+  // ─── AI Drafts ───────────────────────────────────────────────────
+  listDrafts: 'drafts:list',
+  getDraft: 'drafts:get',
+  updateDraftBody: 'drafts:updateBody',
+  refineDraft: 'drafts:refine',
+  sendDraft: 'drafts:send',
+  discardDraft: 'drafts:discard',
+  revertDraft: 'drafts:revert',
+  draftsChanged: 'drafts:changed',
+
   // ─── Workflows ───────────────────────────────────────────────────
   listWorkflows: 'workflows:list',
   saveWorkflow: 'workflows:save',

@@ -2,25 +2,19 @@ import type { WorkflowDef } from '@shared/types';
 
 /**
  * Autopilot scenario — for each unaddressed review comment on the
- * user's open PRs, draft a per-comment plan, judgment, and reply.
+ * user's most-recently-updated open PR, draft a reply ready to be
+ * posted from the Drafts tab.
  *
- *   trigger:  autopilot · cron 15m
+ *   trigger:  autopilot · cron 15m (gated by appMode === 'autopilot')
  *   pipeline: shell(gh search prs --author @me)
  *             → transform (parse + pick most-recently-updated PR)
- *             → run-skill (pr-address-comments returns JSON array,
- *                          one row per comment)
- *             → batch-prompt-output (table HUD, per-comment Accept)
+ *             → run-skill (pr-comments-triage returns JSON array)
+ *             → transform (parse JSON)
+ *             → draft-store-write (writes to ai_drafts table)
  *
- * The user sees a row per individual review comment:
- *   - file:line + reviewer cells
- *   - the agent's plan (1-2 sentences) as the draft body
- *   - verdict chip: should-do vs ignore — agent's judgment on whether
- *     the comment is worth acting on
- *   - expandable context with the original comment text + the
- *     proposed reply
- *
- * Accept saves positive feedback. Code changes / replies are NOT
- * auto-applied. The user manually pushes a fix + replies on GitHub.
+ * Each row in the Drafts view is one inline-comment reply. The
+ * sendAction is a shell call to `gh api ... /replies` so Send
+ * actually posts the reply (no manual gh round-trip needed).
  *
  * Default `enabled: false`.
  */
@@ -36,51 +30,35 @@ const FILTER_FN = `(() => {
   return sorted[0];
 })()`;
 
-const AGENT_PROMPT = `You're given ONE pull request the user authored. Look at the unaddressed review comments and produce one row per comment with a plan, judgment, and reply draft.
-
-**Do NOT push code, post comments, or use any gh write command.** Use gh api to read inline comments (gh api repos/<owner>/<repo>/pulls/<num>/comments). Use gh pr diff to see the changes if you need context. Output only.
-
-For each unaddressed comment, produce one object with:
-  - id: stable id (use the comment id from gh api, e.g. "comment-12345")
-  - pr: short PR ref (owner/repo#num)
-  - file: path
-  - line: number (the comment's anchor line)
-  - by: reviewer handle
-  - comment: the comment text (verbatim, truncated to ~200 chars)
-  - verdict: "should-do" | "ignore"
-  - plan: 1-2 sentences describing the change you'd make if "should-do" (or empty if ignore)
-  - reply: the reply text you'd post on GitHub (1-2 sentences)
+const AGENT_PROMPT = `You're given ONE pull request the user authored. Triage the unaddressed review comments and produce drafts ready to reply — see your system prompt for the exact JSON shape (\`draft-store-write\` + shell sendAction).
 
 Input PR:
 \`\`\`json
 {prev}
 \`\`\`
 
-Past feedback the user has given you on this scenario:
+Past feedback the user has given on this scenario:
 {feedback}
 
-Be selective. Style nits the user has previously waved off → "ignore" with an empty plan. Real bugs / behavior changes → "should-do".
+Output ONLY a JSON array of draft objects. No prose, no markdown fences.`;
 
-Output ONLY a JSON array of comment rows. No prose, no markdown code fences.`;
-
-const ROWS_FN = `(Array.isArray($) ? $ : []).filter(r => r && r.id).map(r => ({
-  id: String(r.id),
-  preview: [
-    { label: 'PR',      value: String(r.pr || '?') },
-    { label: 'File',    value: String(r.file || '?') + ':' + String(r.line || '?') },
-    { label: 'By',      value: String(r.by || '?') },
-    { label: 'Comment', value: String(r.comment || '').slice(0, 160) },
-  ],
-  draft: String(r.plan || '(ignore — no code change planned)'),
-  verdict: r.verdict === 'should-do' ? 'should-do' : 'ignore',
-  context: 'Original comment:\\n' + String(r.comment || '') + '\\n\\nDraft reply:\\n' + String(r.reply || ''),
-}))`;
+const PARSE_FN = `(() => {
+  try {
+    const text = typeof $ === 'string' ? $ : '';
+    const m = text.match(/\\\`\\\`\\\`(?:json)?\\s*([\\s\\S]*?)\\s*\\\`\\\`\\\`/);
+    const json = m ? m[1] : text.trim();
+    const arr = JSON.parse(json);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+})()`;
 
 export const AUTOPILOT_PR_COMMENTS_WORKFLOW: WorkflowDef = {
   id: 'autopilot-pr-comments-on-mine',
-  name: 'Autopilot · Address comments on my PRs',
+  name: 'Autopilot · Triage PR comments',
   description:
-    'Every 15 min in autopilot mode, find your most recently-updated open PR and produce one row per unaddressed review comment: plan, verdict, reply. Reviewed as a table; nothing is posted or pushed.',
+    'Every 15 min in autopilot mode, find your most recently-updated open PR and draft a reply for each unaddressed review comment. Drafts land in the Drafts tab — edit, refine via prompt, send with one click (posts to GitHub via gh api).',
   enabled: false,
   trigger: { kind: 'autopilot', when: 'cron', every: '15m' },
   pipeline: [
@@ -115,23 +93,15 @@ export const AUTOPILOT_PR_COMMENTS_WORKFLOW: WorkflowDef = {
     },
     {
       type: 'run-skill',
-      params: { skillId: 'pr-address-comments', prompt: AGENT_PROMPT },
+      params: { skillId: 'pr-comments-triage', prompt: AGENT_PROMPT },
     },
     {
       type: 'transform',
-      params: {
-        fn: `(() => { try { return JSON.parse(typeof $ === 'string' ? $ : '[]'); } catch { return []; } })()`,
-      },
+      params: { fn: PARSE_FN },
     },
     {
-      type: 'batch-prompt-output',
-      params: {
-        title: 'Address PR comments',
-        summary:
-          'Autopilot grouped your PR\'s review comments. Accept = positive feedback (no code is pushed; no reply posted). Reject + note teaches the agent.',
-        rowsFn: ROWS_FN,
-        onEmpty: 'skip',
-      },
+      type: 'draft-store-write',
+      params: { source: 'pr-comments-triage' },
     },
   ],
 };

@@ -56,6 +56,7 @@ import {
 import { startHttpServer, type HttpServerHandle } from './http-server.js';
 import { initPush, pushToAll } from './push.js';
 import { ActivityStore } from './activity-store.js';
+import { DraftsStore } from './drafts-store.js';
 import { IntegrationsStore } from './integrations-store.js';
 import { IntentClassifier } from './intent-classifier.js';
 import { createJarvisMcp } from './jarvis-mcp.js';
@@ -203,6 +204,7 @@ const oauthOrchestrator = new OAuthOrchestrator(connectorRegistry, {
 });
 const tokenRefresher = new TokenRefresher(connectorRegistry, integrationsStore);
 const inbox = new InboxStore();
+const drafts = new DraftsStore();
 const activity = new ActivityStore();
 const briefings = new BriefingsStore(BUILTIN_BRIEFING_KINDS);
 const workflows = new WorkflowStore();
@@ -924,6 +926,7 @@ app.whenReady().then(async () => {
     mcp,
     integrations: integrationsStore,
     inbox,
+    drafts,
     notifier,
     runner,
     jarvisRoot: join(homedir(), '.jarvis'),
@@ -1486,6 +1489,22 @@ app.whenReady().then(async () => {
     console.warn('[push] init failed:', err);
   }
 
+  // AI Drafts housekeeping: drop sent/discarded drafts older than 30 days
+  // so the table doesn't grow unbounded. Pending/sending/failed rows are
+  // never auto-pruned — those need user attention.
+  const pruneDrafts = (): void => {
+    try {
+      const n = drafts.prune({ olderThanMs: 30 * 24 * 60 * 60 * 1000 });
+      if (n > 0) {
+        console.log(`[drafts-store] pruned ${n} draft row(s)`);
+      }
+    } catch (err) {
+      console.warn('[drafts-store] prune failed:', err);
+    }
+  };
+  pruneDrafts();
+  setInterval(pruneDrafts, 60 * 60 * 1000);
+
   // Localhost HTTP API. Auto-generates a bearer token on first launch
   // and binds 127.0.0.1:4747. Lets iOS Shortcuts / CLI / future phone
   // clients drive Jarvis the same way the renderer does via IPC.
@@ -1559,6 +1578,7 @@ app.whenReady().then(async () => {
     userContext,
     preferences,
     inbox,
+    drafts,
     activity,
     briefings,
     dashboard,

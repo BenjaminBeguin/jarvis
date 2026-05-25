@@ -32,7 +32,17 @@ export async function invokeMcpTool(
   args: Record<string, unknown>,
   signal?: AbortSignal,
 ): Promise<InvokeResult> {
-  const cfg = mcp.resolve([id])[id];
+  const resolved = mcp.resolve([id]);
+  // Prefix-match fallback: a caller that passes short-form 'gmail'
+  // picks up the first connected account's 'gmail-<accountId>' MCP.
+  // Mirrors how skills declare `mcp-servers: [gmail]`. The exact id
+  // still wins when both present.
+  let cfg = resolved[id];
+  if (!cfg) {
+    const prefix = `${id}-`;
+    const match = Object.entries(resolved).find(([k]) => k.startsWith(prefix));
+    if (match) cfg = match[1];
+  }
   if (!cfg) return { ok: false, message: `No mcp.json entry for "${id}".` };
   if (cfg.type === 'sdk') return invokeSdkTool(cfg, toolName, args);
   if (cfg.type !== 'stdio') {

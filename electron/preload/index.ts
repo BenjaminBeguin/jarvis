@@ -11,6 +11,8 @@ import type {
   ConnectorAccount,
   ConnectorId,
   ConnectorSummary,
+  Draft,
+  DraftStatus,
   InboxPrefs,
   DispatchIntentResult,
   JarvisFileEntry,
@@ -760,6 +762,36 @@ const api = {
     subscribe(IpcChannels.workflowsChanged, listener),
   onWorkflowRunChanged: (listener: Listener<WorkflowRun>): Unsubscribe =>
     subscribe(IpcChannels.workflowRunChanged, listener),
+
+  // ─── AI Drafts ──────────────────────────────────────────────────
+  listDrafts: (
+    args?: {
+      status?: DraftStatus | DraftStatus[];
+      source?: string;
+      channel?: string;
+      limit?: number;
+    },
+  ): Promise<Draft[]> =>
+    ipcRenderer.invoke(IpcChannels.listDrafts, args ?? {}),
+  getDraft: (id: string): Promise<Draft | null> =>
+    ipcRenderer.invoke(IpcChannels.getDraft, id),
+  updateDraftBody: (id: string, body: string): Promise<Draft | null> =>
+    ipcRenderer.invoke(IpcChannels.updateDraftBody, id, body),
+  refineDraft: (
+    id: string,
+    prompt: string,
+  ): Promise<{ ok: boolean; draft?: Draft | null; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.refineDraft, id, prompt),
+  sendDraft: (
+    id: string,
+  ): Promise<{ ok: boolean; draft?: Draft | null; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.sendDraft, id),
+  discardDraft: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.discardDraft, id),
+  revertDraft: (id: string): Promise<Draft | null> =>
+    ipcRenderer.invoke(IpcChannels.revertDraft, id),
+  onDraftsChanged: (listener: Listener<void>): Unsubscribe =>
+    subscribe(IpcChannels.draftsChanged, listener),
 };
 
 export type JarvisApi = typeof api;

@@ -98,15 +98,29 @@ export const mcpCallNode = fromPromise<
   // invokeMcpTool returns a friendly `ok: false` for missing entries,
   // but surfacing it here gives the user the workflow context
   // (which step + node) rather than a bare "No mcp.json entry".
+  //
+  // Prefix-match fallback: a workflow that wrote `mcp: 'gmail'`
+  // (short-form) picks up the first connected account's
+  // `gmail-<accountId>` MCP. Mirrors how skills declare
+  // `mcp-servers: [gmail]` and how users think about integrations
+  // ("Gmail is connected") regardless of the per-account suffix.
+  // For deterministic multi-account targeting, the workflow can use
+  // the full id; the exact match wins.
   const resolved = ctx.mcp.resolve([params.mcp]);
-  if (!resolved[params.mcp]) {
+  let resolvedId = resolved[params.mcp] ? params.mcp : '';
+  if (!resolvedId) {
+    const prefix = `${params.mcp}-`;
+    const match = Object.keys(resolved).find((k) => k.startsWith(prefix));
+    if (match) resolvedId = match;
+  }
+  if (!resolvedId) {
     throw new Error(
       `mcp-call: MCP server '${params.mcp}' not registered. Check Settings → Integrations · MCP Servers, or your ~/.jarvis/mcp.json.`,
     );
   }
   const result = await invokeMcpTool(
     ctx.mcp,
-    params.mcp,
+    resolvedId,
     params.tool,
     params.args ?? {},
     signal,

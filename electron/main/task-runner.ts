@@ -289,6 +289,13 @@ export class TaskRunner extends EventEmitter {
     this.auth = ctx;
   }
 
+  /** Read-only snapshot for callers that want to run a headless Claude
+   *  turn (draft refinement, intent classification) with matching
+   *  credentials. */
+  getAuth(): AuthContext {
+    return this.auth;
+  }
+
   /** Optional intent classifier. When set, the runner uses it to refine
    *  the multi-turn `awaitingInput: true` flag on `result` events —
    *  agent messages that aren't actually asking the user for a reply

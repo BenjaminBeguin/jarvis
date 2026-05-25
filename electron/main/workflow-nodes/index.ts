@@ -2,6 +2,7 @@ import type { NodeHandler } from './types.js';
 
 import { batchPromptOutputNode } from './batch-prompt-output.js';
 import { draftOutputNode } from './draft-output.js';
+import { draftStoreWriteNode } from './draft-store-write.js';
 import { httpFetchNode } from './http-fetch.js';
 import { inboxWriteNode } from './inbox-write.js';
 import { mcpCallNode } from './mcp-call.js';
@@ -32,6 +33,7 @@ export const NODE_REGISTRY: Record<string, NodeHandler> = {
   'run-skill': runSkillNode as unknown as NodeHandler,
   'mcp-call': mcpCallNode as unknown as NodeHandler,
   'draft-output': draftOutputNode as unknown as NodeHandler,
+  'draft-store-write': draftStoreWriteNode as unknown as NodeHandler,
   'prompt-output': promptOutputNode as unknown as NodeHandler,
   'batch-prompt-output': batchPromptOutputNode as unknown as NodeHandler,
 };

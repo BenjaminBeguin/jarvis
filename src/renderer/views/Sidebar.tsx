@@ -37,6 +37,8 @@ export interface SidebarItem {
   isActive: boolean;
   onClick: () => void;
   title?: string;
+  /** Optional pending-count badge. Hidden when 0 or unset. */
+  count?: number;
 }
 
 export interface SidebarSection {
@@ -132,10 +134,18 @@ export function Sidebar({ sections }: Props) {
                   >
                     <span className="shell__sidebar-icon" aria-hidden="true">
                       {item.icon}
+                      {item.count && item.count > 0 && collapsed ? (
+                        <span className="shell__sidebar-dot" />
+                      ) : null}
                     </span>
                     {!collapsed && (
                       <span className="shell__sidebar-label">{item.label}</span>
                     )}
+                    {item.count && item.count > 0 && !collapsed ? (
+                      <span className="shell__sidebar-badge">
+                        {item.count > 99 ? '99+' : item.count}
+                      </span>
+                    ) : null}
                   </button>
                   {editMode && !collapsed && (
                     <div className="shell__sidebar-edit-controls">

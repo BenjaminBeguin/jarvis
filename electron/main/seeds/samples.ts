@@ -51,6 +51,99 @@ once a week to refine these based on what was actually useful.
 - (Calibration appends timestamped entries here.)
 `;
 
+/**
+ * Triage policy seeded at `~/.jarvis/triage-policy.md`. Read by every
+ * channel-specific triage skill (gmail-triage today, slack-triage and
+ * others later) at the start of each run. Drives what gets archived,
+ * what gets drafted, what gets ignored, and what tone to write in.
+ *
+ * Single file across channels (sub-section per channel). The
+ * `## People` and `## Defaults` sections apply globally so an "always
+ * draft for X" rule works whether X emails or DMs.
+ *
+ * Plain markdown. Edit freely. Save and the next workflow tick picks
+ * up the new rules.
+ */
+export const SAMPLE_TRIAGE_POLICY = `# Triage policy
+
+Channel-specific triage skills (gmail-triage, slack-triage, …) read
+this file every run. Edit freely — the next tick picks up changes.
+
+## People I want to hear from
+
+People I always want a draft reply for, no matter the channel. Names,
+email addresses, slack handles — whatever matches.
+
+- (e.g. "alice@acme.com — boss, always draft")
+- (e.g. "@bob — direct report, treat seriously")
+
+## Senders to archive
+
+Domains and patterns that should NEVER get a draft — newsletters,
+marketing, automated mail. Listed here, the triage skill recommends
+archive (or auto-archives in Phase B).
+
+- noreply@*
+- no-reply@*
+- newsletter@*
+- marketing@*
+- *@notifications.atlassian.com
+- (add your own patterns)
+
+## Topics to take seriously
+
+Subject/body keywords that should always produce a draft, even from
+unknown senders.
+
+- interview
+- offer
+- contract
+- intro / introduction
+- urgent / asap
+
+## Topics to ignore
+
+Subject/body patterns that should be dropped entirely (no draft, no
+surface). The skill omits them from the output.
+
+- receipt
+- order confirmation
+- password reset
+- (GitHub / Linear / Slack notifications are already handled by
+  dedicated workflows — let those flows surface them)
+
+## Tone & signature
+
+How drafts should be written. The skill applies this as the default;
+override per-recipient under "People I want to hear from" if needed.
+
+- Tone: peer-to-peer, 1-3 sentences. No greeting, no signoff.
+- Signature: (paste your standard sign-off block, or leave blank)
+
+## My availability
+
+Free-text. The skill paraphrases this when a message asks about
+scheduling. In Phase B+ this will be replaced by a live calendar
+lookup.
+
+- Working hours: 9:00–18:00 Mon–Fri (local time)
+- Best for short syncs: Tue 2–4pm, Wed mornings
+- Long blocks: Friday afternoons
+
+## Gmail
+
+(Optional channel-specific overrides — leave blank to use the
+defaults above.)
+
+## Slack
+
+(Same — channel-specific overrides go here.)
+
+## Running notes
+
+Calibration appends timestamped entries here.
+`;
+
 export const SAMPLE_MCP_CONFIG = `{
   "//": "Define custom MCP servers globally; skills opt-in via mcp-servers: [name] in their frontmatter, or 'mcp-servers: [\\"*\\"]' to inherit everything here. Copy this file to ~/.jarvis/mcp.json (drop the .example) and fill in any tokens.",
 

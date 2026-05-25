@@ -50,27 +50,21 @@ const FILTER_FN = `(() => {
     return true;
   }).slice(0, 10).map(m => {
     const who = m.username || m.user || 'someone';
-    const chan = m.channel.name ? '#' + m.channel.name : String(m.channel.id);
+    const chanLabel = m.channel.name ? '#' + m.channel.name : String(m.channel.id);
     const text = (m.text || '').trim();
     return {
-      id: 'slack-' + m.channel.id + '-' + m.ts,
+      sourceItemId: 'slack-' + m.channel.id + '-' + m.ts,
       from: who,
-      channel: chan,
+      channelLabel: chanLabel,
+      channelId: m.channel.id,
       message: text,
       url: m.permalink || null,
-      ts: m.ts,
+      threadTs: m.ts,
     };
   });
 })()`;
 
-const AGENT_PROMPT = `You're given an array of unread Slack messages. For each one, draft a brief acknowledgement reply.
-
-For each input row, produce one output row with the same id and these fields:
-  - id: same as input
-  - from: same as input
-  - channel: same as input
-  - message: same as input (so the user sees what's being responded to)
-  - draft: 1-2 sentences, peer-to-peer tone. No greeting, no signoff. Output the literal string "(skip)" if the message is hostile, automated, or needs context you don't have.
+const AGENT_PROMPT = `You're given an array of unread Slack messages. Draft a brief acknowledgement reply for each one. Output a JSON array shaped for the \`draft-store-write\` workflow node — see the skill's system prompt for the full schema. Rows you'd skip (hostile, automated, needs context you don't have) should be omitted from the output entirely.
 
 Input messages:
 \`\`\`json
@@ -80,24 +74,25 @@ Input messages:
 Past feedback the user has given you on this scenario:
 {feedback}
 
-Output ONLY a JSON array. No prose around it, no markdown code fences. Example:
-[{"id":"slack-CXXX-1.2","from":"luca","channel":"#migrations","message":"redis PR look ok?","draft":"on it, EOD"}]`;
+Output ONLY a JSON array of draft objects. No prose, no markdown fences.`;
 
-const ROWS_FN = `(Array.isArray($) ? $ : []).filter(r => r && r.id && r.draft && r.draft !== '(skip)').map(r => ({
-  id: r.id,
-  preview: [
-    { label: 'From', value: String(r.from || '?') },
-    { label: 'In',   value: String(r.channel || '?') },
-    { label: 'Said', value: String(r.message || '').slice(0, 200) },
-  ],
-  draft: String(r.draft),
-}))`;
+const PARSE_FN = `(() => {
+  try {
+    const text = typeof $ === 'string' ? $ : '';
+    const m = text.match(/\\\`\\\`\\\`(?:json)?\\s*([\\s\\S]*?)\\s*\\\`\\\`\\\`/);
+    const json = m ? m[1] : text.trim();
+    const arr = JSON.parse(json);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+})()`;
 
 export const AUTOPILOT_SLACK_DM_ACK_WORKFLOW: WorkflowDef = {
   id: 'autopilot-slack-dm-ack',
-  name: 'Autopilot · Ack Slack DMs',
+  name: 'Autopilot · Triage Slack DMs',
   description:
-    'Every 5 min in autopilot mode, poll Slack for unread, recent DMs + @-mentions and draft short acknowledgement replies. Reviewed as a table; never auto-sent.',
+    'Every 5 min in autopilot mode, poll Slack for unread DMs + @-mentions and produce drafts in the Drafts tab. Edit inline, refine via prompt, send with one click.',
   enabled: false,
   trigger: { kind: 'autopilot', when: 'cron', every: '5m' },
   pipeline: [
@@ -136,19 +131,11 @@ export const AUTOPILOT_SLACK_DM_ACK_WORKFLOW: WorkflowDef = {
     },
     {
       type: 'transform',
-      params: {
-        fn: `(() => { try { return JSON.parse(typeof $ === 'string' ? $ : '[]'); } catch { return []; } })()`,
-      },
+      params: { fn: PARSE_FN },
     },
     {
-      type: 'batch-prompt-output',
-      params: {
-        title: 'Ack unread Slack messages',
-        summary:
-          'Autopilot drafted acknowledgements for your unread messages. Accept = positive feedback (no message is sent). Reject + note teaches the agent for next time.',
-        rowsFn: ROWS_FN,
-        onEmpty: 'skip',
-      },
+      type: 'draft-store-write',
+      params: { source: 'slack-triage' },
     },
   ],
 };

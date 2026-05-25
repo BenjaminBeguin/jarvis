@@ -1061,8 +1061,136 @@ export type WorkflowNodeType =
   | 'run-skill'
   | 'mcp-call'
   | 'draft-output'
+  | 'draft-store-write'
   | 'prompt-output'
   | 'batch-prompt-output';
+
+// ─── AI Drafts ────────────────────────────────────────────────────────
+
+/**
+ * Lifecycle of a draft:
+ *   - pending    AI produced it; user hasn't acted yet.
+ *   - sending    User clicked Send; the MCP call is in flight.
+ *   - sent       Sent successfully — moves out of the default view.
+ *   - failed     Send failed; user can retry or edit.
+ *   - discarded  User threw it away.
+ */
+export type DraftStatus =
+  | 'pending'
+  | 'sending'
+  | 'sent'
+  | 'failed'
+  | 'discarded';
+
+/**
+ * Channel-specific dispatch template carried on each draft. Two shapes:
+ *
+ *   - `kind: 'mcp'` (default) — invoke an MCP tool. The editable body
+ *     is substituted into `args[bodyKey]` and the store calls
+ *     `invokeMcpTool(mcp, tool, args)`. Used by Gmail, Slack, any
+ *     channel with a tool-shaped API.
+ *
+ *   - `kind: 'shell'` — `execFile(cmd, args)`. Each occurrence of
+ *     `bodyToken` (default `'{body}'`) in any of the literal args is
+ *     replaced with the editable body before exec. Used by GitHub PR
+ *     replies / reviews (gh CLI) where the canonical send path is
+ *     already shell-based. Restricted to an allowlist of commands
+ *     server-side; never accepts arbitrary `cmd`.
+ *
+ * Producers fill the shape that fits their channel. The store + UI
+ * are channel-agnostic — they just dispatch on `kind` at send time.
+ */
+export type SendAction =
+  | {
+      kind?: 'mcp';
+      /** Resolved MCP server id (e.g. 'gmail-ben@hive.app', 'slack'). */
+      mcp: string;
+      /** Tool name on that server (e.g. 'send_message'). */
+      tool: string;
+      /** Fixed args. The editable body is substituted in at send time,
+       *  not stored here. */
+      args: Record<string, unknown>;
+      /** Which key of `args` the body slots into (e.g. 'body' for
+       *  Gmail, 'text' for Slack). */
+      bodyKey: string;
+    }
+  | {
+      kind: 'shell';
+      /** Command to exec. Must be on the allowlist (currently: 'gh'). */
+      cmd: string;
+      /** Literal args. Token substitution applies (see below). */
+      args: string[];
+      /** Optional stdin payload — useful for `gh api --input -` style
+       *  calls that need a JSON request body. Token substitution
+       *  applies. */
+      stdin?: string;
+      /** Optional working directory. Defaults to the user's home. */
+      cwd?: string;
+      /** Timeout in ms. Default 30s. */
+      timeoutMs?: number;
+    };
+
+/**
+ * Substitution tokens used in shell SendAction `args` and `stdin`:
+ *
+ *   - `{body}`       → literal body, no escaping. Use in shell args
+ *                      where execFile passes the value as a single
+ *                      arg (e.g. `-f body={body}`).
+ *   - `{body_json}`  → `JSON.stringify(body)` (quoted + escaped).
+ *                      Use inside JSON-shaped stdin payloads:
+ *                      `{"body": {body_json}, "event": "APPROVE"}`.
+ *
+ * Both tokens replace every occurrence, anywhere they appear.
+ */
+
+export interface Draft {
+  id: string;
+  /** Producer id — the workflow / module that wrote the draft. Used to
+   *  group + filter ("via gmail-triage"). */
+  source: string;
+  /** Channel family — drives the UI badge and lets the user filter
+   *  ("just my email drafts"). */
+  channel: string;
+  /** Producer's natural id for the upstream item (gmail message id,
+   *  slack ts, PR comment id). Drives idempotent dedupe via a partial
+   *  unique index. */
+  sourceItemId?: string | null;
+  status: DraftStatus;
+  title: string;
+  /** Short context line shown in the collapsed row. */
+  contextSummary?: string | null;
+  /** Full upstream content (original email body, slack thread excerpt)
+   *  — surfaced when the row expands and fed to the refine engine. */
+  contextFull?: string | null;
+  /** Current editable body — what would be sent if the user clicks Send. */
+  currentBody: string;
+  /** AI's first draft. Drives the Revert button. */
+  originalBody: string;
+  /** One-sentence reasoning from the triage skill. */
+  why?: string | null;
+  sendAction: SendAction;
+  /** Workflow run that produced this draft, if any. Audit trail. */
+  workflowId?: string | null;
+  createdAt: number;
+  updatedAt: number;
+  sentAt?: number | null;
+  /** JSON-serialized result of the send (success body / error). */
+  sentResult?: unknown;
+}
+
+/** Shape producers pass to `DraftsStore.create`. */
+export interface NewDraft {
+  source: string;
+  channel: string;
+  sourceItemId?: string | null;
+  title: string;
+  contextSummary?: string | null;
+  contextFull?: string | null;
+  body: string;
+  why?: string | null;
+  sendAction: SendAction;
+  workflowId?: string | null;
+}
 
 export interface WorkflowNodeDef {
   type: string;

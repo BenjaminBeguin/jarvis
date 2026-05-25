@@ -74,6 +74,36 @@ const MIGRATIONS = [
   );`,
   `CREATE INDEX IF NOT EXISTS idx_workflow_runs_started ON workflow_runs(started_at DESC);`,
   `CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow ON workflow_runs(workflow_id, started_at DESC);`,
+  // Generic AI Drafts store. Any module/workflow that produces text
+  // for the user to review lands here: gmail-triage replies, future
+  // slack-triage replies, social DMs, etc. The renderer reads from one
+  // table; the per-channel dispatch lives in `send_action` (JSON).
+  `CREATE TABLE IF NOT EXISTS ai_drafts (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    source_item_id TEXT,
+    status TEXT NOT NULL,
+    title TEXT NOT NULL,
+    context_summary TEXT,
+    context_full TEXT,
+    current_body TEXT NOT NULL,
+    original_body TEXT NOT NULL,
+    why TEXT,
+    send_action TEXT NOT NULL,
+    workflow_id TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    sent_at INTEGER,
+    sent_result TEXT
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_ai_drafts_status ON ai_drafts(status, updated_at DESC);`,
+  `CREATE INDEX IF NOT EXISTS idx_ai_drafts_source ON ai_drafts(source, status);`,
+  // Partial unique index — dedupe within a producer when the producer
+  // supplies a natural id. Producers that don't (one-shot prompts) just
+  // omit source_item_id and get a non-dedup'd row.
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_drafts_dedupe
+    ON ai_drafts(source, source_item_id) WHERE source_item_id IS NOT NULL;`,
 ];
 
 let db: DatabaseType | null = null;

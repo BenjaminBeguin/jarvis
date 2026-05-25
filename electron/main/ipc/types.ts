@@ -3,6 +3,7 @@ import type { AppStatus } from '@shared/types';
 import type { ActivityStore } from '../activity-store.js';
 import type { BriefingsStore } from '../briefings.js';
 import type { DashboardStore } from '../dashboard-store.js';
+import type { DraftsStore } from '../drafts-store.js';
 import type { InboxStore } from '../inbox.js';
 import type { IntegrationsStore } from '../integrations-store.js';
 import type { McpConfigStore } from '../mcp-config.js';
@@ -47,6 +48,7 @@ export interface IpcDeps {
   activity: ActivityStore;
   briefings: BriefingsStore;
   dashboard: DashboardStore;
+  drafts: DraftsStore;
   workflows: WorkflowStore;
   workflowRunner: WorkflowRunner;
   workflowScheduler: WorkflowScheduler;

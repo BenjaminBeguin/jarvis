@@ -2,25 +2,22 @@ import type { WorkflowDef } from '@shared/types';
 
 /**
  * Autopilot scenario — draft first-pass reviews for PRs requesting
- * the user's review where the author isn't on their team.
+ * the user's review where the author isn't on their team. Each draft
+ * lands in the Drafts tab; Send submits the review via
+ * `gh api /pulls/<num>/reviews`.
  *
  *   trigger:  autopilot · cron 15m (gated by appMode === 'autopilot')
  *   pipeline: shell(gh search prs --review-requested @me)
  *             → transform (parse + filter by authorAssociation)
- *             → run-skill (pr-review-queue returns JSON array)
- *             → batch-prompt-output (table HUD)
+ *             → run-skill (pr-review-triage returns JSON array)
+ *             → transform (parse JSON)
+ *             → draft-store-write (writes to ai_drafts table)
  *
- * The user sees a table — one row per PR — with:
- *   - title + repo + author cells
- *   - the agent's draft review summary
- *   - the proposed verdict chip (approve / comment / request-changes)
- *   - expandable context with the inline comments the agent would
- *     attach if posting
- *
- * Accept saves positive feedback to the per-workflow memory file;
- * the review is NOT auto-posted. The user opens the PR and decides
- * whether to mirror the draft. Future iteration adds an opt-in
- * mcp-call to gh pr review on accepted rows.
+ * The verdict (APPROVE / COMMENT / REQUEST_CHANGES) is baked into
+ * each draft's sendAction.stdin. The user can change verdict only
+ * by discarding + re-running — they can edit the summary body
+ * freely. This is the right trade-off for the unified Drafts UI;
+ * if you need finer-grained verdict editing, open the PR directly.
  *
  * Default `enabled: false`.
  */
@@ -36,54 +33,35 @@ const FILTER_FN = `(() => {
   }).slice(0, 10);
 })()`;
 
-const AGENT_PROMPT = `You're given an array of pull requests requesting the user's review. For each one, draft a first-pass review WITHOUT posting it.
-
-**Do NOT use \`gh pr review\`, \`gh pr comment\`, or any other gh write command.** Read-only gh commands (gh pr view, gh pr diff) are fine for gathering context. The user reviews your output and decides whether to mirror it.
-
-For each input PR, produce one output row with:
-  - id: stable id (e.g. owner/repo#number)
-  - title: PR title
-  - url: PR url
-  - repo: owner/repo string
-  - author: PR author handle
-  - verdict: exactly one of "approve" | "comment" | "request-changes"
-  - summary: 1-2 sentence overall take
-  - comments: array of inline notes, each { file, line, body }. Empty array if just approving.
+const AGENT_PROMPT = `You're given an array of pull requests requesting the user's review. Triage each one and produce a draft ready to submit — see your system prompt for the exact JSON shape (\`draft-store-write\` + shell sendAction with verdict baked into stdin).
 
 Input PRs:
 \`\`\`json
 {prev}
 \`\`\`
 
-Past feedback the user has given you on this scenario (match this tone / depth):
+Past feedback the user has given on this scenario (match this tone / depth):
 {feedback}
 
-Be confident — "looks good" beats a manufactured nit. If nothing breaks, verdict is "approve" and comments is empty.
+Output ONLY a JSON array of draft objects. No prose, no markdown fences.`;
 
-Output ONLY a JSON array. No prose, no markdown code fences.`;
-
-const ROWS_FN = `(Array.isArray($) ? $ : []).filter(r => r && r.id).map(r => {
-  const commentsText = Array.isArray(r.comments) && r.comments.length > 0
-    ? r.comments.map(c => '  ' + (c.file || '?') + ':' + (c.line || '?') + ' — ' + (c.body || '').slice(0, 200)).join('\\n')
-    : '(no inline comments)';
-  return {
-    id: r.id,
-    preview: [
-      { label: 'PR',     value: String(r.id || '?') },
-      { label: 'Title',  value: String(r.title || '').slice(0, 80) },
-      { label: 'Author', value: String(r.author || '?') },
-    ],
-    draft: String(r.summary || ''),
-    verdict: String(r.verdict || 'comment'),
-    context: 'Inline comments the agent would attach:\\n' + commentsText + '\\n\\nURL: ' + (r.url || '?'),
-  };
-})`;
+const PARSE_FN = `(() => {
+  try {
+    const text = typeof $ === 'string' ? $ : '';
+    const m = text.match(/\\\`\\\`\\\`(?:json)?\\s*([\\s\\S]*?)\\s*\\\`\\\`\\\`/);
+    const json = m ? m[1] : text.trim();
+    const arr = JSON.parse(json);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+})()`;
 
 export const AUTOPILOT_PR_REVIEW_NON_TEAM_WORKFLOW: WorkflowDef = {
   id: 'autopilot-pr-review-non-team',
-  name: 'Autopilot · PR review (non-team)',
+  name: 'Autopilot · Triage non-team PR reviews',
   description:
-    'Every 15 min in autopilot mode, find PRs awaiting your review whose author is outside your team, draft a first-pass review per PR with verdict, and surface as a table for per-row approval.',
+    'Every 15 min in autopilot mode, find PRs from non-team contributors requesting your review and draft a first-pass review for each. Drafts land in the Drafts tab — edit summary, refine via prompt, send (verdict baked in via gh api).',
   enabled: false,
   trigger: { kind: 'autopilot', when: 'cron', every: '15m' },
   pipeline: [
@@ -101,7 +79,7 @@ export const AUTOPILOT_PR_REVIEW_NON_TEAM_WORKFLOW: WorkflowDef = {
           '--json',
           'number,title,url,repository,author,authorAssociation,updatedAt',
           '--limit',
-          '30',
+          '20',
         ],
         timeoutMs: 30_000,
       },
@@ -118,23 +96,15 @@ export const AUTOPILOT_PR_REVIEW_NON_TEAM_WORKFLOW: WorkflowDef = {
     },
     {
       type: 'run-skill',
-      params: { skillId: 'pr-review-queue', prompt: AGENT_PROMPT },
+      params: { skillId: 'pr-review-triage', prompt: AGENT_PROMPT },
     },
     {
       type: 'transform',
-      params: {
-        fn: `(() => { try { return JSON.parse(typeof $ === 'string' ? $ : '[]'); } catch { return []; } })()`,
-      },
+      params: { fn: PARSE_FN },
     },
     {
-      type: 'batch-prompt-output',
-      params: {
-        title: 'PRs awaiting your review',
-        summary:
-          'Autopilot drafted a review per non-team PR. Accept = positive feedback (review is NOT auto-posted). Reject + note teaches the agent.',
-        rowsFn: ROWS_FN,
-        onEmpty: 'skip',
-      },
+      type: 'draft-store-write',
+      params: { source: 'pr-review-triage' },
     },
   ],
 };

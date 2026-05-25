@@ -8,6 +8,7 @@ import {
   SAMPLE_INBOX_PRIORITIES,
   SAMPLE_MCP_CONFIG,
   SAMPLE_PROJECTS,
+  SAMPLE_TRIAGE_POLICY,
 } from './seeds/index.js';
 import { BUILTIN_WORKFLOWS } from './seeds/workflows/index.js';
 import type { WorkflowDef } from '@shared/types';
@@ -87,6 +88,26 @@ const WORKFLOW_STALE_DETECTORS: Record<
   'inbox-curate-sync': (def) =>
     isUntouchedShorthandCron(def, '10m') ||
     isUntouchedShorthandCron(def, '*/15 9-18 * * 1-5'),
+  // Slack DM autopilot pre-Drafts-store ended in batch-prompt-output
+  // (accept = positive feedback, no message sent). The new shape
+  // ends in draft-store-write → drafts land in the Drafts tab and
+  // Accept actually sends. Detect the old terminal node and rewrite.
+  'autopilot-slack-dm-ack': (def) => {
+    const last = def.pipeline[def.pipeline.length - 1];
+    return last?.type === 'batch-prompt-output';
+  },
+  // PR autopilot scenarios pre-Drafts-store also ended in
+  // batch-prompt-output. Same migration: rewrite to the new shape
+  // that ends in draft-store-write so drafts land in the Drafts tab
+  // and Send posts via gh api.
+  'autopilot-pr-comments-on-mine': (def) => {
+    const last = def.pipeline[def.pipeline.length - 1];
+    return last?.type === 'batch-prompt-output';
+  },
+  'autopilot-pr-review-non-team': (def) => {
+    const last = def.pipeline[def.pipeline.length - 1];
+    return last?.type === 'batch-prompt-output';
+  },
 };
 
 /**
@@ -202,6 +223,11 @@ export function seedDefaultsIfEmpty(): void {
   // appends to it. Seeded once with placeholder bullets; the user
   // edits in place.
   writeIfMissing(join(root, 'inbox-priorities.md'), SAMPLE_INBOX_PRIORITIES);
+  // Triage policy: read by every channel-specific triage skill
+  // (gmail-triage today). Sub-sectioned by channel + shared sections
+  // for people / defaults / tone. Seeded once with placeholders; the
+  // user edits and the next workflow tick reflects the changes.
+  writeIfMissing(join(root, 'triage-policy.md'), SAMPLE_TRIAGE_POLICY);
 
   // Each built-in skill seeds only if missing. New built-ins added in later
   // versions show up automatically; user-authored skills are never touched.

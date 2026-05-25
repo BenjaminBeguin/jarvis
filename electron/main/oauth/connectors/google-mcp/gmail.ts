@@ -111,13 +111,22 @@ export function buildGmailMcp(
       ),
       tool(
         'send_message',
-        `Send an email from ${accountId}. RFC 5322 fields. CC and BCC optional. Plain text body only — no HTML yet.`,
+        `Send an email from ${accountId}. RFC 5322 fields. CC and BCC optional. Plain text body only — no HTML yet. For replies, pass threadId (and ideally inReplyTo + references from the original message-id) so Gmail keeps the message in the same conversation.`,
         {
           to: z.string().min(3),
           subject: z.string(),
           body: z.string(),
           cc: z.string().optional(),
           bcc: z.string().optional(),
+          /** Gmail thread id from list_messages/get_message. When set,
+           *  the API merges this message into the existing thread. */
+          threadId: z.string().optional(),
+          /** Original message-id (the RFC 822 Message-ID header value)
+           *  — sets In-Reply-To so non-Gmail recipients can thread too. */
+          inReplyTo: z.string().optional(),
+          /** Existing References header chain — preserves long thread
+           *  history for non-Gmail clients. */
+          references: z.string().optional(),
         },
         async (args) =>
           callGmail(getAccessToken, async (token) => {
@@ -128,7 +137,11 @@ export function buildGmailMcp(
               bcc: args.bcc,
               subject: args.subject,
               body: args.body,
+              inReplyTo: args.inReplyTo,
+              references: args.references,
             });
+            const payload: { raw: string; threadId?: string } = { raw };
+            if (args.threadId) payload.threadId = args.threadId;
             const res = await fetch(
               'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
               {
@@ -137,7 +150,7 @@ export function buildGmailMcp(
                   Authorization: `Bearer ${token}`,
                   'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ raw }),
+                body: JSON.stringify(payload),
               },
             );
             if (!res.ok) return err(await res.text());
@@ -288,6 +301,8 @@ function buildRawEmail(args: {
   bcc?: string;
   subject: string;
   body: string;
+  inReplyTo?: string;
+  references?: string;
 }): string {
   const headers: string[] = [
     `From: ${args.from}`,
@@ -296,6 +311,11 @@ function buildRawEmail(args: {
   if (args.cc) headers.push(`Cc: ${args.cc}`);
   if (args.bcc) headers.push(`Bcc: ${args.bcc}`);
   headers.push(`Subject: ${args.subject}`);
+  // Threading headers. Gmail's threadId is the authoritative threader
+  // server-side; these belt-and-suspenders headers help non-Gmail
+  // recipients (clients that go by Message-ID).
+  if (args.inReplyTo) headers.push(`In-Reply-To: ${args.inReplyTo}`);
+  if (args.references) headers.push(`References: ${args.references}`);
   headers.push('Content-Type: text/plain; charset=UTF-8');
   headers.push('MIME-Version: 1.0');
   const message = `${headers.join('\r\n')}\r\n\r\n${args.body}`;

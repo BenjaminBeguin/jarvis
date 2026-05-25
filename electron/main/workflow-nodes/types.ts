@@ -1,5 +1,6 @@
 import type { fromPromise } from 'xstate';
 
+import type { DraftsStore } from '../drafts-store.js';
 import type { InboxStore } from '../inbox.js';
 import type { IntegrationsStore } from '../integrations-store.js';
 import type { McpConfigStore } from '../mcp-config.js';
@@ -19,6 +20,8 @@ export interface WorkflowNodeContext {
   integrations: IntegrationsStore | null;
   /** Inbox-write node target. */
   inbox: InboxStore;
+  /** AI Drafts store — `draft-store-write` writes here. */
+  drafts: DraftsStore;
   /** Notify node target. */
   notifier: typeof Notifier;
   /** Run-skill node uses this to spawn a Claude turn. */

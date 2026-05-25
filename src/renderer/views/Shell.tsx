@@ -15,6 +15,7 @@ import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
 import { Activity } from './Activity';
 import { Dashboard } from './Dashboard';
+import { Drafts } from './Drafts';
 import { FlowStream } from './FlowStream';
 import { Settings } from './Settings';
 import { Sidebar, type SidebarSection } from './Sidebar';
@@ -30,6 +31,7 @@ type Tab =
   | 'observatory'
   | 'ai-agent'
   | 'inbox'
+  | 'drafts'
   | 'activity'
   | 'projects'
   | 'routines'
@@ -82,6 +84,21 @@ export function Shell({ status }: Props) {
     const apply = (list: ProjectDef[]) => setProjectList(list);
     void window.jarvis.listProjects().then(apply);
     return window.jarvis.onProjectsChanged(apply);
+  }, []);
+
+  // Pending-draft count for the sidebar badge. Re-counts on every
+  // drafts:changed broadcast — cheap because listDrafts is a SQLite
+  // SELECT with a status filter.
+  const [draftsPending, setDraftsPending] = useState(0);
+  useEffect(() => {
+    const refresh = () => {
+      void window.jarvis
+        .listDrafts({ status: ['pending', 'failed'] })
+        .then((list) => setDraftsPending(list.length))
+        .catch(() => setDraftsPending(0));
+    };
+    refresh();
+    return window.jarvis.onDraftsChanged(refresh);
   }, []);
 
   // Module that wants to open the dialog (e.g. the /new-project palette
@@ -440,6 +457,18 @@ export function Shell({ status }: Props) {
           title: '⌘3 · Triage feed (PRs / reminders / Linear / failed routines)',
         },
         {
+          id: 'drafts',
+          label: 'Drafts',
+          icon: 'D',
+          isActive: tab === 'drafts' && !openModuleId,
+          onClick: () => {
+            setTab('drafts');
+            setOpenModuleId(null);
+          },
+          title: 'AI-generated drafts waiting for your review',
+          count: draftsPending,
+        },
+        {
           id: 'observatory',
           label: 'Observatory',
           icon: 'O',
@@ -719,6 +748,8 @@ export function Shell({ status }: Props) {
           <Observatory />
         ) : tab === 'inbox' ? (
           <Inbox />
+        ) : tab === 'drafts' ? (
+          <Drafts />
         ) : tab === 'activity' ? (
           <Activity />
         ) : tab === 'projects' ? (
