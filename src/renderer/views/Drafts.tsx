@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Draft } from '../../shared/types';
 import { toast } from './Toaster';
@@ -38,6 +38,15 @@ export function Drafts() {
   const [channelFilter, setChannelFilter] = useState<string>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  /**
+   * Track draft ids we've seen so newly-arrived rows can play a
+   * slide-in animation exactly once. On the first render we mark
+   * everything as already seen — animating rows on initial page
+   * load would be noisy.
+   */
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const initialFetchDoneRef = useRef(false);
+  const [newIds, setNewIds] = useState<Set<string>>(new Set());
 
   const fetch = async () => {
     setRefreshing(true);
@@ -47,6 +56,32 @@ export function Drafts() {
           ? { status: ['pending', 'sending', 'failed'] }
           : {},
       );
+      // Diff against previously-seen ids. Only mark as "new"
+      // anything that arrived AFTER the first fetch completed.
+      if (initialFetchDoneRef.current) {
+        const arrivedIds = items
+          .map((d) => d.id)
+          .filter((id) => !seenIdsRef.current.has(id));
+        if (arrivedIds.length > 0) {
+          setNewIds((prev) => {
+            const next = new Set(prev);
+            for (const id of arrivedIds) next.add(id);
+            return next;
+          });
+          // Clear the "new" flag after the animation duration so the
+          // row settles into its resting style. Matches the CSS
+          // animation length below (--draft-slide-in-ms = 420ms).
+          window.setTimeout(() => {
+            setNewIds((prev) => {
+              const next = new Set(prev);
+              for (const id of arrivedIds) next.delete(id);
+              return next;
+            });
+          }, 700);
+        }
+      }
+      seenIdsRef.current = new Set(items.map((d) => d.id));
+      initialFetchDoneRef.current = true;
       setDrafts(items);
     } catch (err) {
       console.error('[drafts] list failed', err);
@@ -56,6 +91,8 @@ export function Drafts() {
   };
 
   useEffect(() => {
+    initialFetchDoneRef.current = false;
+    seenIdsRef.current = new Set();
     void fetch();
     const off = window.jarvis.onDraftsChanged(() => void fetch());
     return off;
@@ -168,6 +205,7 @@ export function Drafts() {
               key={draft.id}
               draft={draft}
               expanded={expandedId === draft.id}
+              isNew={newIds.has(draft.id)}
               onToggle={() =>
                 setExpandedId(expandedId === draft.id ? null : draft.id)
               }
@@ -249,10 +287,12 @@ function EmptyState({ statusFilter }: { statusFilter: StatusFilter }) {
 function DraftRow({
   draft,
   expanded,
+  isNew,
   onToggle,
 }: {
   draft: Draft;
   expanded: boolean;
+  isNew: boolean;
   onToggle: () => void;
 }) {
   const [body, setBody] = useState(draft.currentBody);
@@ -342,6 +382,7 @@ function DraftRow({
 
   return (
     <article
+      className={`draft-row${isNew ? ' draft-row--new' : ''}`}
       style={{
         border: '1px solid var(--border)',
         borderRadius: 8,
