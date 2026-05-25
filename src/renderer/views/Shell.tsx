@@ -195,52 +195,84 @@ export function Shell({ status }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Navigation history (browser-style back/forward). Each entry is the
-  // (tab, moduleId) pair the user was looking at. New navigations push
-  // a new entry; back/forward move the cursor without pushing. A ref
-  // skip-flag suppresses the push when we set state from history.
-  const [history, setHistory] = useState<Array<{ tab: Tab; moduleId: string | null }>>(
-    () => [{ tab: 'dashboard', moduleId: null }],
-  );
-  const [histIdx, setHistIdx] = useState(0);
+  // Navigation history — delegated to `window.history` so the global
+  // back/forward arrows compose with sub-view navigation. Each Shell
+  // tab/moduleId change pushes a `{ shellNav: … }` state; views like
+  // Workflows and Routines push their own state objects (`{ wfId }`,
+  // `{ rtId }`) when the user drills into a detail row. The arrows
+  // call `window.history.back/forward()`, which fires popstate that
+  // each layer handles independently — sub-views pop their detail
+  // back to the list first, then the Shell pops to the previous tab.
+  //
+  // Arrows are always enabled. There's no public API to read the
+  // current window.history position, and accurately disabling at the
+  // boundaries would require every sub-view to notify the Shell on
+  // push (via context). Browser back/forward at the boundary is a
+  // silent no-op, which is acceptable here.
   const skipHistoryPushRef = useRef(false);
 
+  // Seed the browser history entry on mount so the first pop has a
+  // shellNav state to restore from (instead of `null`, which would
+  // leave the Shell in an undefined-tab limbo).
+  useEffect(() => {
+    const existing = (window.history.state ?? null) as {
+      shellNav?: { tab: Tab; moduleId: string | null };
+    } | null;
+    if (!existing?.shellNav) {
+      window.history.replaceState(
+        { shellNav: { tab, moduleId: openModuleId } },
+        '',
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Push tab/moduleId changes to window.history so back/forward
+  // naturally walks them. Dedupe identical consecutive entries.
   useEffect(() => {
     if (skipHistoryPushRef.current) {
       skipHistoryPushRef.current = false;
       return;
     }
-    setHistory((h) => {
-      const truncated = h.slice(0, histIdx + 1);
-      const last = truncated[truncated.length - 1];
-      if (last && last.tab === tab && last.moduleId === openModuleId) {
-        return h; // no real change; dedupe identical consecutive entries
-      }
-      const next = [...truncated, { tab, moduleId: openModuleId }];
-      setHistIdx(next.length - 1);
-      return next;
-    });
+    const current = (window.history.state ?? null) as {
+      shellNav?: { tab: Tab; moduleId: string | null };
+    } | null;
+    if (
+      current?.shellNav &&
+      current.shellNav.tab === tab &&
+      current.shellNav.moduleId === openModuleId
+    ) {
+      return;
+    }
+    window.history.pushState(
+      { shellNav: { tab, moduleId: openModuleId } },
+      '',
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, openModuleId]);
 
-  const goBack = () => {
-    if (histIdx <= 0) return;
-    const target = history[histIdx - 1]!;
-    skipHistoryPushRef.current = true;
-    setTab(target.tab);
-    setOpenModuleId(target.moduleId);
-    setHistIdx(histIdx - 1);
-  };
-  const goForward = () => {
-    if (histIdx >= history.length - 1) return;
-    const target = history[histIdx + 1]!;
-    skipHistoryPushRef.current = true;
-    setTab(target.tab);
-    setOpenModuleId(target.moduleId);
-    setHistIdx(histIdx + 1);
-  };
-  const canBack = histIdx > 0;
-  const canForward = histIdx < history.length - 1;
+  // Listen to popstate. Shell-level entries restore tab/moduleId;
+  // sub-view entries are ignored here — each sub-view (Workflows,
+  // Routines, …) has its own popstate listener handling its state.
+  useEffect(() => {
+    const onPop = (e: PopStateEvent): void => {
+      const state = (e.state ?? null) as {
+        shellNav?: { tab: Tab; moduleId: string | null };
+      } | null;
+      if (state?.shellNav) {
+        skipHistoryPushRef.current = true;
+        setTab(state.shellNav.tab);
+        setOpenModuleId(state.shellNav.moduleId);
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  const goBack = () => window.history.back();
+  const goForward = () => window.history.forward();
+  const canBack = true;
+  const canForward = true;
 
   // Verbal nav: the shell-nav module fires shell:navigate when the user
   // says "open settings", "show observatory", etc. Switch the tab + module
