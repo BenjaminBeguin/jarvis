@@ -168,27 +168,17 @@ export function Drafts() {
     >
       <div style={{ maxWidth: 960, margin: '0 auto' }}>
       <header style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: '0 0 8px 0', fontSize: 20, fontWeight: 600 }}>
-          Drafts
+        <h1 className="drafts-page__title">
+          <span>Drafts</span>
           {pendingCount > 0 && (
-            <span
-              style={{
-                marginLeft: 12,
-                padding: '2px 10px',
-                borderRadius: 12,
-                background: 'rgba(255, 165, 0, 0.15)',
-                color: '#ffa500',
-                fontSize: 13,
-                fontWeight: 500,
-              }}
-            >
+            <span className="drafts-page__pending">
               {pendingCount} pending
             </span>
           )}
         </h1>
-        <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
-          AI drafts waiting for your review. Edit inline or refine via prompt,
-          then send.
+        <p className="drafts-page__subtitle">
+          AI drafts waiting for your review. Edit inline, refine via prompt,
+          then pick an action.
         </p>
       </header>
 
@@ -523,20 +513,28 @@ function DraftRow({
             {timeAgo(draft.updatedAt)} · via {draft.source}
           </span>
         </div>
+        <span
+          className={`draft-row__chevron${expanded ? ' draft-row__chevron--open' : ''}`}
+          aria-hidden
+        >
+          ▶
+        </span>
       </header>
 
       {expanded && (
-        <ExpandedBody
-          draft={draft}
-          body={body}
-          setBody={setBody}
-          sending={sending}
-          onSave={onSave}
-          onRevert={onRevert}
-          onDiscard={onDiscard}
-          onAction={runAction}
-          onOpenRefine={() => setRefineOpen(true)}
-        />
+        <div className="draft-row__expanded-body">
+          <ExpandedBody
+            draft={draft}
+            body={body}
+            setBody={setBody}
+            sending={sending}
+            onSave={onSave}
+            onRevert={onRevert}
+            onDiscard={onDiscard}
+            onAction={runAction}
+            onOpenRefine={() => setRefineOpen(true)}
+          />
+        </div>
       )}
 
       {refineOpen && (
@@ -665,11 +663,12 @@ function ExpandedBody({
           return (
             <button
               key={action.id}
+              className={isPrimary ? 'draft-action--primary' : undefined}
               onClick={() => void onAction(action.id)}
               disabled={actionsDisabled}
               title={action.description}
               style={{
-                padding: '8px 16px',
+                padding: isPrimary ? '8px 18px' : '8px 16px',
                 background: isPrimary ? 'var(--accent)' : 'transparent',
                 color: isPrimary ? '#000' : 'var(--text)',
                 border: isPrimary ? 'none' : '1px solid var(--border)',

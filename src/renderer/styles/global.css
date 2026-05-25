@@ -20977,6 +20977,148 @@ button:disabled:hover {
   color: var(--text);
 }
 
+/* ─── Drafts page polish ───────────────────────────────────────── */
+
+/* Page-level header. Title left, pending pulse right.
+   Pulse uses a soft glow so the user notices new arrivals
+   without it feeling shouty. */
+
+.drafts-page__title {
+  margin: 0 0 8px 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.drafts-page__pending {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 11px;
+  background: rgba(255, 165, 0, 0.14);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  animation: draftsPendingPulse 2400ms ease-in-out infinite;
+}
+
+@keyframes draftsPendingPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 165, 0, 0.0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(255, 165, 0, 0.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drafts-page__pending {
+    animation: none;
+  }
+}
+
+.drafts-page__subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+/* Primary action button — used inside expanded drafts. Subtle
+   glow on hover so it always feels like the obvious next step. */
+.draft-action--primary {
+  position: relative;
+  background: var(--accent) !important;
+  color: #000 !important;
+  border: 0 !important;
+  font-weight: 500 !important;
+  transition:
+    transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 200ms ease,
+    filter 140ms ease;
+}
+
+.draft-action--primary:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px rgba(255, 165, 0, 0.5),
+    0 6px 18px -8px rgba(255, 165, 0, 0.4);
+  filter: brightness(1.05);
+}
+
+.draft-action--primary:not(:disabled):active {
+  transform: translateY(0);
+  box-shadow:
+    0 0 0 1px rgba(255, 165, 0, 0.5),
+    0 2px 6px -3px rgba(255, 165, 0, 0.4);
+}
+
+/* Smooth expand-in for the body section. Replays each time the
+   row opens because React unmounts the inner block when collapsed. */
+@keyframes draftRowExpand {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    max-height: 1200px;
+  }
+}
+
+.draft-row__expanded-body {
+  animation: draftRowExpand 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .draft-row__expanded-body {
+    animation: none;
+  }
+}
+
+/* Chevron hint on rows so the user knows they're clickable. */
+.draft-row__chevron {
+  display: inline-block;
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.draft-row__chevron--open {
+  transform: rotate(90deg);
+  color: var(--accent);
+}
+
+/* Subtle border accent when a row is expanded — visually marks the
+   "active" row in the list so the user keeps their place after
+   editing or scrolling. */
+.draft-row:has(.draft-row__expanded-body) {
+  border-color: rgba(255, 165, 0, 0.32) !important;
+  box-shadow: 0 0 0 1px rgba(255, 165, 0, 0.08);
+}
+
+/* Universal focus ring — keyboard nav clarity. Applied broadly so
+   any clickable element gets visible focus without a separate rule
+   per component. */
+button:focus-visible,
+[role='tab']:focus-visible {
+  outline: 2px solid rgba(255, 165, 0, 0.55);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* ─── Draft row channel chip + hover lift ──────────────────────── */
 
 .draft-row {
@@ -21014,21 +21156,23 @@ button:disabled:hover {
   transform: scale(1.05);
 }
 
-/* ─── Tab cross-fade — the body content fades in on tab change ── */
+/* ─── Tab cross-fade — the body content slides in on tab change ── */
 
 @keyframes shellBodyFade {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(6px);
+    filter: blur(0.5px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
+    filter: blur(0);
   }
 }
 
 .shell__body > *:not(.setup-nudge) {
-  animation: shellBodyFade 220ms ease-out;
+  animation: shellBodyFade 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
