@@ -20505,7 +20505,193 @@ button:disabled:hover {
   box-shadow: 0 0 12px rgba(255, 165, 0, 0.25);
 }
 
-/* ─── System pulse — at-a-glance Dashboard status strip ───────── */
+/* ─── Building home — stats + setup todo list ─────────────────── */
+
+/* shell__body is a flex row with no overflow of its own — the view
+   itself owns its scroll region. */
+.building-home {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 32px 60px;
+}
+
+.building-home__hero,
+.building-home__todos {
+  max-width: 960px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.building-home__hero {
+  margin-bottom: 18px;
+}
+
+.building-home__title {
+  margin: 0 0 6px 0;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.building-home__subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 620px;
+  line-height: 1.5;
+}
+
+/* SystemPulse normally lives inside Dashboard padding; reset its
+   left/right padding when embedded in BuildingHome so chips align
+   with the hero text. */
+.building-home > .system-pulse {
+  max-width: 960px;
+  margin: 8px auto 24px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.building-home__todos {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.building-home__todos-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.building-home__section-title {
+  margin: 0;
+  font-size: 11px;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.building-home__todos-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.building-home__todos-empty-tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #9ece6a;
+}
+
+.building-home__todos-empty {
+  padding: 16px;
+  border: 1px dashed rgba(158, 206, 106, 0.32);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  background: rgba(158, 206, 106, 0.04);
+}
+
+.building-home__todos-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.building-home__todo {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  align-items: start;
+  column-gap: 14px;
+  row-gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.building-home__todo:hover {
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.building-home__todo--pending {
+  border-left: 2px solid var(--accent);
+}
+.building-home__todo--partial {
+  border-left: 2px solid rgba(255, 165, 0, 0.55);
+}
+
+.building-home__todo-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  align-self: start;
+}
+.building-home__todo-dot--pending {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(255, 165, 0, 0.55);
+}
+.building-home__todo-dot--partial {
+  background: rgba(255, 165, 0, 0.55);
+}
+
+.building-home__todo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.building-home__todo-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.building-home__todo-description {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.building-home__todo-action {
+  appearance: none;
+  align-self: center;
+  padding: 6px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.building-home__todo-action:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--accent);
+}
+
+.building-home__todo-action--pending {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+}
+
+.building-home__todo-action--pending:hover {
+  filter: brightness(1.1);
+}
+
+/* ─── System pulse — at-a-glance status strip ─────────────────── */
 
 .system-pulse {
   display: flex;

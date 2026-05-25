@@ -14,6 +14,7 @@ import { NewProjectDialog } from './projects/NewProjectDialog';
 import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
 import { Activity } from './Activity';
+import { BuildingHome } from './BuildingHome';
 import { Dashboard } from './Dashboard';
 import { Drafts } from './Drafts';
 import { FlowStream } from './FlowStream';
@@ -38,6 +39,7 @@ type Tab =
   | 'routines'
   | 'skills'
   | 'workflows'
+  | 'building-home'
   | 'settings';
 
 /**
@@ -82,7 +84,7 @@ function saveUiMode(mode: UiMode): void {
 const MODE_DEFAULT_TAB: Record<UiMode, Tab> = {
   working: 'dashboard',
   observing: 'observatory',
-  building: 'workflows',
+  building: 'building-home',
 };
 
 interface Props {
@@ -614,6 +616,17 @@ export function Shell({ status }: Props) {
     id: 'build',
     items: [
       {
+        id: 'building-home',
+        label: 'Home',
+        icon: 'H',
+        isActive: tab === 'building-home' && !openModuleId,
+        onClick: () => {
+          setTab('building-home');
+          setOpenModuleId(null);
+        },
+        title: 'Stats + things still to set up',
+      },
+      {
         id: 'routines',
         label: 'Routines',
         icon: 'R',
@@ -926,6 +939,8 @@ export function Shell({ status }: Props) {
           />
         ) : tab === 'workflows' ? (
           <Workflows />
+        ) : tab === 'building-home' ? (
+          <BuildingHome />
         ) : (
           <Settings
             status={status}
