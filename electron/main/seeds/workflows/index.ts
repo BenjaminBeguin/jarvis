@@ -8,6 +8,7 @@ import { CALENDAR_TODAY_WORKFLOW } from './calendar-today.js';
 import { DAILY_LEARN_WORKFLOW } from './daily-learn.js';
 import { GOAL_PROGRESS_WORKFLOW } from './goal-progress.js';
 import { INBOX_CURATE_WORKFLOW } from './inbox-curate.js';
+import { JARVIS_SELF_GRADE_WORKFLOW } from './jarvis-self-grade.js';
 import { MORNING_BRIEF_WORKFLOW } from './morning-brief.js';
 import { LINEAR_INBOX_WORKFLOW } from './linear-inbox.js';
 import { SLACK_INBOX_WORKFLOW } from './slack-inbox.js';
@@ -30,6 +31,7 @@ export const BUILTIN_WORKFLOWS: WorkflowDef[] = [
   WORK_AWARENESS_WORKFLOW,
   DAILY_LEARN_WORKFLOW,
   GOAL_PROGRESS_WORKFLOW,
+  JARVIS_SELF_GRADE_WORKFLOW,
   MORNING_BRIEF_WORKFLOW,
   // Autopilot scenarios — all default `enabled: false`. Users opt in
   // per-scenario from Settings → Workflows (or directly in the JSON).

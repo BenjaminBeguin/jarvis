@@ -42,4 +42,12 @@ export const BUILTIN_BRIEFING_KINDS: DigestKind[] = [
     skillId: 'cost-recap',
     schedule: '0 10 * * 1',
   },
+  {
+    id: 'jarvis-self-grade',
+    label: 'Jarvis self-grade',
+    description:
+      "Weekly audit of Jarvis's own outputs — draft accept/discard, escalations, cost outliers, workflow health. Spots which skills earned their place.",
+    skillId: 'jarvis-self-grade',
+    schedule: '0 9 * * 1',
+  },
 ];

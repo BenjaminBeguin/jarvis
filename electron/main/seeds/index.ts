@@ -19,6 +19,7 @@ import gmailTriage from './skills/gmail-triage.js';
 import goalProgress from './skills/goal-progress.js';
 import inboxCalibrate from './skills/inbox-calibrate.js';
 import inboxCurate from './skills/inbox-curate.js';
+import jarvisSelfGrade from './skills/jarvis-self-grade.js';
 import linearInbox from './skills/linear-inbox.js';
 import meetingContextWatch from './skills/meeting-context-watch.js';
 import meetingDebrief from './skills/meeting-debrief.js';
@@ -59,6 +60,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'goal-progress', body: goalProgress },
   { name: 'inbox-calibrate', body: inboxCalibrate },
   { name: 'inbox-curate', body: inboxCurate },
+  { name: 'jarvis-self-grade', body: jarvisSelfGrade },
   { name: 'linear-inbox', body: linearInbox },
   { name: 'meeting-context-watch', body: meetingContextWatch },
   { name: 'meeting-debrief', body: meetingDebrief },
