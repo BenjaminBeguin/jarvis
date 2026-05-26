@@ -428,6 +428,40 @@ export interface Reminder {
 }
 
 /**
+ * Multi-day commitments: "ship X by Friday" — the shape that doesn't
+ * fit reminders (too long) or routines (not recurring). Surfaced into
+ * the Inbox alongside everything else; the goal-progress skill auto-
+ * appends activity entries.
+ */
+export type GoalStatus = 'active' | 'done' | 'abandoned';
+
+export interface GoalProgressEntry {
+  /** ms epoch when this entry was added. */
+  at: number;
+  /** Free-text note describing what happened. */
+  note: string;
+  /** Where the signal came from — 'user', 'goal-progress', 'pr-merge', etc. */
+  source: string;
+  /** Optional URL / file path linking to the underlying signal. */
+  url?: string;
+}
+
+export interface Goal {
+  id: string;
+  title: string;
+  body: string;
+  /** ms epoch deadline. null = open-ended. */
+  deadline: number | null;
+  status: GoalStatus;
+  createdAt: number;
+  updatedAt: number;
+  relatedKeywords: string[];
+  progressLog: GoalProgressEntry[];
+  /** Optional project alias scope. */
+  project?: string | null;
+}
+
+/**
  * Result of routing a free-text palette prompt. The router tries (in order):
  *  1. Verbal intent match — "record the meeting" → meeting module.
  *  2. Reminder/scheduled parse — "remind me in 2h …".

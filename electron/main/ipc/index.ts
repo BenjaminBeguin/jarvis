@@ -5,6 +5,7 @@ import { registerConversationIpc } from './conversation.js';
 import { registerBriefingsIpc } from './briefings.js';
 import { registerDashboardIpc } from './dashboard.js';
 import { registerDraftsIpc } from './drafts.js';
+import { registerGoalsIpc } from './goals.js';
 import { registerInboxIpc } from './inbox.js';
 import { registerIntegrationsIpc } from './integrations.js';
 import { registerIntentIpc } from './intent.js';
@@ -37,6 +38,7 @@ export function registerAllIpc(deps: IpcDeps): void {
   registerBriefingsIpc(deps);
   registerDashboardIpc(deps);
   registerDraftsIpc(deps);
+  registerGoalsIpc(deps);
   registerInboxIpc(deps);
   registerIntegrationsIpc({
     integrations: deps.integrations,

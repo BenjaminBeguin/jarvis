@@ -842,6 +842,28 @@ function InboxRow({
             ✓ Done
           </button>
         )}
+        {item.source === 'goals' && (
+          // Item id is `goal-<goalId>` (see goalsInboxSource). Marks
+          // the goal done — drops it from the active inbox surface;
+          // ~/.jarvis/goals.json keeps the record for history.
+          <button
+            className="inbox__row-done"
+            onClick={async () => {
+              const goalId = item.id.replace(/^goal-/, '');
+              try {
+                await window.jarvis.setGoalStatus(goalId, 'done');
+              } catch (e) {
+                toast({
+                  kind: 'error',
+                  message: e instanceof Error ? e.message : String(e),
+                });
+              }
+            }}
+            title="Mark this goal done"
+          >
+            ✓ Done
+          </button>
+        )}
         {item.action && !binding && (() => {
           // Open-url is pure navigation; the agent never runs, so it
           // stays enabled even when paused. Anything else fires a
@@ -939,6 +961,7 @@ const SOURCE_ORDER: Record<string, { rank: number; label: string }> = {
   // inbox-curate skill. Empty when the curator hasn't run yet or
   // when nothing pressing exists; harmless either way.
   smart: { rank: -1, label: 'Smart · what matters now' },
+  goals: { rank: -0.5, label: 'Goals · active commitments' },
   reminders: { rank: 0, label: 'Scheduled' },
   'failed-routines': { rank: 1, label: 'Needs attention' },
   'pr-comments': { rank: 2, label: 'Comments on your PRs' },
@@ -1000,6 +1023,11 @@ export const PINNABLE_INBOX_SOURCES: Array<{
     source: 'reminders',
     label: 'Reminders',
     hint: 'Time-fired prompts queued via /remind',
+  },
+  {
+    source: 'goals',
+    label: 'Goals',
+    hint: 'Multi-day commitments created via /goal',
   },
 ];
 

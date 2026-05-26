@@ -16,6 +16,7 @@ import dailyBrief from './skills/daily-brief.js';
 import dailyLearn from './skills/daily-learn.js';
 import dailyRecap from './skills/daily-recap.js';
 import gmailTriage from './skills/gmail-triage.js';
+import goalProgress from './skills/goal-progress.js';
 import inboxCalibrate from './skills/inbox-calibrate.js';
 import inboxCurate from './skills/inbox-curate.js';
 import linearInbox from './skills/linear-inbox.js';
@@ -55,6 +56,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'daily-learn', body: dailyLearn },
   { name: 'daily-recap', body: dailyRecap },
   { name: 'gmail-triage', body: gmailTriage },
+  { name: 'goal-progress', body: goalProgress },
   { name: 'inbox-calibrate', body: inboxCalibrate },
   { name: 'inbox-curate', body: inboxCurate },
   { name: 'linear-inbox', body: linearInbox },

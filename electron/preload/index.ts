@@ -35,6 +35,9 @@ import type {
   WorkflowDef,
   WorkflowRun,
   WorkingHoursPrefs,
+  Goal,
+  GoalProgressEntry,
+  GoalStatus,
   ProjectDef,
   ProjectInput,
   ProjectMemoryFile,
@@ -689,6 +692,26 @@ const api = {
     ipcRenderer.invoke(IpcChannels.markReminderDone, id),
   onRemindersChanged: (listener: Listener<Reminder[]>): Unsubscribe =>
     subscribe(IpcChannels.remindersChanged, listener),
+
+  listGoals: (): Promise<Goal[]> => ipcRenderer.invoke(IpcChannels.listGoals),
+  createGoal: (input: {
+    title: string;
+    body?: string;
+    deadline?: number | null;
+    relatedKeywords?: string[];
+    project?: string | null;
+  }): Promise<Goal> => ipcRenderer.invoke(IpcChannels.createGoal, input),
+  appendGoalProgress: (
+    id: string,
+    entry: Omit<GoalProgressEntry, 'at'>,
+  ): Promise<Goal | null> =>
+    ipcRenderer.invoke(IpcChannels.appendGoalProgress, id, entry),
+  setGoalStatus: (id: string, status: GoalStatus): Promise<Goal | null> =>
+    ipcRenderer.invoke(IpcChannels.setGoalStatus, id, status),
+  removeGoal: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.removeGoal, id),
+  onGoalsChanged: (listener: Listener<Goal[]>): Unsubscribe =>
+    subscribe(IpcChannels.goalsChanged, listener),
 
   launchTask: (req: LaunchTaskRequest): Promise<TaskSummary> =>
     ipcRenderer.invoke(IpcChannels.launchTask, req),

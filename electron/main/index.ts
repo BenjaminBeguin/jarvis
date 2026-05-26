@@ -62,6 +62,7 @@ import { DraftsStore } from './drafts-store.js';
 import { IntegrationsStore } from './integrations-store.js';
 import { IntentClassifier } from './intent-classifier.js';
 import { createJarvisMcp } from './jarvis-mcp.js';
+import { GoalStore } from './goals.js';
 import { InboxStore } from './inbox.js';
 import { ConnectorRegistry } from './oauth/connector-registry.js';
 import { OAuthOrchestrator } from './oauth/orchestrator.js';
@@ -89,6 +90,7 @@ import { BUILTIN_BRIEFING_KINDS } from './seeds/briefing-kinds.js';
 import { BUILTIN_WORKFLOWS } from './seeds/workflows/index.js';
 import {
   failedRoutinesInboxSource,
+  goalsInboxSource,
   prAddressCommentsInboxSource,
   prReviewQueueInboxSource,
   remindersInboxSource,
@@ -103,6 +105,7 @@ import { askModule } from './modules/ask.js';
 import { calendarModule } from './modules/calendar.js';
 import { claudeCodeWatchModule } from './modules/claude-code-watch.js';
 import { dailyLearnModule } from './modules/daily-learn.js';
+import { goalsModule } from './modules/goals.js';
 import { morningBriefModule } from './modules/morning-brief.js';
 import { meetingRecorderModule } from './modules/meeting-recorder.js';
 import { prWorkflowsModule } from './modules/pr-workflows.js';
@@ -185,6 +188,7 @@ const projects = new ProjectStore();
 const runner = new TaskRunner();
 const routines = new RoutineStore();
 const reminders = new ReminderStore();
+const goals = new GoalStore();
 const skillSuggestions = new SkillSuggestionStore(join(homedir(), '.jarvis'));
 const skillSessions = new SkillSessionStore();
 const projectMemory = new ProjectMemoryStore();
@@ -559,6 +563,7 @@ userContext.register(recentTaskProvider(runner));
 //     (the same ones the MCP servers already use). No-op gracefully when
 //     tokens are missing or the platform doesn't support them.
 inbox.register(remindersInboxSource(reminders));
+inbox.register(goalsInboxSource(goals));
 inbox.register(failedRoutinesInboxSource());
 inbox.register(prReviewQueueInboxSource(projects));
 inbox.register(prAddressCommentsInboxSource(projects));
@@ -624,6 +629,7 @@ runner.setJarvisMcp(
     mcp,
     routines,
     runner,
+    goals,
     setAppMode: (mode) => {
       const prev = loadAppMode();
       if (prev === mode) return;
@@ -1341,6 +1347,7 @@ app.whenReady().then(async () => {
     });
   });
   reminders.init();
+  goals.init();
   skillSuggestions.init();
 
   // Module foundation: every user-asked feature ships as a module that
@@ -1463,6 +1470,39 @@ app.whenReady().then(async () => {
       }
       return result;
     },
+    listGoals: () => goals.list(),
+    listActiveGoals: () => goals.listActive(),
+    createGoal: (input) => {
+      const g = goals.create(input);
+      activity.record({
+        kind: 'goal.created',
+        label: `Goal · ${g.title.slice(0, 80)}${g.title.length > 80 ? '…' : ''}`,
+        detail: {
+          id: g.id,
+          title: g.title,
+          deadline: g.deadline,
+          project: g.project ?? null,
+        },
+      });
+      return g;
+    },
+    appendGoalProgress: (id, entry) => goals.appendProgress(id, entry),
+    setGoalStatus: (id, status) => {
+      const before = goals.get(id);
+      const next = goals.setStatus(id, status);
+      if (next && before && before.status !== status) {
+        activity.record({
+          kind: status === 'done' ? 'goal.done' : 'goal.status',
+          label:
+            status === 'done'
+              ? `Goal done · ${next.title.slice(0, 80)}`
+              : `Goal ${status} · ${next.title.slice(0, 80)}`,
+          detail: { id, title: next.title, status },
+        });
+      }
+      return next;
+    },
+    removeGoal: (id) => goals.remove(id),
     listSkills: () => skills.list(),
     getCostBreakdown: (windowDays) => getCostBreakdown(windowDays),
     classifyIntent: (message) => intentClassifier.classify(message),
@@ -1482,6 +1522,7 @@ app.whenReady().then(async () => {
   await modules.register(prWorkflowsModule);
   await modules.register(calendarModule);
   await modules.register(remindersModule);
+  await modules.register(goalsModule);
   await modules.register(shellNavModule);
   await modules.register(shellModule);
   await modules.register(workflowsModule);
@@ -1615,6 +1656,13 @@ app.whenReady().then(async () => {
     });
   });
   setPendingRemindersCount(reminders.pendingCount());
+
+  // Goals: every mutation broadcasts to the renderer + nudges the inbox
+  // to refresh so the surface stays in sync without a full poll cycle.
+  goals.on('changed', (list) => {
+    broadcast(IpcChannels.goalsChanged, list);
+    void inbox.refresh().catch(() => {});
+  });
 
   skillSuggestions.on('changed', (list) =>
     broadcast(IpcChannels.skillSuggestionsChanged, list),
@@ -1827,6 +1875,7 @@ app.whenReady().then(async () => {
     shellRunner,
     routines,
     reminders,
+    goals,
     skillSuggestions,
     userContext,
     preferences,

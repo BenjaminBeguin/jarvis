@@ -28,6 +28,7 @@ import type { ActivityStore } from './activity-store.js';
 import type { getCostBreakdown as getCostBreakdownFn } from './db.js';
 import { dispatchDraftSend } from './draft-send.js';
 import type { DraftsStore } from './drafts-store.js';
+import type { GoalStore } from './goals.js';
 import { InboxStore } from './inbox.js';
 import type { McpConfigStore } from './mcp-config.js';
 import type { ProjectMemoryStore } from './project-memory.js';
@@ -99,6 +100,10 @@ export interface JarvisMcpDeps {
    *  Used by set_app_mode. Autopilot is intentionally NOT a value
    *  the agent can choose — see the tool definition. */
   setAppMode: (mode: AppMode) => void;
+  /** Persistent multi-day commitments. Exposed minimally — agents
+   *  list/append progress; the user owns create/done via the
+   *  palette + module intents. */
+  goals: GoalStore;
 }
 
 const ok = (text: string): CallToolResult => ({
@@ -304,6 +309,63 @@ export function createJarvisMcp(
           const suffix = args.cron ? ` (recurring · ${args.cron})` : '';
           return ok(
             `reminder ${r.id} scheduled for ${new Date(r.fireAt).toISOString()}${suffix}`,
+          );
+        },
+      ),
+
+      tool(
+        'list_goals',
+        'List the user\'s active multi-day commitments ("ship X by Friday"). Returns id, title, body, deadline (ms epoch), relatedKeywords, last progress entry, days since last progress. Use before append_goal_progress to find the right goal id and to check whether an observed signal is already logged.',
+        { include_inactive: z.boolean().optional() },
+        async (args) => {
+          const all = deps.goals.list();
+          const list = args.include_inactive
+            ? all
+            : all.filter((g) => g.status === 'active');
+          const now = Date.now();
+          const out = list.map((g) => {
+            const last = g.progressLog[g.progressLog.length - 1] ?? null;
+            return {
+              id: g.id,
+              title: g.title,
+              body: g.body,
+              status: g.status,
+              deadline: g.deadline,
+              relatedKeywords: g.relatedKeywords,
+              project: g.project ?? null,
+              progressCount: g.progressLog.length,
+              lastProgress: last
+                ? {
+                    at: last.at,
+                    note: last.note,
+                    source: last.source,
+                    msSince: now - last.at,
+                  }
+                : null,
+            };
+          });
+          return json(out);
+        },
+      ),
+
+      tool(
+        'append_goal_progress',
+        'Append a progress entry to a goal. Use when you observed activity that moves a goal forward (PR merged matching a related keyword, meeting where the goal was discussed, etc.). `source` should describe where the signal came from: "pr-merge", "meeting", "goal-progress" (the daily skill), or "user". Optional `url` links to the underlying artefact (PR url, meeting note path).',
+        {
+          id: z.string().min(1),
+          note: z.string().min(1).max(500),
+          source: z.string().min(1).max(40),
+          url: z.string().optional(),
+        },
+        async (args) => {
+          const updated = deps.goals.appendProgress(args.id, {
+            note: args.note,
+            source: args.source,
+            ...(args.url ? { url: args.url } : {}),
+          });
+          if (!updated) return err(`unknown goal id: ${args.id}`);
+          return ok(
+            `appended progress to goal ${args.id} (${updated.progressLog.length} entries total)`,
           );
         },
       ),

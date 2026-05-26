@@ -6,6 +6,7 @@ import { AUTOPILOT_PR_REVIEW_NON_TEAM_WORKFLOW } from './autopilot-pr-review-non
 import { AUTOPILOT_SLACK_DM_ACK_WORKFLOW } from './autopilot-slack-dm-ack.js';
 import { CALENDAR_TODAY_WORKFLOW } from './calendar-today.js';
 import { DAILY_LEARN_WORKFLOW } from './daily-learn.js';
+import { GOAL_PROGRESS_WORKFLOW } from './goal-progress.js';
 import { INBOX_CURATE_WORKFLOW } from './inbox-curate.js';
 import { MORNING_BRIEF_WORKFLOW } from './morning-brief.js';
 import { LINEAR_INBOX_WORKFLOW } from './linear-inbox.js';
@@ -28,6 +29,7 @@ export const BUILTIN_WORKFLOWS: WorkflowDef[] = [
   INBOX_CURATE_WORKFLOW,
   WORK_AWARENESS_WORKFLOW,
   DAILY_LEARN_WORKFLOW,
+  GOAL_PROGRESS_WORKFLOW,
   MORNING_BRIEF_WORKFLOW,
   // Autopilot scenarios — all default `enabled: false`. Users opt in
   // per-scenario from Settings → Workflows (or directly in the JSON).

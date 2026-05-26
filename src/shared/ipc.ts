@@ -243,6 +243,13 @@ export const IpcChannels = {
   markReminderDone: 'reminders:markDone',
   remindersChanged: 'reminders:changed',
 
+  listGoals: 'goals:list',
+  createGoal: 'goals:create',
+  appendGoalProgress: 'goals:appendProgress',
+  setGoalStatus: 'goals:setStatus',
+  removeGoal: 'goals:remove',
+  goalsChanged: 'goals:changed',
+
   launchTask: 'task:launch',
   launchShell: 'task:launchShell',
   abortTask: 'task:abort',

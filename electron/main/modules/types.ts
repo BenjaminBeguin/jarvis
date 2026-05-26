@@ -1,6 +1,9 @@
 import type {
   ActivityEventInput,
   CostBreakdown,
+  Goal,
+  GoalProgressEntry,
+  GoalStatus,
   InboxItem,
   LaunchTaskRequest,
   ModuleSettingsSpec,
@@ -176,6 +179,24 @@ export interface ModuleContext {
   markReminderDone(id: string): boolean;
   /** Re-arm a reminder to fire `msFromNow` from now. Wraps reminders.snooze. */
   snoozeReminder(id: string, msFromNow: number): Reminder | null;
+  /** Persistent multi-day commitments. The Goals module + the
+   *  goal-progress daily skill drive these; the inbox source surfaces
+   *  active ones. */
+  listGoals(): Goal[];
+  listActiveGoals(): Goal[];
+  createGoal(input: {
+    title: string;
+    body?: string;
+    deadline?: number | null;
+    relatedKeywords?: string[];
+    project?: string | null;
+  }): Goal;
+  appendGoalProgress(
+    id: string,
+    entry: Omit<GoalProgressEntry, 'at'>,
+  ): Goal | null;
+  setGoalStatus(id: string, status: GoalStatus): Goal | null;
+  removeGoal(id: string): boolean;
   /** Skills available to launch. Used by the Telegram bot for /skills. */
   listSkills(): SkillSummary[];
   /** Snapshot of Jarvis spend over the last `windowDays` (1-90). Used
