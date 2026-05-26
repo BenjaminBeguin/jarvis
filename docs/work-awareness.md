@@ -92,15 +92,24 @@ done based on recent activity. Example:
 }
 ```
 
-**Phase 1 (now):** the dismissals array is captured but not yet
-auto-applied. The skill writes them; you read them as a hint in the
-output. Treat it as advisory.
+**How it's wired:** `userInboxSource` (the JSON-file reader in
+`electron/main/inbox-sources/user.ts`) consumes the `dismissals`
+array on every fetch and forwards each id to
+`InboxDismissalStore.dismiss(id, 8h)`. Items disappear from the
+unified Inbox on the next refresh, no click required.
 
-**Phase 2 (next):** the `inbox-write` style flow that consumes the
-file will look at `dismissals` and pass them through
-`InboxDismissalStore.dismiss()`. Items drop off the Inbox tab
-automatically. (Coming in a follow-up commit — keeping Phase 1 tight
-so you can iterate on the prompt + priorities file first.)
+**Why 8h, not forever:** if the agent gets a dismissal wrong (says
+"send Theo Q3" is done when actually you only DRAFTED a reply, didn't
+send it), an 8-hour snooze means the item reappears in your next
+working block and you have a chance to address it. "Forever"
+dismissals stay tied to the user's manual ✕ button — the agent
+isn't trusted with hard delete.
+
+**De-duping across refreshes:** the source maintains an in-memory
+set of `<filename>:<id>` keys it's already passed to the dismissal
+store this process lifetime, so a workflow that re-writes the same
+dismissal list on every tick doesn't re-fire the IPC. App restart
+clears the set; the dismissal store on disk persists.
 
 ## Why a skill (not JS)
 
@@ -155,9 +164,6 @@ infrastructure.
 
 ## Limits + next steps
 
-- **Phase 1 here.** Auto-dismissal is captured in the output JSON
-  but not yet wired through `InboxDismissalStore`. The next commit
-  will close that loop.
 - **No proactive note creation yet.** The user's original ask
   included "create notes dynamically" — that's a different skill
   (write to `~/.jarvis/notes/` when the awareness pass detects
@@ -170,3 +176,7 @@ infrastructure.
   add a "what to mute" bullet for the noisy class. The skill picks
   it up on the next tick. Five iterations of the priorities file
   is usually enough to dial it in.
+- **Recovering a wrongly-dismissed item.** The 8-hour soft snooze
+  means it naturally reappears later, but if you want it back now,
+  delete the matching entry from `~/.jarvis/inbox/.dismissed.json`
+  and refresh the Inbox.

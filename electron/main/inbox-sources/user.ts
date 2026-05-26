@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import type { InboxItem } from '@shared/types';
 
+import { InboxDismissalStore } from '../inbox-dismissals.js';
 import type { InboxSource } from '../inbox.js';
 
 /**
@@ -59,6 +60,12 @@ interface InboxFileWrapper {
   source?: string;
   label?: string;
   items: unknown[];
+  /** Optional companion array: inbox item ids the skill / workflow that
+   *  wrote this file inferred are DONE (PR merged, message sent, etc.).
+   *  Each tick of the fetch passes these through InboxDismissalStore so
+   *  they drop off the unified inbox without the user having to click
+   *  through. Used by the work-awareness loop today. */
+  dismissals?: unknown[];
 }
 
 function isWrapper(v: unknown): v is InboxFileWrapper {
@@ -68,6 +75,14 @@ function isWrapper(v: unknown): v is InboxFileWrapper {
     Array.isArray((v as InboxFileWrapper).items)
   );
 }
+
+/** Per-source, per-id memory of which dismissals we've already applied
+ *  during this process lifetime. Without this, the source's fetch would
+ *  re-call dismiss on every refresh — harmless (the dismissal store is
+ *  idempotent) but noisy in the logs. Keyed by `<filename>:<id>` so two
+ *  files with overlapping ids don't trample each other. */
+const appliedDismissals = new Set<string>();
+const dismissalStore = new InboxDismissalStore();
 
 function isItem(v: unknown): v is InboxItem {
   if (!v || typeof v !== 'object') return false;
@@ -136,10 +151,14 @@ export const userInboxSource: InboxSource = {
 
       let items: unknown[];
       let source = sourceFromName;
+      let dismissals: unknown[] = [];
       if (isWrapper(parsed)) {
         items = parsed.items;
         if (typeof parsed.source === 'string' && parsed.source) {
           source = parsed.source;
+        }
+        if (Array.isArray(parsed.dismissals)) {
+          dismissals = parsed.dismissals;
         }
       } else if (Array.isArray(parsed)) {
         items = parsed;
@@ -148,6 +167,30 @@ export const userInboxSource: InboxSource = {
           `Inbox: ${entry.name} must be an array or {source,label,items}`,
         );
         continue;
+      }
+
+      // Apply dismissals before items are returned. The auto-dismiss
+      // path: a skill (work-awareness today) writes a wrapper file
+      // with a `dismissals: [<id>, ...]` array of inbox item ids it
+      // inferred are done based on recent activity. We pass each
+      // through InboxDismissalStore so the unified Inbox filters them
+      // out automatically. Long snooze (8h) — not "forever" — so an
+      // incorrectly-dismissed item naturally reappears later if the
+      // user actually still needs it.
+      const DISMISS_MS = 8 * 60 * 60 * 1000;
+      for (const raw of dismissals) {
+        if (typeof raw !== 'string' || !raw) continue;
+        const key = `${entry.name}:${raw}`;
+        if (appliedDismissals.has(key)) continue;
+        appliedDismissals.add(key);
+        try {
+          dismissalStore.dismiss(raw, DISMISS_MS);
+        } catch (err) {
+          console.warn(
+            `[inbox/user] failed to apply dismissal ${raw}:`,
+            err,
+          );
+        }
       }
 
       for (const raw of items) {
