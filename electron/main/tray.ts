@@ -310,6 +310,15 @@ export function getTrayMenuState(): TrayMenuState {
     reducedConversations,
     todaySpendUsd,
     pinned: [...pinnedConversations],
+    ...(meetingRecording
+      ? {
+          meeting: {
+            active: meetingRecording,
+            paused: meetingPaused,
+            title: meetingTitle,
+          },
+        }
+      : {}),
   };
 }
 
@@ -378,6 +387,10 @@ export function setMeetingRecording(state: {
   meetingTitle = state.title;
   rebuildTitle();
   rebuildToolTip();
+  // The custom tray-menu popover surfaces a Pause/Resume + Finish
+  // row when a recording is live. Push the new state so it appears
+  // (or disappears) without waiting for an unrelated trigger.
+  broadcastTrayState();
 }
 
 /**

@@ -8193,6 +8193,120 @@ button:disabled:hover {
   letter-spacing: 0.04em;
 }
 
+/* Meeting recording row — sits right under the header when a
+   recording is live. Red dot pulses; pause/resume/finish buttons
+   give the user quick control without finding the Jarvis window. */
+.tray-menu__meeting {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px 10px;
+  background: rgba(255, 107, 133, 0.07);
+  border-left: 2px solid rgba(255, 107, 133, 0.65);
+  margin: 2px 4px;
+  border-radius: 2px;
+}
+
+.tray-menu__meeting-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+
+.tray-menu__meeting-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bad);
+  box-shadow: 0 0 8px var(--bad);
+  animation: tray-meeting-pulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.tray-menu__meeting-dot--paused {
+  background: var(--warn);
+  box-shadow: 0 0 8px var(--warn);
+  animation: none;
+}
+
+.tray-menu__meeting-label {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+.tray-menu__meeting-dot--paused + .tray-menu__meeting-label {
+  color: var(--warn);
+}
+
+.tray-menu__meeting-title {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-family: var(--sans);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tray-menu__meeting-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.tray-menu__meeting-btn {
+  flex: 1;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid rgba(150, 195, 220, 0.28);
+  color: var(--text);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease,
+    color 120ms ease;
+}
+
+.tray-menu__meeting-btn:hover {
+  background: rgba(150, 195, 220, 0.08);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tray-menu__meeting-btn--primary {
+  border-color: rgba(108, 242, 169, 0.45);
+  color: var(--good);
+}
+
+.tray-menu__meeting-btn--primary:hover {
+  background: rgba(108, 242, 169, 0.08);
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.tray-menu__meeting-btn--danger {
+  flex: 0 0 32px;
+  border-color: rgba(255, 107, 133, 0.32);
+  color: var(--bad);
+}
+
+.tray-menu__meeting-btn--danger:hover {
+  background: rgba(255, 107, 133, 0.1);
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+@keyframes tray-meeting-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 .tray-menu__divider {
   height: 1px;
   background: linear-gradient(

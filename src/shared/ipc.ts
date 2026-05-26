@@ -105,6 +105,11 @@ export const IpcChannels = {
    *  the floating "STOP SPEAKING" pill. */
   speechActive: 'voice:speechActive',
 
+  /** Renderer-invoked control of the active meeting recording. Used
+   *  by the tray menu's Pause/Resume/Finish buttons. Same path the
+   *  PWA + Chrome extension hit via /v1/meeting/control. */
+  meetingControlInvoke: 'meeting:control-invoke',
+
   listProjects: 'projects:list',
   createProject: 'projects:create',
   updateProject: 'projects:update',

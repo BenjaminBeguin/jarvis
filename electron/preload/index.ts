@@ -216,6 +216,14 @@ const api = {
    *  `false` when it ends. Drives the floating STOP pill. */
   onSpeechActive: (listener: Listener<boolean>): Unsubscribe =>
     subscribe(IpcChannels.speechActive, listener),
+
+  /** Tray-menu meeting controls. Routes to the renderer's
+   *  MeetingRecorder through the same broadcast path the PWA +
+   *  Chrome extension use. */
+  meetingControlInvoke: (
+    action: 'pause' | 'resume' | 'cancel' | 'finish',
+  ): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IpcChannels.meetingControlInvoke, action),
   openInClaudeDesktop: (
     sessionId: string,
   ): Promise<{ ok: boolean; message?: string }> =>

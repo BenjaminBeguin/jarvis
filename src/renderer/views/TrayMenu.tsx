@@ -48,6 +48,12 @@ export function TrayMenu() {
   return (
     <div className="tray-menu" ref={containerRef}>
       <TrayMenuHeader state={state} />
+      {state.meeting?.active && (
+        <>
+          <Divider />
+          <MeetingRow meeting={state.meeting} />
+        </>
+      )}
       {state.pinned.length > 0 && (
         <>
           <Divider label={`📌 Pinned · ${state.pinned.length}`} />
@@ -175,6 +181,72 @@ function TrayMenuHeader({ state }: { state: TrayMenuState }) {
       ) : (
         <div className="tray-menu__header-idle">Nothing in flight.</div>
       )}
+    </div>
+  );
+}
+
+function MeetingRow({
+  meeting,
+}: {
+  meeting: NonNullable<TrayMenuState['meeting']>;
+}) {
+  const title = meeting.title?.trim() || 'Meeting';
+  const display = title.length > 28 ? `${title.slice(0, 27)}…` : title;
+  return (
+    <div className="tray-menu__meeting" role="group" aria-label="Meeting recording">
+      <div className="tray-menu__meeting-line">
+        <span
+          className={`tray-menu__meeting-dot${meeting.paused ? ' tray-menu__meeting-dot--paused' : ''}`}
+          aria-hidden
+        />
+        <span className="tray-menu__meeting-label">
+          {meeting.paused ? 'PAUSED' : 'RECORDING'}
+        </span>
+        <span className="tray-menu__meeting-title" title={title}>
+          {display}
+        </span>
+      </div>
+      <div className="tray-menu__meeting-actions">
+        {meeting.paused ? (
+          <button
+            type="button"
+            className="tray-menu__meeting-btn"
+            onClick={() => void meetingControl('resume')}
+            title="Resume recording"
+          >
+            ▶ Resume
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="tray-menu__meeting-btn"
+            onClick={() => void meetingControl('pause')}
+            title="Pause recording (audio chunks discarded until resume)"
+          >
+            ⏸ Pause
+          </button>
+        )}
+        <button
+          type="button"
+          className="tray-menu__meeting-btn tray-menu__meeting-btn--primary"
+          onClick={() => void meetingControl('finish')}
+          title="Stop + save + auto-debrief"
+        >
+          ■ Finish
+        </button>
+        <button
+          type="button"
+          className="tray-menu__meeting-btn tray-menu__meeting-btn--danger"
+          onClick={() => {
+            if (window.confirm('Discard this recording?')) {
+              void meetingControl('cancel');
+            }
+          }}
+          title="Discard recording without saving"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   );
 }
@@ -356,6 +428,21 @@ async function setAfk(next: boolean): Promise<void> {
 
 async function setAppMode(mode: AppMode): Promise<void> {
   await window.jarvis.setAppMode(mode);
+}
+
+async function meetingControl(
+  action: 'pause' | 'resume' | 'cancel' | 'finish',
+): Promise<void> {
+  await window.jarvis.meetingControlInvoke(action);
+  // For Finish + Cancel, dismiss the popover — the recording state
+  // changes (the row disappears) so leaving the menu open would
+  // immediately re-render without it, which is fine, but the user
+  // probably wants the menu out of their way after a terminal
+  // action. Pause / Resume keeps the menu open so they can keep
+  // adjusting.
+  if (action === 'finish' || action === 'cancel') {
+    await dismiss();
+  }
 }
 
 async function quitApp(): Promise<void> {

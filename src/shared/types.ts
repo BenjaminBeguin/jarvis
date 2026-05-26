@@ -1039,6 +1039,14 @@ export interface TrayMenuState {
     status: TaskStatus;
     reduced: boolean;
   }>;
+  /** Meeting recorder live state — surfaces in the tray menu so the
+   *  user can pause / resume / finish without finding the Jarvis
+   *  window. Absent when no recording is active. */
+  meeting?: {
+    active: boolean;
+    paused: boolean;
+    title: string | null;
+  };
 }
 
 export interface AppStatus {

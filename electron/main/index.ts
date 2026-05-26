@@ -2012,6 +2012,25 @@ app.whenReady().then(async () => {
   speechEvents.on('start', () => broadcast(IpcChannels.speechActive, true));
   speechEvents.on('stop', () => broadcast(IpcChannels.speechActive, false));
 
+  // Tray-menu meeting controls. Routes through the same broadcast
+  // path the PWA + Chrome extension use so the renderer's
+  // MeetingRecorder doesn't need to distinguish sources.
+  ipcMain.handle(
+    IpcChannels.meetingControlInvoke,
+    (_e, action: 'pause' | 'resume' | 'cancel' | 'finish') => {
+      if (
+        action !== 'pause' &&
+        action !== 'resume' &&
+        action !== 'cancel' &&
+        action !== 'finish'
+      ) {
+        return { ok: false, error: 'invalid action' };
+      }
+      const ok = onMeetingControlFromHttp(action);
+      return { ok };
+    },
+  );
+
   // Open observatory on first launch.
   openObservatory();
 });
