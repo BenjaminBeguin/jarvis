@@ -148,6 +148,21 @@ In addition to the toast, the heads-up fires a macOS Notification + a
 Web Push to your paired phone, so you see it even when your browser /
 Meet tab is in front on another space.
 
+## While recording
+
+A handful of things shift to "the mic is hot, don't lose the recording":
+
+- **Menu-bar tray** prefixes its title with **🔴** (live) or **⏸**
+  (paused) and the tooltip becomes `Jarvis — Recording: <meeting
+  title> · …`. So even if you close the Jarvis window, the
+  recording is visible from anywhere on macOS.
+- **Display sleep is inhibited** via Electron's `powerSaveBlocker`
+  while a recording is active + un-paused. A 60-minute meeting
+  won't get cut short by the screensaver. The blocker releases
+  automatically on **Pause**, **Cancel**, and **Finish**.
+- The **MeetingOverlay** floats in the renderer window with the
+  pause/cancel/finish controls (next section).
+
 ## Recording controls
 
 | Control | Behaviour | When you'd use it |

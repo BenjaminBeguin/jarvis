@@ -1,4 +1,4 @@
-import { app, globalShortcut, ipcMain, shell } from 'electron';
+import { app, globalShortcut, ipcMain, powerSaveBlocker, shell } from 'electron';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
@@ -150,6 +150,7 @@ import {
   refreshTrayMenu,
   setAbortAllHandler,
   setAwaitingRepliesCount,
+  setMeetingRecording,
   setPendingRemindersCount,
   setRunningTasksCount,
   setTodaySpend,
@@ -391,6 +392,47 @@ ipcMain.handle(IpcChannels.snoozeMeetingHeadsUp, (_e, ms: number) => {
   );
   return { until: meetingHeadsUpSnoozedUntil };
 });
+
+/**
+ * Mirror MeetingRecorder state from the renderer into:
+ *   - the tray: 🔴/⏸ prefix + tooltip mentions the live meeting
+ *     so the user knows the mic is hot even with the window closed.
+ *   - the OS power-save blocker: prevents the display from sleeping
+ *     while a recording is active. Released on stop/cancel/abort.
+ *
+ * The renderer is the source of truth for recording state (the
+ * AudioCapture lives there); main just reflects it.
+ */
+let powerSaveBlockerId: number | null = null;
+ipcMain.handle(
+  IpcChannels.meetingRecorderState,
+  (_e, state: { active: boolean; paused: boolean; title: string | null }) => {
+    setMeetingRecording(state);
+    if (state.active && !state.paused) {
+      if (powerSaveBlockerId === null) {
+        try {
+          // 'prevent-display-sleep' is the strictest mode — it also
+          // implies 'prevent-app-suspension'. Without this, a long
+          // call would let macOS dim/sleep + the renderer audio loop
+          // would stall when the lid stays open but the system idles.
+          powerSaveBlockerId = powerSaveBlocker.start('prevent-display-sleep');
+        } catch (err) {
+          console.warn('[meeting] powerSaveBlocker start failed:', err);
+        }
+      }
+    } else if (powerSaveBlockerId !== null) {
+      // Released on stop, cancel, AND pause — paused recordings
+      // aren't capturing samples, so there's no need to keep the
+      // display awake. resume re-arms.
+      try {
+        powerSaveBlocker.stop(powerSaveBlockerId);
+      } catch {
+        /* already gone */
+      }
+      powerSaveBlockerId = null;
+    }
+  },
+);
 
 // Renderer can pull the current watcher state on demand (e.g. when
 // the Now view mounts and wants to show "auto-detect quiet → record

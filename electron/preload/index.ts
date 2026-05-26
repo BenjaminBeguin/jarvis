@@ -477,6 +477,16 @@ const api = {
     ipcRenderer.invoke(IpcChannels.suppressMeetingPrompt, id),
   snoozeMeetingHeadsUp: (ms: number): Promise<{ until: number }> =>
     ipcRenderer.invoke(IpcChannels.snoozeMeetingHeadsUp, ms),
+  /** Push the live MeetingRecorder state into the main process so
+   *  the tray shows 🔴/⏸ + the meeting title, and the OS sleep
+   *  inhibitor stays armed while recording. Fire-and-forget; no
+   *  return value needed. */
+  meetingRecorderState: (state: {
+    active: boolean;
+    paused: boolean;
+    title: string | null;
+  }): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.meetingRecorderState, state),
   meetingDetectionStatus: (): Promise<MeetingDetectionStatus> =>
     ipcRenderer.invoke(IpcChannels.meetingDetectionStatus),
   onMeetingDetectionChanged: (

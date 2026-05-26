@@ -57,6 +57,13 @@ let reducedConversations = 0;
  *  pinned without having to bring Jarvis forward first. */
 let pinnedConversations: PinnedConversationEntry[] = [];
 
+/** Meeting-recorder is actively capturing. Drives the 🔴/⏸ prefix
+ *  on the tray title so the user sees the mic-live state even with
+ *  the Jarvis window closed. */
+let meetingRecording = false;
+let meetingPaused = false;
+let meetingTitle: string | null = null;
+
 function buildIcon(active: boolean): Electron.NativeImage {
   // Use template image so macOS handles dark/light. Falls back to a generated
   // 16x16 PNG so the tray still appears before assets are bundled.
@@ -232,6 +239,12 @@ function rebuildToolTip(): void {
       `$${todaySpendUsd >= 0.01 ? todaySpendUsd.toFixed(2) : todaySpendUsd.toFixed(4)} today`,
     );
   }
+  if (meetingRecording) {
+    const verb = meetingPaused ? 'Paused' : 'Recording';
+    bits.unshift(
+      meetingTitle ? `${verb}: ${meetingTitle}` : `${verb} a meeting`,
+    );
+  }
   tray.setToolTip(bits.length ? `Jarvis — ${bits.join(' · ')}` : 'Jarvis');
 }
 
@@ -240,10 +253,18 @@ function rebuildToolTip(): void {
  * Without this the bundled PNGs may be missing in dev → the icon
  * is invisible. The title is intentionally tiny: a "J" base, with
  * status badges appended when there's something to surface.
+ *
+ * When a meeting recording is active, a 🔴 (or ⏸ when paused)
+ * leads the title so the user can see at a glance that the mic is
+ * live even with the Jarvis window closed.
  */
 function rebuildTitle(): void {
   if (!tray) return;
-  const parts = ['J'];
+  const parts: string[] = [];
+  if (meetingRecording) {
+    parts.push(meetingPaused ? '⏸' : '🔴');
+  }
+  parts.push('J');
   if (runningTasks > 0) parts.push(`●${runningTasks}`);
   if (pinnedConversations.length > 0) {
     parts.push(`📌${pinnedConversations.length}`);
@@ -339,6 +360,24 @@ export function setReducedConversationsCount(n: number): void {
   reducedConversations = Math.max(0, n);
   rebuildToolTip();
   broadcastTrayState();
+}
+
+/**
+ * Reflect the renderer's MeetingRecorder state in the menu-bar tray
+ * so the user always knows the mic is live — even when they've
+ * closed the Jarvis window. Pushed on every start/pause/resume/
+ * stop/cancel transition.
+ */
+export function setMeetingRecording(state: {
+  active: boolean;
+  paused: boolean;
+  title: string | null;
+}): void {
+  meetingRecording = state.active;
+  meetingPaused = state.paused;
+  meetingTitle = state.title;
+  rebuildTitle();
+  rebuildToolTip();
 }
 
 /**

@@ -302,8 +302,29 @@ class MeetingRecorder {
   }
 
   private setState(next: MeetingState): void {
+    const wasActive = this.state.active;
+    const wasPaused = this.state.paused;
+    const wasTitle = this.state.title;
     this.state = next;
     for (const l of this.listeners) l(next);
+    // Mirror to main only when the recording-shape changes — no
+    // need to spam IPC on every liveChunks update. Fire-and-forget;
+    // the tray + powerSaveBlocker tolerate a dropped message.
+    if (
+      next.active !== wasActive ||
+      next.paused !== wasPaused ||
+      next.title !== wasTitle
+    ) {
+      try {
+        void window.jarvis.meetingRecorderState({
+          active: next.active,
+          paused: next.paused,
+          title: next.title,
+        });
+      } catch {
+        /* main not ready / api missing in older binaries */
+      }
+    }
   }
 }
 
