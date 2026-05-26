@@ -1,8 +1,11 @@
 import { Notification, ipcMain, systemPreferences } from 'electron';
+import { join } from 'node:path';
 
 import { IpcChannels } from '@shared/ipc';
 
 import { loadModuleSettings } from '../auth.js';
+import { awaitTurnResult } from '../await-turn.js';
+import { pushMeetingActionsToInbox } from '../meeting-actions.js';
 import {
   MEETING_RECORDER_MODULE_ID,
   persistMeeting,
@@ -21,6 +24,7 @@ export function registerMediaIpc({
   hud,
   jarvisRoot,
   activity,
+  inbox,
 }: IpcDeps): void {
   ipcMain.handle(
     IpcChannels.requestMicAccess,
@@ -121,6 +125,36 @@ export function registerMediaIpc({
             origin: 'routine',
           });
           hud.pushTask(debrief.id);
+          // Fire-and-forget: wait for the debrief task to complete,
+          // then re-read the rewritten transcript and pump extracted
+          // action items into the inbox under
+          // source='meeting-actions'. This closes the loop —
+          // transcripts on disk are read-only memory, the inbox
+          // surfaces the things you actually need to do.
+          void (async () => {
+            try {
+              await awaitTurnResult(runner, debrief.id, {
+                timeoutMs: 5 * 60_000,
+              });
+              const transcriptPath = join(
+                jarvisRoot,
+                'meetings',
+                filename,
+              );
+              pushMeetingActionsToInbox(inbox, {
+                transcriptPath,
+                meetingTitle: payload.title,
+                project: payload.project ?? null,
+                finishedAt: payload.endedAt,
+                meetingKey: filename.replace(/\.md$/, ''),
+              });
+            } catch (err) {
+              console.warn(
+                '[meeting-actions] extraction after debrief failed:',
+                err,
+              );
+            }
+          })();
         } catch (e) {
           console.error('Meeting auto-debrief failed to launch:', e);
         }

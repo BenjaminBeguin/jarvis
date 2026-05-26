@@ -168,6 +168,23 @@ Turn it off in **Settings → Modules → Meeting recorder → Auto-debrief
 on finish** if you want raw transcripts only (saves Claude spend per
 meeting).
 
+### Action items → Inbox
+
+Once the debrief completes, Jarvis re-reads the structured transcript,
+parses the `## Action items` bullets (format: `[owner] action — by
+when`), and pushes them into the Inbox under
+**`meeting-actions`** source. They sort alongside PRs / Slack / Linear
+in your triage feed, with the meeting title + project as subtitle, and
+a `vscode://` link that opens the transcript at the source of truth.
+
+Re-running the debrief skill on the same meeting REPLACES that
+meeting's actions — no duplicate pile-up. Items from other recent
+meetings stay live.
+
+The smart-inbox curator naturally sees these too, so a high-priority
+action ("send Q3 report to Theo — today") rises to the top of the
+Smart section.
+
 ## Calendar-aware default title
 
 When `/meeting` fires without a title — the heads-up's [Record]
