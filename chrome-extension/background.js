@@ -1,21 +1,28 @@
 /**
  * Jarvis Meet Detector — background service worker.
  *
- * Receives "meeting detected" events from the content script(s) and
- * POSTs them to the local Jarvis HTTP API. The Mac fires its existing
- * heads-up prompt ("record this meeting?") off the same flow as the
- * macOS Core Audio watcher — we just give it more reliable signal
- * for browser-hosted meetings.
+ * Receives "meeting detected" + "meeting ended" events from the
+ * content script(s) and POSTs them to the local Jarvis HTTP API.
+ * The Mac fires its existing heads-up prompt ("record this
+ * meeting?") off the same flow as the macOS Core Audio watcher.
  *
  * Settings stored in chrome.storage.local:
  *   baseUrl  — Jarvis HTTP API origin (e.g. http://127.0.0.1:4747)
  *   token    — bearer token from Settings → API → Token
  *
- * Both are set from popup.html. The extension is no-op until both
- * exist (no annoying notifications-please toast on every page).
+ * In-meeting tab state stored in chrome.storage.session (cleared on
+ * browser quit, survives SW hibernation):
+ *   inMeetingTabs — { [tabId]: { vendor, url } }
+ *
+ * Tab-close detection: MV3 service workers can hibernate, but
+ * `chrome.tabs.onRemoved` is registered at the top level so it wakes
+ * the worker when a tab closes. If the closed tab was in our
+ * in-meeting map, we fire meeting-ended — the content script
+ * couldn't, because it died with the page.
  */
 
 const STATE_KEY = 'jarvis.state';
+const TABS_KEY = 'jarvis.inMeetingTabs';
 
 /**
  * One detection per (tabId, vendor, ~minute) to avoid spamming when
@@ -34,6 +41,37 @@ async function getSettings() {
     baseUrl: typeof state.baseUrl === 'string' ? state.baseUrl.trim() : '',
     token: typeof state.token === 'string' ? state.token.trim() : '',
   };
+}
+
+async function getInMeetingTabs() {
+  const { [TABS_KEY]: tabs = {} } =
+    await chrome.storage.session.get(TABS_KEY);
+  return tabs;
+}
+
+async function setInMeetingTabs(tabs) {
+  await chrome.storage.session.set({ [TABS_KEY]: tabs });
+}
+
+async function markTabInMeeting(tabId, payload) {
+  if (typeof tabId !== 'number') return;
+  const tabs = await getInMeetingTabs();
+  tabs[tabId] = {
+    vendor: payload.vendor ?? null,
+    url: payload.url ?? null,
+    at: Date.now(),
+  };
+  await setInMeetingTabs(tabs);
+}
+
+async function clearTabInMeeting(tabId) {
+  if (typeof tabId !== 'number') return null;
+  const tabs = await getInMeetingTabs();
+  const prev = tabs[tabId];
+  if (!prev) return null;
+  delete tabs[tabId];
+  await setInMeetingTabs(tabs);
+  return prev;
 }
 
 async function sendMeetingEnded(payload) {
@@ -114,11 +152,28 @@ async function sendDetection(detection, tabId) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.kind === 'meeting-detected') {
-    sendDetection(msg.payload, sender.tab?.id).then(sendResponse);
+    (async () => {
+      const result = await sendDetection(msg.payload, sender.tab?.id);
+      // Remember the tab so tabs.onRemoved can fire meeting-ended
+      // when the user closes the tab without first leaving the call.
+      if (result.ok && sender.tab?.id != null) {
+        await markTabInMeeting(sender.tab.id, msg.payload);
+      }
+      sendResponse(result);
+    })();
     return true; // async response
   }
   if (msg && msg.kind === 'meeting-ended') {
-    sendMeetingEnded(msg.payload ?? {}).then(sendResponse);
+    (async () => {
+      const result = await sendMeetingEnded(msg.payload ?? {});
+      // Forget the tab — even if the send failed (Jarvis offline,
+      // 401, etc.) the content script told us the user left, so
+      // tabs.onRemoved shouldn't double-fire later.
+      if (sender.tab?.id != null) {
+        await clearTabInMeeting(sender.tab.id);
+      }
+      sendResponse(result);
+    })();
     return true;
   }
   if (msg && msg.kind === 'ping-jarvis') {
@@ -151,3 +206,67 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   return false;
 });
+
+/**
+ * Tab close → fire meeting-ended if we previously saw a detection on
+ * that tab. The content script can't notify us itself because it dies
+ * with the page. Registered at the top level so it wakes the SW from
+ * hibernation when a tab closes.
+ */
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  const prev = await clearTabInMeeting(tabId);
+  if (!prev) return;
+  console.log(
+    '[jarvis-ext] tab closed while in meeting — firing meeting-ended',
+    prev,
+  );
+  await sendMeetingEnded({ vendor: prev.vendor, url: prev.url });
+});
+
+/**
+ * Tab navigation away from meeting URL → also fire meeting-ended.
+ * The content script only re-runs when the new URL matches a meeting
+ * host; if the user navigates to gmail.com, the content script is
+ * gone but the tab isn't.
+ *
+ * We use a generous heuristic: any time the URL on a known
+ * in-meeting tab changes to one that doesn't look like the same
+ * vendor's meeting page, treat it as the user leaving.
+ */
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (!changeInfo.url) return;
+  const tabs = await getInMeetingTabs();
+  const prev = tabs[tabId];
+  if (!prev) return;
+  if (urlMatchesVendor(changeInfo.url, prev.vendor)) return;
+  // Navigated away from the meeting page. Treat as leave.
+  delete tabs[tabId];
+  await setInMeetingTabs(tabs);
+  console.log(
+    '[jarvis-ext] tab navigated away from meeting — firing meeting-ended',
+    { tabId, oldUrl: prev.url, newUrl: changeInfo.url },
+  );
+  await sendMeetingEnded({ vendor: prev.vendor, url: prev.url });
+});
+
+function urlMatchesVendor(url, vendor) {
+  try {
+    const host = new URL(url).hostname;
+    switch (vendor) {
+      case 'meet':
+        return host === 'meet.google.com';
+      case 'zoom':
+        return host.endsWith('.zoom.us');
+      case 'teams':
+        return (
+          host === 'teams.microsoft.com' || host === 'teams.live.com'
+        );
+      case 'whereby':
+        return host === 'whereby.com' || host.endsWith('.whereby.com');
+      default:
+        return false;
+    }
+  } catch {
+    return false;
+  }
+}

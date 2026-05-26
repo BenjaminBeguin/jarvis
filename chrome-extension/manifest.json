@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "Jarvis Meet Detector",
   "short_name": "Jarvis",
-  "version": "1.1.0",
-  "description": "Ping the local Jarvis app when you join (or leave) a Meet / Zoom / Teams / Whereby call so it can offer to record + auto-stop when the call ends.",
+  "version": "1.2.0",
+  "description": "Ping the local Jarvis app when you join (or leave) a Meet / Zoom / Teams / Whereby call so it can offer to record + auto-stop when the call ends (including closing the tab or navigating away).",
   "permissions": ["storage", "tabs"],
   "host_permissions": [
     "*://meet.google.com/*",
