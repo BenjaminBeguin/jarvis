@@ -399,6 +399,8 @@ runner.setJarvisMcp(
     workflows,
     workflowRunner,
     inbox,
+    drafts,
+    mcp,
   }),
 );
 

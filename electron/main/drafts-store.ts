@@ -294,6 +294,52 @@ export class DraftsStore extends EventEmitter {
     return true;
   }
 
+  /**
+   * Discard every draft matching the filter. Same filter shape as
+   * `list()` so callers can target by status / source / channel.
+   * Status defaults to `['pending', 'failed']` when omitted — never
+   * silently include already-sent or already-discarded rows in a
+   * "discard all" sweep. Returns the count discarded.
+   *
+   * Used by the MCP `discard_drafts` tool so the agent can act on
+   * "discard all my drafts" without shelling out to SQLite.
+   */
+  bulkDiscard(options: Omit<ListOptions, 'limit'> = {}): number {
+    const db = getDb();
+    const clauses: string[] = [`status NOT IN ('sent', 'discarded')`];
+    const params: unknown[] = [];
+    const statuses = Array.isArray(options.status)
+      ? options.status
+      : options.status
+        ? [options.status]
+        : (['pending', 'failed'] as DraftStatus[]);
+    const filtered = statuses.filter(
+      (s) => s !== 'sent' && s !== 'discarded',
+    );
+    if (filtered.length === 0) return 0;
+    clauses.push(`status IN (${filtered.map(() => '?').join(', ')})`);
+    params.push(...filtered);
+    if (options.source) {
+      clauses.push('source = ?');
+      params.push(options.source);
+    }
+    if (options.channel) {
+      clauses.push('channel = ?');
+      params.push(options.channel);
+    }
+    const now = Date.now();
+    params.unshift(now);
+    const result = db
+      .prepare(
+        `UPDATE ai_drafts SET status = 'discarded', updated_at = ?
+         WHERE ${clauses.join(' AND ')}`,
+      )
+      .run(...params);
+    const changed = Number(result.changes ?? 0);
+    if (changed > 0) this.emit('changed');
+    return changed;
+  }
+
   markSending(id: string): Draft | null {
     const draft = this.get(id);
     if (!draft) return null;

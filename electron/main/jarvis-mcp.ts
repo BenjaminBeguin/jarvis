@@ -22,11 +22,14 @@ interface CallToolResult {
 
 import { nextCronFire } from '@shared/cron';
 
-import type { InboxItem } from '@shared/types';
+import type { DraftStatus, InboxItem } from '@shared/types';
 
 import type { ActivityStore } from './activity-store.js';
 import type { getCostBreakdown as getCostBreakdownFn } from './db.js';
+import { dispatchDraftSend } from './draft-send.js';
+import type { DraftsStore } from './drafts-store.js';
 import type { InboxStore } from './inbox.js';
+import type { McpConfigStore } from './mcp-config.js';
 import type { ProjectMemoryStore } from './project-memory.js';
 import type { ProjectStore } from './projects.js';
 import type { ReminderStore } from './reminders.js';
@@ -75,6 +78,13 @@ export interface JarvisMcpDeps {
    *  refresh after appending to a JSON bucket so items appear without
    *  waiting for the next auto-refresh tick. */
   inbox: InboxStore;
+  /** AI drafts queue. Backs the list/get/discard/revert/update/send
+   *  tools so the agent can act on drafts the user would otherwise
+   *  click through manually in the Drafts tab. */
+  drafts: DraftsStore;
+  /** MCP config store — needed by send_draft to resolve the channel
+   *  MCP (gmail, slack, …) that a draft's sendAction targets. */
+  mcp: McpConfigStore;
 }
 
 const ok = (text: string): CallToolResult => ({
@@ -452,6 +462,175 @@ export function createJarvisMcp(
           } catch (e) {
             return err(e instanceof Error ? e.message : String(e));
           }
+        },
+      ),
+
+      // ──── Drafts ────────────────────────────────────────────────
+      // The Drafts tab is where AI-generated outputs (Gmail replies,
+      // Slack DMs, PR comments) wait for human review. These tools
+      // let the agent act on them the way the user would click-act
+      // through the UI — list / send / discard / revert / update /
+      // refine. Mirrors `src/renderer/views/Drafts.tsx`.
+
+      tool(
+        'list_drafts',
+        'List AI drafts waiting for the user (or filter by status / source / channel). Each draft has an `actions` array — the LLM-chosen Send/Archive/Forward/etc. options the user picks from in the UI. Use this to find a draft id before calling get_draft, discard_draft, or send_draft. Default `limit` 50.',
+        {
+          status: z
+            .union([
+              z.enum(['pending', 'sending', 'sent', 'failed', 'discarded']),
+              z.array(
+                z.enum(['pending', 'sending', 'sent', 'failed', 'discarded']),
+              ),
+            ])
+            .optional(),
+          source: z.string().optional(),
+          channel: z.string().optional(),
+          limit: z.number().int().positive().max(200).optional(),
+        },
+        async (args) => {
+          const list = deps.drafts.list({
+            status: args.status as DraftStatus | DraftStatus[] | undefined,
+            source: args.source,
+            channel: args.channel,
+            limit: args.limit ?? 50,
+          });
+          // Trim the result for agent consumption — full bodies and
+          // sendAction args bloat the context without adding signal.
+          // The agent calls get_draft for the full row when needed.
+          return json(
+            list.map((d) => ({
+              id: d.id,
+              source: d.source,
+              channel: d.channel,
+              status: d.status,
+              title: d.title,
+              contextSummary: d.contextSummary,
+              why: d.why,
+              actions: d.actions.map((a) => ({
+                id: a.id,
+                label: a.label,
+                primary: a.primary ?? false,
+                requiresBody: a.requiresBody ?? true,
+              })),
+              createdAt: d.createdAt,
+              updatedAt: d.updatedAt,
+            })),
+          );
+        },
+      ),
+
+      tool(
+        'get_draft',
+        'Fetch one draft by id, including the editable body, full original context, and the LLM-chosen actions[] with their dispatch templates. Use after list_drafts to inspect a specific draft before sending or discarding.',
+        { id: z.string().min(1) },
+        async (args) => {
+          const draft = deps.drafts.get(args.id);
+          if (!draft) return err(`Draft not found: ${args.id}`);
+          return json(draft);
+        },
+      ),
+
+      tool(
+        'discard_draft',
+        'Discard one draft by id. Marks the row as `discarded` — it stops appearing in the Drafts tab\'s default Pending filter. Idempotent; sending a second time is a no-op. Use when the user says "drop that one" / "I\'ll handle it myself" / "ignore the Asana draft".',
+        { id: z.string().min(1) },
+        async (args) => {
+          const ok2 = deps.drafts.discard(args.id);
+          return ok2
+            ? ok(`discarded: ${args.id}`)
+            : err(`Draft not found: ${args.id}`);
+        },
+      ),
+
+      tool(
+        'discard_drafts',
+        'BULK: discard every draft matching the filter. Status defaults to ["pending","failed"] — `sent` and `discarded` rows are never re-discarded. Use when the user says "discard all my drafts" / "clear the queue" / "drop all the Gmail ones". `confirm: true` is REQUIRED to prevent accidental fires from hallucinated calls; without it this tool errors with the count it WOULD discard, so the agent can echo it back to the user for explicit approval.',
+        {
+          status: z
+            .union([
+              z.enum(['pending', 'sending', 'sent', 'failed', 'discarded']),
+              z.array(
+                z.enum(['pending', 'sending', 'sent', 'failed', 'discarded']),
+              ),
+            ])
+            .optional(),
+          source: z.string().optional(),
+          channel: z.string().optional(),
+          confirm: z.boolean().optional(),
+        },
+        async (args) => {
+          const filter = {
+            status: args.status as DraftStatus | DraftStatus[] | undefined,
+            source: args.source,
+            channel: args.channel,
+          };
+          if (args.confirm !== true) {
+            const wouldDiscard = deps.drafts.list({ ...filter, limit: 1000 })
+              .filter((d) => d.status !== 'sent' && d.status !== 'discarded')
+              .length;
+            return err(
+              `confirm:true required for bulk discard. Would discard ${wouldDiscard} draft(s) matching the filter. Echo the count back to the user, get explicit approval, then call again with confirm:true.`,
+            );
+          }
+          const n = deps.drafts.bulkDiscard(filter);
+          deps.activity.record({
+            kind: 'drafts.bulk-discard',
+            label: `Bulk-discarded ${n} draft(s) via agent tool`,
+            detail: { filter, count: n },
+          });
+          return ok(`discarded ${n} draft${n === 1 ? '' : 's'}`);
+        },
+      ),
+
+      tool(
+        'revert_draft',
+        'Reset a draft\'s editable body to the AI\'s original first draft. Use when the user says "undo my edits" / "start over with what you wrote". No effect on sent/discarded drafts.',
+        { id: z.string().min(1) },
+        async (args) => {
+          const draft = deps.drafts.revert(args.id);
+          if (!draft) return err(`Draft not found: ${args.id}`);
+          return ok(`reverted: ${args.id}`);
+        },
+      ),
+
+      tool(
+        'update_draft_body',
+        'Replace a draft\'s editable body. Use when the user says "make the reply say X" / "change the tone to formal". The next send picks up the new body. Sent/discarded drafts are immutable — this is a no-op on those.',
+        {
+          id: z.string().min(1),
+          body: z.string(),
+        },
+        async (args) => {
+          const draft = deps.drafts.updateBody(args.id, args.body);
+          if (!draft) return err(`Draft not found: ${args.id}`);
+          return ok(`updated body: ${args.id}`);
+        },
+      ),
+
+      tool(
+        'send_draft',
+        'Dispatch one of a draft\'s actions (the LLM-chosen Send / Archive / Forward / Star options). Omit `actionId` to fire the primary action (or the first). Marks the draft as sent on success, failed on error. Returns the post-dispatch draft + result message. Use when the user says "send draft <id>" / "approve the reply to Alice" / "archive that Asana notification" — after confirming WHICH draft (call list_drafts first if uncertain).',
+        {
+          id: z.string().min(1),
+          actionId: z.string().optional(),
+        },
+        async (args) => {
+          const result = await dispatchDraftSend(
+            deps.drafts,
+            deps.mcp,
+            args.id,
+            args.actionId,
+          );
+          if (!result.ok) {
+            return err(result.message ?? 'Send failed.');
+          }
+          return json({
+            ok: true,
+            draftId: args.id,
+            status: result.draft?.status,
+            message: result.message,
+          });
         },
       ),
     ],
