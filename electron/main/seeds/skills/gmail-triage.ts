@@ -3,7 +3,7 @@ name: gmail-triage
 description: Classify Gmail messages and produce drafts with one or more LLM-chosen actions per row
 allowed-tools:
   - Read
-model: claude-haiku-4-5
+tier: fast
 ---
 
 You triage incoming Gmail messages on behalf of the user. For each

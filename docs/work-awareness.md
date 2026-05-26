@@ -19,57 +19,80 @@ file. No JS-based extractors — everything is a skill prompt.
 
 ## Module
 
-This is the `work-awareness` module — a discoverable wrapper around
-the (skill + workflow + calibration + inbox source) bundle. Find it
-at **Settings → Modules → Work awareness** for the declared memory
-map + the palette intents listed below.
+This is the `work-awareness` module. Find it at **Settings → Modules
+→ Work awareness** for the settings panel + the declared memory
+map.
 
-Palette:
-- `/work-awareness` — fire the loop now (don't wait 30 min). Verbal
-  triggers include "what should I look at", "check open loops",
-  "what am I forgetting".
-- `/work-awareness-edit` — open the priorities file in your default
-  editor.
+The structured config lives in the settings UI (config.json under
+the hood). The companion priorities markdown is an optional
+freeform supplement for nuance the settings can't capture (your
+notion of "urgent", edge-case rules, running notes).
+
+### Settings (the primary config surface)
+
+| Field | What it does |
+|---|---|
+| **Priority people** | Comma-separated handles whose threads always count. ALWAYS surfaced; auto-detection adds more on top when enabled. |
+| **Priority channels** | Slack channels (and similar) whose mentions always count. |
+| **Mute channels / patterns** | Dropped entirely. Default: `#random, #announcements, #memes`. |
+| **Auto-detect people from activity** | When ON, the agent also considers people who tagged you / reviewed your PRs in the past 2 weeks. Default ON. |
+| **Auto-dismiss** | When ON, the agent drops inbox items where it can see you completed the action. Default ON. |
+| **Dismissal confidence** | conservative / balanced / aggressive — gates how willing the agent is to dismiss. Default balanced. |
+| **Max items per tick** | Cap on items[] in the output. Default 8. |
+
+### Palette intents
+
+- `/work-awareness` — fire the loop now (don't wait 30 min).
+  Verbal triggers: "what should I look at", "check open loops",
+  "what am I forgetting", "what is waiting on me".
+- `/work-awareness-edit` — open the freeform priorities markdown
+  in your default editor.
+- `/work-awareness-calibrate` — scan recent activity across
+  connected MCPs (Slack, GitHub, Linear, Notion) and propose
+  concrete people / channels / mutes you can paste into the
+  settings. Conversational — doesn't write to disk, you copy what
+  you want.
 
 ## Files
 
-- `~/.jarvis/skills/work-awareness/SKILL.md` — the agent body (the
-  rules, the output shape, what to surface vs mute)
-- `~/.jarvis/work-awareness-priorities.md` — YOUR calibration: who
-  matters, what counts as urgent, what to mute, what counts as "done"
-- `~/.jarvis/workflows/work-awareness-loop.json` — the cron driver
-  (default disabled — turn on after calibrating)
+- **Primary config**: `config.json · moduleSettings.work-awareness`
+  (edit via Settings → Modules → Work awareness).
+- `~/.jarvis/work-awareness-priorities.md` — freeform supplement
+  for nuance the structured settings can't capture.
+- `~/.jarvis/skills/work-awareness/SKILL.md` — the agent body
+  (reads config.json + priorities md on every tick).
+- `~/.jarvis/skills/work-awareness-calibrate/SKILL.md` — one-shot
+  helper that proposes initial settings from activity.
+- `~/.jarvis/workflows/work-awareness-loop.json` — cron driver
+  (default disabled — toggle on after calibrating).
 - `~/.jarvis/inbox/work-awareness.json` — output: surfaces in the
-  Inbox tab as a "Awareness · open loops" section
+  Inbox tab as an "Awareness · open loops" section.
 
-## First-run setup (5 minutes)
+## First-run setup (2 minutes — no markdown editing required)
 
-1. **Open `~/.jarvis/work-awareness-priorities.md`** and replace the
-   `(e.g. "...")` placeholders with your real list. The agent reads
-   this on every tick so you can iterate without re-deploying
-   anything. A few useful sections to fill in:
-   - **People whose threads matter** — surface their mentions even
-     when they'd otherwise sink.
-   - **What to consider "done" (auto-dismiss)** — teach the agent
-     how to spot completed work in your activity. E.g. "If I sent a
-     Slack DM to X in the last 2h, drop any 'reply to X' items."
-   - **What to mute** — the agent leans on this to keep the list
-     short.
+1. **Optionally hit `/work-awareness-calibrate`** in the palette.
+   The agent scans your connected Slack / GitHub / Linear / Notion
+   and prints a copy-pasteable list of proposed people, channels,
+   and mutes based on real activity counts (not guesses). Skip this
+   step if you'd rather configure manually.
 
-2. **Enable the workflow** in Settings → Workflows → `work-awareness-loop`
-   → toggle to on. It'll start firing on the next cron tick
-   (`*/30 {businessHours}` resolves to your working hours from
-   `config.json`).
+2. **Settings → Modules → Work awareness.** Fill in the fields —
+   the calibrate output is structured exactly to copy in. The agent
+   reads these on every tick, no file editing needed.
 
-3. **Click ▶ RUN NOW** on the workflow page to fire it once
+3. **Enable the workflow** in Settings → Workflows →
+   `work-awareness-loop` → toggle on. Default cron is
+   `*/30 {businessHours}` (resolved from your config.json working
+   hours).
+
+4. **Hit `/work-awareness`** in the palette to fire it once
    immediately, so you see the first output in the Inbox without
-   waiting 30 min. The "Awareness · open loops" section appears
-   under the Inbox tab.
+   waiting 30 min. The "Awareness · open loops" section appears.
 
-4. **Refine over time.** When the agent surfaces something useless,
-   edit the priorities file → add the pattern to "what to mute".
-   When it misses something useful, add it to "what kinds of signals
-   to surface". The next tick picks up the change.
+5. **Iterate.** Surface something useless? Add a pattern to
+   **Mute channels / patterns**. Missing something? Add the person
+   / channel to the priority lists. Re-fire `/work-awareness` to
+   see the change immediately.
 
 ## What it reads (data flow)
 

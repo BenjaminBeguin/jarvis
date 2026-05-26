@@ -8987,6 +8987,30 @@ button:disabled:hover {
   gap: 16px;
 }
 
+.detail__escalate {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid rgba(0, 217, 255, 0.4);
+  color: var(--accent);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+
+.detail__escalate:hover:not(:disabled) {
+  background: rgba(0, 212, 255, 0.08);
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.35);
+}
+
+.detail__escalate:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
 .detail__header::after {
   content: '';
   position: absolute;

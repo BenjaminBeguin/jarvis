@@ -36,6 +36,7 @@ import triageCalibrate from './skills/triage-calibrate.js';
 import todayFocus from './skills/today-focus.js';
 import weeklyRetro from './skills/weekly-retro.js';
 import workAwareness from './skills/work-awareness.js';
+import workAwarenessCalibrate from './skills/work-awareness-calibrate.js';
 import workflowAuthor from './skills/workflow-author.js';
 
 export interface BuiltinSkill {
@@ -72,6 +73,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'today-focus', body: todayFocus },
   { name: 'weekly-retro', body: weeklyRetro },
   { name: 'work-awareness', body: workAwareness },
+  { name: 'work-awareness-calibrate', body: workAwarenessCalibrate },
   { name: 'workflow-author', body: workflowAuthor },
 ];
 

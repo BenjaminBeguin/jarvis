@@ -7,6 +7,8 @@ import matter from 'gray-matter';
 
 import type { SkillSummary } from '@shared/types';
 
+import { asTier } from './model-tiers.js';
+
 export interface SkillRecord extends SkillSummary {
   body: string;
 }
@@ -16,7 +18,16 @@ interface SkillFrontmatter {
   description?: string;
   'allowed-tools'?: unknown;
   'mcp-servers'?: unknown;
+  /** Explicit model id (e.g. 'claude-haiku-4-5'). Takes precedence
+   *  over `tier` when both are set. Most skills should prefer
+   *  `tier` so they participate in the global speed-bias system. */
   model?: string;
+  /** Abstract tier: 'fast' / 'balanced' / 'smart'. Resolved to a
+   *  concrete model via `model-tiers.ts:modelForTier`, with the
+   *  user's `speedBias` preference applied on top. Unset → default
+   *  tier (balanced) — so skills without any model hint still flow
+   *  through the bias system. */
+  tier?: string;
 }
 
 function toStringArray(value: unknown): string[] {
@@ -108,6 +119,7 @@ export class SkillStore extends EventEmitter {
       const allowedTools = toStringArray(fm['allowed-tools']);
       const mcpServers = toStringArray(fm['mcp-servers']);
       const model = typeof fm.model === 'string' ? fm.model : null;
+      const tier = asTier(fm.tier);
       const body = content.trim();
       return {
         id: slugify(name) || slugify(dirName) || dirName,
@@ -117,6 +129,7 @@ export class SkillStore extends EventEmitter {
         allowedTools,
         mcpServers,
         model,
+        tier,
         hasBody: body.length > 0,
         body,
       };

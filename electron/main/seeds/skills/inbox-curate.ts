@@ -5,7 +5,7 @@ allowed-tools:
   - Read
   - Write
   - Glob
-model: claude-haiku-4-5
+tier: fast
 ---
 
 You curate the Smart section of the user's Inbox. Every 10 minutes

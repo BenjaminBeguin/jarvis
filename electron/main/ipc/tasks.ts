@@ -54,6 +54,42 @@ export function registerTasksIpc({
     return ok;
   });
 
+  /** Manually bump a running task to a higher model tier. Backs the
+   *  ↑ Escalate button in the conversation header (and the
+   *  `mcp__jarvis__think_harder` MCP tool the agent can call). */
+  ipcMain.handle(
+    IpcChannels.escalateTask,
+    async (
+      _e,
+      payload: { taskId: string; targetTier?: string; reason?: string },
+    ) => {
+      const tier =
+        payload.targetTier === 'fast' ||
+        payload.targetTier === 'balanced' ||
+        payload.targetTier === 'smart'
+          ? payload.targetTier
+          : undefined;
+      const result = await runner.escalate(payload.taskId, {
+        targetTier: tier,
+        reason: payload.reason,
+      });
+      if (result.ok) {
+        const task = runner.list().find((t) => t.id === payload.taskId);
+        activity.record({
+          kind: 'task.escalated',
+          label: `Task escalated to ${result.tier} · ${task?.title ?? payload.taskId}`,
+          detail: {
+            taskId: payload.taskId,
+            title: task?.title,
+            tier: result.tier,
+            reason: payload.reason ?? null,
+          },
+        });
+      }
+      return result;
+    },
+  );
+
   ipcMain.handle(IpcChannels.launchShell, (_e, cmd: string) => {
     if (typeof cmd !== 'string' || !cmd.trim()) {
       throw new Error('Empty shell command.');

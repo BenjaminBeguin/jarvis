@@ -15,6 +15,12 @@ import {
   type WorkingHoursPrefs,
 } from '@shared/types';
 
+import {
+  asSpeedBias,
+  DEFAULT_SPEED_BIAS,
+  type SpeedBias,
+} from './model-tiers.js';
+
 interface PersistedConfig {
   authMode?: AuthMode;
   disabledModules?: string[];
@@ -53,6 +59,11 @@ interface PersistedConfig {
      *  pause flag automatically. The user can resume manually. */
     autoPauseOnDaily?: boolean;
   };
+  /** Global speed bias for the tier-routing system. `auto` (default)
+   *  respects each skill's declared tier; `prefer-fast` shifts every
+   *  skill down a tier; `force-<tier>` clamps everything. See
+   *  electron/main/model-tiers.ts. */
+  speedBias?: string;
 }
 
 const CONFIG_PATH = join(homedir(), '.jarvis', 'config.json');
@@ -95,18 +106,43 @@ export function detectClaudeBinary(): string | null {
   return null;
 }
 
+/**
+ * Tiny in-memory cache so the dozen `load*` helpers don't each
+ * re-read + re-parse config.json on every task launch. 500 ms TTL
+ * is shorter than any human-perceivable mutation gap but covers
+ * the burst of load calls inside a single launch path
+ * (loadSpeedBias + loadAppMode + loadAfkMode + …). Writes
+ * invalidate the cache so freshly-saved values are reflected
+ * immediately to other readers in the same process.
+ */
+const CONFIG_CACHE_TTL_MS = 500;
+let cachedConfig: { value: PersistedConfig; ts: number } | null = null;
+
 function readConfig(): PersistedConfig {
-  if (!existsSync(CONFIG_PATH)) return {};
+  if (cachedConfig && Date.now() - cachedConfig.ts < CONFIG_CACHE_TTL_MS) {
+    return cachedConfig.value;
+  }
+  if (!existsSync(CONFIG_PATH)) {
+    cachedConfig = { value: {}, ts: Date.now() };
+    return cachedConfig.value;
+  }
   try {
-    return JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
+    const parsed = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
+    cachedConfig = { value: parsed, ts: Date.now() };
+    return parsed;
   } catch {
-    return {};
+    cachedConfig = { value: {}, ts: Date.now() };
+    return cachedConfig.value;
   }
 }
 
 function writeConfig(cfg: PersistedConfig): void {
   mkdirSync(join(homedir(), '.jarvis'), { recursive: true });
   writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf8');
+  // Invalidate so subsequent reads in this process see the write
+  // immediately — saves a stale-by-up-to-500ms window if the user
+  // toggles a setting then immediately fires a task.
+  cachedConfig = { value: cfg, ts: Date.now() };
 }
 
 export function loadAuthMode(): AuthMode | null {
@@ -262,6 +298,22 @@ export function loadPaused(): boolean {
  */
 export function savePaused(value: boolean): void {
   saveAppMode(value ? 'paused' : 'running');
+}
+
+/**
+ * Global speed-bias preference for the tier-routing system. Read
+ * by TaskRunner when resolving a skill's tier to a concrete model.
+ * Validation lives in `model-tiers.ts:asSpeedBias` — anything
+ * unrecognised collapses to the default.
+ */
+export function loadSpeedBias(): SpeedBias {
+  const cfg = readConfig();
+  return asSpeedBias(cfg.speedBias ?? DEFAULT_SPEED_BIAS);
+}
+
+export function saveSpeedBias(value: SpeedBias): void {
+  const cfg = readConfig();
+  writeConfig({ ...cfg, speedBias: value });
 }
 
 export function loadWorkingHours(): WorkingHoursPrefs {

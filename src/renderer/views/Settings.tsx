@@ -111,7 +111,12 @@ export function Settings({
       <main className="settings__panel">
         {section === 'general' && <GeneralPanel status={status} />}
         {section === 'preferences' && <PreferencesPanel />}
-        {section === 'notifications' && <NotificationsPanel />}
+        {section === 'notifications' && (
+          <>
+            <NotificationsPanel />
+            <SpeedPanel />
+          </>
+        )}
         {section === 'inbox' && <InboxPanel />}
         {section === 'autopilot' && <AutopilotPanel />}
         {section === 'modules' && <ModulesPage onOpenPage={onOpenModulePage} />}
@@ -591,6 +596,105 @@ function NotificationsPanel() {
             label: 'Toast',
             blurb:
               'Silent macOS notification — gives you a glanceable "started" pill.',
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
+/**
+ * Speed bias panel — tier-routing knob that applies to EVERY skill
+ * launched (unless the skill pinned an explicit model in its
+ * frontmatter). The default is `auto` which honours each skill's
+ * declared tier. `prefer-fast` shifts everything one tier toward
+ * haiku for snappier responses; `force-*` clamps everything.
+ *
+ * The control lives under Notifications since both are "how the
+ * cockpit behaves" preferences. A dedicated Performance tab is
+ * overkill for a single setting.
+ */
+function SpeedPanel() {
+  const [bias, setBias] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.jarvis.readSpeedBias().then((b) => {
+      if (!cancelled) setBias(b);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!bias) {
+    return <div className="settings__section">Loading…</div>;
+  }
+
+  const update = async (next: string) => {
+    setBias(next); // optimistic
+    try {
+      const confirmed = await window.jarvis.writeSpeedBias(next);
+      setBias(confirmed);
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
+  return (
+    <div className="settings__section">
+      <h3>Model speed</h3>
+      <p className="settings__hint">
+        Every skill declares a tier (<code>fast</code> = haiku,{' '}
+        <code>balanced</code> = sonnet, <code>smart</code> = opus). This
+        knob shifts ALL of them in one place. Skills that pin an
+        explicit <code>model:</code> in their frontmatter ignore this —
+        on purpose, so a skill that genuinely needs opus stays opus.
+      </p>
+
+      <NotifChoice
+        label="Bias"
+        hint="Picks the model tier for every task. Default 'auto' respects each skill's choice."
+        value={bias}
+        onChange={(v) => void update(v)}
+        options={[
+          {
+            value: 'auto',
+            label: 'Auto (default)',
+            blurb:
+              'Use each skill\'s declared tier. inbox-curate stays on haiku, work-awareness-calibrate stays on sonnet, etc.',
+          },
+          {
+            value: 'prefer-fast',
+            label: 'Prefer fast',
+            blurb:
+              'Shift everything down one tier. Balanced → fast (haiku). Smart → balanced (sonnet). Snappy default for daily flow.',
+          },
+          {
+            value: 'prefer-smart',
+            label: 'Prefer smart',
+            blurb:
+              'Shift everything up one tier. Fast → balanced (sonnet). Balanced → smart (opus). When quality matters more than latency.',
+          },
+          {
+            value: 'force-fast',
+            label: 'Force fast',
+            blurb:
+              'Everything runs on haiku. Cheapest + fastest; quality drops for complex skills.',
+          },
+          {
+            value: 'force-balanced',
+            label: 'Force balanced',
+            blurb: 'Everything runs on sonnet. Reasonable middle ground.',
+          },
+          {
+            value: 'force-smart',
+            label: 'Force smart',
+            blurb:
+              'Everything runs on opus. Expensive — only for high-stakes runs you\'re going to babysit.',
           },
         ]}
       />

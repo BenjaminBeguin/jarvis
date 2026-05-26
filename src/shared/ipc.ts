@@ -116,6 +116,8 @@ export const IpcChannels = {
 
   readNotificationPrefs: 'notif:read',
   writeNotificationPrefs: 'notif:write',
+  readSpeedBias: 'speed:read',
+  writeSpeedBias: 'speed:write',
   notificationPrefsChanged: 'notif:changed',
 
   readInboxPrefs: 'inboxPrefs:read',
@@ -243,6 +245,7 @@ export const IpcChannels = {
   launchTask: 'task:launch',
   launchShell: 'task:launchShell',
   abortTask: 'task:abort',
+  escalateTask: 'task:escalate',
   sendTaskMessage: 'task:sendMessage',
   listTasks: 'task:list',
   getTaskHistory: 'task:getHistory',

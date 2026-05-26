@@ -36,9 +36,25 @@ export interface UserContextProvider {
   build(): Promise<string | null> | string | null;
 }
 
+/**
+ * How long a built context block stays valid before we rebuild it.
+ * Most providers read RAM-cheap data; the value mostly changes on
+ * the minute boundary (time provider) or on infrequent events
+ * (tasks finishing, inbox updating). 5 seconds is plenty fresh
+ * for any single user interaction while saving real work when
+ * multiple tasks fire in the same tick (autopilot pass + manual
+ * palette prompt + work-awareness loop overlapping).
+ */
+const BUILD_CACHE_TTL_MS = 5_000;
+
 export class UserContextStore {
   private providers: UserContextProvider[] = [];
   private activeProject: string | null = null;
+  /** Memoised build() output. Invalidated by TTL or
+   *  invalidateCache() — modules that mutate context-driving state
+   *  can call invalidateCache() to force a fresh build on the next
+   *  task launch (e.g. when active project changes). */
+  private cached: { result: string; ts: number } | null = null;
 
   register(provider: UserContextProvider): void {
     // Replace by name if re-registered — lets modules update their provider
@@ -46,14 +62,18 @@ export class UserContextStore {
     const i = this.providers.findIndex((p) => p.name === provider.name);
     if (i >= 0) this.providers[i] = provider;
     else this.providers.push(provider);
+    // Provider set changed → blow the cache so the new shape lands.
+    this.cached = null;
   }
 
   unregister(name: string): void {
     const i = this.providers.findIndex((p) => p.name === name);
     if (i >= 0) this.providers.splice(i, 1);
+    this.cached = null;
   }
 
   setActiveProject(name: string | null): void {
+    if (this.activeProject !== name) this.cached = null;
     this.activeProject = name;
   }
 
@@ -61,25 +81,49 @@ export class UserContextStore {
     return this.activeProject;
   }
 
+  /** Force the next build() to refetch. Useful after wholesale
+   *  state changes (auth flip, integrations connected) where
+   *  several providers' output would shift at once. */
+  invalidateCache(): void {
+    this.cached = null;
+  }
+
   /**
    * Build the full context block. Empty string if every provider returned
    * null (e.g. fresh install with no projects). Caller usually appends to
    * the system prompt with a "## Current context" header.
+   *
+   * Hot-path optimised:
+   *   - **Parallel**: providers run via Promise.all (was serial).
+   *     Saves ~N × providerCost on every launch.
+   *   - **Cached**: result memoised for BUILD_CACHE_TTL_MS. Back-to-back
+   *     launches (autopilot pass + manual command + ambient loop) reuse
+   *     the same block. Cache invalidates naturally on TTL OR via
+   *     invalidateCache() when wholesale state changes.
    */
   async build(): Promise<string> {
+    const cached = this.cached;
+    if (cached && Date.now() - cached.ts < BUILD_CACHE_TTL_MS) {
+      return cached.result;
+    }
+    const settled = await Promise.allSettled(
+      this.providers.map(async (p) => ({ name: p.name, out: await p.build() })),
+    );
     const lines: string[] = [];
-    for (const p of this.providers) {
-      try {
-        const out = await p.build();
+    for (const r of settled) {
+      if (r.status === 'fulfilled') {
+        const { out } = r.value;
         if (out && out.trim()) lines.push(out.trim());
-      } catch (err) {
-        // A misbehaving provider must not block the task launch — log and
-        // skip. Keeps the substrate resilient as third-party providers
-        // come and go.
-        console.warn(`UserContext provider "${p.name}" failed:`, err);
+      } else {
+        // A misbehaving provider must not block the task launch — log
+        // and skip. Keeps the substrate resilient as third-party
+        // providers come and go.
+        console.warn(`UserContext provider failed:`, r.reason);
       }
     }
-    return lines.join('\n');
+    const result = lines.join('\n');
+    this.cached = { result, ts: Date.now() };
+    return result;
   }
 }
 

@@ -133,6 +133,44 @@ export function createJarvisMcp(
       ),
 
       tool(
+        'think_harder',
+        'Self-escalate the CURRENT task to a more capable model. Use when you realise the model running this turn is over its head — a hard reasoning step, a tricky synthesis, an edge case that needs deeper thinking. The runner aborts your current SDK query and spawns a new one on the next tier up (haiku → sonnet → opus), resuming the same session so the conversation continues without loss of context. Cost goes up; use sparingly. `task_id` is on your system prompt under "Self-reference". Default target: one tier above current; you may specify "balanced" or "smart" to skip a step. After calling this tool your current turn ends — the new tier picks up from there.',
+        {
+          task_id: z
+            .string()
+            .min(1)
+            .describe(
+              'The current task id — see the "Self-reference" section of your system prompt.',
+            ),
+          reason: z
+            .string()
+            .min(4)
+            .max(200)
+            .describe(
+              'One short sentence on why escalation is needed. Surfaces in the conversation transcript + the activity log.',
+            ),
+          target_tier: z
+            .enum(['balanced', 'smart'])
+            .optional()
+            .describe(
+              'Optional explicit target. Defaults to one tier above current (fast → balanced, balanced → smart).',
+            ),
+        },
+        async (args) => {
+          const result = await deps.runner.escalate(args.task_id, {
+            targetTier: args.target_tier,
+            reason: args.reason,
+          });
+          if (!result.ok) {
+            return err(result.message ?? 'escalation failed');
+          }
+          return ok(
+            `Escalated to ${result.tier}. The next turn continues with deeper reasoning. End your current turn cleanly.`,
+          );
+        },
+      ),
+
+      tool(
         'log_activity',
         'Append a row to the Activity feed (Settings → Activity). Use for non-conversational side effects you want the user to see later: "ran cleanup", "checked Slack mentions". `kind` is a short dotted id ("recap.daily", "scan.slack"); `label` is the human one-liner. NOTE: Activity is an audit log, not the user\'s triage view — for "things the user should look at" use add_to_inbox instead.',
         {

@@ -6,9 +6,12 @@ import type { InboxPrefs, NotificationPrefs } from '@shared/types';
 import {
   loadInboxPrefs,
   loadNotificationPrefs,
+  loadSpeedBias,
   saveInboxPrefs,
   saveNotificationPrefs,
+  saveSpeedBias,
 } from '../auth.js';
+import { asSpeedBias } from '../model-tiers.js';
 import type { IpcDeps } from './types.js';
 
 /**
@@ -61,6 +64,22 @@ export function registerPreferencesIpc({ preferences, activity }: IpcDeps): void
         label: `Notification prefs · on-ask=${prefs.onAsk} · on-launch=${prefs.onLaunch}`,
         detail: prefs,
       });
+    },
+  );
+
+  ipcMain.handle(IpcChannels.readSpeedBias, () => loadSpeedBias());
+
+  ipcMain.handle(
+    IpcChannels.writeSpeedBias,
+    (_e, raw: unknown) => {
+      const next = asSpeedBias(raw);
+      saveSpeedBias(next);
+      activity.record({
+        kind: 'speed-bias.changed',
+        label: `Speed bias · ${next}`,
+        detail: { speedBias: next },
+      });
+      return next;
     },
   );
 

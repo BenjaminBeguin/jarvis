@@ -432,6 +432,15 @@ const api = {
     listener: Listener<NotificationPrefs>,
   ): Unsubscribe => subscribe(IpcChannels.notificationPrefsChanged, listener),
 
+  /** Global model speed-bias preference. `auto` honours each skill's
+   *  declared tier; `prefer-fast` / `prefer-smart` shift them by one;
+   *  `force-<tier>` clamps everything. Resolved per-task at launch
+   *  by the TaskRunner. */
+  readSpeedBias: (): Promise<string> =>
+    ipcRenderer.invoke(IpcChannels.readSpeedBias),
+  writeSpeedBias: (value: string): Promise<string> =>
+    ipcRenderer.invoke(IpcChannels.writeSpeedBias, value),
+
   readInboxPrefs: (): Promise<InboxPrefs> =>
     ipcRenderer.invoke(IpcChannels.readInboxPrefs),
   writeInboxPrefs: (prefs: InboxPrefs): Promise<void> =>
@@ -671,6 +680,16 @@ const api = {
     ipcRenderer.invoke(IpcChannels.launchShell, cmd),
   abortTask: (taskId: string): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.abortTask, taskId),
+  /** Manually bump a running task to a higher model tier — aborts
+   *  the current SDK query and resumes the same session on the new
+   *  tier. Returns `{ ok, tier?, message? }`. Default targetTier:
+   *  one above current. */
+  escalateTask: (payload: {
+    taskId: string;
+    targetTier?: 'fast' | 'balanced' | 'smart';
+    reason?: string;
+  }): Promise<{ ok: boolean; tier?: string; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.escalateTask, payload),
   sendTaskMessage: (
     taskId: string,
     text: string,

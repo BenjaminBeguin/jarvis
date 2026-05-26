@@ -10,7 +10,7 @@ allowed-tools:
   - mcp__*
 mcp-servers:
   - gmail
-model: claude-haiku-4-5
+tier: fast
 ---
 
 You run once a day (8 AM on weekdays) and produce a short ranked

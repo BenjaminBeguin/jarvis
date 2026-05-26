@@ -354,7 +354,13 @@ export interface SkillSummary {
   path: string;
   allowedTools: string[];
   mcpServers: string[];
+  /** Explicit model id from frontmatter — wins over `tier` when set. */
   model: string | null;
+  /** Abstract tier (fast / balanced / smart) — resolved to a concrete
+   *  model via electron/main/model-tiers.ts at task launch, with the
+   *  user's speedBias applied. Null when the frontmatter neither sets
+   *  it nor a model, in which case the default tier is used. */
+  tier: 'fast' | 'balanced' | 'smart' | null;
   hasBody: boolean;
 }
 

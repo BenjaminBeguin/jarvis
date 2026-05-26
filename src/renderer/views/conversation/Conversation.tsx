@@ -290,9 +290,12 @@ export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
           )}
         </div>
         {task.status === 'running' && task.origin !== 'external' && (
-          <button onClick={() => void window.jarvis.abortTask(task.id)}>
-            Stop
-          </button>
+          <>
+            <EscalateButton taskId={task.id} />
+            <button onClick={() => void window.jarvis.abortTask(task.id)}>
+              Stop
+            </button>
+          </>
         )}
       </header>
 
@@ -951,6 +954,55 @@ function ContinueExternal({
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * "↑ Escalate" button — bumps a running task to a higher model tier.
+ * Aborts the current SDK query and resumes the same session on the
+ * next tier up (haiku → sonnet → opus). The conversation continues
+ * seamlessly; the user sees a system event in the transcript
+ * marking the switch.
+ *
+ * Disabled while the request is in-flight to prevent double-clicks.
+ * On error (e.g. "already on smart") shows a toast and stays
+ * enabled.
+ */
+function EscalateButton({ taskId }: { taskId: string }) {
+  const [busy, setBusy] = useState(false);
+
+  const escalate = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await window.jarvis.escalateTask({ taskId });
+      if (result.ok) {
+        toast({ message: result.message ?? 'Escalated.' });
+      } else {
+        toast({
+          kind: 'error',
+          message: result.message ?? "Couldn't escalate.",
+        });
+      }
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button
+      className="detail__escalate"
+      onClick={() => void escalate()}
+      disabled={busy}
+      title="Switch this task to a more capable model (one tier up). Same conversation, smarter agent."
+    >
+      {busy ? '…' : '↑ Escalate'}
+    </button>
   );
 }
 

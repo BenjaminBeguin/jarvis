@@ -13,7 +13,13 @@ import type {
   TaskSummary,
 } from '@shared/types';
 import { AsyncMessageQueue } from './async-message-queue.js';
+import { loadSpeedBias } from './auth.js';
 import { appendTaskEvent, insertTask, updateTaskStatus } from './db.js';
+import {
+  modelForTier,
+  resolveTier,
+  type ModelTier,
+} from './model-tiers.js';
 import type { IntentClassifier } from './intent-classifier.js';
 import type { McpConfigStore } from './mcp-config.js';
 import type { ProjectStore } from './projects.js';
@@ -106,6 +112,12 @@ interface TaskRecord {
    *  flags the task `errored` if the final assistant text looks like
    *  a question to the user. */
   unattended?: boolean;
+  /** When set, the model resolution path uses this tier instead of
+   *  the skill's frontmatter / speedBias defaults. Set by `escalate()`
+   *  when the user (or the agent via `think_harder`) upgrades a task
+   *  mid-conversation. Persists for the task's lifetime so subsequent
+   *  turns continue on the upgraded tier. */
+  tierOverride?: ModelTier | null;
 }
 
 /**
@@ -342,7 +354,10 @@ export class TaskRunner extends EventEmitter {
    * Appending rather than templating means skills with their own prompts
    * still get the same environment, preferences, and context for free.
    */
-  private async composeSystemPrompt(skill: SkillRecord | null): Promise<string> {
+  private async composeSystemPrompt(
+    skill: SkillRecord | null,
+    taskId?: string,
+  ): Promise<string> {
     const base = skill?.hasBody ? skill.body : DEFAULT_SYSTEM_PROMPT;
     const sections: string[] = [ENVIRONMENT_PROMPT, base];
     if (this.preferences) {
@@ -358,6 +373,16 @@ export class TaskRunner extends EventEmitter {
     if (this.userContext) {
       const block = await this.userContext.build();
       if (block) sections.push(`## Current context\n${block}`);
+    }
+    if (taskId) {
+      // Surface the current task id so the agent can pass it to
+      // `mcp__jarvis__think_harder` (the escalation tool). Brief +
+      // explicit so it doesn't clutter the prompt for the 99% of
+      // turns that never call think_harder.
+      sections.push(
+        `## Self-reference\n- Current task id: ${taskId}` +
+          ` — pass to mcp__jarvis__think_harder when escalating.`,
+      );
     }
     return sections.join('\n\n');
   }
@@ -572,6 +597,118 @@ export class TaskRunner extends EventEmitter {
   }
 
   /**
+   * Mid-flight model upgrade. Aborts the current SDK query and spawns a
+   * new one on the higher tier, resuming the same session so the
+   * conversation continues seamlessly. Used by:
+   *
+   *   - the manual ↑ Escalate button (user sees a task struggling on
+   *     haiku and bumps it to sonnet/opus)
+   *   - the `mcp__jarvis__think_harder` MCP tool (agent recognises it's
+   *     over its head and self-escalates)
+   *
+   * Default target: one tier up from current. Caller can override with
+   * an explicit targetTier ('balanced' | 'smart').
+   *
+   * Returns { ok, tier, message }:
+   *   - ok=true + new tier on success
+   *   - ok=false + reason when escalation can't proceed (terminal task,
+   *     already at smart tier, etc.)
+   *
+   * Cost note: the new SDK call costs whatever the bigger model costs
+   * for the FULL resumed conversation, not just the next turn. The
+   * user should treat escalation as "pay sonnet rates from here on."
+   */
+  async escalate(
+    taskId: string,
+    opts: { targetTier?: ModelTier; reason?: string } = {},
+  ): Promise<{ ok: boolean; tier?: ModelTier; message?: string }> {
+    const rec = this.records.get(taskId);
+    if (!rec) return { ok: false, message: 'task not found' };
+    if (rec.external) return { ok: false, message: 'cannot escalate external tasks' };
+    if (
+      rec.summary.status === 'completed' ||
+      rec.summary.status === 'errored' ||
+      rec.summary.status === 'aborted'
+    ) {
+      return { ok: false, message: `task is ${rec.summary.status}; nothing to escalate` };
+    }
+    if (!rec.sdkSessionId) {
+      return {
+        ok: false,
+        message: 'task hasn\'t produced a session id yet — wait a moment + retry',
+      };
+    }
+
+    // Pick the target tier. When the caller didn't specify, bump one
+    // step up from the currently-effective tier (override > skill tier >
+    // default 'balanced'). Already at smart → no-op.
+    const skill = rec.summary.skillId
+      ? this.skills?.get(rec.summary.skillId) ?? null
+      : null;
+    const currentTier: ModelTier =
+      rec.tierOverride ??
+      resolveTier(skill?.tier ?? null, loadSpeedBias());
+    const tierOrder: ModelTier[] = ['fast', 'balanced', 'smart'];
+    const idx = tierOrder.indexOf(currentTier);
+    const target: ModelTier =
+      opts.targetTier ?? tierOrder[Math.min(tierOrder.length - 1, idx + 1)] ?? 'smart';
+    if (target === currentTier) {
+      return { ok: false, message: `already on ${currentTier}` };
+    }
+
+    // Stamp the override + record an event so the UI shows the
+    // escalation moment in the conversation transcript.
+    rec.tierOverride = target;
+    const reasonNote = opts.reason ? ` · ${opts.reason}` : '';
+    this.recordEvent(rec, {
+      type: 'system',
+      subtype: 'escalated',
+      from: currentTier,
+      to: target,
+      reason: opts.reason ?? null,
+    } as unknown as SDKMessage);
+
+    // Tear down the current SDK query — same pattern sendMessage uses
+    // when restarting on a stream-ended task. Fresh AbortController +
+    // inputs queue + resume the same session on the new tier.
+    const resumeId = rec.sdkSessionId;
+    try {
+      rec.inputs?.close();
+    } catch {
+      /* already closed */
+    }
+    try {
+      rec.abort.abort();
+    } catch {
+      /* already aborted */
+    }
+    rec.inputs = new AsyncMessageQueue();
+    // Seed the new session with a single user message so the agent has
+    // something to react to. Brief — the resumed conversation carries
+    // the actual context.
+    rec.inputs.push(
+      userMessage(
+        `[Escalated to ${target} model${reasonNote}. Continue from where the previous turn left off.]`,
+        rec.summary.id,
+      ),
+    );
+    rec.abort = new AbortController();
+    rec.summary = {
+      ...rec.summary,
+      status: 'running',
+      endedAt: null,
+      awaitingInput: false,
+    };
+    this.emit('status', rec.summary);
+    void this.run(rec, skill, resumeId, false);
+    return {
+      ok: true,
+      tier: target,
+      message: `Switched to ${target} (${modelForTier(target)})`,
+    };
+  }
+
+  /**
    * Register an entry that wasn't run by us — e.g. a Claude Code session
    * observed by the claude-code-watch module. In-memory only; the SQLite
    * tables stay reserved for tasks we actually ran.
@@ -763,7 +900,7 @@ export class TaskRunner extends EventEmitter {
     let finalStatus: TaskStatus = 'completed';
     try {
       const cfg = record.config ?? {};
-      const systemPrompt = await this.composeSystemPrompt(skill);
+      const systemPrompt = await this.composeSystemPrompt(skill, id);
       const options: Parameters<typeof query>[0]['options'] = {
         abortController: record.abort,
         // Default to bypassPermissions for back-compat with the rest of
@@ -811,9 +948,25 @@ export class TaskRunner extends EventEmitter {
         if (forkSession) o['forkSession'] = true;
       }
       if (skill?.allowedTools.length) options.allowedTools = skill.allowedTools;
-      // Model precedence: per-launch override → skill frontmatter → SDK default.
-      if (cfg.model) options.model = cfg.model;
-      else if (skill?.model) options.model = skill.model;
+      // Model precedence:
+      //   0. Per-record tierOverride (escalate / think_harder) — explicit
+      //      mid-flight upgrade, wins over everything.
+      //   1. Per-launch override (cfg.model) — caller knows best.
+      //   2. Explicit `model:` in the skill's frontmatter — author pinned it.
+      //   3. Skill's `tier:` resolved through the user's speedBias — the
+      //      tier-routing path. Default tier is `balanced` when unset, so
+      //      EVERY skill without an explicit model participates in the
+      //      bias system (prefer-fast actually makes things faster).
+      if (record.tierOverride) {
+        options.model = modelForTier(record.tierOverride);
+      } else if (cfg.model) {
+        options.model = cfg.model;
+      } else if (skill?.model) {
+        options.model = skill.model;
+      } else {
+        const tier = resolveTier(skill?.tier ?? null, loadSpeedBias());
+        options.model = modelForTier(tier);
+      }
       if (cfg.fallbackModel) options.fallbackModel = cfg.fallbackModel;
       // Compose MCP servers passed to the spawned CLI via --mcp-config:
       //
@@ -852,10 +1005,23 @@ export class TaskRunner extends EventEmitter {
       if (!record.inputs) {
         throw new Error('Task has no input queue');
       }
+      const queryStartedAt = Date.now();
       const stream = query({ prompt: record.inputs, options });
       console.log(`[task ${id}] starting query loop`);
+      let firstEventLogged = false;
 
       for await (const msg of stream as AsyncIterable<SDKMessage>) {
+        if (!firstEventLogged) {
+          // Time-to-first-event = SDK cold start + subprocess spawn +
+          // MCP server boot + Anthropic API TTFT. Anything noticeably
+          // over ~1500ms in subscription mode is worth investigating
+          // (usually MCP startup or an over-stuffed system prompt).
+          console.log(
+            `[task ${id}] TTFE ${Date.now() - queryStartedAt}ms (model=${options.model ?? '<sdk-default>'})`,
+          );
+          firstEventLogged = true;
+        }
+        this.recordEvent(record, msg);
         this.recordEvent(record, msg);
         const m = msg as { type?: string; subtype?: string; total_cost_usd?: number };
         if (m.type === 'result') {
