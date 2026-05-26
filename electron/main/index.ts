@@ -38,6 +38,7 @@ import {
   loadPaused,
   loadWorkingHours,
   saveAfkMode,
+  saveAppMode,
   savePaused,
 } from './auth.js';
 import { awaitTurnResult } from './await-turn.js';
@@ -401,6 +402,24 @@ runner.setJarvisMcp(
     inbox,
     drafts,
     mcp,
+    routines,
+    runner,
+    setAppMode: (mode) => {
+      const prev = loadAppMode();
+      if (prev === mode) return;
+      saveAppMode(mode);
+      // Mirror the auth IPC handler: both event broadcasts + tray
+      // refresh + activity record. Lets the tray menu's checkmarks
+      // re-render without waiting for the next user-initiated toggle.
+      broadcast(IpcChannels.appModeChanged, mode);
+      broadcast(IpcChannels.pausedChanged, mode === 'paused');
+      refreshTrayMenu();
+      activity.record({
+        kind: 'mode.changed',
+        label: `Jarvis ${prev} → ${mode} (via agent tool)`,
+        detail: { from: prev, to: mode, source: 'mcp' },
+      });
+    },
   }),
 );
 

@@ -22,7 +22,7 @@ interface CallToolResult {
 
 import { nextCronFire } from '@shared/cron';
 
-import type { DraftStatus, InboxItem } from '@shared/types';
+import type { AppMode, DraftStatus, InboxItem } from '@shared/types';
 
 import type { ActivityStore } from './activity-store.js';
 import type { getCostBreakdown as getCostBreakdownFn } from './db.js';
@@ -33,6 +33,8 @@ import type { McpConfigStore } from './mcp-config.js';
 import type { ProjectMemoryStore } from './project-memory.js';
 import type { ProjectStore } from './projects.js';
 import type { ReminderStore } from './reminders.js';
+import type { RoutineStore } from './routines.js';
+import type { TaskRunner } from './task-runner.js';
 import type { UserContextStore } from './user-context.js';
 import type { WorkflowRunner } from './workflow-runner.js';
 import type { WorkflowStore } from './workflow-store.js';
@@ -85,6 +87,18 @@ export interface JarvisMcpDeps {
   /** MCP config store — needed by send_draft to resolve the channel
    *  MCP (gmail, slack, …) that a draft's sendAction targets. */
   mcp: McpConfigStore;
+  /** Cron-fired routines (~/.jarvis/routines.json). Backs list /
+   *  run_now / set_enabled. Save + delete are intentionally NOT
+   *  exposed — agents shouldn't rewrite their own schedule. */
+  routines: RoutineStore;
+  /** Task runner for abort_task / abort_all_tasks / list_tasks.
+   *  launch is intentionally NOT exposed — recursive task launches
+   *  from inside an agent loop are a footgun. */
+  runner: TaskRunner;
+  /** Set the tri-state app mode (running / paused / autopilot).
+   *  Used by set_app_mode. Autopilot is intentionally NOT a value
+   *  the agent can choose — see the tool definition. */
+  setAppMode: (mode: AppMode) => void;
 }
 
 const ok = (text: string): CallToolResult => ({
@@ -840,6 +854,197 @@ export function createJarvisMcp(
           }
           deps.userContext.setActiveProject(def.name);
           return ok(`active project: ${def.name}`);
+        },
+      ),
+
+      // ──── Routines ──────────────────────────────────────────────
+      // Cron-scheduled skill fires defined in ~/.jarvis/routines.json.
+      // Saving + deleting are intentionally NOT exposed — those are
+      // user-driven decisions made in the Routines tab.
+
+      tool(
+        'list_routines',
+        'List defined routines. Returns id, skillId, cron, enabled, lastRunAt, nextRunAt per routine. Use to discover ids before run_routine_now / set_routine_enabled, or to inspect the schedule.',
+        {},
+        async () =>
+          json(
+            deps.routines.list().map((r) => ({
+              id: r.id,
+              skillId: r.skillId,
+              cron: r.cron,
+              input: r.input,
+              enabled: r.enabled,
+              lastRunAt: r.lastRunAt,
+              nextRunAt: r.nextRunAt,
+            })),
+          ),
+      ),
+
+      tool(
+        'run_routine_now',
+        'Fire a routine immediately, outside its cron schedule. Equivalent to the Routines tab\'s "Run now" button. Returns ok when the routine spawned; the task itself continues in the background.',
+        { id: z.string().min(1) },
+        async (args) => {
+          const fired = deps.routines.runNow(args.id);
+          return fired
+            ? ok(`fired: ${args.id}`)
+            : err(`Routine ${args.id} not found (or runner unavailable).`);
+        },
+      ),
+
+      tool(
+        'set_routine_enabled',
+        'Enable or disable a routine without deleting its definition. Disabled routines stop firing on cron but stay in the list so they can be re-enabled later. Use when the user says "pause the daily-brief routine" / "turn off my Slack scan for the week".',
+        {
+          id: z.string().min(1),
+          enabled: z.boolean(),
+        },
+        async (args) => {
+          const updated = deps.routines.setEnabled(args.id, args.enabled);
+          if (!updated) return err(`Routine not found: ${args.id}`);
+          return ok(
+            `${args.enabled ? 'enabled' : 'disabled'}: ${args.id}`,
+          );
+        },
+      ),
+
+      // ──── Workflow runs ─────────────────────────────────────────
+      // list_workflows + run_workflow above; these inspect/abort
+      // individual runs.
+
+      tool(
+        'list_workflow_runs',
+        'List recent workflow runs. Filter by `workflowId` to see history for one workflow only. Returns newest-first; default `limit` 20. Use to discover runIds before get_workflow_run / stop_workflow_run.',
+        {
+          workflowId: z.string().optional(),
+          limit: z.number().int().positive().max(200).optional(),
+        },
+        async (args) => {
+          const all = deps.workflowRunner.list(args.workflowId);
+          const cap = args.limit ?? 20;
+          return json(
+            all.slice(0, cap).map((r) => ({
+              id: r.id,
+              workflowId: r.workflowId,
+              trigger: r.trigger,
+              status: r.status,
+              startedAt: r.startedAt,
+              endedAt: r.endedAt,
+              error: r.error,
+            })),
+          );
+        },
+      ),
+
+      tool(
+        'get_workflow_run',
+        'Fetch a workflow run with full per-step status (started/ended timestamps, output excerpt, error if any). Use when the user asks "why did the autopilot fail?" / "what did that run produce?" — surfaces the step-level detail the Workflows UI shows.',
+        { runId: z.string().min(1) },
+        async (args) => {
+          const run = deps.workflowRunner.get(args.runId);
+          if (!run) return err(`Workflow run not found: ${args.runId}`);
+          return json(run);
+        },
+      ),
+
+      tool(
+        'stop_workflow_run',
+        'Stop an in-flight workflow run. No-op for already-terminal runs. Use when the user says "abort the gmail autopilot" / "cancel the run that\'s stuck".',
+        { runId: z.string().min(1) },
+        async (args) => {
+          const stopped = deps.workflowRunner.stop(args.runId);
+          return stopped
+            ? ok(`stopped: ${args.runId}`)
+            : err(`Run ${args.runId} is not running (or doesn\'t exist).`);
+        },
+      ),
+
+      // ──── Tasks ─────────────────────────────────────────────────
+      // launch_task is intentionally NOT exposed — recursive task
+      // spawning from inside an agent loop creates runaway risk.
+      // These tools let the agent observe + stop other tasks.
+
+      tool(
+        'list_tasks',
+        'List active and recent tasks. Optionally filter by `status` (running / awaiting-input / completed / failed / aborted). Default `limit` 20, newest-first. Use to discover task ids before abort_task, or to answer "what\'s running right now?".',
+        {
+          status: z.string().optional(),
+          limit: z.number().int().positive().max(100).optional(),
+        },
+        async (args) => {
+          let list = deps.runner.list();
+          if (args.status) {
+            list = list.filter((t) => t.status === args.status);
+          }
+          // TaskSummary fields vary; surface a stable subset that's
+          // useful to the agent without bloating the context.
+          const cap = args.limit ?? 20;
+          return json(
+            list.slice(0, cap).map((t) => ({
+              id: t.id,
+              status: t.status,
+              skillId: t.skillId,
+              title: t.title,
+              origin: t.origin,
+              startedAt: t.startedAt,
+              endedAt: t.endedAt,
+              awaitingInput: t.awaitingInput ?? false,
+              inputPreview: t.inputPreview,
+            })),
+          );
+        },
+      ),
+
+      tool(
+        'abort_task',
+        'Abort one running task by id. Use when the user says "stop the task that\'s stuck" / "kill the runaway brainstorm". No effect on already-terminal tasks.',
+        { id: z.string().min(1) },
+        async (args) => {
+          const aborted = deps.runner.abort(args.id);
+          return aborted
+            ? ok(`aborted: ${args.id}`)
+            : err(`Task not found or already terminal: ${args.id}`);
+        },
+      ),
+
+      tool(
+        'abort_all_tasks',
+        'EMERGENCY: abort every running task at once (same as the tray\'s "Abort all" menu item). `confirm: true` is REQUIRED — without it returns the count of running tasks so the agent can echo it to the user before firing. Use only when the user explicitly says "kill everything" / "abort all my running tasks" / "emergency stop".',
+        { confirm: z.boolean().optional() },
+        async (args) => {
+          const running = deps.runner
+            .list()
+            .filter((t) => t.status === 'running' || t.status === 'queued');
+          if (args.confirm !== true) {
+            return err(
+              `confirm:true required for abort_all_tasks. Would abort ${running.length} task(s). Echo the count to the user, get explicit approval, then call again with confirm:true.`,
+            );
+          }
+          deps.runner.abortAll();
+          deps.activity.record({
+            kind: 'tasks.abort-all',
+            label: `Abort-all triggered via agent tool (${running.length} task(s))`,
+            detail: { count: running.length, source: 'mcp' },
+          });
+          return ok(`aborted ${running.length} task${running.length === 1 ? '' : 's'}`);
+        },
+      ),
+
+      // ──── App mode ──────────────────────────────────────────────
+      // set_paused above is the binary form. set_app_mode is the
+      // explicit tri-state form. Autopilot is intentionally NOT a
+      // value the agent can pick — that's a user-driven decision
+      // that turns on automatic dispatches.
+
+      tool(
+        'set_app_mode',
+        'Set the global app mode. Accepts "running" (normal) or "paused" (skip automatic cron / scheduled fires). Autopilot mode is NOT settable via this tool — it turns on automatic dispatches without further user review and must be the user\'s explicit choice from the tray. Use when the user says "pause Jarvis" / "go back to running mode" / "I\'m in a meeting — quiet things down".',
+        {
+          mode: z.enum(['running', 'paused']),
+        },
+        async (args) => {
+          deps.setAppMode(args.mode);
+          return ok(`app mode: ${args.mode}`);
         },
       ),
 

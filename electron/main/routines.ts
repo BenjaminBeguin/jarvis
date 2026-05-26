@@ -121,6 +121,20 @@ export class RoutineStore extends EventEmitter {
     return true;
   }
 
+  /**
+   * Flip a routine's `enabled` flag — disables the cron schedule
+   * without dropping the routine definition itself. Returns the
+   * updated routine, or null if the id is unknown. Used by the MCP
+   * `set_routine_enabled` tool; the Routines UI uses save() with a
+   * full input instead.
+   */
+  setEnabled(id: string, enabled: boolean): RoutineDef | null {
+    const rec = this.routines.get(id);
+    if (!rec) return null;
+    if (rec.def.enabled === enabled) return rec.def;
+    return this.save({ ...rec.def, enabled });
+  }
+
   close(): void {
     for (const rec of this.routines.values()) rec.task?.stop();
     this.routines.clear();
