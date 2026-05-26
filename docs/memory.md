@@ -131,6 +131,19 @@ Read-only on Anthropic-owned files.
 | `~/.jarvis/.skill-batch.json` | file | read-write | Transient drop file where the skill-author skill writes its proposals. |
 | `~/.jarvis/skills/<name>/SKILL.md` | directory | write | On "accept", the suggestion is committed as a real skill. |
 
+### `work-awareness` — Work awareness
+Discoverable wrapper around the ambient-watcher (skill + workflow +
+calibration + inbox source) bundle. The module declares the four
+storage locations so the user can find + reason about them in
+Settings → Modules → Work awareness.
+
+| Store | Kind | Access | Notes |
+|---|---|---|---|
+| `~/.jarvis/work-awareness-priorities.md` | file | read-write | Shapes the watcher's lens: people who matter, what to mute, what counts as "done" for auto-dismissal. Skill reads it on every tick. |
+| `~/.jarvis/skills/work-awareness/SKILL.md` | file | read | haiku-4-5 by default. Bump the model in frontmatter for sharper synthesis. |
+| `~/.jarvis/workflows/work-awareness-loop.json` | file | read | Cron: `*/30 {businessHours}`. Default disabled — toggle on in Settings → Workflows after editing priorities. |
+| `~/.jarvis/inbox/work-awareness.json` | file | write | Output: `items[]` (surface) + `dismissals[]` (8h soft-snooze applied automatically by userInboxSource). |
+
 ### Modules with no own storage
 
 These are intent-only or pure-RAM and don't declare `memory`:

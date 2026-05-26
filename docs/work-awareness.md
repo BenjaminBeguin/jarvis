@@ -17,6 +17,20 @@ this morning, the "send Theo the Q3 update" action item drops off.
 The agent does the synthesis. You shape its lens via a markdown
 file. No JS-based extractors — everything is a skill prompt.
 
+## Module
+
+This is the `work-awareness` module — a discoverable wrapper around
+the (skill + workflow + calibration + inbox source) bundle. Find it
+at **Settings → Modules → Work awareness** for the declared memory
+map + the palette intents listed below.
+
+Palette:
+- `/work-awareness` — fire the loop now (don't wait 30 min). Verbal
+  triggers include "what should I look at", "check open loops",
+  "what am I forgetting".
+- `/work-awareness-edit` — open the priorities file in your default
+  editor.
+
 ## Files
 
 - `~/.jarvis/skills/work-awareness/SKILL.md` — the agent body (the
