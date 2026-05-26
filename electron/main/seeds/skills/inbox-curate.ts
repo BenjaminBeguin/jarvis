@@ -21,15 +21,30 @@ your judgement.
 
 ## Inputs
 
-1. The user's priorities file:
+1. The user's priorities file (HIGHEST priority — explicit user config):
 
 \`\`\`
 ~/.jarvis/inbox-priorities.md
 \`\`\`
 
-   This describes the people, projects, topics that matter, and what
-   "urgent" means for them. Read it on every run — it changes when
+   Describes the people, projects, topics that matter, and what
+   "urgent" means for them. Read on every run — it changes when
    the user runs \`/inbox-calibrate\`.
+
+1a. Auto-inferred supplemental priorities (LOWER priority —
+   Jarvis's own inferences):
+
+\`\`\`
+~/.jarvis/learnings/inferred-priorities.md
+\`\`\`
+
+   Rewritten daily by the \`daily-learn\` skill from the user's
+   recent behaviour (rolling 14d window). Read AFTER the explicit
+   priorities; the user's file always wins on conflicts. Use this
+   to catch patterns the user hasn't explicitly configured —
+   newly-frequent collaborators, channels they've effectively
+   muted via repeated dismissals, etc. Missing or empty is fine
+   (haven't accumulated enough signal yet); just skip.
 
 2. Raw inbox files written by the source workflows + skills:
 

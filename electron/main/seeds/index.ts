@@ -13,6 +13,7 @@ import calendarToday from './skills/calendar-today.js';
 import commitHelper from './skills/commit-helper.js';
 import costRecap from './skills/cost-recap.js';
 import dailyBrief from './skills/daily-brief.js';
+import dailyLearn from './skills/daily-learn.js';
 import dailyRecap from './skills/daily-recap.js';
 import gmailTriage from './skills/gmail-triage.js';
 import inboxCalibrate from './skills/inbox-calibrate.js';
@@ -50,6 +51,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'commit-helper', body: commitHelper },
   { name: 'cost-recap', body: costRecap },
   { name: 'daily-brief', body: dailyBrief },
+  { name: 'daily-learn', body: dailyLearn },
   { name: 'daily-recap', body: dailyRecap },
   { name: 'gmail-triage', body: gmailTriage },
   { name: 'inbox-calibrate', body: inboxCalibrate },

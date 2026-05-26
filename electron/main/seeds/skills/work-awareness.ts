@@ -74,6 +74,21 @@ If the file is missing or full of placeholder \`(e.g. "...")\`
 bullets, the user hasn't customised it — fall back to the settings
 alone.
 
+## And the auto-inferred priorities
+
+\`\`\`
+~/.jarvis/learnings/inferred-priorities.md
+\`\`\`
+
+Rewritten daily by the \`daily-learn\` skill from the user's
+recent behaviour (rolling 14d window). LOWER priority than the
+user's explicit settings + priorities file — the user's config
+always wins. Use this to catch patterns they haven't explicitly
+configured: collaborators who've been mentioning them frequently,
+channels they've effectively muted via repeated dismissals,
+skills they've escalated multiple times (those tasks need
+balanced/smart tier). Missing or empty is fine — just skip.
+
 ## Inputs to scan
 
 ### 1. Current inbox state (avoid duplicates)
