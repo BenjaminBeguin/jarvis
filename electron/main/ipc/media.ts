@@ -73,6 +73,73 @@ export function registerMediaIpc({
     return { ok: true };
   });
 
+  /** Shared post-persist work: activity row, OS notification, and
+   *  auto-debrief launch + action-items extraction. Called from
+   *  both the PCM finish path (legacy, short meetings) and the
+   *  text finish path (long meetings using live chunks). */
+  function afterMeetingPersisted(args: {
+    filename: string;
+    title: string;
+    project: string | null;
+    startedAt: number;
+    endedAt: number;
+  }): void {
+    const relPath = `~/.jarvis/meetings/${args.filename}`;
+    const durationSec = Math.round((args.endedAt - args.startedAt) / 1000);
+    activity.record({
+      kind: 'meeting.finished',
+      label: args.project
+        ? `Meeting saved · ${args.project} · ${args.title} (${formatDuration(durationSec)})`
+        : `Meeting saved · ${args.title} (${formatDuration(durationSec)})`,
+      detail: {
+        title: args.title,
+        project: args.project,
+        path: relPath,
+        durationSec,
+      },
+    });
+    new Notification({ title: 'Meeting saved', body: relPath })
+      .on('click', () => openObservatory())
+      .show();
+    const moduleSettings = loadModuleSettings(MEETING_RECORDER_MODULE_ID);
+    const autoDebrief = moduleSettings.autoDebrief !== false;
+    if (!autoDebrief) return;
+    try {
+      const debrief = runner.launch({
+        prompt: `Path: ~/.jarvis/meetings/${args.filename}\n\nRead this freshly recorded meeting transcript and restructure the file as the skill instructs.`,
+        skillId: 'meeting-debrief',
+        origin: 'routine',
+      });
+      hud.pushTask(debrief.id);
+      void (async () => {
+        try {
+          await awaitTurnResult(runner, debrief.id, {
+            timeoutMs: 5 * 60_000,
+          });
+          const transcriptPath = join(
+            jarvisRoot,
+            'meetings',
+            args.filename,
+          );
+          pushMeetingActionsToInbox(inbox, {
+            transcriptPath,
+            meetingTitle: args.title,
+            project: args.project,
+            finishedAt: args.endedAt,
+            meetingKey: args.filename.replace(/\.md$/, ''),
+          });
+        } catch (err) {
+          console.warn(
+            '[meeting-actions] extraction after debrief failed:',
+            err,
+          );
+        }
+      })();
+    } catch (e) {
+      console.error('Meeting auto-debrief failed to launch:', e);
+    }
+  }
+
   ipcMain.handle(
     IpcChannels.meetingFinish,
     async (
@@ -94,71 +161,50 @@ export function registerMediaIpc({
         sampleRate: payload.sampleRate,
         pcm: new Float32Array(payload.pcm),
       });
-      const relPath = `~/.jarvis/meetings/${filename}`;
-      const durationSec = Math.round((payload.endedAt - payload.startedAt) / 1000);
-      activity.record({
-        kind: 'meeting.finished',
-        label: payload.project
-          ? `Meeting saved · ${payload.project} · ${payload.title} (${formatDuration(durationSec)})`
-          : `Meeting saved · ${payload.title} (${formatDuration(durationSec)})`,
-        detail: {
-          title: payload.title,
-          project: payload.project,
-          path: relPath,
-          durationSec,
-        },
+      afterMeetingPersisted({
+        filename,
+        title: payload.title,
+        project: payload.project ?? null,
+        startedAt: payload.startedAt,
+        endedAt: payload.endedAt,
       });
-      new Notification({ title: 'Meeting saved', body: relPath })
-        .on('click', () => openObservatory())
-        .show();
-      // Auto-debrief: kick off the meeting-debrief skill to rewrite the
-      // transcript file with Summary / Decisions / Action items sections.
-      // Gated by the meeting-recorder module's autoDebrief setting so
-      // users who just want raw transcripts can turn it off.
-      const moduleSettings = loadModuleSettings(MEETING_RECORDER_MODULE_ID);
-      const autoDebrief = moduleSettings.autoDebrief !== false; // default ON
-      if (autoDebrief) {
-        try {
-          const debrief = runner.launch({
-            prompt: `Path: ~/.jarvis/meetings/${filename}\n\nRead this freshly recorded meeting transcript and restructure the file as the skill instructs.`,
-            skillId: 'meeting-debrief',
-            origin: 'routine',
-          });
-          hud.pushTask(debrief.id);
-          // Fire-and-forget: wait for the debrief task to complete,
-          // then re-read the rewritten transcript and pump extracted
-          // action items into the inbox under
-          // source='meeting-actions'. This closes the loop —
-          // transcripts on disk are read-only memory, the inbox
-          // surfaces the things you actually need to do.
-          void (async () => {
-            try {
-              await awaitTurnResult(runner, debrief.id, {
-                timeoutMs: 5 * 60_000,
-              });
-              const transcriptPath = join(
-                jarvisRoot,
-                'meetings',
-                filename,
-              );
-              pushMeetingActionsToInbox(inbox, {
-                transcriptPath,
-                meetingTitle: payload.title,
-                project: payload.project ?? null,
-                finishedAt: payload.endedAt,
-                meetingKey: filename.replace(/\.md$/, ''),
-              });
-            } catch (err) {
-              console.warn(
-                '[meeting-actions] extraction after debrief failed:',
-                err,
-              );
-            }
-          })();
-        } catch (e) {
-          console.error('Meeting auto-debrief failed to launch:', e);
-        }
-      }
+      return { filename };
+    },
+  );
+
+  /**
+   * Long-meeting fast path: renderer hands us already-transcribed
+   * text (stitched from the 5-sec live chunks) instead of a giant
+   * PCM buffer. Skips the Whisper re-pass entirely — Finish is
+   * instant regardless of meeting length, and we avoid marshalling
+   * hundreds of MB across IPC.
+   */
+  ipcMain.handle(
+    IpcChannels.meetingFinishFromText,
+    async (
+      _e,
+      payload: {
+        title: string;
+        project?: string | null;
+        startedAt: number;
+        endedAt: number;
+        transcript: string;
+      },
+    ): Promise<{ filename: string }> => {
+      const filename = await persistMeeting(jarvisRoot, {
+        title: payload.title,
+        project: payload.project ?? null,
+        startedAt: payload.startedAt,
+        endedAt: payload.endedAt,
+        transcript: payload.transcript,
+      });
+      afterMeetingPersisted({
+        filename,
+        title: payload.title,
+        project: payload.project ?? null,
+        startedAt: payload.startedAt,
+        endedAt: payload.endedAt,
+      });
       return { filename };
     },
   );

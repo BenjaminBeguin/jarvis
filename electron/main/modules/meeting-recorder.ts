@@ -172,23 +172,43 @@ interface FinishedRecording {
   title: string;
   startedAt: number;
   endedAt: number;
-  pcm: Float32Array;
-  /** Sample rate of the PCM (almost always 16_000). */
-  sampleRate: number;
+  /** Raw PCM to transcribe via Whisper. OMIT this and pass
+   *  `transcript` instead when the caller has already-transcribed
+   *  text (e.g. the renderer stitched live chunks from a long
+   *  meeting and wants instant save). */
+  pcm?: Float32Array;
+  /** Sample rate of the PCM (almost always 16_000). Required when
+   *  `pcm` is set; ignored otherwise. */
+  sampleRate?: number;
+  /** Pre-computed transcript — used in place of running Whisper.
+   *  Long meetings stitch their 5-sec live chunks into this so
+   *  Finish completes instantly instead of choking on a 230 MB
+   *  PCM concat + a minutes-long re-transcribe pass. */
+  transcript?: string;
   /** Project name when the recording was scoped via "<alias>: <title>". */
   project?: string | null;
 }
 
 /**
- * Transcribe the recorded audio and persist a meeting markdown file.
- * Returns the relative path under ~/.jarvis/meetings/ so the caller can
- * surface a notification with a clickable file path.
+ * Persist a meeting markdown file. Two paths:
+ *   - `transcript` provided → use it verbatim (instant; long-meeting
+ *     fast-path that uses live chunks)
+ *   - `pcm` provided → run Whisper inference (slow; accurate; short
+ *     meetings only)
+ *
+ * Returns the relative path under ~/.jarvis/meetings/ so the caller
+ * can surface a notification with a clickable file path.
  */
 export async function persistMeeting(
   jarvisRoot: string,
   recording: FinishedRecording,
 ): Promise<string> {
-  const transcript = await transcribePcm(recording.pcm);
+  const transcript =
+    typeof recording.transcript === 'string'
+      ? recording.transcript
+      : recording.pcm
+        ? await transcribePcm(recording.pcm)
+        : '';
   const durationSec = Math.round(
     (recording.endedAt - recording.startedAt) / 1000,
   );

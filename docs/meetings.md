@@ -176,7 +176,12 @@ A handful of things shift to "the mic is hot, don't lose the recording":
 | **❚❚ Pause** | Drops incoming samples while keeping the mic + AudioContext open. Clock freezes on the audible time so what you see matches the saved transcript length. | Break / private aside / mic check |
 | **▶ Resume** | Un-flips the pause flag; recording continues seamlessly. No re-prompt for mic permission. | Continue after pause |
 | **✕ Cancel** | Discards the recording — no transcript written. Confirm-prompt first so a misclick doesn't lose work. | "This was a mistake / dry run" |
-| **Finish** | Transcribes via Whisper + writes `~/.jarvis/meetings/<ts>-<slug>.md`. The Meetings page surfaces the file. | End of meeting |
+| **Finish** | Writes `~/.jarvis/meetings/<ts>-<slug>.md` instantly using the live chunks already transcribed during the meeting (5-sec windows). For short / live-transcription-failed meetings, falls back to a full Whisper re-pass over the PCM. The Meetings page surfaces the file; auto-debrief runs in the background. | End of meeting |
+
+> Finishing a 1-hour meeting used to choke on a 230 MB PCM marshal +
+> a multi-minute Whisper re-pass. The live-chunks fast-path makes
+> Finish instant regardless of meeting length. If you need higher
+> fidelity, hit **Push to Claude** on the saved file later.
 
 ## Auto-debrief
 

@@ -582,6 +582,18 @@ const api = {
     pcm: ArrayBuffer;
   }): Promise<{ filename: string }> =>
     ipcRenderer.invoke(IpcChannels.meetingFinish, payload),
+  /** Long-meeting fast path: hand the main process an already-
+   *  transcribed text blob built by stitching live chunks instead
+   *  of a giant PCM buffer. Skips Whisper re-pass + the multi-MB
+   *  IPC marshal that made Finish unresponsive on 1h+ recordings. */
+  meetingFinishFromText: (payload: {
+    title: string;
+    project?: string | null;
+    startedAt: number;
+    endedAt: number;
+    transcript: string;
+  }): Promise<{ filename: string }> =>
+    ipcRenderer.invoke(IpcChannels.meetingFinishFromText, payload),
   onMeetingStart: (
     listener: Listener<{ title: string; project?: string | null; startedAt: number }>,
   ): Unsubscribe => subscribe(IpcChannels.meetingStart, listener),

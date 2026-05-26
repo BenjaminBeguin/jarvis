@@ -210,7 +210,51 @@ class MeetingRecorder {
     const title = this.state.title ?? 'Untitled meeting';
     const startedAt = this.state.startedAt ?? Date.now();
     const project = this.state.project;
+    const liveChunks = this.state.liveChunks;
     this.setState({ ...this.state, active: false, finishing: true });
+
+    // Fast path: if we have live chunks (Whisper transcribed during
+    // the meeting in 5-sec windows), stitch them and hand the text
+    // to main. Skips a 230 MB PCM concat + a multi-MB IPC marshal +
+    // a minutes-long Whisper re-pass — Finish is instant regardless
+    // of meeting length. The audio fidelity loss vs a full re-pass
+    // is small (5-sec boundary clipping at most) and not worth the
+    // wait on a 1h+ meeting.
+    if (liveChunks.length > 0) {
+      // Tear down capture without building the giant concatenated PCM.
+      try {
+        capture.abort();
+      } catch {
+        /* already gone */
+      }
+      const transcript = liveChunks
+        .map((c) => c.text)
+        .filter((t) => t.length > 0)
+        .join('\n\n');
+      try {
+        await window.jarvis.meetingFinishFromText({
+          title,
+          project,
+          startedAt,
+          endedAt: Date.now(),
+          transcript,
+        });
+        this.setState({ ...INITIAL_STATE });
+      } catch (err) {
+        this.setState({
+          ...INITIAL_STATE,
+          error:
+            err instanceof Error
+              ? `Save failed: ${err.message}`
+              : 'Save failed',
+        });
+      }
+      return;
+    }
+
+    // Slow path: no live chunks (very short meeting OR live
+    // transcription failed throughout). Fall through to the full
+    // PCM transcribe — accurate, only painful at scale.
     let pcm: Float32Array;
     try {
       const result = await capture.stop();

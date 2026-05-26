@@ -154,6 +154,7 @@ export const IpcChannels = {
   snoozeMeetingHeadsUp: 'inbox:snoozeMeetingHeadsUp',
   meetingRecorderState: 'meeting:recorder-state',
   meetingControlRemote: 'meeting:control-remote',
+  meetingFinishFromText: 'meeting:finish-from-text',
   meetingDetectionStatus: 'meeting:detection-status',
   meetingDetectionChanged: 'meeting:detection-changed',
 
