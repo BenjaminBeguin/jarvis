@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Jarvis Meet Detector",
+  "short_name": "Jarvis",
+  "version": "1.0.0",
+  "description": "Ping the local Jarvis app when you join a Meet / Zoom / Teams / Whereby call so it can offer to record.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "*://meet.google.com/*",
+    "*://*.zoom.us/*",
+    "*://teams.microsoft.com/*",
+    "*://teams.live.com/*",
+    "*://whereby.com/*",
+    "http://127.0.0.1:4747/*",
+    "http://localhost:4747/*",
+    "http://*.ts.net:4747/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://meet.google.com/*",
+        "*://*.zoom.us/*",
+        "*://teams.microsoft.com/*",
+        "*://teams.live.com/*",
+        "*://whereby.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_title": "Jarvis Meet Detector",
+    "default_popup": "popup.html"
+  }
+}

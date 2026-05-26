@@ -23,9 +23,14 @@ export class AudioCapture {
   private audioContext: AudioContext | null = null;
   private processor: ScriptProcessorNode | null = null;
   private chunks: Float32Array[] = [];
+  /** When true, onaudioprocess drops incoming samples instead of pushing
+   *  them. The mic + AudioContext stay open so resume() picks up
+   *  seamlessly without re-prompting the user for permission. */
+  private paused = false;
 
   async start(): Promise<void> {
     this.chunks = [];
+    this.paused = false;
     this.mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
@@ -39,12 +44,30 @@ export class AudioCapture {
     const source = this.audioContext.createMediaStreamSource(this.mediaStream);
     this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
     this.processor.onaudioprocess = (event) => {
+      // Drop samples while paused — the recording's timeline stays
+      // continuous (no silent gap to confuse Whisper later).
+      if (this.paused) return;
       const channel = event.inputBuffer.getChannelData(0);
       // The buffer is reused — copy before stashing.
       this.chunks.push(new Float32Array(channel));
     };
     source.connect(this.processor);
     this.processor.connect(this.audioContext.destination);
+  }
+
+  /** Stop accumulating samples without tearing the stream down. The
+   *  mic light stays on (we still hold the MediaStream) but no audio
+   *  reaches the buffer. resume() un-flips the flag. Idempotent. */
+  pause(): void {
+    this.paused = true;
+  }
+
+  resume(): void {
+    this.paused = false;
+  }
+
+  isPaused(): boolean {
+    return this.paused;
   }
 
   /**

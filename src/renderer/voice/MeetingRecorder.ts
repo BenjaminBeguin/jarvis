@@ -22,6 +22,16 @@ export interface MeetingState {
   liveChunks: LiveTranscriptChunk[];
   /** True while a chunk is currently being transcribed (small spinner). */
   transcribing: boolean;
+  /** Paused: mic + AudioContext stay open but samples are dropped.
+   *  startedAt-derived clock display is offset by `pausedTotalMs` so
+   *  the user sees recorded-time, not wall-clock-since-start. */
+  paused: boolean;
+  /** Wall-clock when the current pause began. null when not paused.
+   *  Combined with pausedTotalMs to give the running elapsed offset. */
+  pausedAt: number | null;
+  /** Cumulative ms spent paused across this session. Subtracted from
+   *  the elapsed display so "REC · 04:12" reflects audible time. */
+  pausedTotalMs: number;
 }
 
 const INITIAL_STATE: MeetingState = {
@@ -33,6 +43,9 @@ const INITIAL_STATE: MeetingState = {
   error: null,
   liveChunks: [],
   transcribing: false,
+  paused: false,
+  pausedAt: null,
+  pausedTotalMs: 0,
 };
 
 const CHUNK_INTERVAL_MS = 5_000;
@@ -129,6 +142,9 @@ class MeetingRecorder {
       error: null,
       liveChunks: [],
       transcribing: false,
+      paused: false,
+      pausedAt: null,
+      pausedTotalMs: 0,
     });
     // Live transcription: every CHUNK_INTERVAL_MS, slice the audio
     // captured since the previous cursor and send to whisper. Cheap on
@@ -142,6 +158,10 @@ class MeetingRecorder {
   private async tickChunk(): Promise<void> {
     const capture = this.capture;
     if (!capture || !this.state.active) return;
+    // While paused, the capture isn't accumulating new samples — bail
+    // before doing any work. Resuming naturally picks up where we left
+    // off on the next tick.
+    if (this.state.paused) return;
     const end = capture.capturedSamples();
     const start = this.chunkCursor;
     const rate = capture.sampleRate() ?? 48_000;
@@ -229,6 +249,46 @@ class MeetingRecorder {
             : 'Save failed',
       });
     }
+  }
+
+  /**
+   * Suspend audio capture without ending the session. The mic light
+   * stays on (we keep the stream alive so resume doesn't re-prompt
+   * for permission), but no samples reach the buffer and the live
+   * chunk timer stops doing work. Idempotent.
+   */
+  pause(): void {
+    if (!this.state.active || this.state.paused) return;
+    this.capture?.pause();
+    this.setState({ ...this.state, paused: true, pausedAt: Date.now() });
+  }
+
+  resume(): void {
+    if (!this.state.active || !this.state.paused) return;
+    const pausedDuration =
+      this.state.pausedAt != null ? Date.now() - this.state.pausedAt : 0;
+    this.capture?.resume();
+    // Also push the chunk cursor forward so the just-completed pause
+    // window doesn't end up handed to Whisper as a single giant chunk
+    // when resume happens (those samples never existed but the cursor
+    // still anchors to capturedSamples() which is now offset).
+    if (this.capture) this.chunkCursor = this.capture.capturedSamples();
+    this.setState({
+      ...this.state,
+      paused: false,
+      pausedAt: null,
+      pausedTotalMs: this.state.pausedTotalMs + pausedDuration,
+    });
+  }
+
+  /**
+   * Cancel the in-flight recording — discard audio, write nothing to
+   * disk. Used by the overlay's "Cancel" button when the user
+   * realises the recording was a mistake and doesn't want a transcript.
+   * Different from `stop()` which transcribes + saves.
+   */
+  cancel(): void {
+    this.abort();
   }
 
   abort(): void {

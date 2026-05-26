@@ -11083,20 +11083,65 @@ button:disabled:hover {
   font-variant-numeric: tabular-nums;
 }
 
-.meeting-overlay__stop {
+.meeting-overlay__stop,
+.meeting-overlay__pause,
+.meeting-overlay__resume,
+.meeting-overlay__cancel {
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.12em;
   padding: 5px 10px;
-  border: 1px solid var(--bad);
-  color: var(--bad);
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
   background: transparent;
   border-radius: 2px;
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+}
+
+.meeting-overlay__pause:hover,
+.meeting-overlay__resume:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(0, 212, 255, 0.06);
+}
+
+/* Finish = positive action (transcribe + save), so it gets the
+   accent treatment. Cancel = destructive (discard) → bad-color. */
+.meeting-overlay__stop {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .meeting-overlay__stop:hover {
+  background: rgba(0, 212, 255, 0.1);
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.35);
+}
+
+.meeting-overlay__cancel {
+  /* Squarer footprint — it's an icon, not a label. */
+  padding: 5px 8px;
+  width: 28px;
+  text-align: center;
+}
+
+.meeting-overlay__cancel:hover {
+  border-color: var(--bad);
+  color: var(--bad);
   background: rgba(255, 85, 119, 0.08);
   box-shadow: 0 0 8px rgba(255, 85, 119, 0.35);
+}
+
+.meeting-overlay__header--paused {
+  /* Dim the whole header subtly so the user clocks "this is paused". */
+  opacity: 0.85;
+}
+
+.meeting-overlay__dot--paused {
+  /* Stop the pulse + recolor while paused. */
+  background: var(--text-faint) !important;
+  box-shadow: none !important;
+  animation: none !important;
 }
 
 .meeting-overlay__finishing,

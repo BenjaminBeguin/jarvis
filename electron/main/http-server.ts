@@ -46,6 +46,19 @@ const PORT = 4747;
  *  /v1/status/details. */
 const SSE_TICK_MS = 5_000;
 
+export interface MeetingDetectedPayload {
+  /** Where the detection came from. 'extension' for the Chrome
+   *  browser extension; 'manual' for ad-hoc clients. */
+  source: string;
+  /** Meeting title if the extension could scrape one. */
+  title?: string;
+  /** Meeting URL — used by the prompt's "Join" button. */
+  url?: string;
+  /** Free-form vendor label ('meet', 'zoom', 'teams'). For
+   *  diagnostics + logging. */
+  vendor?: string;
+}
+
 export interface HttpDeps {
   runner: TaskRunner;
   reminders: ReminderStore;
@@ -56,6 +69,10 @@ export interface HttpDeps {
    *  Same shape the tray menu consumes; reused here so SSE +
    *  /v1/status/details stay in lockstep with the desktop UI. */
   getStatus(): TrayMenuState;
+  /** Fire the heads-up "record this meeting?" prompt — same flow the
+   *  macOS Core Audio watcher uses. Wired in index.ts so the HTTP
+   *  endpoint stays infrastructure-free. */
+  onMeetingDetected(payload: MeetingDetectedPayload): void;
   token: string;
   version: string;
 }
@@ -288,6 +305,30 @@ async function handle(
   if (req.method === 'POST' && path === '/v1/inbox/refresh') {
     const items = await deps.inbox.refresh();
     sendJson(res, 200, items);
+    return;
+  }
+
+  // POST /v1/meeting/detected — external clients (Chrome
+  // extension, Shortcuts, custom scripts) flag "the user is in a
+  // meeting right now" so Jarvis can offer to record. Fires the
+  // same heads-up flow as the macOS Core Audio watcher; no
+  // duplicate detection logic.
+  if (req.method === 'POST' && path === '/v1/meeting/detected') {
+    const body = await readJson(req);
+    const source =
+      typeof body?.source === 'string' && body.source.trim()
+        ? body.source.trim()
+        : 'extension';
+    const title =
+      typeof body?.title === 'string' ? body.title.trim() : undefined;
+    const url =
+      typeof body?.url === 'string' && /^https?:\/\//.test(body.url)
+        ? body.url
+        : undefined;
+    const vendor =
+      typeof body?.vendor === 'string' ? body.vendor.trim() : undefined;
+    deps.onMeetingDetected({ source, title, url, vendor });
+    sendJson(res, 200, { ok: true });
     return;
   }
 

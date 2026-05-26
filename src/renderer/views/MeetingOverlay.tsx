@@ -162,8 +162,12 @@ export function MeetingOverlay() {
     <div className={`meeting-overlay${expanded ? ' meeting-overlay--expanded' : ''}`}>
       {state.active && state.startedAt !== null && (
         <>
-          <div className="meeting-overlay__header">
-            <span className="meeting-overlay__dot" />
+          <div
+            className={`meeting-overlay__header${state.paused ? ' meeting-overlay__header--paused' : ''}`}
+          >
+            <span
+              className={`meeting-overlay__dot${state.paused ? ' meeting-overlay__dot--paused' : ''}`}
+            />
             <div className="meeting-overlay__body">
               <div className="meeting-overlay__title">
                 {state.project && (
@@ -174,8 +178,21 @@ export function MeetingOverlay() {
                 {state.title}
               </div>
               <div className="meeting-overlay__time">
-                REC · {formatDuration(now - state.startedAt)}
-                {state.transcribing && <span className="meeting-overlay__pulse"> · ✦</span>}
+                {(() => {
+                  // Elapsed audible time = wall clock since start
+                  // minus the cumulative paused gap, frozen on the
+                  // value at pauseStart while still paused so the
+                  // user sees the clock literally stop ticking.
+                  const elapsed = state.paused && state.pausedAt != null
+                    ? state.pausedAt - state.startedAt - state.pausedTotalMs
+                    : now - state.startedAt - state.pausedTotalMs;
+                  return state.paused
+                    ? `PAUSED · ${formatDuration(Math.max(0, elapsed))}`
+                    : `REC · ${formatDuration(Math.max(0, elapsed))}`;
+                })()}
+                {state.transcribing && !state.paused && (
+                  <span className="meeting-overlay__pulse"> · ✦</span>
+                )}
               </div>
             </div>
             <button
@@ -185,11 +202,44 @@ export function MeetingOverlay() {
             >
               {expanded ? '▾' : '▸'}
             </button>
+            {state.paused ? (
+              <button
+                className="meeting-overlay__resume"
+                onClick={() => meetingRecorder.resume()}
+                title="Resume recording"
+              >
+                ▶ Resume
+              </button>
+            ) : (
+              <button
+                className="meeting-overlay__pause"
+                onClick={() => meetingRecorder.pause()}
+                title="Pause — mic stays open, samples are dropped"
+              >
+                ❚❚ Pause
+              </button>
+            )}
+            <button
+              className="meeting-overlay__cancel"
+              onClick={() => {
+                if (
+                  confirm(
+                    'Discard this recording? No transcript will be saved.',
+                  )
+                ) {
+                  meetingRecorder.cancel();
+                }
+              }}
+              title="Discard recording — no transcript saved"
+            >
+              ✕
+            </button>
             <button
               className="meeting-overlay__stop"
               onClick={() => void meetingRecorder.stop()}
+              title="Stop + transcribe + save"
             >
-              Stop
+              Finish
             </button>
           </div>
           {expanded && (

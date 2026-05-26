@@ -23,6 +23,7 @@ process.on('exit', (code) => {
 import { IpcChannels } from '@shared/ipc';
 import type {
   AppStatus,
+  InboxItem,
   TaskEvent,
   TaskSummary,
   WorkflowRun,
@@ -269,15 +270,58 @@ const inboxProximity = new InboxProximityWatcher(
 // same "want to record this?" toast. Catches Google Meet, Zoom,
 // Discord, FaceTime, etc. — anything that touches Core Audio / CMIO.
 // macOS-only; no-op on other platforms.
-const meetingActivity = new MeetingActivityWatcher((item) => {
+/**
+ * Surface a "record this meeting?" heads-up. Used both by the macOS
+ * Core Audio watcher (mic/cam went hot at the OS level) AND by the
+ * HTTP endpoint that the Chrome extension hits when it detects a
+ * meeting in a Meet/Zoom/Teams tab. Single funnel so the renderer's
+ * MeetingPrompt component only has one channel to listen on.
+ */
+function fireMeetingHeadsUp(item: InboxItem): void {
   try {
     const win = openObservatory();
     win.focus();
     sendWhenReady(win, IpcChannels.meetingImminent, { item, minutesUntil: 0 });
   } catch (err) {
-    console.warn('Meeting activity broadcast failed:', err);
+    console.warn('Meeting heads-up broadcast failed:', err);
   }
-});
+}
+
+const meetingActivity = new MeetingActivityWatcher((item) =>
+  fireMeetingHeadsUp(item),
+);
+
+/**
+ * Handle a /v1/meeting/detected POST from the Chrome extension (or
+ * any external caller). Build an InboxItem-shaped payload and route
+ * it through the same heads-up flow as the OS-level watcher.
+ */
+function onExternalMeetingDetected(payload: {
+  source: string;
+  title?: string;
+  url?: string;
+  vendor?: string;
+}): void {
+  const vendorLabel = payload.vendor
+    ? payload.vendor.charAt(0).toUpperCase() + payload.vendor.slice(1)
+    : 'Browser';
+  // Bucket by minute so a single tab pinging twice in quick
+  // succession doesn't double-prompt. Different from the audio
+  // watcher's cooldown but achieves the same outcome via id dedupe
+  // in the renderer.
+  const id = `ad-hoc-ext-${payload.vendor ?? 'unknown'}-${Math.floor(Date.now() / 60_000)}`;
+  const item: InboxItem = {
+    id,
+    source: 'meeting-activity',
+    title: payload.title
+      ? `${payload.title} — record this?`
+      : `${vendorLabel} meeting detected — record this?`,
+    subtitle: `Detected via ${payload.source}${payload.vendor ? ` · ${payload.vendor}` : ''}`,
+    ...(payload.url ? { url: payload.url } : {}),
+    createdAt: Date.now(),
+  };
+  fireMeetingHeadsUp(item);
+}
 
 ipcMain.handle(IpcChannels.suppressMeetingPrompt, (_e, id: string) => {
   if (typeof id !== 'string') return;
@@ -1540,6 +1584,7 @@ app.whenReady().then(async () => {
       oauth: oauthOrchestrator,
       notifier,
       getStatus: () => getTrayMenuState(),
+      onMeetingDetected: onExternalMeetingDetected,
       token,
       version: app.getVersion(),
     });
@@ -1571,6 +1616,7 @@ app.whenReady().then(async () => {
         oauth: oauthOrchestrator,
         notifier,
         getStatus: () => getTrayMenuState(),
+        onMeetingDetected: onExternalMeetingDetected,
         token: fresh,
         version: app.getVersion(),
       });
