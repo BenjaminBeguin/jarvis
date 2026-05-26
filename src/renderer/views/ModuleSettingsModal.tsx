@@ -67,13 +67,15 @@ export function ModuleSettingsModal({
             ×
           </button>
         </header>
-        <p className="module-settings-modal__desc">{m.description}</p>
+        <div className="module-settings-modal__body">
+          <p className="module-settings-modal__desc">{m.description}</p>
 
-        <SettingsPanel module={m} />
+          <SettingsPanel module={m} />
 
-        <MemoryPanel module={m} />
+          <MemoryPanel module={m} />
 
-        <HistoryPane moduleId={m.id} />
+          <HistoryPane moduleId={m.id} />
+        </div>
       </div>
     </div>
   );
