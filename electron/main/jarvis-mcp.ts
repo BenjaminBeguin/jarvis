@@ -1,6 +1,6 @@
 import { shell } from 'electron';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { join, normalize, resolve } from 'node:path';
 
 import {
   createSdkMcpServer,
@@ -28,7 +28,7 @@ import type { ActivityStore } from './activity-store.js';
 import type { getCostBreakdown as getCostBreakdownFn } from './db.js';
 import { dispatchDraftSend } from './draft-send.js';
 import type { DraftsStore } from './drafts-store.js';
-import type { InboxStore } from './inbox.js';
+import { InboxStore } from './inbox.js';
 import type { McpConfigStore } from './mcp-config.js';
 import type { ProjectMemoryStore } from './project-memory.js';
 import type { ProjectStore } from './projects.js';
@@ -605,6 +605,241 @@ export function createJarvisMcp(
           const draft = deps.drafts.updateBody(args.id, args.body);
           if (!draft) return err(`Draft not found: ${args.id}`);
           return ok(`updated body: ${args.id}`);
+        },
+      ),
+
+      // ──── Inbox ─────────────────────────────────────────────────
+      // The Inbox tab aggregates source feeds (PRs, calendar, smart,
+      // tech-watch, etc.). add_to_inbox writes; these tools read +
+      // mutate + clear.
+
+      tool(
+        'list_inbox',
+        'List current inbox items (filtered + ranked the same way the Inbox tab shows them). Pass `source` to scope to one feed ("tech-watch", "linear", "slack", "smart", …). Pass `project` to filter to items tagged with that project. By default dismissed/snoozed items are EXCLUDED — pass `includeDismissed:true` to also list snoozed rows. Use to discover item ids before calling dismiss_inbox_item or restore_inbox_item.',
+        {
+          source: z.string().optional(),
+          project: z.string().optional(),
+          includeDismissed: z.boolean().optional(),
+        },
+        async (args) => {
+          const items = args.includeDismissed
+            ? [...deps.inbox.list(), ...deps.inbox.listDismissed()]
+            : deps.inbox.list();
+          const filtered = items.filter((it) => {
+            if (args.source && it.source !== args.source) return false;
+            if (args.project) {
+              // Project matches when the item is tagged with it, OR
+              // the item is ambient (no project tag) — same logic the
+              // Inbox tab uses for scoped views.
+              if (it.project && it.project !== args.project) return false;
+            }
+            return true;
+          });
+          return json(
+            filtered.map((it) => ({
+              id: it.id,
+              source: it.source,
+              title: it.title,
+              subtitle: it.subtitle,
+              url: it.url,
+              why: it.why,
+              project: it.project,
+              createdAt: it.createdAt,
+              fireAt: it.fireAt,
+            })),
+          );
+        },
+      ),
+
+      tool(
+        'dismiss_inbox_item',
+        'Snooze / dismiss one inbox item by id. Without `snoozeMs` the item is dismissed forever (until restored). Common snooze durations: 3600000 (1h), 14400000 (4h), 86400000 (1 day), 604800000 (1 week). Use when the user says "snooze the Asana one for an hour" / "I\'ll deal with PR 1234 tomorrow" / "stop showing me this thread".',
+        {
+          id: z.string().min(1),
+          snoozeMs: z.number().int().positive().optional(),
+        },
+        async (args) => {
+          const ms = args.snoozeMs ?? InboxStore.foreverMs();
+          deps.inbox.dismiss(args.id, ms);
+          return ok(`dismissed: ${args.id}`);
+        },
+      ),
+
+      tool(
+        'restore_inbox_item',
+        'Bring a snoozed/dismissed inbox item back to the active list. Use when the user says "un-snooze that Linear ticket" / "actually bring back the PR I dismissed".',
+        { id: z.string().min(1) },
+        async (args) => {
+          deps.inbox.restore(args.id);
+          return ok(`restored: ${args.id}`);
+        },
+      ),
+
+      tool(
+        'refresh_inbox',
+        'Re-aggregate every registered inbox source (re-runs each source\'s fetch + applies snooze filter). Cheap — doesn\'t re-fire the underlying source skills/workflows. To re-fire a feed before re-aggregating (e.g. force a Linear/Slack re-pull), call run_workflow / run_routine_now on its workflow first, then refresh_inbox. Use when the user says "refresh my inbox" / "check for new items".',
+        {},
+        async () => {
+          const items = await deps.inbox.refresh();
+          return ok(`refreshed: ${items.length} items`);
+        },
+      ),
+
+      tool(
+        'clear_inbox_source',
+        'BULK: delete a JSON inbox source file (e.g. `tech-watch.json`, `watch.json`). This wipes the items the agent or a workflow wrote — workflow-fed sources will repopulate on their next run. `confirm: true` is REQUIRED to prevent accidental fires from hallucinated calls; without it returns the current item count so the agent can echo it back to the user. Built-in source files maintained by core stores (PRs etc.) are not exposed this way — only user/agent/workflow-written JSON in ~/.jarvis/inbox/.',
+        {
+          source: z.string().min(1).max(40).regex(/^[a-z0-9-]+$/, 'source must be lowercase letters / digits / dashes (e.g. "watch", "tech-watch")'),
+          confirm: z.boolean().optional(),
+        },
+        async (args) => {
+          const inboxDir = join(deps.jarvisRoot, 'inbox');
+          const filename = `${args.source}.json`;
+          // Single-segment guardrail — same logic as ipc/inbox.ts
+          // resolveInboxFile. Block traversal / abs paths even though
+          // the regex above is strict; defence in depth.
+          if (filename.includes('/') || filename.includes('..')) {
+            return err(`invalid source: ${args.source}`);
+          }
+          const target = normalize(resolve(inboxDir, filename));
+          if (!target.startsWith(inboxDir)) {
+            return err(`invalid source: ${args.source}`);
+          }
+          if (!existsSync(target)) return ok(`already empty: ${args.source}`);
+
+          if (args.confirm !== true) {
+            let count = 0;
+            try {
+              const parsed: unknown = JSON.parse(readFileSync(target, 'utf8'));
+              if (Array.isArray(parsed)) count = parsed.length;
+              else if (
+                parsed && typeof parsed === 'object'
+                && Array.isArray((parsed as { items?: unknown[] }).items)
+              ) {
+                count = (parsed as { items: unknown[] }).items.length;
+              }
+            } catch {
+              // unreadable / malformed — let the user clear it anyway
+              count = -1;
+            }
+            return err(
+              `confirm:true required for clear_inbox_source. Would clear ${count >= 0 ? count : 'an unknown number of'} item(s) from ${args.source}.json. Echo back to the user, get approval, then call again with confirm:true.`,
+            );
+          }
+
+          try {
+            unlinkSync(target);
+            deps.activity.record({
+              kind: 'inbox.cleared',
+              label: `Inbox source cleared (mcp) · ${args.source}`,
+              detail: { source: args.source, path: target },
+            });
+            await deps.inbox.refresh();
+            return ok(`cleared: ${args.source}`);
+          } catch (e) {
+            return err(e instanceof Error ? e.message : String(e));
+          }
+        },
+      ),
+
+      // ──── Reminders ─────────────────────────────────────────────
+      // create_reminder above; these list / fire-now / mark-done /
+      // cancel pending or recurring reminders.
+
+      tool(
+        'list_reminders',
+        'List reminders (one-shots, scheduled actions, recurring crons). Filter by `status`: "pending" (waiting to fire), "fired" (already triggered, one-shot), "done" (user marked complete), "cancelled". Omit to get everything, ranked pending-first then newest. Use to discover ids before fire_reminder_now / mark_reminder_done / cancel_reminder.',
+        {
+          status: z
+            .enum(['pending', 'fired', 'done', 'cancelled'])
+            .optional(),
+        },
+        async (args) => {
+          const all = deps.reminders.list();
+          const filtered = args.status
+            ? all.filter((r) => r.status === args.status)
+            : all;
+          return json(
+            filtered.map((r) => ({
+              id: r.id,
+              body: r.body,
+              mode: r.mode,
+              status: r.status,
+              fireAt: r.fireAt,
+              firedAt: r.firedAt,
+              cron: r.cron,
+              createdAt: r.createdAt,
+            })),
+          );
+        },
+      ),
+
+      tool(
+        'fire_reminder_now',
+        'Fire a pending reminder immediately (equivalent to its timer expiring this moment). For mode="reminder" it pops a notification; for mode="scheduled" it spawns the agentic task. No effect on already-fired/cancelled reminders. Use when the user says "trigger that reminder now" / "run the 9am task now instead of waiting".',
+        { id: z.string().min(1) },
+        async (args) => {
+          const fired = await deps.reminders.fireNow(args.id);
+          return fired
+            ? ok(`fired: ${args.id}`)
+            : err(`Reminder ${args.id} is not pending (or doesn\'t exist).`);
+        },
+      ),
+
+      tool(
+        'mark_reminder_done',
+        'Mark a reminder as done — the user acted on it. Drops the row from the inbox but keeps the reminder in history. Idempotent.',
+        { id: z.string().min(1) },
+        async (args) => {
+          const done = deps.reminders.markDone(args.id);
+          return done
+            ? ok(`done: ${args.id}`)
+            : err(`Reminder not found: ${args.id}`);
+        },
+      ),
+
+      tool(
+        'cancel_reminder',
+        'Cancel a pending reminder so it never fires. For recurring reminders this stops the entire series. No effect on already-fired/done reminders. Use when the user says "cancel the 9am standup ping" / "stop the weekly recap reminder".',
+        { id: z.string().min(1) },
+        async (args) => {
+          const cancelled = deps.reminders.cancel(args.id);
+          return cancelled
+            ? ok(`cancelled: ${args.id}`)
+            : err(`Reminder ${args.id} is not pending (or doesn\'t exist).`);
+        },
+      ),
+
+      // ──── Projects ──────────────────────────────────────────────
+      // get_active_project + read/write_project_memory above; these
+      // enumerate + switch the active scope.
+
+      tool(
+        'list_projects',
+        'List every project defined in ~/.jarvis/projects.json. Returns `{ name, aliases, path?, repo?, description? }` per project. Use to discover what scopes exist before set_active_project, or to resolve "the X project" / repo paths in the agent\'s reasoning.',
+        {},
+        async () => json(deps.projects.list()),
+      ),
+
+      tool(
+        'set_active_project',
+        'Switch the user\'s active project scope (the same toggle as the Shell\'s project picker). Pass `name` to activate that project; pass null/empty to clear the scope. Subsequent tools that respect scope (calendar, inbox project filter) honor the new value. Use when the user says "switch to <project>" / "I\'m working on X now" / "clear the project filter".',
+        {
+          name: z.string().nullable(),
+        },
+        async (args) => {
+          if (!args.name) {
+            deps.userContext.setActiveProject(null);
+            return ok('cleared active project');
+          }
+          const def = deps.projects.resolve(args.name);
+          if (!def) {
+            return err(
+              `Unknown project: ${args.name}. Call list_projects to see what's defined.`,
+            );
+          }
+          deps.userContext.setActiveProject(def.name);
+          return ok(`active project: ${def.name}`);
         },
       ),
 
