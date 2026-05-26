@@ -14,17 +14,49 @@ matters now and over the next ~12 hours. Unlike the daily recap
 (retrospective) and weekly retro (themed look-back), this is "if I
 read this once at the start of my day, what do I need to know."
 
-## Output location
+## Output locations
 
-Write the final markdown to exactly this path:
+You write TWO files. The Briefings tab reads the markdown; the
+Inbox tab reads the JSON. Both get rewritten each morning.
+
+### 1. The full briefing (markdown)
 
 \`\`\`
 ~/.jarvis/briefings/today-focus/<YYYY-MM-DD>.md
 \`\`\`
 
-Where \`<YYYY-MM-DD>\` is today's date.
+Where \`<YYYY-MM-DD>\` is today's date. Overwrite if it exists.
 
-If the file already exists, overwrite it.
+### 2. A single inbox item (JSON wrapper) carrying the recommended next move
+
+\`\`\`
+~/.jarvis/inbox/today-focus.json
+\`\`\`
+
+So the user sees your top recommendation in the Inbox directly —
+not buried under "Briefings." Shape:
+
+\`\`\`json
+{
+  "source": "today-focus",
+  "label": "Today's focus",
+  "items": [
+    {
+      "id": "today-focus-<YYYY-MM-DD>",
+      "source": "today-focus",
+      "title": "<the recommended-next-move sentence>",
+      "subtitle": "<count summary, e.g. '4 PRs waiting · 2 meetings · 3 reminders'>",
+      "body": "<2-4 sentences expanding the recommendation: WHY this is the move, what to look at first, time estimate if obvious>",
+      "createdAt": <ms epoch>,
+      "url": "vscode://file<absolute path to the markdown file you just wrote>"
+    }
+  ]
+}
+\`\`\`
+
+Single item, always. Stable id \`today-focus-<date>\` so re-runs
+overwrite cleanly. The url field uses \`vscode://\` so a click
+opens the full briefing in the editor.
 
 ## Sources to pull from
 

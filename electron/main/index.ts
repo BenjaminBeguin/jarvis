@@ -103,6 +103,7 @@ import { askModule } from './modules/ask.js';
 import { calendarModule } from './modules/calendar.js';
 import { claudeCodeWatchModule } from './modules/claude-code-watch.js';
 import { dailyLearnModule } from './modules/daily-learn.js';
+import { morningBriefModule } from './modules/morning-brief.js';
 import { meetingRecorderModule } from './modules/meeting-recorder.js';
 import { prWorkflowsModule } from './modules/pr-workflows.js';
 import { quickNoteModule } from './modules/quick-note.js';
@@ -1486,6 +1487,7 @@ app.whenReady().then(async () => {
   await modules.register(workflowsModule);
   await modules.register(workAwarenessModule);
   await modules.register(dailyLearnModule);
+  await modules.register(morningBriefModule);
   await modules.register(askModule);
   await modules.register(telegramBotModule);
   await modules.register(voiceModule);
