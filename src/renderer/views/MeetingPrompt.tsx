@@ -117,6 +117,16 @@ export function MeetingPrompt() {
     setPending(null);
   };
 
+  /** "Don't ask for the next hour" — useful during focus blocks
+   *  where you DON'T want a heads-up every time you tap the mic.
+   *  RAM-only on the Mac side; restart clears. */
+  const snooze1h = () => {
+    cancelledRef.current.add(item.id);
+    void window.jarvis.snoozeMeetingHeadsUp(60 * 60_000);
+    toast({ message: 'Meeting prompts snoozed 1h' });
+    setPending(null);
+  };
+
   // Ad-hoc detections (mic/cam went hot at the OS level) come through
   // with minutesUntil=0 and an "ad-hoc-…" id; treat them as "already in
   // progress" rather than "starting in 0 min".
@@ -161,6 +171,13 @@ export function MeetingPrompt() {
         )}
         <button className="meeting-prompt__skip" onClick={skip}>
           Skip
+        </button>
+        <button
+          className="meeting-prompt__snooze"
+          onClick={snooze1h}
+          title="Silence meeting heads-ups for the next hour"
+        >
+          Snooze 1h
         </button>
       </div>
     </div>

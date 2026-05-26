@@ -151,6 +151,7 @@ export const IpcChannels = {
   clearInboxSource: 'inbox:clearSource',
   meetingImminent: 'inbox:meetingImminent',
   suppressMeetingPrompt: 'inbox:suppressMeetingPrompt',
+  snoozeMeetingHeadsUp: 'inbox:snoozeMeetingHeadsUp',
   meetingDetectionStatus: 'meeting:detection-status',
   meetingDetectionChanged: 'meeting:detection-changed',
 

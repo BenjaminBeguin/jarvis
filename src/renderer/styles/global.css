@@ -4777,7 +4777,8 @@ button:disabled:hover {
 
 .meeting-prompt__primary,
 .meeting-prompt__join,
-.meeting-prompt__skip {
+.meeting-prompt__skip,
+.meeting-prompt__snooze {
   background: transparent;
   border: 1px solid var(--border-strong);
   color: var(--text-dim);
@@ -4789,6 +4790,12 @@ button:disabled:hover {
   border-radius: 2px;
   cursor: pointer;
   flex: 1;
+}
+
+.meeting-prompt__snooze:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow-soft);
 }
 
 .meeting-prompt__primary {

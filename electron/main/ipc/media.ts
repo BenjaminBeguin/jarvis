@@ -2,7 +2,11 @@ import { Notification, ipcMain, systemPreferences } from 'electron';
 
 import { IpcChannels } from '@shared/ipc';
 
-import { persistMeeting } from '../modules/meeting-recorder.js';
+import { loadModuleSettings } from '../auth.js';
+import {
+  MEETING_RECORDER_MODULE_ID,
+  persistMeeting,
+} from '../modules/meeting-recorder.js';
 import { speak, stopSpeaking } from '../modules/voice/speech.js';
 import { transcribePcm } from '../modules/voice/transcribe.js';
 import { openObservatory } from '../windows.js';
@@ -105,15 +109,21 @@ export function registerMediaIpc({
         .show();
       // Auto-debrief: kick off the meeting-debrief skill to rewrite the
       // transcript file with Summary / Decisions / Action items sections.
-      try {
-        const debrief = runner.launch({
-          prompt: `Path: ~/.jarvis/meetings/${filename}\n\nRead this freshly recorded meeting transcript and restructure the file as the skill instructs.`,
-          skillId: 'meeting-debrief',
-          origin: 'routine',
-        });
-        hud.pushTask(debrief.id);
-      } catch (e) {
-        console.error('Meeting auto-debrief failed to launch:', e);
+      // Gated by the meeting-recorder module's autoDebrief setting so
+      // users who just want raw transcripts can turn it off.
+      const moduleSettings = loadModuleSettings(MEETING_RECORDER_MODULE_ID);
+      const autoDebrief = moduleSettings.autoDebrief !== false; // default ON
+      if (autoDebrief) {
+        try {
+          const debrief = runner.launch({
+            prompt: `Path: ~/.jarvis/meetings/${filename}\n\nRead this freshly recorded meeting transcript and restructure the file as the skill instructs.`,
+            skillId: 'meeting-debrief',
+            origin: 'routine',
+          });
+          hud.pushTask(debrief.id);
+        } catch (e) {
+          console.error('Meeting auto-debrief failed to launch:', e);
+        }
       }
       return { filename };
     },

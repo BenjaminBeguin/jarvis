@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { transcribePcm } from './voice/transcribe.js';
-import type { Module } from './types.js';
+import type { Module, ModuleContext } from './types.js';
 
 const CHANNEL_START = 'meeting:start';
 const CHANNEL_STOP_REQUEST = 'meeting:stop-request';
@@ -25,12 +25,27 @@ function timestamp(d: Date): string {
   );
 }
 
+export const MEETING_RECORDER_MODULE_ID = 'meeting-recorder';
+
 export const meetingRecorderModule: Module = {
-  id: 'meeting-recorder',
+  id: MEETING_RECORDER_MODULE_ID,
   name: 'Meeting recorder',
   description:
     'Record a meeting, transcribe locally via Whisper, save as a markdown transcript you can push to Claude',
   version: '1.0.0',
+  settings: {
+    description:
+      'When auto-debrief is on (default), every finished meeting runs the meeting-debrief skill in the background — restructures the transcript with Summary / Decisions / Action items sections. Turn off if you want raw transcripts only.',
+    fields: [
+      {
+        key: 'autoDebrief',
+        label: 'Auto-debrief on finish',
+        hint: 'Run the meeting-debrief skill automatically after each Finish to extract action items.',
+        type: 'boolean',
+        default: true,
+      },
+    ],
+  },
   memory: [
     {
       label: 'Meeting transcripts (global)',
@@ -84,6 +99,7 @@ export const meetingRecorderModule: Module = {
         }
         const title =
           rawTitle ||
+          currentCalendarEventTitle(ctx) ||
           `Meeting at ${new Date().toLocaleTimeString([], {
             hour: '2-digit',
             minute: '2-digit',
@@ -122,6 +138,35 @@ export const meetingRecorderModule: Module = {
     },
   ],
 };
+
+/**
+ * "Is a calendar event happening RIGHT NOW?" Used to default the
+ * `/meeting` title from your actual calendar instead of a generic
+ * "Meeting at 10:30". Generous window: an event counts as current
+ * if it started in the last 10 min OR starts in the next 5 min
+ * (people start recording slightly late or early). Picks the
+ * soonest-started event when multiple overlap.
+ */
+function currentCalendarEventTitle(ctx: ModuleContext): string | null {
+  try {
+    const now = Date.now();
+    const events = ctx
+      .listInboxItems()
+      .filter(
+        (i) =>
+          i.source === 'calendar' &&
+          typeof i.fireAt === 'number' &&
+          i.fireAt >= now - 10 * 60_000 &&
+          i.fireAt <= now + 5 * 60_000,
+      )
+      .sort((a, b) => (b.fireAt ?? 0) - (a.fireAt ?? 0));
+    return events[0]?.title ?? null;
+  } catch {
+    // listInboxItems shouldn't throw, but if the inbox isn't ready
+    // yet at very first launch we just fall through to the timestamp.
+    return null;
+  }
+}
 
 interface FinishedRecording {
   title: string;

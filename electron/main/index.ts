@@ -271,19 +271,68 @@ const inboxProximity = new InboxProximityWatcher(
 // Discord, FaceTime, etc. — anything that touches Core Audio / CMIO.
 // macOS-only; no-op on other platforms.
 /**
+ * "Quiet for the next N ms" — set by the renderer when the user
+ * clicks Snooze on a heads-up. RAM-only on purpose: snooze is a
+ * "leave me alone for the rest of this work session" intent, not a
+ * persisted preference. App restart clears it.
+ */
+let meetingHeadsUpSnoozedUntil = 0;
+
+/**
  * Surface a "record this meeting?" heads-up. Used both by the macOS
  * Core Audio watcher (mic/cam went hot at the OS level) AND by the
  * HTTP endpoint that the Chrome extension hits when it detects a
  * meeting in a Meet/Zoom/Teams tab. Single funnel so the renderer's
  * MeetingPrompt component only has one channel to listen on.
+ *
+ * Fires THREE surfaces in parallel:
+ *   - The Jarvis window toast (MeetingPrompt component) — primary
+ *     interaction surface with [Record] / [Join] / [Skip] buttons.
+ *   - macOS Notification Center via notifier.post() — so the user
+ *     sees it even when their browser/Meet tab is in front on
+ *     another space.
+ *   - Web Push to the paired phone (the notifier subscription auto-
+ *     fans every event out via push.ts).
+ *
+ * The notifier respects global pause; if Jarvis is paused, the OS
+ * notification + push are suppressed but the in-app toast still
+ * fires (pause is about unattended work, not silencing user-visible
+ * UI in the foreground window).
  */
 function fireMeetingHeadsUp(item: InboxItem): void {
+  if (Date.now() < meetingHeadsUpSnoozedUntil) {
+    console.log(
+      `[meeting-heads-up] snoozed (${Math.round((meetingHeadsUpSnoozedUntil - Date.now()) / 60_000)} min left); dropping prompt`,
+    );
+    return;
+  }
   try {
     const win = openObservatory();
     win.focus();
     sendWhenReady(win, IpcChannels.meetingImminent, { item, minutesUntil: 0 });
   } catch (err) {
     console.warn('Meeting heads-up broadcast failed:', err);
+  }
+  // Mirror to macOS Notification Center + Web Push so the user sees
+  // it when the Jarvis window isn't visible. Clicking the OS
+  // notification brings Jarvis forward + jumps to the Inbox where
+  // the heads-up item lives.
+  try {
+    notifier.post({
+      source: 'meeting-heads-up',
+      title: item.title,
+      body: item.subtitle ?? 'Tap to record',
+      // skipOsNotification stays false (the default) so this fires
+      // the native OS notification AND fans out to subscribers
+      // (Telegram bot, mobile PWA via Web Push).
+      onClick: () => {
+        const w = openObservatory();
+        w.focus();
+        sendWhenReady(w, IpcChannels.shellNavigate, { tab: 'inbox' });
+      },
+    });
+  } catch (err) {
+    console.warn('Meeting heads-up notifier post failed:', err);
   }
 }
 
@@ -329,6 +378,18 @@ ipcMain.handle(IpcChannels.suppressMeetingPrompt, (_e, id: string) => {
   // 'ad-hoc-' prefix; everything else is a calendar item id.
   if (id.startsWith('ad-hoc-')) meetingActivity.suppress(id);
   else inboxProximity.suppressMeetingPrompt(id);
+});
+
+/** Snooze ALL meeting heads-up prompts for the next `ms`. Used by the
+ *  Snooze button in MeetingPrompt.tsx — "leave me alone for the next
+ *  hour while I focus." RAM-only; restart clears. */
+ipcMain.handle(IpcChannels.snoozeMeetingHeadsUp, (_e, ms: number) => {
+  const dur = typeof ms === 'number' && ms > 0 ? Math.min(ms, 8 * 60 * 60_000) : 60 * 60_000;
+  meetingHeadsUpSnoozedUntil = Date.now() + dur;
+  console.log(
+    `[meeting-heads-up] snoozed for ${Math.round(dur / 60_000)} min`,
+  );
+  return { until: meetingHeadsUpSnoozedUntil };
 });
 
 // Renderer can pull the current watcher state on demand (e.g. when

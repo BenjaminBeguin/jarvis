@@ -475,6 +475,8 @@ const api = {
   ): Unsubscribe => subscribe(IpcChannels.meetingImminent, listener),
   suppressMeetingPrompt: (id: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.suppressMeetingPrompt, id),
+  snoozeMeetingHeadsUp: (ms: number): Promise<{ until: number }> =>
+    ipcRenderer.invoke(IpcChannels.snoozeMeetingHeadsUp, ms),
   meetingDetectionStatus: (): Promise<MeetingDetectionStatus> =>
     ipcRenderer.invoke(IpcChannels.meetingDetectionStatus),
   onMeetingDetectionChanged: (

@@ -18,12 +18,12 @@ All three land on the same prompt + recording overlay.
 ## What it does
 
 ```
-┌────────────────────────────┐
-│ Meeting in progress         │  ← top-right toast,
-│ Engineering standup         │     auto-dismisses in 90s
-│ Detected via extension · meet│
-│ [🎙 Record] [Join] [Skip]   │
-└────────────────────────────┘
+┌──────────────────────────────────┐
+│ Meeting in progress               │  ← top-right toast +
+│ Engineering standup               │     macOS notification +
+│ Detected via extension · meet     │     Web Push to your phone,
+│ [🎙 Record] [Join] [Skip] [Snooze 1h]│  auto-dismisses in 90s
+└──────────────────────────────────┘
 
 … click Record ↓
 
@@ -133,6 +133,21 @@ reachable from any device on your tailnet. See
 - [src/renderer/views/MeetingOverlay.tsx](../src/renderer/views/MeetingOverlay.tsx) — floating overlay with controls
 - [src/renderer/views/MeetingPrompt.tsx](../src/renderer/views/MeetingPrompt.tsx) — "record this meeting?" heads-up
 
+## Heads-up controls
+
+The toast carries four actions:
+
+| Button | Effect |
+|---|---|
+| **🎙 Record** | Fires `/meeting <title>` with the detected meeting title. Title defaults to the currently-happening calendar event if you didn't pass one. |
+| **Join** | Opens the meeting URL (Meet/Zoom/Teams) in the browser. No recording. Only shown when the source carries a URL. |
+| **Skip** | Dismisses + suppresses further prompts for THIS specific detection. |
+| **Snooze 1h** | Silences ALL meeting heads-ups for the next hour. Use during focus blocks. Resets on app restart. |
+
+In addition to the toast, the heads-up fires a macOS Notification + a
+Web Push to your paired phone, so you see it even when your browser /
+Meet tab is in front on another space.
+
 ## Recording controls
 
 | Control | Behaviour | When you'd use it |
@@ -141,6 +156,29 @@ reachable from any device on your tailnet. See
 | **▶ Resume** | Un-flips the pause flag; recording continues seamlessly. No re-prompt for mic permission. | Continue after pause |
 | **✕ Cancel** | Discards the recording — no transcript written. Confirm-prompt first so a misclick doesn't lose work. | "This was a mistake / dry run" |
 | **Finish** | Transcribes via Whisper + writes `~/.jarvis/meetings/<ts>-<slug>.md`. The Meetings page surfaces the file. | End of meeting |
+
+## Auto-debrief
+
+When you click **Finish**, Jarvis automatically runs the
+`meeting-debrief` skill in the background. It restructures the
+transcript file with `Summary` / `Decisions` / `Action items`
+sections so you don't have to manually push to Claude every time.
+
+Turn it off in **Settings → Modules → Meeting recorder → Auto-debrief
+on finish** if you want raw transcripts only (saves Claude spend per
+meeting).
+
+## Calendar-aware default title
+
+When `/meeting` fires without a title — the heads-up's [Record]
+button, or just typing `/meeting` in the palette — Jarvis looks at
+your calendar inbox for a current event (started in the last 10 min
+OR starts in the next 5 min) and uses its title. So joining a Meet
+during the "Engineering standup" calendar block auto-names the
+recording `Engineering standup` instead of `Meeting at 14:32`.
+
+Falls back to the timestamp if no current event is found (no Google
+account connected, paused, etc.).
 
 ## Detection heuristics (Chrome extension)
 
