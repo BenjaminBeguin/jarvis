@@ -95,6 +95,11 @@ export const IpcChannels = {
   writeJarvisFile: 'fs:writeJarvisFile',
   deleteJarvisFile: 'fs:deleteJarvisFile',
 
+  /** Chrome extension setup helper — returns the on-disk path so the
+   *  Settings → Browser panel can show it + a reveal-in-Finder button. */
+  getChromeExtensionInfo: 'browser:getChromeExtensionInfo',
+  revealChromeExtensionFolder: 'browser:revealChromeExtensionFolder',
+
   listProjects: 'projects:list',
   createProject: 'projects:create',
   updateProject: 'projects:update',

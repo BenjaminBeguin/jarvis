@@ -206,6 +206,11 @@ const api = {
     ipcRenderer.invoke(IpcChannels.resizePalette, height),
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.openExternal, url),
+
+  getChromeExtensionInfo: (): Promise<{ path: string; exists: boolean }> =>
+    ipcRenderer.invoke(IpcChannels.getChromeExtensionInfo),
+  revealChromeExtensionFolder: (): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.revealChromeExtensionFolder),
   openInClaudeDesktop: (
     sessionId: string,
   ): Promise<{ ok: boolean; message?: string }> =>

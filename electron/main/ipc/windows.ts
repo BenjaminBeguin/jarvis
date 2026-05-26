@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { app, ipcMain, shell } from 'electron';
@@ -102,6 +104,34 @@ export function registerWindowIpc(_deps: IpcDeps): void {
     if (!/^https?:\/\//i.test(url)) return;
     await shell.openExternal(url);
   });
+
+  // Chrome extension setup — used by Settings → Browser to show the
+  // user where the unpacked extension lives + reveal it in Finder
+  // for "Load unpacked". In dev mode, app.getAppPath() resolves to
+  // the repo root so chrome-extension/ is right there. In a packaged
+  // build we'd need to ship it via electron-builder's extraResources;
+  // until then `exists: false` surfaces a fallback message in the UI.
+  ipcMain.handle(
+    IpcChannels.getChromeExtensionInfo,
+    (): { path: string; exists: boolean } => {
+      const path = join(app.getAppPath(), 'chrome-extension');
+      return { path, exists: existsSync(path) };
+    },
+  );
+  ipcMain.handle(
+    IpcChannels.revealChromeExtensionFolder,
+    (): { ok: boolean; message?: string } => {
+      const target = join(app.getAppPath(), 'chrome-extension');
+      if (!existsSync(target)) {
+        return {
+          ok: false,
+          message: `Folder not found: ${target}. In a packaged build, ship it via electron-builder extraResources.`,
+        };
+      }
+      shell.showItemInFolder(target);
+      return { ok: true };
+    },
+  );
 
   // Jump from a Jarvis task into Claude Code Desktop. Subscription-mode
   // sessions are real Claude Code sessions on disk (~/.claude/projects/...)

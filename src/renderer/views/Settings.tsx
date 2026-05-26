@@ -13,6 +13,7 @@ import type {
 } from '../../shared/types';
 import { DEFAULT_INBOX_PREFS } from '../../shared/types';
 import { AutopilotPanel } from './autopilot/AutopilotPanel';
+import { BrowserExtensionPanel } from './BrowserExtensionPanel';
 import { Integrations } from './integrations/Integrations';
 import { BuilderPanel } from './BuilderPanel';
 import { MobilePairingPanel } from './MobilePairingPanel';
@@ -31,7 +32,8 @@ type Section =
   | 'api'
   | 'spend'
   | 'builder'
-  | 'mobile';
+  | 'mobile'
+  | 'browser';
 
 interface Props {
   status: AppStatus;
@@ -107,6 +109,9 @@ export function Settings({
         <SectionTab name="mobile" active={section} onClick={setSection}>
           Mobile
         </SectionTab>
+        <SectionTab name="browser" active={section} onClick={setSection}>
+          Browser
+        </SectionTab>
       </aside>
       <main className="settings__panel">
         {section === 'general' && <GeneralPanel status={status} />}
@@ -133,6 +138,7 @@ export function Settings({
             <MobilePairingPanel />
           </div>
         )}
+        {section === 'browser' && <BrowserExtensionPanel />}
       </main>
     </section>
   );
