@@ -142,6 +142,119 @@ body:has(.mobile-bootstrap) {
   border-radius: 3px;
 }
 
+/* ─────── recording banner ─────── */
+
+.mobile-rec {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid rgba(255, 85, 119, 0.35);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 85, 119, 0.18) 0%,
+    rgba(255, 85, 119, 0.08) 100%
+  );
+}
+
+.mobile-rec--paused {
+  border-bottom-color: rgba(0, 217, 255, 0.35);
+  background: linear-gradient(
+    180deg,
+    rgba(0, 212, 255, 0.16) 0%,
+    rgba(0, 212, 255, 0.06) 100%
+  );
+}
+
+.mobile-rec__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mobile-rec__dot {
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.mobile-rec__title {
+  flex: 1 1 auto;
+  font-size: 12.5px;
+  color: #d8eefb;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-rec__time {
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: #ff8585;
+  flex: 0 0 auto;
+}
+
+.mobile-rec--paused .mobile-rec__time {
+  color: #00d4ff;
+}
+
+.mobile-rec__chev {
+  font-size: 11px;
+  color: #88a7bd;
+  flex: 0 0 auto;
+}
+
+.mobile-rec__controls {
+  display: flex;
+  gap: 8px;
+  padding: 4px 16px 12px;
+}
+
+.mobile-rec__btn {
+  flex: 1;
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  color: #d8eefb;
+  cursor: pointer;
+}
+
+.mobile-rec__btn:active {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.mobile-rec__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mobile-rec__btn--primary {
+  border-color: #00d4ff;
+  color: #00d4ff;
+}
+
+.mobile-rec__btn--danger {
+  flex: 0 0 auto;
+  width: 44px;
+  border-color: rgba(255, 85, 119, 0.6);
+  color: #ff8585;
+}
+
 /* ─────── tab bar ─────── */
 
 .mobile-shell__tabs {

@@ -342,6 +342,32 @@ const meetingActivity = new MeetingActivityWatcher((item) =>
 );
 
 /**
+ * Forward a remote-control command (`pause` / `resume` / `cancel` /
+ * `finish`) from the phone PWA to the renderer's MeetingRecorder.
+ * Returns true when there's any open window to receive it. Renderer
+ * subscribes to IpcChannels.meetingControlRemote and dispatches to
+ * the MeetingRecorder singleton.
+ */
+function onMeetingControlFromHttp(
+  action: 'pause' | 'resume' | 'cancel' | 'finish',
+): boolean {
+  if (!currentMeetingState.active && action !== 'finish') {
+    // No active recording — pause/resume/cancel are no-ops. We still
+    // let 'finish' through in case the renderer is in the
+    // post-Finish transcribing state where active=false but the
+    // chain is still running (it's idempotent there).
+    return false;
+  }
+  try {
+    broadcast(IpcChannels.meetingControlRemote, { action });
+    return true;
+  } catch (err) {
+    console.warn('[meeting] broadcast control failed:', err);
+    return false;
+  }
+}
+
+/**
  * Handle a /v1/meeting/detected POST from the Chrome extension (or
  * any external caller). Build an InboxItem-shaped payload and route
  * it through the same heads-up flow as the OS-level watcher.
@@ -399,15 +425,58 @@ ipcMain.handle(IpcChannels.snoozeMeetingHeadsUp, (_e, ms: number) => {
  *     so the user knows the mic is hot even with the window closed.
  *   - the OS power-save blocker: prevents the display from sleeping
  *     while a recording is active. Released on stop/cancel/abort.
+ *   - module-level `currentMeetingState` slot the HTTP server reads
+ *     to expose recording state over SSE to the phone PWA.
  *
  * The renderer is the source of truth for recording state (the
  * AudioCapture lives there); main just reflects it.
  */
 let powerSaveBlockerId: number | null = null;
+interface MirroredRecordingState {
+  active: boolean;
+  paused: boolean;
+  title: string | null;
+  /** Wall-clock ms when the recording started, OR null when no
+   *  active recording. The phone derives elapsed display from
+   *  this — main doesn't need to push every second. */
+  startedAt: number | null;
+}
+let currentMeetingState: MirroredRecordingState = {
+  active: false,
+  paused: false,
+  title: null,
+  startedAt: null,
+};
+type MeetingStateListener = (s: MirroredRecordingState) => void;
+const meetingStateListeners = new Set<MeetingStateListener>();
+function subscribeMeetingState(l: MeetingStateListener): () => void {
+  meetingStateListeners.add(l);
+  return () => meetingStateListeners.delete(l);
+}
 ipcMain.handle(
   IpcChannels.meetingRecorderState,
   (_e, state: { active: boolean; paused: boolean; title: string | null }) => {
     setMeetingRecording(state);
+    // Persist + fan-out. We only stamp startedAt on the active=true
+    // transition so a pause/resume cycle keeps the same anchor.
+    const wasActive = currentMeetingState.active;
+    currentMeetingState = {
+      active: state.active,
+      paused: state.paused,
+      title: state.title,
+      startedAt: state.active
+        ? wasActive
+          ? currentMeetingState.startedAt
+          : Date.now()
+        : null,
+    };
+    for (const l of meetingStateListeners) {
+      try {
+        l(currentMeetingState);
+      } catch (err) {
+        console.warn('[meeting] state listener threw:', err);
+      }
+    }
     if (state.active && !state.paused) {
       if (powerSaveBlockerId === null) {
         try {
@@ -1688,6 +1757,9 @@ app.whenReady().then(async () => {
       notifier,
       getStatus: () => getTrayMenuState(),
       onMeetingDetected: onExternalMeetingDetected,
+      getMeetingState: () => currentMeetingState,
+      subscribeMeetingState: subscribeMeetingState,
+      onMeetingControl: onMeetingControlFromHttp,
       token,
       version: app.getVersion(),
     });
@@ -1720,6 +1792,9 @@ app.whenReady().then(async () => {
         notifier,
         getStatus: () => getTrayMenuState(),
         onMeetingDetected: onExternalMeetingDetected,
+      getMeetingState: () => currentMeetingState,
+      subscribeMeetingState: subscribeMeetingState,
+      onMeetingControl: onMeetingControlFromHttp,
         token: fresh,
         version: app.getVersion(),
       });

@@ -162,6 +162,12 @@ A handful of things shift to "the mic is hot, don't lose the recording":
   automatically on **Pause**, **Cancel**, and **Finish**.
 - The **MeetingOverlay** floats in the renderer window with the
   pause/cancel/finish controls (next section).
+- The **mobile PWA** gets a 🔴 banner under its header showing the
+  current meeting + audible-time clock. Tap to reveal **Pause /
+  Resume / Finish / Cancel** controls. Everything routes through
+  the same `MeetingRecorder` the desktop overlay uses, so walking
+  to the kitchen and stopping the recording from your phone
+  produces the same transcript file + auto-debrief.
 
 ## Recording controls
 

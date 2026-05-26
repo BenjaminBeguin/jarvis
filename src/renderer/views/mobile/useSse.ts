@@ -7,6 +7,10 @@ export interface SseHandlers {
   onStatus?: (payload: unknown) => void;
   onNotif?: (payload: unknown) => void;
   onTaskStatus?: (payload: unknown) => void;
+  /** Active meeting recording state, pushed on connect + on every
+   *  start/pause/resume/stop transition. Mirrors the renderer's
+   *  MeetingRecorder.state shape. */
+  onMeetingState?: (payload: unknown) => void;
 }
 
 /**
@@ -50,6 +54,13 @@ export function useSse(
         handlersRef.current.onTaskStatus?.(JSON.parse(e.data));
       } catch (err) {
         console.warn('[sse] bad task.status payload', err);
+      }
+    });
+    es.addEventListener('meeting.state', (e) => {
+      try {
+        handlersRef.current.onMeetingState?.(JSON.parse(e.data));
+      } catch (err) {
+        console.warn('[sse] bad meeting.state payload', err);
       }
     });
     return () => {

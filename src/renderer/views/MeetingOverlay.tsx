@@ -131,9 +131,30 @@ export function MeetingOverlay() {
     const offStopReq = window.jarvis.onMeetingStopRequest(() => {
       void meetingRecorder.stop();
     });
+    // Remote control from the mobile PWA — HTTP POST to
+    // /v1/meeting/control routes here via broadcast IPC. We
+    // dispatch to the same MeetingRecorder methods the local
+    // overlay buttons call, so the behaviour stays identical.
+    const offRemote = window.jarvis.onMeetingControlRemote(({ action }) => {
+      switch (action) {
+        case 'pause':
+          meetingRecorder.pause();
+          break;
+        case 'resume':
+          meetingRecorder.resume();
+          break;
+        case 'cancel':
+          meetingRecorder.cancel();
+          break;
+        case 'finish':
+          void meetingRecorder.stop();
+          break;
+      }
+    });
     return () => {
       offStart();
       offStopReq();
+      offRemote();
     };
   }, []);
 

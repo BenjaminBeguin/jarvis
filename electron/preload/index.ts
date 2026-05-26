@@ -487,6 +487,13 @@ const api = {
     title: string | null;
   }): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.meetingRecorderState, state),
+  /** Remote-control commands forwarded from the phone PWA via the
+   *  HTTP API. Renderer's MeetingRecorder subscribes to this and
+   *  calls pause/resume/cancel/stop. */
+  onMeetingControlRemote: (
+    listener: Listener<{ action: 'pause' | 'resume' | 'cancel' | 'finish' }>,
+  ): Unsubscribe =>
+    subscribe(IpcChannels.meetingControlRemote, listener),
   meetingDetectionStatus: (): Promise<MeetingDetectionStatus> =>
     ipcRenderer.invoke(IpcChannels.meetingDetectionStatus),
   onMeetingDetectionChanged: (

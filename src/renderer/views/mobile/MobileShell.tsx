@@ -25,8 +25,23 @@ interface Props {
  * INDEPENDENTLY to the events they care about — SSE multiplex
  * fan-out happens inside useSse.
  */
+interface RecordingState {
+  active: boolean;
+  paused: boolean;
+  title: string | null;
+  startedAt: number | null;
+}
+
+const EMPTY_RECORDING: RecordingState = {
+  active: false,
+  paused: false,
+  title: null,
+  startedAt: null,
+};
+
 export function MobileShell({ auth, view, conversationId, onSignOut }: Props) {
   const [status, setStatus] = useState<TrayMenuState | null>(null);
+  const [recording, setRecording] = useState<RecordingState>(EMPTY_RECORDING);
 
   // Initial fetch — populates the header before SSE delivers the
   // first 'status' event.
@@ -36,17 +51,30 @@ export function MobileShell({ auth, view, conversationId, onSignOut }: Props) {
       .catch(() => {
         /* will be retried on next SSE status tick */
       });
+    // Same for the recording snapshot — paint the banner immediately
+    // when the phone opens to a Mac that's already mid-meeting.
+    void api<RecordingState>(auth, '/v1/meeting/state')
+      .then(setRecording)
+      .catch(() => {
+        /* SSE will catch us up */
+      });
   }, [auth.baseUrl, auth.token]);
 
   const { connected } = useSse(auth, {
     onStatus: (payload) => {
       setStatus(payload as TrayMenuState);
     },
+    onMeetingState: (payload) => {
+      setRecording(payload as RecordingState);
+    },
   });
 
   return (
     <div className="mobile-shell">
       <Header status={status} connected={connected} />
+      {recording.active && (
+        <RecordingBanner auth={auth} state={recording} />
+      )}
       <main className="mobile-shell__body">
         <ViewBody
           view={view}
@@ -68,6 +96,134 @@ export function MobileShell({ auth, view, conversationId, onSignOut }: Props) {
       </nav>
     </div>
   );
+}
+
+/**
+ * Banner under the header when a meeting recording is active on the
+ * Mac. Shows the meeting title + an audible-elapsed clock (computed
+ * from startedAt — no server-side counter needed). Tap to reveal
+ * remote-control buttons (Pause/Resume + Finish + Cancel). All four
+ * actions POST to /v1/meeting/control and the Mac's renderer
+ * dispatches to the local MeetingRecorder.
+ */
+function RecordingBanner({
+  auth,
+  state,
+}: {
+  auth: MobileAuth;
+  state: RecordingState;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const [acting, setActing] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!state.active || state.paused) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [state.active, state.paused]);
+
+  const send = async (
+    action: 'pause' | 'resume' | 'cancel' | 'finish',
+  ): Promise<void> => {
+    if (acting) return;
+    if (action === 'cancel') {
+      const ok = window.confirm(
+        'Discard the recording? No transcript will be saved.',
+      );
+      if (!ok) return;
+    }
+    setActing(action);
+    try {
+      await api<{ ok: boolean }>(auth, '/v1/meeting/control', {
+        method: 'POST',
+        body: JSON.stringify({ action }),
+      });
+    } catch {
+      /* SSE will reflect the next state — no need to surface here. */
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const elapsedMs = state.startedAt
+    ? Math.max(0, now - state.startedAt)
+    : 0;
+  const elapsedLabel = formatRecLabel(elapsedMs);
+
+  return (
+    <div
+      className={`mobile-rec${state.paused ? ' mobile-rec--paused' : ''}${expanded ? ' mobile-rec--expanded' : ''}`}
+    >
+      <button
+        type="button"
+        className="mobile-rec__bar"
+        onClick={() => setExpanded((v) => !v)}
+        aria-label="Show recording controls"
+      >
+        <span className="mobile-rec__dot" aria-hidden>
+          {state.paused ? '⏸' : '🔴'}
+        </span>
+        <span className="mobile-rec__title">
+          {state.title ?? 'Recording'}
+        </span>
+        <span className="mobile-rec__time">
+          {state.paused ? 'paused' : elapsedLabel}
+        </span>
+        <span className="mobile-rec__chev" aria-hidden>
+          {expanded ? '▾' : '▸'}
+        </span>
+      </button>
+      {expanded && (
+        <div className="mobile-rec__controls">
+          {state.paused ? (
+            <button
+              type="button"
+              className="mobile-rec__btn"
+              onClick={() => void send('resume')}
+              disabled={!!acting}
+            >
+              {acting === 'resume' ? '…' : '▶ Resume'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="mobile-rec__btn"
+              onClick={() => void send('pause')}
+              disabled={!!acting}
+            >
+              {acting === 'pause' ? '…' : '❚❚ Pause'}
+            </button>
+          )}
+          <button
+            type="button"
+            className="mobile-rec__btn mobile-rec__btn--primary"
+            onClick={() => void send('finish')}
+            disabled={!!acting}
+          >
+            {acting === 'finish' ? '…' : 'Finish'}
+          </button>
+          <button
+            type="button"
+            className="mobile-rec__btn mobile-rec__btn--danger"
+            onClick={() => void send('cancel')}
+            disabled={!!acting}
+          >
+            {acting === 'cancel' ? '…' : '✕'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatRecLabel(ms: number): string {
+  const t = Math.floor(ms / 1000);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
 function Header({

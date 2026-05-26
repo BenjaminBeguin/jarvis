@@ -46,6 +46,20 @@ const PORT = 4747;
  *  /v1/status/details. */
 const SSE_TICK_MS = 5_000;
 
+/** Snapshot of the active meeting recording, shared with the phone
+ *  PWA over SSE. Mirrors the renderer's MeetingRecorder.state. */
+export interface MeetingRecordingSnapshot {
+  active: boolean;
+  paused: boolean;
+  title: string | null;
+  startedAt: number | null;
+}
+
+/** Action a remote client (mobile PWA today) can take on the
+ *  current recording. Routed through the renderer's MeetingRecorder
+ *  via broadcast IPC; main just forwards. */
+export type MeetingControlAction = 'pause' | 'resume' | 'cancel' | 'finish';
+
 export interface MeetingDetectedPayload {
   /** Where the detection came from. 'extension' for the Chrome
    *  browser extension; 'manual' for ad-hoc clients. */
@@ -73,6 +87,17 @@ export interface HttpDeps {
    *  macOS Core Audio watcher uses. Wired in index.ts so the HTTP
    *  endpoint stays infrastructure-free. */
   onMeetingDetected(payload: MeetingDetectedPayload): void;
+  /** Snapshot of the active recording — pushed to SSE clients on
+   *  connect AND on every state change. */
+  getMeetingState(): MeetingRecordingSnapshot;
+  /** Subscribe to recording state changes (for SSE fan-out). */
+  subscribeMeetingState(
+    listener: (state: MeetingRecordingSnapshot) => void,
+  ): () => void;
+  /** Forward a control action to the renderer's MeetingRecorder.
+   *  Returns true when the renderer was reachable; false when there's
+   *  no live window to act on. */
+  onMeetingControl(action: MeetingControlAction): boolean;
   token: string;
   version: string;
 }
@@ -305,6 +330,38 @@ async function handle(
   if (req.method === 'POST' && path === '/v1/inbox/refresh') {
     const items = await deps.inbox.refresh();
     sendJson(res, 200, items);
+    return;
+  }
+
+  // POST /v1/meeting/control — phone PWA controls the active
+  // recording. Body: { action: 'pause' | 'resume' | 'cancel' |
+  // 'finish' }. Forwards to the renderer's MeetingRecorder via
+  // broadcast IPC. Returns 409 when no Jarvis window is open.
+  if (req.method === 'POST' && path === '/v1/meeting/control') {
+    const body = await readJson(req);
+    const action = typeof body?.action === 'string' ? body.action : '';
+    if (
+      action !== 'pause' &&
+      action !== 'resume' &&
+      action !== 'cancel' &&
+      action !== 'finish'
+    ) {
+      sendJson(res, 400, { error: 'invalid action' });
+      return;
+    }
+    const ok = deps.onMeetingControl(action);
+    sendJson(res, ok ? 200 : 409, {
+      ok,
+      ...(ok ? {} : { error: 'no live renderer to control' }),
+    });
+    return;
+  }
+
+  // GET /v1/meeting/state — snapshot of the current recording. The
+  // phone's first paint reads this so it doesn't have to wait for
+  // the next SSE state change.
+  if (req.method === 'GET' && path === '/v1/meeting/state') {
+    sendJson(res, 200, deps.getMeetingState());
     return;
   }
 
@@ -582,12 +639,19 @@ function handleSseStatus(
   // First payload: current snapshot. Phone renders before waiting
   // for the first tick.
   write('status', deps.getStatus());
+  // Same idea for the active recording — phone shows the
+  // "🔴 Recording: <title>" banner immediately on connect rather
+  // than waiting for the next transition.
+  write('meeting.state', deps.getMeetingState());
 
   const unsubNotif = deps.notifier.subscribe((evt) => {
     write('notif', evt);
   });
   const onTaskStatus = (summary: unknown): void => write('task.status', summary);
   deps.runner.on('status', onTaskStatus);
+  const unsubMeeting = deps.subscribeMeetingState((s) =>
+    write('meeting.state', s),
+  );
 
   const tick = setInterval(() => {
     if (res.writableEnded) return;
@@ -602,6 +666,7 @@ function handleSseStatus(
   const cleanup = (): void => {
     clearInterval(tick);
     unsubNotif();
+    unsubMeeting();
     deps.runner.off('status', onTaskStatus);
     if (!res.writableEnded) res.end();
   };
