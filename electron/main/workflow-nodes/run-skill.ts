@@ -12,13 +12,21 @@ import type { NodeHandlerInput } from './types.js';
  * Params:
  *   {
  *     skillId: string
- *     prompt?: string        // user message; default empty
- *                            //   supports {prev} and {feedback}
- *                            //   substitution (see below)
- *     includePrev?: boolean  // default true; appends prev to prompt as JSON
- *                            //   IFF no {prev} token is present in the
- *                            //   template — explicit token wins
- *     timeoutMs?: number     // default 5 min
+ *     prompt?: string         // user message; default empty
+ *                             //   supports {prev} and {feedback}
+ *                             //   substitution (see below)
+ *     includePrev?: boolean   // default true; appends prev to prompt as JSON
+ *                             //   IFF no {prev} token is present in the
+ *                             //   template — explicit token wins
+ *     timeoutMs?: number      // default 5 min
+ *     runOnEmptyPrev?: boolean // default false — if the template
+ *                             //   references {prev} but prev resolves
+ *                             //   to empty (null / undefined / '' /
+ *                             //   [] / {}), the node SKIPS firing
+ *                             //   Claude and returns '' so downstream
+ *                             //   parsers naturally see "no work".
+ *                             //   Set true for skills that should
+ *                             //   still fire on an empty pre — rare.
  *   }
  *
  * Prompt substitution tokens (resolved before the Claude turn):
@@ -32,7 +40,9 @@ import type { NodeHandlerInput } from './types.js';
  *                  agent sees what the user accepted / rejected /
  *                  noted last time. Compound improvement loop.
  *
- * Output: the agent's final assistant text (string).
+ * Output: the agent's final assistant text (string). Empty string
+ * when the node short-circuits on an empty {prev} reference (the
+ * default autopilot guard).
  */
 
 interface RunSkillParams {
@@ -40,6 +50,7 @@ interface RunSkillParams {
   prompt?: string;
   includePrev?: boolean;
   timeoutMs?: number;
+  runOnEmptyPrev?: boolean;
 }
 
 export const runSkillNode = fromPromise<
@@ -52,6 +63,21 @@ export const runSkillNode = fromPromise<
   const promptBase = params.prompt ?? '';
   const hasPrevToken = /\{prev(?:\.[\w.]+)?\}/.test(promptBase);
   const hasFeedbackToken = /\{feedback\}/.test(promptBase);
+
+  // Auto-skip: the template expects `{prev}` to carry the data the
+  // skill should act on, but the upstream pipeline produced nothing
+  // (gh returned [], filter dropped everything, etc.). Firing the
+  // Claude turn anyway would spend tokens on a prompt with empty
+  // slots — exactly the autopilot-PR-review-without-PRs failure
+  // mode. Opt out per-node via `runOnEmptyPrev: true` if a skill
+  // genuinely should fire on empty.
+  if (hasPrevToken && !params.runOnEmptyPrev && isPrevEmpty(prev)) {
+    console.log(
+      `[run-skill] skipping ${params.skillId} (workflow=${ctx.workflowId ?? '?'}): {prev} is empty`,
+    );
+    return '';
+  }
+
   // Resolve {feedback} lazily — only read the file if the template
   // references it. Empty string when there's no workflowId on ctx
   // (extremely rare — runner now always sets it).
@@ -136,4 +162,19 @@ function stringifyForPrompt(v: unknown): string {
   } catch {
     return String(v);
   }
+}
+
+/**
+ * "There's nothing to act on" check for the auto-skip guard. Covers
+ * the realistic upstream-empty shapes: null / undefined (filter or
+ * mcp-call returned nothing), empty string (shell exited with no
+ * output), empty array (search matched nothing), empty object
+ * (parse produced {}). Plain non-empty primitives count as work.
+ */
+function isPrevEmpty(v: unknown): boolean {
+  if (v == null) return true;
+  if (typeof v === 'string') return v.trim().length === 0;
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === 'object') return Object.keys(v as object).length === 0;
+  return false;
 }
