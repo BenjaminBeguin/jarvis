@@ -261,7 +261,16 @@ export function VoiceOrb() {
     setTranscript(text);
     setPhase('dispatching');
     try {
-      await window.jarvis.routePrompt(text, { origin: 'voice' });
+      // speakReply closes the voice loop: when the agent's result
+      // event lands, TaskRunner speaks the final text aloud via
+      // macOS `say` (markdown-stripped). User presses orb hotkey,
+      // speaks, hears the response. The dispatched task still lives
+      // in the conversation view for the full transcript — TTS is
+      // additive, not a replacement for the written reply.
+      await window.jarvis.routePrompt(text, {
+        origin: 'voice',
+        sessionConfig: { speakReply: true },
+      });
     } catch (e) {
       setError(
         `Dispatch failed: ${e instanceof Error ? e.message : String(e)}`,

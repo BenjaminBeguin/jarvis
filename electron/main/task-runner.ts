@@ -20,6 +20,7 @@ import {
   resolveTier,
   type ModelTier,
 } from './model-tiers.js';
+import { speak } from './modules/voice/speech.js';
 import type { IntentClassifier } from './intent-classifier.js';
 import type { McpConfigStore } from './mcp-config.js';
 import type { ProjectStore } from './projects.js';
@@ -235,6 +236,41 @@ export function lastAssistantText(events: TaskEvent[]): string | null {
     if (text) return text;
   }
   return null;
+}
+
+/**
+ * Strip markdown for TTS. macOS `say` reads syntax literally
+ * ("asterisk asterisk", "hash hash") — bad UX. Quick regex sweep
+ * to get the prose-only signal: drop heading markers, bold/italic
+ * delimiters, code backticks, list bullets, and link wrappers
+ * (keep the visible text). Not a full parser; just good enough
+ * for chat-style replies the voice path produces.
+ */
+function stripMarkdownForTTS(input: string): string {
+  let out = input;
+  // Code fences — drop the fence lines + the code (TTS shouldn't
+  // dictate source).
+  out = out.replace(/```[\s\S]*?```/g, ' [code omitted] ');
+  // Inline code — keep the content, drop the backticks.
+  out = out.replace(/`([^`]+)`/g, '$1');
+  // Links: [text](url) → text
+  out = out.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  // Heading markers at line start
+  out = out.replace(/^#{1,6}\s+/gm, '');
+  // List bullets at line start (-, *, +, or "1. ")
+  out = out.replace(/^\s*([-*+]|\d+\.)\s+/gm, '');
+  // Bold + italic (** __ * _) — keep the inner text
+  out = out.replace(/\*\*([^*]+)\*\*/g, '$1');
+  out = out.replace(/__([^_]+)__/g, '$1');
+  out = out.replace(/\*([^*]+)\*/g, '$1');
+  out = out.replace(/(^|\s)_([^_]+)_(?=\s|$|[.,!?])/g, '$1$2');
+  // Blockquote markers
+  out = out.replace(/^>\s?/gm, '');
+  // Horizontal rules
+  out = out.replace(/^-{3,}$/gm, '');
+  // Collapse 3+ newlines → 2 (paragraph breaks fine; massive gaps weird)
+  out = out.replace(/\n{3,}/g, '\n\n');
+  return out.trim();
 }
 
 /**
@@ -1055,7 +1091,6 @@ export class TaskRunner extends EventEmitter {
           firstEventLogged = true;
         }
         this.recordEvent(record, msg);
-        this.recordEvent(record, msg);
         const m = msg as { type?: string; subtype?: string; total_cost_usd?: number };
         if (m.type === 'result') {
           if (typeof m.total_cost_usd === 'number') cost = m.total_cost_usd;
@@ -1093,6 +1128,22 @@ export class TaskRunner extends EventEmitter {
               awaitingInput: nextAwaiting,
               costUsd: cost,
             };
+            // Voice-loop close: when the launch opted in to TTS
+            // (the voice orb sets speakReply: true), speak the final
+            // assistant text aloud via macOS `say`. Markdown is
+            // stripped first so the prose carries cleanly. Failure
+            // is non-fatal — we don't want a missing `say` binary
+            // or a transient process spawn issue to error the task.
+            if (record.config?.speakReply && finalText) {
+              try {
+                const spoken = stripMarkdownForTTS(finalText);
+                void speak(spoken).catch((e) =>
+                  console.warn('[tts] speak failed:', e),
+                );
+              } catch (e) {
+                console.warn('[tts] strip / dispatch failed:', e);
+              }
+            }
           }
           this.emit('status', record.summary);
         } else if (m.type === 'assistant' || m.type === 'user') {

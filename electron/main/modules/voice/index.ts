@@ -62,6 +62,24 @@ export const voiceModule: Module = {
         return `Speaking · "${preview}"`;
       },
     },
+    {
+      id: 'shush',
+      prefix: '/shush',
+      label: 'Stop speaking',
+      description:
+        'Interrupt the current TTS utterance. Useful when the voice-loop reply runs longer than you want to hear.',
+      verbalTriggers: [
+        'shush',
+        'stop talking',
+        'stop speaking',
+        'quiet',
+        'shut up',
+      ],
+      handler: () => {
+        stopSpeaking();
+        return 'Shushed.';
+      },
+    },
   ],
   onLoad: () => {
     // Fire-and-forget warmup so the first dictation skips the

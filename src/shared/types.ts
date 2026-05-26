@@ -314,6 +314,11 @@ export interface SessionConfig {
   cwd?: string;
   /** Extra directories the agent can read/write beyond cwd. */
   additionalDirectories?: string[];
+  /** Speak the agent's final response aloud via macOS `say` when the
+   *  result event lands. Used by the voice orb to close the loop —
+   *  press hotkey, speak, hear the response. Markdown is stripped
+   *  before TTS so headings + bullets don't read as syntax. */
+  speakReply?: boolean;
 }
 
 export interface LaunchTaskRequest extends SessionConfig {
