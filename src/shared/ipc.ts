@@ -157,6 +157,7 @@ export const IpcChannels = {
   meetingRecorderState: 'meeting:recorder-state',
   meetingControlRemote: 'meeting:control-remote',
   meetingFinishFromText: 'meeting:finish-from-text',
+  readMeetingLiveContext: 'meeting:read-live-context',
   meetingDetectionStatus: 'meeting:detection-status',
   meetingDetectionChanged: 'meeting:detection-changed',
 

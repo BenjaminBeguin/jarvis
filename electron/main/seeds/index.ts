@@ -19,6 +19,7 @@ import gmailTriage from './skills/gmail-triage.js';
 import inboxCalibrate from './skills/inbox-calibrate.js';
 import inboxCurate from './skills/inbox-curate.js';
 import linearInbox from './skills/linear-inbox.js';
+import meetingContextWatch from './skills/meeting-context-watch.js';
 import meetingDebrief from './skills/meeting-debrief.js';
 import memoryTrim from './skills/memory-trim.js';
 import prAddressComments from './skills/pr-address-comments.js';
@@ -57,6 +58,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'inbox-calibrate', body: inboxCalibrate },
   { name: 'inbox-curate', body: inboxCurate },
   { name: 'linear-inbox', body: linearInbox },
+  { name: 'meeting-context-watch', body: meetingContextWatch },
   { name: 'meeting-debrief', body: meetingDebrief },
   { name: 'memory-trim', body: memoryTrim },
   { name: 'pr-address-comments', body: prAddressComments },

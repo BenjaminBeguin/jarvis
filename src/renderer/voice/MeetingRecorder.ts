@@ -49,6 +49,15 @@ const INITIAL_STATE: MeetingState = {
 };
 
 const CHUNK_INTERVAL_MS = 5_000;
+/** How often the meeting-context-watch skill fires during a
+ *  recording. 60s balances cost vs latency — fast enough for the
+ *  sidecar to feel live, slow enough that we're not burning a Claude
+ *  call every chunk. */
+const CONTEXT_TICK_MS = 60_000;
+/** How far back the context skill looks each tick. Slightly longer
+ *  than the tick interval so we don't miss a phrase that landed at
+ *  the boundary. */
+const CONTEXT_LOOKBACK_MS = 90_000;
 
 /**
  * Same hallucination filter the palette uses on dictation. Whisper-tiny
@@ -94,6 +103,9 @@ class MeetingRecorder {
   /** Auto-increment id for live chunks. */
   private nextChunkId = 1;
   private chunkTimer: ReturnType<typeof setInterval> | null = null;
+  /** Periodic timer that fires the meeting-context-watch skill so the
+   *  sidecar UI gets live "things mentioned just now" context. */
+  private contextTimer: ReturnType<typeof setInterval> | null = null;
 
   getState(): MeetingState {
     return this.state;
@@ -153,6 +165,48 @@ class MeetingRecorder {
     this.chunkTimer = setInterval(() => {
       void this.tickChunk();
     }, CHUNK_INTERVAL_MS);
+    // Live context: every CONTEXT_TICK_MS, fire the
+    // meeting-context-watch skill with the recent transcript window.
+    // The skill writes a sidecar JSON the MeetingOverlay reads via
+    // polling. First fire is delayed CONTEXT_TICK_MS so the first
+    // window has actual content (otherwise the first call sees the
+    // empty pre-recording state).
+    this.contextTimer = setInterval(() => {
+      void this.tickContext();
+    }, CONTEXT_TICK_MS);
+  }
+
+  /**
+   * Fire the meeting-context-watch skill with the recent transcript
+   * chunks. Fire-and-forget — the skill writes its output to disk;
+   * the overlay reads it back via IPC poll. We don't await the task
+   * here because the next tick might fire before this one finishes
+   * and we don't want them serialised.
+   */
+  private async tickContext(): Promise<void> {
+    if (!this.state.active || this.state.paused) return;
+    const startedAt = this.state.startedAt;
+    if (startedAt == null) return;
+    const elapsed = Date.now() - startedAt;
+    if (elapsed < CONTEXT_TICK_MS - 5_000) return; // not enough audio yet
+    const cutoff = Date.now() - CONTEXT_LOOKBACK_MS - startedAt;
+    const recent = this.state.liveChunks
+      .filter((c) => c.offsetMs >= cutoff)
+      .map((c) => c.text)
+      .filter((t) => t.length > 0);
+    if (recent.length === 0) return; // nothing was said
+    const transcript = recent.join(' ');
+    const title = this.state.title ?? 'Untitled meeting';
+    const prompt = `MEETING: ${title}\n\nRecent transcript (last ~${Math.round(CONTEXT_LOOKBACK_MS / 1000)}s):\n\n${transcript}`;
+    try {
+      await window.jarvis.launchTask({
+        skillId: 'meeting-context-watch',
+        prompt,
+        origin: 'routine',
+      });
+    } catch (err) {
+      console.warn('[meeting-context] tick launch failed', err);
+    }
   }
 
   private async tickChunk(): Promise<void> {
@@ -206,6 +260,10 @@ class MeetingRecorder {
     if (this.chunkTimer) {
       clearInterval(this.chunkTimer);
       this.chunkTimer = null;
+    }
+    if (this.contextTimer) {
+      clearInterval(this.contextTimer);
+      this.contextTimer = null;
     }
     const title = this.state.title ?? 'Untitled meeting';
     const startedAt = this.state.startedAt ?? Date.now();
@@ -341,6 +399,10 @@ class MeetingRecorder {
     if (this.chunkTimer) {
       clearInterval(this.chunkTimer);
       this.chunkTimer = null;
+    }
+    if (this.contextTimer) {
+      clearInterval(this.contextTimer);
+      this.contextTimer = null;
     }
     this.setState({ ...INITIAL_STATE });
   }

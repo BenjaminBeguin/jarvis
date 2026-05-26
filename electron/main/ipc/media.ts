@@ -1,4 +1,6 @@
 import { Notification, ipcMain, systemPreferences } from 'electron';
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { IpcChannels } from '@shared/ipc';
@@ -208,6 +210,27 @@ export function registerMediaIpc({
       return { filename };
     },
   );
+
+  /** Renderer polls this every ~10s during an active recording to
+   *  pick up the latest mid-meeting context the `meeting-context-watch`
+   *  skill wrote. Returns null when no context file exists yet —
+   *  the sidecar UI hides until then. Skill writes to
+   *  `~/.jarvis/meetings/live-context/current.json`. */
+  ipcMain.handle(IpcChannels.readMeetingLiveContext, () => {
+    const path = join(
+      homedir(),
+      '.jarvis',
+      'meetings',
+      'live-context',
+      'current.json',
+    );
+    if (!existsSync(path)) return null;
+    try {
+      return JSON.parse(readFileSync(path, 'utf8'));
+    } catch {
+      return null;
+    }
+  });
 }
 
 function formatDuration(seconds: number): string {

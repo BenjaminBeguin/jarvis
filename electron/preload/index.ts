@@ -603,6 +603,22 @@ const api = {
     transcript: string;
   }): Promise<{ filename: string }> =>
     ipcRenderer.invoke(IpcChannels.meetingFinishFromText, payload),
+  /** Poll the latest mid-meeting context snapshot the
+   *  meeting-context-watch skill wrote. Returns null when no
+   *  context has been generated yet (skill hasn't fired, or no
+   *  recognisable entities in the recent transcript window). */
+  readMeetingLiveContext: (): Promise<{
+    meetingTitle?: string;
+    updatedAt: number;
+    items: Array<{
+      id: string;
+      kind: string;
+      title: string;
+      subtitle?: string;
+      url?: string;
+      trigger?: string;
+    }>;
+  } | null> => ipcRenderer.invoke(IpcChannels.readMeetingLiveContext),
   onMeetingStart: (
     listener: Listener<{ title: string; project?: string | null; startedAt: number }>,
   ): Unsubscribe => subscribe(IpcChannels.meetingStart, listener),

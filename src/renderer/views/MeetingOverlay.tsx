@@ -274,6 +274,7 @@ export function MeetingOverlay() {
               )}
             </div>
           )}
+          {expanded && <LiveContextSidecar active={state.active} />}
           {expanded && selection && (
             <SelectionAction
               anchor={selection}
@@ -379,4 +380,127 @@ function SelectionAction({
       )}
     </div>
   );
+}
+
+interface ContextItem {
+  id: string;
+  kind: string;
+  title: string;
+  subtitle?: string;
+  url?: string;
+  trigger?: string;
+}
+
+interface ContextSnapshot {
+  meetingTitle?: string;
+  updatedAt: number;
+  items: ContextItem[];
+}
+
+/**
+ * Sidecar panel showing entities the meeting-context-watch skill
+ * surfaced from the recent transcript window. Polls main every
+ * 10s while recording — light enough that the polling doesn't
+ * matter cost-wise, and matches the human "every minute or so I
+ * want fresh context" expectation without coupling to the skill's
+ * exact 60s tick.
+ *
+ * Stale snapshots (older than 5 min) hide instead of showing
+ * outdated items — happens when the skill silently failed for a
+ * stretch.
+ */
+function LiveContextSidecar({ active }: { active: boolean }) {
+  const [snap, setSnap] = useState<ContextSnapshot | null>(null);
+
+  useEffect(() => {
+    if (!active) {
+      setSnap(null);
+      return;
+    }
+    let cancelled = false;
+    const fetch = async (): Promise<void> => {
+      try {
+        const next = await window.jarvis.readMeetingLiveContext();
+        if (!cancelled) setSnap(next ?? null);
+      } catch {
+        /* polling, ignore transient errors */
+      }
+    };
+    void fetch();
+    const id = setInterval(() => void fetch(), 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [active]);
+
+  if (!snap || snap.items.length === 0) return null;
+  // Drop stale snapshots — older than 5 min means the skill went
+  // quiet (failed / no recent transcript content).
+  if (Date.now() - snap.updatedAt > 5 * 60_000) return null;
+
+  const open = (url: string | undefined): void => {
+    if (!url) return;
+    void window.jarvis.openExternal(url);
+  };
+
+  return (
+    <div className="meeting-overlay__context">
+      <div className="meeting-overlay__context-head">
+        <span className="meeting-overlay__context-dot" aria-hidden>
+          ◆
+        </span>
+        Live context
+      </div>
+      <ul className="meeting-overlay__context-list">
+        {snap.items.map((it) => (
+          <li key={it.id} className="meeting-overlay__context-item">
+            <button
+              type="button"
+              className="meeting-overlay__context-row"
+              onClick={() => open(it.url)}
+              title={it.url ?? ''}
+              disabled={!it.url}
+            >
+              <span className={`meeting-overlay__context-kind kind-${it.kind}`}>
+                {kindGlyph(it.kind)}
+              </span>
+              <span className="meeting-overlay__context-text">
+                <span className="meeting-overlay__context-title">{it.title}</span>
+                {it.subtitle && (
+                  <span className="meeting-overlay__context-sub">
+                    {it.subtitle}
+                  </span>
+                )}
+              </span>
+            </button>
+            {it.trigger && (
+              <span className="meeting-overlay__context-trigger">
+                ↪ &ldquo;{it.trigger}&rdquo;
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function kindGlyph(kind: string): string {
+  switch (kind) {
+    case 'pr':
+      return '⎇';
+    case 'linear':
+      return '▣';
+    case 'notion':
+      return '✎';
+    case 'meeting':
+      return '◑';
+    case 'file':
+      return '◾';
+    case 'person':
+      return '◉';
+    default:
+      return '·';
+  }
 }
