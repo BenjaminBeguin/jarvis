@@ -96,8 +96,8 @@ input, textarea {
 .hud__card-body,
 .hud__card-body *,
 .note-card__entry-body,
-.meeting-card__body,
-.meeting-card__body *,
+.mt-row__body,
+.mt-row__body *,
 .dashboard__suggestion-body,
 .dashboard__row-title,
 .channels__code,
@@ -10701,8 +10701,7 @@ button:disabled:hover {
   color: var(--text-faint);
 }
 
-.note-card__push,
-.meeting-card__actions button {
+.note-card__push {
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.12em;
@@ -10741,54 +10740,83 @@ button:disabled:hover {
   word-break: break-word;
 }
 
-/* Meeting cards */
+/* Meetings page — same wf-list visual family as Routines + Workflows
+   so the three "list of agent-touched things" pages read as a unit.
+   Per-row tweaks: a hint slot in the toolbar, an inline-expand body
+   that hangs below the row when opened, and a chev that rotates. */
 
-.meeting-card {
+.mt-toolbar__hint {
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mt-toolbar__hint code {
+  margin: 0 4px;
+  padding: 1px 6px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  color: var(--text-dim);
+}
+
+.mt-error {
+  margin: 12px 22px 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 100, 100, 0.4);
+  background: rgba(255, 100, 100, 0.08);
+  color: #ff8585;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* Each meeting is a row + (optionally) an expanded body that hangs
+   below the row visually attached. The wrapper has no border so the
+   inner article keeps wf-list__row's outline; the body sits
+   immediately under it with its own border + padding. */
+.mt-row {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  background: rgba(10, 17, 24, 0.6);
-  border: 1px solid var(--border);
-  padding: 14px 18px;
 }
 
-.meeting-card__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
+/* When a row is open, its bottom corners flatten into the body so
+   the two visually merge. */
+.mt-row--open > .wf-list__row {
+  border-bottom-color: transparent;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  background: rgba(0, 212, 255, 0.03);
 }
 
-.meeting-card__title {
-  font-family: var(--mono);
-  font-size: 13px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.mt-row--open > .wf-list__row:hover {
+  transform: none;
+}
+
+.mt-row__chev {
+  transition: transform 140ms ease, color 140ms ease;
+}
+
+.mt-row__chev[data-open='true'] {
+  transform: rotate(90deg);
   color: var(--accent);
-  text-shadow: var(--accent-glow);
 }
 
-.meeting-card__meta {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-.meeting-card__actions {
-  display: flex;
-  gap: 6px;
-}
-
-.meeting-card__body {
-  border-top: 1px solid var(--border);
-  padding-top: 10px;
+.mt-row__body {
+  border: 1px solid var(--border-strong);
+  border-top: 0;
+  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
+  background: rgba(4, 7, 11, 0.55);
+  padding: 14px 18px;
   font-family: var(--sans);
   font-size: 13px;
   line-height: 1.55;
   color: var(--text);
-  max-height: 360px;
+  max-height: 420px;
   overflow-y: auto;
 }
 
