@@ -348,9 +348,29 @@ function fireMeetingHeadsUp(item: InboxItem): void {
   }
 }
 
-const meetingActivity = new MeetingActivityWatcher((item) =>
-  fireMeetingHeadsUp(item),
-);
+/** Read the meeting-recorder module's detection-source setting.
+ *  Returns the normalized value with safe defaults — unknown values
+ *  fall back to 'both' so a corrupted config never silently disables
+ *  detection. */
+function meetingDetectionSource(): 'audio' | 'extension' | 'both' | 'off' {
+  const cfg = loadModuleSettings('meeting-recorder');
+  const v = cfg.detectionSource;
+  if (v === 'audio' || v === 'extension' || v === 'both' || v === 'off') {
+    return v;
+  }
+  return 'both';
+}
+
+const meetingActivity = new MeetingActivityWatcher((item) => {
+  // Audio-watcher path gates on the user's choice. When the user
+  // has set "extension only" they don't want the mic-activity
+  // heuristic to fire — it false-positives on dictation + voice
+  // notes. The watcher still RUNS (selfMicStart/Stop bookkeeping
+  // matters elsewhere), it just doesn't prompt.
+  const source = meetingDetectionSource();
+  if (source !== 'audio' && source !== 'both') return;
+  fireMeetingHeadsUp(item);
+});
 
 /**
  * Forward a remote-control command (`pause` / `resume` / `cancel` /
@@ -378,6 +398,13 @@ function onMeetingControlFromHttp(
   }
 }
 
+/** Wall-clock of the last /v1/meeting/detected we got from the
+ *  Chrome extension. Used to know whether the current recording was
+ *  triggered by the extension — onMeetingEnded only auto-finishes
+ *  recordings that started with extension signal, to avoid stopping
+ *  an unrelated in-person follow-up the user manually kicked off. */
+let lastExtensionDetectedAt = 0;
+
 /**
  * Handle a /v1/meeting/detected POST from the Chrome extension (or
  * any external caller). Build an InboxItem-shaped payload and route
@@ -389,6 +416,16 @@ function onExternalMeetingDetected(payload: {
   url?: string;
   vendor?: string;
 }): void {
+  if (payload.source === 'extension') {
+    lastExtensionDetectedAt = Date.now();
+  }
+  // Detection-source gate. When the user has set "audio only" or
+  // "off", swallow the extension ping — we still record the
+  // lastExtensionDetectedAt above so the user can verify the
+  // extension is wired by toggling the setting on later.
+  const source = meetingDetectionSource();
+  if (source !== 'extension' && source !== 'both') return;
+
   const vendorLabel = payload.vendor
     ? payload.vendor.charAt(0).toUpperCase() + payload.vendor.slice(1)
     : 'Browser';
@@ -421,6 +458,19 @@ function onExternalMeetingEnded(_payload: { vendor?: string; url?: string }): vo
   const settings = loadModuleSettings('meeting-recorder');
   // Default true. Explicit `false` opts out.
   if (settings.autoStopOnExtensionEnd === false) return;
+  // Only auto-stop if the CURRENT recording was likely triggered by
+  // the extension. Heuristic: an extension /v1/meeting/detected ping
+  // landed within the 3h window covering this meeting. If the user
+  // started an unrelated in-person meeting via /meeting and the
+  // extension fires "meeting ended" from a stale tab, we don't want
+  // to cut their recording.
+  const recencyMs = Date.now() - lastExtensionDetectedAt;
+  if (lastExtensionDetectedAt === 0 || recencyMs > 3 * 60 * 60_000) {
+    console.log(
+      '[meeting] ignoring extension meeting-ended — no recent extension detection on file',
+    );
+    return;
+  }
   console.log(
     '[meeting] chrome extension reported meeting ended — auto-finishing recording',
   );

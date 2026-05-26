@@ -35,8 +35,21 @@ export const meetingRecorderModule: Module = {
   version: '1.0.0',
   settings: {
     description:
-      'When auto-debrief is on (default), every finished meeting runs the meeting-debrief skill in the background — restructures the transcript with Summary / Decisions / Action items sections. Turn off if you want raw transcripts only.',
+      'Controls how Jarvis decides when to offer "record this meeting?", what to do when it finishes, and what happens when the browser call ends. Set up the Chrome extension in Settings → Browser before picking "Chrome extension" as the detection source.',
     fields: [
+      {
+        key: 'detectionSource',
+        label: 'Meeting detection source',
+        hint: '"Audio (mic activity)" watches the macOS mic for any meeting (browser OR native Zoom client) — works everywhere but can false-positive on voice notes / dictation. "Chrome extension" only fires on Meet/Zoom-web/Teams/Whereby pages but is rock-solid for those. "Both" fires on either. "Off" disables the auto-prompt entirely — use /meeting in the palette to start.',
+        type: 'select',
+        default: 'both',
+        options: [
+          { value: 'audio', label: 'Audio (mic activity)' },
+          { value: 'extension', label: 'Chrome extension only' },
+          { value: 'both', label: 'Both (audio + extension)' },
+          { value: 'off', label: 'Off — manual /meeting only' },
+        ],
+      },
       {
         key: 'autoDebrief',
         label: 'Auto-debrief on finish',
@@ -47,7 +60,7 @@ export const meetingRecorderModule: Module = {
       {
         key: 'autoStopOnExtensionEnd',
         label: 'Auto-stop when the browser meeting ends',
-        hint: 'When the Chrome extension detects you left a Meet / Zoom / Teams / Whereby call, automatically finish the Jarvis recording. Off = recording keeps running until you click Finish.',
+        hint: 'When the Chrome extension detects you left a Meet / Zoom / Teams / Whereby call, automatically finish the Jarvis recording. Off = recording keeps running until you click Finish. Only fires when the extension is set up + the meeting was detected via the extension.',
         type: 'boolean',
         default: true,
       },
