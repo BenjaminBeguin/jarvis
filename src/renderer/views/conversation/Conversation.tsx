@@ -234,19 +234,25 @@ export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
     task.status !== 'errored' &&
     task.status !== 'aborted';
 
-  // The runner's sendMessage handles both live and completed cases:
-  //   - running + queue open → push next user message
+  // The runner's sendMessage handles three live cases:
+  //   - running + queue open + awaitingInput → push next user message
+  //   - running + queue open + agent mid-turn → push to the SAME queue;
+  //     SDK consumes it on its next iteration (the user's "ping while
+  //     working" path)
   //   - completed + sdkSessionId → spin up a fresh resume turn
-  // So the composer should show whenever either path is viable, not
-  // just when awaitingInput is set. Without this, a turn that ended
-  // with the agent asking a question (but transitioned to completed)
-  // would lock the user out of replying.
+  // The composer should be visible in all three cases. Without this,
+  // the user thinks they can't interject while the agent is mid-flight
+  // even though the runner happily queues their message for the next
+  // turn.
   const canResumeReply =
     task.status === 'completed' &&
     !!task.sdkSessionId &&
     task.origin !== 'external';
+  const canPingMidTurn =
+    task.status === 'running' && !task.awaitingInput;
   const showComposer =
-    task.origin !== 'external' && (isAwaiting || canResumeReply);
+    task.origin !== 'external' &&
+    (isAwaiting || canResumeReply || canPingMidTurn);
 
   return (
     <section className="detail">
@@ -347,6 +353,7 @@ export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
         <SendReply
           task={task}
           resuming={canResumeReply}
+          midTurn={canPingMidTurn}
           speakReplies={speakReplies}
           onToggleSpeakReplies={() => setSpeakReplies((v) => !v)}
         />
@@ -541,6 +548,7 @@ function AwaitingBanner() {
 function SendReply({
   task,
   resuming,
+  midTurn,
   speakReplies,
   onToggleSpeakReplies,
 }: {
@@ -550,6 +558,11 @@ function SendReply({
    *  a live queue. Surfaced as a hint under the textarea so the
    *  user knows the agent is going to wake back up. */
   resuming: boolean;
+  /** True when the agent is currently mid-turn (running, not
+   *  awaiting). The send STILL works — the runner queues into the
+   *  same input stream and the SDK consumes on its next iteration —
+   *  but the placeholder hints that there's a delay. */
+  midTurn: boolean;
   /** Whether the agent's replies will be read aloud (macOS `say`). */
   speakReplies: boolean;
   onToggleSpeakReplies: () => void;
@@ -753,7 +766,9 @@ function SendReply({
               ? 'Transcribing…'
               : resuming
                 ? 'Continue this conversation. ↵ to send, ⇧↵ for newline. Paste or drop images to attach.'
-                : 'Reply to keep the conversation going. ↵ to send, ⇧↵ for newline. Paste or drop images to attach.'
+                : midTurn
+                  ? 'Agent is working — your message queues for the next turn. ↵ to send.'
+                  : 'Reply to keep the conversation going. ↵ to send, ⇧↵ for newline. Paste or drop images to attach.'
         }
         disabled={sending || transcribing}
         onChange={(e) => setText(e.target.value)}
@@ -787,6 +802,12 @@ function SendReply({
         <div className="detail__reply-hint">
           Turn complete — your reply will resume the session and start
           a new turn.
+        </div>
+      )}
+      {midTurn && !error && (
+        <div className="detail__reply-hint">
+          Agent is mid-turn. Your message will be picked up at the start
+          of its next iteration — usually within a few seconds.
         </div>
       )}
       {error && (
