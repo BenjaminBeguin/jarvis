@@ -35,6 +35,7 @@ import {
   loadAppMode,
   loadAuthMode,
   loadCostPrefs,
+  loadModuleSettings,
   loadNotificationPrefs,
   loadPaused,
   loadWorkingHours,
@@ -141,6 +142,7 @@ import { SkillStore } from './skill-store.js';
 import { SkillSuggestionStore } from './skill-suggestions.js';
 import { asTaskOrigin, lastAssistantText, TaskRunner } from './task-runner.js';
 import { setProgressEmitter } from './modules/voice/transcribe.js';
+import { speechEvents, stopSpeaking } from './modules/voice/speech.js';
 import { voiceModule } from './modules/voice/index.js';
 import {
   activeProjectProfileProvider,
@@ -406,6 +408,32 @@ function onExternalMeetingDetected(payload: {
     createdAt: Date.now(),
   };
   fireMeetingHeadsUp(item);
+}
+
+/**
+ * Chrome extension reported the browser meeting ended. If a Jarvis
+ * recording is active AND the meeting-recorder module has
+ * `autoStopOnExtensionEnd` on (default true), forward a 'finish'
+ * control action — same path the PWA's Finish button uses.
+ */
+function onExternalMeetingEnded(_payload: { vendor?: string; url?: string }): void {
+  if (!currentMeetingState.active) return;
+  const settings = loadModuleSettings('meeting-recorder');
+  // Default true. Explicit `false` opts out.
+  if (settings.autoStopOnExtensionEnd === false) return;
+  console.log(
+    '[meeting] chrome extension reported meeting ended — auto-finishing recording',
+  );
+  try {
+    broadcast(IpcChannels.meetingControlRemote, { action: 'finish' });
+    activity.record({
+      kind: 'meeting.auto-finished',
+      label: 'Meeting auto-finished · browser meeting ended',
+      detail: {},
+    });
+  } catch (err) {
+    console.warn('[meeting] auto-finish broadcast failed:', err);
+  }
 }
 
 ipcMain.handle(IpcChannels.suppressMeetingPrompt, (_e, id: string) => {
@@ -1061,6 +1089,17 @@ function registerGlobalShortcut(): void {
   });
   if (!voiceOk) {
     console.warn(`failed to register global shortcut ${voiceAccel}`);
+  }
+  // Quick "shut up" shortcut — cancels any in-flight TTS without
+  // requiring the user to find the palette or click a button. ⌘⇧.
+  // sits next to ⌘⇧J + ⌘⇧Space so the trio of voice shortcuts share
+  // a finger pattern.
+  const shushAccel = 'CommandOrControl+Shift+.';
+  const shushOk = globalShortcut.register(shushAccel, () => {
+    stopSpeaking();
+  });
+  if (!shushOk) {
+    console.warn(`failed to register global shortcut ${shushAccel}`);
   }
 }
 
@@ -1815,6 +1854,7 @@ app.whenReady().then(async () => {
       notifier,
       getStatus: () => getTrayMenuState(),
       onMeetingDetected: onExternalMeetingDetected,
+      onMeetingEnded: onExternalMeetingEnded,
       getMeetingState: () => currentMeetingState,
       subscribeMeetingState: subscribeMeetingState,
       onMeetingControl: onMeetingControlFromHttp,
@@ -1850,6 +1890,7 @@ app.whenReady().then(async () => {
         notifier,
         getStatus: () => getTrayMenuState(),
         onMeetingDetected: onExternalMeetingDetected,
+      onMeetingEnded: onExternalMeetingEnded,
       getMeetingState: () => currentMeetingState,
       subscribeMeetingState: subscribeMeetingState,
       onMeetingControl: onMeetingControlFromHttp,
@@ -1914,6 +1955,12 @@ app.whenReady().then(async () => {
   }
   setAbortAllHandler(() => runner.abortAll());
   registerGlobalShortcut();
+
+  // Mirror TTS lifecycle to every renderer so the floating "STOP
+  // SPEAKING" pill can show / hide without polling. The
+  // `stopSpeaking` IPC handler already lives in ipc/media.ts.
+  speechEvents.on('start', () => broadcast(IpcChannels.speechActive, true));
+  speechEvents.on('stop', () => broadcast(IpcChannels.speechActive, false));
 
   // Open observatory on first launch.
   openObservatory();

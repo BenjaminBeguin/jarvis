@@ -23,6 +23,7 @@ import { SetupNudge } from './SetupNudge';
 import { Sidebar, type SidebarSection } from './Sidebar';
 import { Skills } from './Skills';
 import { Workflows } from './Workflows';
+import { SpeechStopPill } from './SpeechStopPill';
 import { toast } from './Toaster';
 import { Toaster } from './Toaster';
 import { Observatory } from './Observatory';
@@ -976,6 +977,7 @@ export function Shell({ status }: Props) {
         initialName={newProjectInitial}
       />
       <Toaster />
+      <SpeechStopPill />
     </div>
   );
 }

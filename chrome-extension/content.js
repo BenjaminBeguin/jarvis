@@ -37,9 +37,16 @@
 
   const POLL_MS = 2_000;
   const POLL_WINDOW_MS = 60_000;
+  /** How long the "leave" indicator must be absent before we declare
+   *  the meeting ended. Stops false positives during DOM rerenders
+   *  (Meet, in particular, briefly removes its toolbar during layout
+   *  changes). */
+  const LEFT_DEBOUNCE_MS = 6_000;
   let polledFor = 0;
   let detected = false;
   let pollTimer = null;
+  let endedSent = false;
+  let leftSince = 0;
 
   function pickVendor(host) {
     if (host.endsWith('meet.google.com')) return 'meet';
@@ -111,7 +118,10 @@
   function ping() {
     if (detected) return;
     detected = true;
-    stopPolling();
+    // Keep polling AFTER the join ping fires — we now also need to
+    // watch for the leave transition. Switch the poll interval down
+    // to a slower cadence to avoid wasting CPU during the call.
+    restartPolling(5_000);
     chrome.runtime.sendMessage(
       {
         kind: 'meeting-detected',
@@ -133,14 +143,48 @@
     );
   }
 
+  function pingEnded() {
+    if (endedSent) return;
+    endedSent = true;
+    stopPolling();
+    chrome.runtime.sendMessage(
+      {
+        kind: 'meeting-ended',
+        payload: { vendor: VENDOR, url: location.href },
+      },
+      () => {
+        // Fire-and-forget — Jarvis silently ignores if there's
+        // nothing to stop.
+      },
+    );
+  }
+
   function poll() {
     polledFor += POLL_MS;
-    if (isInCall()) {
-      ping();
+    const inCall = isInCall();
+    if (!detected) {
+      if (inCall) {
+        ping();
+        return;
+      }
+      if (polledFor >= POLL_WINDOW_MS) {
+        stopPolling();
+      }
       return;
     }
-    if (polledFor >= POLL_WINDOW_MS) {
-      stopPolling();
+    // detected === true → watch for leave transition.
+    if (inCall) {
+      // Still in. Reset the debounce timer.
+      leftSince = 0;
+      return;
+    }
+    const now = Date.now();
+    if (leftSince === 0) {
+      leftSince = now;
+      return;
+    }
+    if (now - leftSince >= LEFT_DEBOUNCE_MS) {
+      pingEnded();
     }
   }
 
@@ -153,6 +197,11 @@
     setTimeout(poll, 200);
   }
 
+  function restartPolling(intervalMs) {
+    stopPolling();
+    pollTimer = setInterval(poll, intervalMs);
+  }
+
   function stopPolling() {
     if (!pollTimer) return;
     clearInterval(pollTimer);
@@ -163,6 +212,8 @@
   // a full reload when entering a call).
   const restart = () => {
     detected = false;
+    endedSent = false;
+    leftSince = 0;
     startPolling();
   };
   window.addEventListener('popstate', restart);

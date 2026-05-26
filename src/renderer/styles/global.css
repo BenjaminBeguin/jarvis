@@ -10157,6 +10157,71 @@ button:disabled:hover {
   pointer-events: none;
 }
 
+/* Floating STOP SPEAKING pill. Sits above the toast stack — visible
+   only while macOS `say` is actually playing audio. */
+.speech-stop-pill {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  z-index: 1110;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 12px;
+  background: rgba(255, 107, 133, 0.12);
+  border: 1px solid rgba(255, 107, 133, 0.55);
+  color: var(--bad);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  cursor: pointer;
+  box-shadow:
+    0 0 14px rgba(255, 107, 133, 0.25),
+    0 4px 16px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px) saturate(140%);
+  animation: speech-stop-pill-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background 140ms ease, box-shadow 140ms ease,
+    border-color 140ms ease;
+}
+
+.speech-stop-pill:hover {
+  background: rgba(255, 107, 133, 0.22);
+  border-color: var(--bad);
+  box-shadow:
+    0 0 18px rgba(255, 107, 133, 0.45),
+    0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.speech-stop-pill__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bad);
+  box-shadow: 0 0 8px var(--bad);
+  animation: speech-stop-pulse 1.4s ease-in-out infinite;
+}
+
+.speech-stop-pill__label {
+  font-weight: 600;
+}
+
+.speech-stop-pill__hint {
+  color: rgba(255, 107, 133, 0.55);
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+
+@keyframes speech-stop-pill-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes speech-stop-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 .toast {
   pointer-events: auto;
   display: flex;

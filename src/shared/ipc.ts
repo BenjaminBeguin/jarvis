@@ -100,6 +100,11 @@ export const IpcChannels = {
   getChromeExtensionInfo: 'browser:getChromeExtensionInfo',
   revealChromeExtensionFolder: 'browser:revealChromeExtensionFolder',
 
+  /** Live TTS state — fired with `true` when an utterance starts,
+   *  `false` when it ends (naturally or via stopSpeaking). Powers
+   *  the floating "STOP SPEAKING" pill. */
+  speechActive: 'voice:speechActive',
+
   listProjects: 'projects:list',
   createProject: 'projects:create',
   updateProject: 'projects:update',

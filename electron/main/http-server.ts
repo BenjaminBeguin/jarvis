@@ -87,6 +87,11 @@ export interface HttpDeps {
    *  macOS Core Audio watcher uses. Wired in index.ts so the HTTP
    *  endpoint stays infrastructure-free. */
   onMeetingDetected(payload: MeetingDetectedPayload): void;
+  /** Fired when the Chrome extension detects the user LEFT a
+   *  browser-hosted call (Leave button gone, URL back to landing).
+   *  The default wiring stops an active recording, but the user can
+   *  opt out via the meeting-recorder module setting. */
+  onMeetingEnded(payload: { vendor?: string; url?: string }): void;
   /** Snapshot of the active recording — pushed to SSE clients on
    *  connect AND on every state change. */
   getMeetingState(): MeetingRecordingSnapshot;
@@ -385,6 +390,24 @@ async function handle(
     const vendor =
       typeof body?.vendor === 'string' ? body.vendor.trim() : undefined;
     deps.onMeetingDetected({ source, title, url, vendor });
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  // POST /v1/meeting/ended — Chrome extension noticed the user left
+  // the call. Main decides whether to auto-finish an active recording
+  // (subject to the meeting-recorder module's autoStopOnExtensionEnd
+  // setting). Returns 200 either way — the extension doesn't care
+  // whether anything happened on the Mac side.
+  if (req.method === 'POST' && path === '/v1/meeting/ended') {
+    const body = await readJson(req);
+    const vendor =
+      typeof body?.vendor === 'string' ? body.vendor.trim() : undefined;
+    const meetingUrl =
+      typeof body?.url === 'string' && /^https?:\/\//.test(body.url)
+        ? body.url
+        : undefined;
+    deps.onMeetingEnded({ vendor, url: meetingUrl });
     sendJson(res, 200, { ok: true });
     return;
   }

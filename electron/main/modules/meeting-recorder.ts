@@ -44,6 +44,13 @@ export const meetingRecorderModule: Module = {
         type: 'boolean',
         default: true,
       },
+      {
+        key: 'autoStopOnExtensionEnd',
+        label: 'Auto-stop when the browser meeting ends',
+        hint: 'When the Chrome extension detects you left a Meet / Zoom / Teams / Whereby call, automatically finish the Jarvis recording. Off = recording keeps running until you click Finish.',
+        type: 'boolean',
+        default: true,
+      },
     ],
   },
   memory: [

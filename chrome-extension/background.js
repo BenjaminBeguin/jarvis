@@ -36,6 +36,35 @@ async function getSettings() {
   };
 }
 
+async function sendMeetingEnded(payload) {
+  const { baseUrl, token } = await getSettings();
+  if (!baseUrl || !token) {
+    return { ok: false, reason: 'not-configured' };
+  }
+  const url = `${baseUrl.replace(/\/+$/, '')}/v1/meeting/ended`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        vendor: payload.vendor,
+        url: payload.url,
+      }),
+    });
+    if (!res.ok) {
+      return { ok: false, reason: `http-${res.status}` };
+    }
+    console.log('[jarvis-ext] meeting-ended sent', payload);
+    return { ok: true };
+  } catch (err) {
+    console.warn('[jarvis-ext] meeting-ended send failed', err);
+    return { ok: false, reason: 'network' };
+  }
+}
+
 async function sendDetection(detection, tabId) {
   const { baseUrl, token } = await getSettings();
   if (!baseUrl || !token) {
@@ -87,6 +116,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.kind === 'meeting-detected') {
     sendDetection(msg.payload, sender.tab?.id).then(sendResponse);
     return true; // async response
+  }
+  if (msg && msg.kind === 'meeting-ended') {
+    sendMeetingEnded(msg.payload ?? {}).then(sendResponse);
+    return true;
   }
   if (msg && msg.kind === 'ping-jarvis') {
     // Used by the popup's "Test connection" button — verifies the

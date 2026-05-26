@@ -211,6 +211,11 @@ const api = {
     ipcRenderer.invoke(IpcChannels.getChromeExtensionInfo),
   revealChromeExtensionFolder: (): Promise<{ ok: boolean; message?: string }> =>
     ipcRenderer.invoke(IpcChannels.revealChromeExtensionFolder),
+
+  /** Subscribe to live TTS state. `true` when an utterance starts,
+   *  `false` when it ends. Drives the floating STOP pill. */
+  onSpeechActive: (listener: Listener<boolean>): Unsubscribe =>
+    subscribe(IpcChannels.speechActive, listener),
   openInClaudeDesktop: (
     sessionId: string,
   ): Promise<{ ok: boolean; message?: string }> =>
