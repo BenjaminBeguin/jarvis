@@ -156,6 +156,60 @@ Calibration appends timestamped entries here.
  * the Inbox nudge substring-matches one of these to know the file
  * hasn't been customised yet.
  */
+/**
+ * Calibration for the work-awareness loop. Lives at
+ * `~/.jarvis/work-awareness-priorities.md`. The `work-awareness`
+ * skill reads it every 30 min and uses it to decide what to
+ * surface vs mute when scanning recent activity across Slack /
+ * GitHub / Linear / Notion / meetings / notes.
+ *
+ * Plain markdown — no required sections; the headings below are
+ * suggestions. Re-fire `/work-awareness-calibrate` (a future
+ * conversational refiner, same shape as `/inbox-calibrate`) to
+ * teach the file over time.
+ */
+export const SAMPLE_WORK_AWARENESS_PRIORITIES = `# Work awareness — priorities
+
+The work-awareness loop reads this every 30 min during your working
+hours and uses it to decide what counts as a "loop worth flagging"
+vs background noise. Edit freely; the next tick picks up changes.
+
+## What kinds of signals to surface
+
+- (e.g. "Slack threads where someone asked me a question and I haven't replied")
+- (e.g. "PRs I opened that have new comments since my last push")
+- (e.g. "Meeting action items where I'm the owner and the deadline is today/tomorrow")
+- (e.g. "Notion pages I opened today that have unresolved comments tagged to me")
+
+## People whose threads / mentions matter
+
+- (e.g. "Theo — anything from him jumps straight in")
+- (e.g. "My team's #squad-foo channel — surface mentions even off-hours")
+
+## What to consider "done" (auto-dismiss)
+
+- (e.g. "PR I merged today — drop any related review-it inbox items")
+- (e.g. "Slack message I sent in the past 2h to <person> — drop any 'reply to <person>' inbox items")
+- (e.g. "Meeting action item where I see a matching activity entry / file change today")
+
+## What to mute
+
+- (e.g. "Slack #random, #announcements, #memes")
+- (e.g. "PR comments that are just 'lgtm' / 'thanks' / approving emoji reactions")
+- (e.g. "Notion comments resolved in the same day")
+- (e.g. "Tickets older than 2 weeks with no recent activity")
+
+## What 'urgent' looks like for me
+
+- (e.g. "Someone explicitly blocking on me")
+- (e.g. "Today's meetings where I owe prep / a draft beforehand")
+- (e.g. "Action items with a deadline today")
+
+## Running notes
+
+- (Calibration appends timestamped entries here.)
+`;
+
 export const SAMPLE_TECH_WATCH = `# Tech watch
 
 The tech-watch loop reads this file once a day (8 AM weekdays) and

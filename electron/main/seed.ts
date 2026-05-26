@@ -10,6 +10,7 @@ import {
   SAMPLE_PROJECTS,
   SAMPLE_TECH_WATCH,
   SAMPLE_TRIAGE_POLICY,
+  SAMPLE_WORK_AWARENESS_PRIORITIES,
 } from './seeds/index.js';
 import { BUILTIN_WORKFLOWS } from './seeds/workflows/index.js';
 import type { WorkflowDef } from '@shared/types';
@@ -309,6 +310,14 @@ export function seedDefaultsIfEmpty(): void {
   // run to discover RSS feeds, newsletter senders and topic interests.
   // /tech-watch-calibrate walks the user through filling it in.
   writeIfMissing(join(root, 'tech-watch.md'), SAMPLE_TECH_WATCH);
+  // Work-awareness calibration: shapes the ambient watcher's lens.
+  // The skill reads it every 30 min during business hours to decide
+  // which signals to surface vs mute when synthesizing the
+  // "your attention" inbox section.
+  writeIfMissing(
+    join(root, 'work-awareness-priorities.md'),
+    SAMPLE_WORK_AWARENESS_PRIORITIES,
+  );
 
   // Each built-in skill seeds only if missing. New built-ins added in later
   // versions show up automatically; user-authored skills are never touched.

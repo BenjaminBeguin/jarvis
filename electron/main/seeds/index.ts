@@ -35,6 +35,7 @@ import ticketToPr from './skills/ticket-to-pr.js';
 import triageCalibrate from './skills/triage-calibrate.js';
 import todayFocus from './skills/today-focus.js';
 import weeklyRetro from './skills/weekly-retro.js';
+import workAwareness from './skills/work-awareness.js';
 import workflowAuthor from './skills/workflow-author.js';
 
 export interface BuiltinSkill {
@@ -70,6 +71,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'triage-calibrate', body: triageCalibrate },
   { name: 'today-focus', body: todayFocus },
   { name: 'weekly-retro', body: weeklyRetro },
+  { name: 'work-awareness', body: workAwareness },
   { name: 'workflow-author', body: workflowAuthor },
 ];
 
@@ -79,4 +81,5 @@ export {
   SAMPLE_PROJECTS,
   SAMPLE_TECH_WATCH,
   SAMPLE_TRIAGE_POLICY,
+  SAMPLE_WORK_AWARENESS_PRIORITIES,
 } from './samples.js';

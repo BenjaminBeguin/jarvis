@@ -9,6 +9,7 @@ import { INBOX_CURATE_WORKFLOW } from './inbox-curate.js';
 import { LINEAR_INBOX_WORKFLOW } from './linear-inbox.js';
 import { SLACK_INBOX_WORKFLOW } from './slack-inbox.js';
 import { TECH_WATCH_WORKFLOW } from './tech-watch.js';
+import { WORK_AWARENESS_WORKFLOW } from './work-awareness.js';
 
 /**
  * Built-in workflow catalogue. Each entry is seeded on first launch
@@ -23,6 +24,7 @@ export const BUILTIN_WORKFLOWS: WorkflowDef[] = [
   CALENDAR_TODAY_WORKFLOW,
   TECH_WATCH_WORKFLOW,
   INBOX_CURATE_WORKFLOW,
+  WORK_AWARENESS_WORKFLOW,
   // Autopilot scenarios — all default `enabled: false`. Users opt in
   // per-scenario from Settings → Workflows (or directly in the JSON).
   AUTOPILOT_PR_REVIEW_NON_TEAM_WORKFLOW,
