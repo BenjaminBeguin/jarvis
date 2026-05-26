@@ -27,6 +27,8 @@ export function registerMediaIpc({
   jarvisRoot,
   activity,
   inbox,
+  reminders,
+  goals,
 }: IpcDeps): void {
   ipcMain.handle(
     IpcChannels.requestMicAccess,
@@ -129,6 +131,8 @@ export function registerMediaIpc({
             project: args.project,
             finishedAt: args.endedAt,
             meetingKey: args.filename.replace(/\.md$/, ''),
+            reminders,
+            goals,
           });
         } catch (err) {
           console.warn(

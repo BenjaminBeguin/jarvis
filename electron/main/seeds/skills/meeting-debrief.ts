@@ -25,6 +25,17 @@ by a raw Whisper transcript. Your job:
    - **## Action items** — bullets shaped \`[owner] action — by when\`. If no
      owner was named, write \`[?]\`. If no deadline was set, omit "— by when".
      If there are no action items, say "No action items."
+
+     CRITICAL for downstream automation:
+     - Owner brackets that mean THE USER: \`[me]\`, \`[I]\`, \`[you]\`, \`[?]\`
+       (use one of these — they trigger reminder creation for dated items).
+     - Other people: use their name, e.g. \`[Alice]\`, \`[Bob]\`.
+     - Deadlines that mean a real time: \`by Friday\`, \`tomorrow 9am\`,
+       \`in 2h\`, \`by 2026-06-15\`, \`every Monday at 9am\` (parseable). Use
+       these literal phrasings when the speaker said something
+       equivalent — they get parsed into reminder fireAt timestamps. Vague
+       phrases like "soon" / "asap" / "this week" stay as text but DON'T
+       become reminders.
    - **## Open questions** — bullets of unresolved points worth following up.
    - **## Topics** — short comma-separated tags.
 

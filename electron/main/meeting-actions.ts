@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 
 import type { InboxItem } from '@shared/types';
 
+import type { GoalStore } from './goals.js';
 import type { InboxStore } from './inbox.js';
+import { parseIntent } from './intent-router.js';
+import type { ReminderStore } from './reminders.js';
 
 /**
  * After a meeting-debrief task rewrites a transcript with the
@@ -107,6 +110,19 @@ interface PushArgs {
   finishedAt: number;
   /** Stable per-meeting id used to dedupe item ids across re-runs. */
   meetingKey: string;
+  /** Reminder store — when an action item has a parseable deadline
+   *  ("by Friday", "tomorrow 9am"), we mint a real reminder so the
+   *  user gets a time-fired nudge instead of just a static inbox row. */
+  reminders?: ReminderStore;
+  /** Goal store — when an action item mentions an active goal's
+   *  relatedKeywords, append a progress entry so the goal stays in
+   *  sync with what the meeting concluded. */
+  goals?: GoalStore;
+}
+
+interface ActionSideEffect {
+  reminderCreated: boolean;
+  goalsTouched: string[];
 }
 
 /**
@@ -146,15 +162,36 @@ export function pushMeetingActionsToInbox(
     (i) => !i.id.startsWith(`meeting-action-${args.meetingKey}:`),
   );
 
+  // Pre-cache active goals so we keyword-match each action item
+  // against them in O(actions * goals). Goals' relatedKeywords list
+  // is short (≤ 8 each); cheap.
+  const activeGoals = args.goals ? args.goals.listActive() : [];
+
+  let reminderCount = 0;
+  let goalLinkCount = 0;
+
   const fresh = actions.map((a, i): InboxItem => {
     const dueSuffix = a.due ? ` — ${a.due}` : '';
+    const side = applyActionSideEffects(a, args, activeGoals);
+    if (side.reminderCreated) reminderCount += 1;
+    if (side.goalsTouched.length > 0) goalLinkCount += side.goalsTouched.length;
+
+    const subtitleBits: string[] = [];
+    subtitleBits.push(
+      args.project
+        ? `${args.meetingTitle} · ${args.project}`
+        : args.meetingTitle,
+    );
+    if (side.reminderCreated) subtitleBits.push('⏰ reminder set');
+    if (side.goalsTouched.length > 0) {
+      subtitleBits.push(`◎ goal: ${side.goalsTouched.join(', ')}`);
+    }
+
     return {
       id: `meeting-action-${args.meetingKey}:${i}`,
       source: 'meeting-actions',
       title: `[${a.owner}] ${a.action}${dueSuffix}`,
-      subtitle: args.project
-        ? `${args.meetingTitle} · ${args.project}`
-        : args.meetingTitle,
+      subtitle: subtitleBits.join(' · '),
       url: `vscode://file${args.transcriptPath}`,
       createdAt: args.finishedAt,
     };
@@ -166,7 +203,90 @@ export function pushMeetingActionsToInbox(
     [...existing, ...fresh].sort((a, b) => b.createdAt - a.createdAt),
   );
   console.log(
-    `[meeting-actions] pushed ${fresh.length} item(s) from ${args.transcriptPath}`,
+    `[meeting-actions] pushed ${fresh.length} item(s) from ${args.transcriptPath}` +
+      (reminderCount > 0 ? ` · ${reminderCount} reminder(s)` : '') +
+      (goalLinkCount > 0 ? ` · ${goalLinkCount} goal link(s)` : ''),
+  );
+}
+
+/**
+ * For one action item, try to (a) mint a real reminder if the `due`
+ * phrase parses to a time, and (b) append a progress entry on each
+ * active goal whose relatedKeywords appear in the action text.
+ *
+ * Both ops are best-effort — a parse miss or unknown goal id silently
+ * skips; we never block the inbox push on a side effect failing.
+ *
+ * Owner-aware reminders: items whose owner bracket is `me`, `i`,
+ * `you`, or `?` count as actions the user owns. Other owners (e.g.
+ * "[Alice]") are skipped for reminders — those are someone else's
+ * action items that the user should know about but not be nagged
+ * about. Goal-progress logging still happens regardless of owner —
+ * a coworker shipping something against a goal still counts as
+ * progress.
+ */
+function applyActionSideEffects(
+  action: MeetingActionItem,
+  args: PushArgs,
+  goals: ReturnType<GoalStore['listActive']>,
+): ActionSideEffect {
+  const out: ActionSideEffect = { reminderCreated: false, goalsTouched: [] };
+
+  if (args.reminders && action.due && isSelfOwner(action.owner)) {
+    const phrase = `${action.action} by ${action.due}`;
+    try {
+      const parsed = parseIntent(phrase);
+      if (parsed.kind === 'reminder' && parsed.fireAt > Date.now()) {
+        args.reminders.create({
+          body: `${action.action} (from ${args.meetingTitle})`,
+          mode: 'reminder',
+          fireAt: parsed.fireAt,
+        });
+        out.reminderCreated = true;
+      }
+    } catch (err) {
+      console.warn(
+        '[meeting-actions] could not parse due into reminder:',
+        action.due,
+        err,
+      );
+    }
+  }
+
+  if (args.goals && goals.length > 0) {
+    const haystack = action.action.toLowerCase();
+    for (const g of goals) {
+      const hit = g.relatedKeywords.find(
+        (k) => k && haystack.includes(k.toLowerCase()),
+      );
+      if (!hit) continue;
+      args.goals.appendProgress(g.id, {
+        note: `Meeting (${args.meetingTitle}): ${action.action}${action.due ? ` — by ${action.due}` : ''}`,
+        source: 'meeting',
+        url: `vscode://file${args.transcriptPath}`,
+      });
+      // Track by the short title so the inbox subtitle is readable;
+      // ids would dominate the visual.
+      const shortTitle =
+        g.title.length > 24 ? `${g.title.slice(0, 23)}…` : g.title;
+      out.goalsTouched.push(shortTitle);
+    }
+  }
+
+  return out;
+}
+
+/** True if the bracketed owner reads as the user. The skill writes
+ *  `[?]` when it can't infer; we treat that as "probably mine" so
+ *  the reminder still fires — better to over-remind than miss. */
+function isSelfOwner(owner: string): boolean {
+  const norm = owner.trim().toLowerCase();
+  return (
+    norm === '?' ||
+    norm === 'me' ||
+    norm === 'i' ||
+    norm === 'you' ||
+    norm === 'self'
   );
 }
 
