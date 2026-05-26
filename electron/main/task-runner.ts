@@ -235,7 +235,12 @@ const INTERNAL_SESSION_CAP = 1000;
 /** A "running" task whose last event is this old or older is treated
  *  as orphaned by sweepOrphans(). 30 min is conservatively past any
  *  real long-running SDK turn — most tasks resolve in seconds; the
- *  occasional legit long task wraps in single-digit minutes. */
+ *  occasional legit long task wraps in single-digit minutes.
+ *
+ *  Awaiting-input tasks (multi-turn, deliberately status='running'
+ *  between user replies) are explicitly EXCLUDED from this — see
+ *  sweepOrphans below. So this threshold only applies to "running
+ *  but mid-turn and quiet" tasks, which are very probably stuck. */
 const ORPHAN_IDLE_MS = 30 * 60 * 1000;
 
 export class TaskRunner extends EventEmitter {
@@ -438,6 +443,14 @@ export class TaskRunner extends EventEmitter {
     for (const rec of this.records.values()) {
       if (rec.external) continue;
       if (rec.summary.status !== 'running') continue;
+      // Multi-turn tasks deliberately stay status='running' between
+      // user replies (awaitingInput=true). The last event is the
+      // assistant's previous response — if the user takes >30 min
+      // to reply, the old sweep killed the task as a "ghost"
+      // even though it's just patiently waiting. Skip those — a
+      // task only counts as orphaned when it's mid-turn AND quiet
+      // (the SDK process probably hung).
+      if (rec.summary.awaitingInput) continue;
       const last = rec.events[rec.events.length - 1];
       const lastActivity = last?.ts ?? rec.summary.startedAt;
       if (now - lastActivity < ORPHAN_IDLE_MS) continue;
