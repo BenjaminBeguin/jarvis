@@ -93,6 +93,7 @@ export const IpcChannels = {
   listJarvisDir: 'fs:listJarvisDir',
   readJarvisFile: 'fs:readJarvisFile',
   writeJarvisFile: 'fs:writeJarvisFile',
+  deleteJarvisFile: 'fs:deleteJarvisFile',
 
   listProjects: 'projects:list',
   createProject: 'projects:create',

@@ -129,13 +129,34 @@ export function MeetingsPage() {
     }
   };
 
+  const deleteFile = async (file: MeetingFile) => {
+    const ok = window.confirm(
+      `Delete "${file.title}"?\n\nThis removes ~/.jarvis/meetings/${file.name} permanently.`,
+    );
+    if (!ok) return;
+    try {
+      const result = await window.jarvis.deleteJarvisFile(
+        `meetings/${file.name}`,
+      );
+      if (!result.ok) {
+        setError(result.message ?? 'Delete failed.');
+        return;
+      }
+      bindings.clear(file.name);
+      if (openName === file.name) setOpenName(null);
+      setFiles((cur) => cur.filter((f) => f.name !== file.name));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return (
     <section className="rt-page mt-page">
       <header className="wf-toolbar">
         <span className="wf-toolbar__title">Meetings</span>
         <span className="mt-toolbar__hint">
           <code>/meeting [title]</code> in the palette · stored at{' '}
-          <code>~/.jarvis/meetings/</code>
+          <code>~/.jarvis/meetings/</code> · ↪ extracts action items via Claude
         </span>
         <div className="wf-toolbar__spacer" />
         {files.length > 0 && (
@@ -200,6 +221,7 @@ export function MeetingsPage() {
                   }
                   onPush={() => void pushToClaude(f)}
                   onUnbind={() => bindings.clear(f.name)}
+                  onDelete={() => void deleteFile(f)}
                 />
               ))}
             </div>
@@ -218,6 +240,7 @@ function MeetingRow({
   onToggle,
   onPush,
   onUnbind,
+  onDelete,
 }: {
   file: MeetingFile;
   isOpen: boolean;
@@ -226,6 +249,7 @@ function MeetingRow({
   onToggle: () => void;
   onPush: () => void;
   onUnbind: () => void;
+  onDelete: () => void;
 }) {
   return (
     <div className={`mt-row${isOpen ? ' mt-row--open' : ''}`}>
@@ -286,11 +310,23 @@ function MeetingRow({
                 onPush();
               }}
               disabled={isPushing}
-              title="Send transcript to Claude for action-item extraction"
+              title="Send this transcript to a fresh Claude task. Pops the Answer HUD with extracted action items, owners, deadlines, and follow-ups."
             >
-              {isPushing ? 'Pushing…' : '↪ Push to Claude'}
+              {isPushing ? 'Pushing…' : '↪ Extract action items'}
             </button>
           )}
+          <button
+            type="button"
+            className="wf-btn wf-btn--ghost mt-row__delete"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            title={`Delete ~/.jarvis/meetings/${f.name}`}
+            aria-label="Delete meeting"
+          >
+            🗑
+          </button>
           <span
             className="wf-list__chev mt-row__chev"
             aria-hidden

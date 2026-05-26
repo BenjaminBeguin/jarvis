@@ -362,6 +362,10 @@ const api = {
     contents: string,
   ): Promise<{ ok: boolean; message?: string }> =>
     ipcRenderer.invoke(IpcChannels.writeJarvisFile, { path, contents }),
+  deleteJarvisFile: (
+    rel: string,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.deleteJarvisFile, rel),
   pickDirectory: (
     options?: { multi?: boolean; defaultPath?: string },
   ): Promise<string[]> =>

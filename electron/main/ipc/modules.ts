@@ -4,6 +4,7 @@ import {
   readFileSync,
   readdirSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
@@ -153,6 +154,45 @@ export function registerModulesIpc({ modules, activity, jarvisRoot }: IpcDeps): 
             detail: { path: payload.path, bytes: payload.contents.length },
           });
         }
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
+
+  /**
+   * Delete a file under ~/.jarvis. Used by the Meetings / Notes pages
+   * so the user can prune transcripts they don't want to keep. Path
+   * is validated via resolveSafe — can't escape ~/.jarvis. Refuses
+   * to delete directories (caller should walk + delete explicitly).
+   */
+  ipcMain.handle(
+    IpcChannels.deleteJarvisFile,
+    (_e, rel: string): { ok: boolean; message?: string } => {
+      try {
+        if (typeof rel !== 'string' || !rel) {
+          return { ok: false, message: 'Invalid path.' };
+        }
+        const target = resolveSafe(rel);
+        let stat;
+        try {
+          stat = statSync(target);
+        } catch {
+          return { ok: false, message: 'File does not exist.' };
+        }
+        if (stat.isDirectory()) {
+          return { ok: false, message: 'Refusing to delete a directory.' };
+        }
+        unlinkSync(target);
+        activity.record({
+          kind: 'jarvis-file.deleted',
+          label: `Deleted · ~/.jarvis/${rel}`,
+          detail: { path: rel, bytes: stat.size },
+        });
         return { ok: true };
       } catch (err) {
         return {
