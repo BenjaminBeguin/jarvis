@@ -17,6 +17,7 @@ import type {
 const VALID_ITEM_KINDS = new Set<DashboardItem['kind']>([
   'inbox',
   'drafts',
+  'inbox-source',
   'routine',
   'calendar',
   'spend',
@@ -28,6 +29,7 @@ function isDashboardItem(v: unknown): v is DashboardItem {
   if (typeof i.kind !== 'string') return false;
   if (!VALID_ITEM_KINDS.has(i.kind as DashboardItem['kind'])) return false;
   if (i.kind === 'routine' && typeof i.routineId !== 'string') return false;
+  if (i.kind === 'inbox-source' && typeof i.source !== 'string') return false;
   return true;
 }
 

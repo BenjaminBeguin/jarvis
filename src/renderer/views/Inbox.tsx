@@ -35,7 +35,26 @@ function readActiveProject(): string | null {
  * Used when the component is embedded inside a Dashboard section
  * (which already carries the section title).
  */
-export function Inbox({ compact = false }: { compact?: boolean } = {}) {
+export function Inbox({
+  compact = false,
+  sourceFilter,
+  maxItems,
+}: {
+  compact?: boolean;
+  /** When set, render only items from this `source` and drop every
+   *  strip / banner / nudge / settings affordance — Dashboard
+   *  uses this for the per-source pinned card. */
+  sourceFilter?: string;
+  /** When set, cap the visible item count. Used with `sourceFilter`
+   *  on the Dashboard so a card stays glanceable. */
+  maxItems?: number;
+} = {}) {
+  // When sourceFilter is set we render a stripped-down view: no
+  // header strips, no calibration nudges, no settings popover, no
+  // dismissed section, no group header (the Dashboard's section
+  // already provides a title). Items themselves still get the full
+  // snooze / open-url / action treatment.
+  const singleSource = sourceFilter !== undefined;
   const [items, setItems] = useState<InboxItem[]>([]);
   const [dismissed, setDismissed] = useState<InboxItem[]>([]);
   const [showDismissed, setShowDismissed] = useState(false);
@@ -246,6 +265,16 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
   };
 
   const filteredItems = useMemo(() => {
+    // 0. Per-source pin (Dashboard card): a literal source filter
+    //    overrides every other lens. Skip disabled-source / calendar-
+    //    window / project-scope filtering — the user pinned THIS
+    //    source explicitly, so we honor it as-is and just cap the
+    //    count.
+    if (singleSource) {
+      const matching = items.filter((it) => it.source === sourceFilter);
+      return maxItems != null ? matching.slice(0, maxItems) : matching;
+    }
+
     // 1. Drop items whose source is disabled in Settings → Inbox.
     const disabledSet = new Set(inboxPrefs.disabledSources);
     let next = items.filter((it) => !disabledSet.has(it.source));
@@ -270,10 +299,35 @@ export function Inbox({ compact = false }: { compact?: boolean } = {}) {
     //    stay; items belonging to OTHER projects are hidden.
     if (!filterByScope || !activeProject) return next;
     return next.filter((it) => !it.project || it.project === activeProject);
-  }, [items, filterByScope, activeProject, inboxPrefs]);
+  }, [items, filterByScope, activeProject, inboxPrefs, singleSource, sourceFilter, maxItems]);
 
   const grouped = useMemo(() => groupBySource(filteredItems), [filteredItems]);
   const hiddenCount = items.length - filteredItems.length;
+
+  if (singleSource) {
+    return (
+      <section className="inbox inbox--single-source">
+        {filteredItems.length === 0 ? (
+          <div className="inbox__empty inbox__empty--compact">
+            {refreshing ? 'Looking…' : 'Nothing here yet.'}
+          </div>
+        ) : (
+          <ul className="inbox__list">
+            {filteredItems.map((item) => (
+              <InboxRow
+                key={item.id}
+                item={item}
+                binding={bindings.get(item.id)}
+                onBind={(taskId) => bindings.bind(item.id, taskId)}
+                onForget={() => bindings.clear(item.id)}
+                paused={paused}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className={`inbox${compact ? ' inbox--compact' : ''}`}>
@@ -896,6 +950,58 @@ const SOURCE_ORDER: Record<string, { rank: number; label: string }> = {
   'tech-watch': { rank: 7.5, label: 'Tech watch · industry' },
   dedupe: { rank: 8, label: 'Possible duplicates' },
 };
+
+/**
+ * Sources the Dashboard's "+ Add item" picker offers as standalone
+ * cards (`kind: 'inbox-source'`). Keep these to user-facing feeds —
+ * exclude meta-sections (`smart`, `dedupe`) and ephemeral ones
+ * (`meeting-activity`). Hint text shows under the picker name.
+ *
+ * Adding a new source: register it in SOURCE_ORDER above for the
+ * Inbox-tab grouping, then add it here if it makes sense as a
+ * pinnable card.
+ */
+export const PINNABLE_INBOX_SOURCES: Array<{
+  source: string;
+  label: string;
+  hint: string;
+}> = [
+  {
+    source: 'tech-watch',
+    label: 'Tech watch',
+    hint: 'Daily RSS + newsletter digest from tech-watch.md',
+  },
+  {
+    source: 'linear',
+    label: 'Linear',
+    hint: 'Linear tickets waiting on you',
+  },
+  {
+    source: 'slack',
+    label: 'Slack',
+    hint: 'Slack threads waiting on you',
+  },
+  {
+    source: 'pr-review',
+    label: 'PRs awaiting review',
+    hint: 'Open PRs that need your review',
+  },
+  {
+    source: 'pr-comments',
+    label: 'PR comments',
+    hint: 'New comments on PRs you authored',
+  },
+  {
+    source: 'calendar',
+    label: 'Calendar items',
+    hint: 'Upcoming meetings (full timeline lives in the Calendar widget)',
+  },
+  {
+    source: 'reminders',
+    label: 'Reminders',
+    hint: 'Time-fired prompts queued via /remind',
+  },
+];
 
 function groupBySource(items: InboxItem[]): Group[] {
   const byKey = new Map<string, Group>();

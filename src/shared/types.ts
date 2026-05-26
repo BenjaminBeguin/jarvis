@@ -449,6 +449,20 @@ export type DashboardItem =
       /** Cap how many rows the widget shows. Default 6. */
       limit?: number;
     }
+  | {
+      /** Pinned card showing items from a single inbox source —
+       *  Tech watch, Linear, Slack, etc. Renders the Inbox component
+       *  in stripped-down "single-source" mode: no header strips, no
+       *  calibration nudges, no settings, no dismissed accordion.
+       *  Use this when you want a glanceable per-source card on the
+       *  dashboard instead of the firehose Inbox widget. */
+      kind: 'inbox-source';
+      /** Which `InboxItem.source` to show. See `PINNABLE_INBOX_SOURCES`
+       *  in `src/renderer/views/Inbox.tsx`. */
+      source: string;
+      /** Cap how many rows the card shows. Default 6. */
+      limit?: number;
+    }
   | { kind: 'routine'; routineId: string }
   | {
       /** Unified time-sorted view: calendar events, reminders, scheduled

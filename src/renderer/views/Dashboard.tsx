@@ -12,7 +12,7 @@ import type {
   SkillSummary,
 } from '../../shared/types';
 import { DraftsWidget } from './DraftsWidget';
-import { Inbox } from './Inbox';
+import { Inbox, PINNABLE_INBOX_SOURCES } from './Inbox';
 import { MarkdownDoc } from './MarkdownText';
 import {
   ScheduledItemDetail,
@@ -440,6 +440,9 @@ function ItemView({
       )}
       {item.kind === 'inbox' && <Inbox compact />}
       {item.kind === 'drafts' && <DraftsWidget limit={item.limit ?? 6} />}
+      {item.kind === 'inbox-source' && (
+        <Inbox compact sourceFilter={item.source} maxItems={item.limit ?? 6} />
+      )}
       {item.kind === 'routine' && <RoutineItem routineId={item.routineId} />}
       {item.kind === 'calendar' && (
         <CalendarTimeline horizon={item.horizon ?? 'week'} />
@@ -1081,6 +1084,17 @@ function ItemPicker({
   const hasDrafts = existing.some((it) => it.kind === 'drafts');
   const hasCalendar = existing.some((it) => it.kind === 'calendar');
   const hasSpend = existing.some((it) => it.kind === 'spend');
+  const pinnedSourceIds = new Set(
+    existing
+      .filter(
+        (it): it is Extract<DashboardItem, { kind: 'inbox-source' }> =>
+          it.kind === 'inbox-source',
+      )
+      .map((it) => it.source),
+  );
+  const pickableSources = PINNABLE_INBOX_SOURCES.filter(
+    (s) => !pinnedSourceIds.has(s.source),
+  );
   const pinnedRoutineIds = new Set(
     existing
       .filter((it): it is Extract<DashboardItem, { kind: 'routine' }> => it.kind === 'routine')
@@ -1133,6 +1147,16 @@ function ItemPicker({
           </div>
         </button>
       )}
+      {pickableSources.map((s) => (
+        <button
+          key={`inbox-source-${s.source}`}
+          className="dash-picker__row"
+          onClick={() => onPick({ kind: 'inbox-source', source: s.source })}
+        >
+          <div className="dash-picker__name">{s.label}</div>
+          <div className="dash-picker__hint">{s.hint}</div>
+        </button>
+      ))}
       {pickableRoutines.length === 0 ? (
         <div className="dash-picker__empty">
           No routines available. Create one in the Routines tab first.
