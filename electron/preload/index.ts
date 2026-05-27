@@ -473,6 +473,13 @@ const api = {
   writeSpeedBias: (value: string): Promise<string> =>
     ipcRenderer.invoke(IpcChannels.writeSpeedBias, value),
 
+  readVoiceAlwaysSpeak: (): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.readVoiceAlwaysSpeak),
+  writeVoiceAlwaysSpeak: (value: boolean): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.writeVoiceAlwaysSpeak, value),
+  onVoiceAlwaysSpeakChanged: (listener: Listener<boolean>): Unsubscribe =>
+    subscribe(IpcChannels.readVoiceAlwaysSpeak, listener),
+
   readInboxPrefs: (): Promise<InboxPrefs> =>
     ipcRenderer.invoke(IpcChannels.readInboxPrefs),
   writeInboxPrefs: (prefs: InboxPrefs): Promise<void> =>

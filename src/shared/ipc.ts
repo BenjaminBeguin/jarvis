@@ -138,6 +138,10 @@ export const IpcChannels = {
   writeNotificationPrefs: 'notif:write',
   readSpeedBias: 'speed:read',
   writeSpeedBias: 'speed:write',
+
+  /** Read / write the "always read replies aloud" global toggle. */
+  readVoiceAlwaysSpeak: 'voice:always-speak:read',
+  writeVoiceAlwaysSpeak: 'voice:always-speak:write',
   notificationPrefsChanged: 'notif:changed',
 
   readInboxPrefs: 'inboxPrefs:read',

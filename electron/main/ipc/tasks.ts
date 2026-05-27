@@ -3,7 +3,7 @@ import { ipcMain } from 'electron';
 import { IpcChannels } from '@shared/ipc';
 import type { LaunchTaskRequest } from '@shared/types';
 
-import { loadCostPrefs, saveCostPrefs } from '../auth.js';
+import { loadCostPrefs, loadVoiceAlwaysSpeak, saveCostPrefs } from '../auth.js';
 import {
   getCostBreakdown,
   getCostSummary,
@@ -38,7 +38,15 @@ export function registerTasksIpc({
           'terminal, then paste the token in Setup — or switch to API-key mode.',
       );
     }
-    return runner.launch({ ...req, origin: asTaskOrigin(req.origin) });
+    // Apply "always read aloud" preference when the caller didn't
+    // explicitly set speakReply. Lets the global toggle drive ALL
+    // task launches from the Mac (palette, conversation composer,
+    // module dispatches) without each callsite threading the value.
+    const next: LaunchTaskRequest = { ...req, origin: asTaskOrigin(req.origin) };
+    if (next.speakReply === undefined && loadVoiceAlwaysSpeak()) {
+      next.speakReply = true;
+    }
+    return runner.launch(next);
   });
 
   ipcMain.handle(IpcChannels.abortTask, (_e, taskId: string) => {

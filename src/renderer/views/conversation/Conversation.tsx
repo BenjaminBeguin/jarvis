@@ -91,14 +91,30 @@ export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const [showSystem, setShowSystem] = useState(mode === 'full');
-  /** Per-conversation toggle: when on, each completed assistant
-   *  turn is read aloud via macOS `say`. Reset per task so the
-   *  preference doesn't bleed across conversations. */
-  const [speakReplies, setSpeakReplies] = useState(false);
+  /** Toggle: when on, each completed assistant turn is read aloud
+   *  via macOS `say`. Reads the global "always read aloud"
+   *  preference on mount + on changes from other windows, so
+   *  flipping it in Settings (or in a sibling conversation) is
+   *  reflected everywhere. Toggling the icon writes back to the
+   *  global pref — the toggle is the source of truth. */
+  const [speakReplies, setSpeakRepliesLocal] = useState(false);
   useEffect(() => {
-    setSpeakReplies(false);
+    void window.jarvis.readVoiceAlwaysSpeak().then(setSpeakRepliesLocal);
+    const off = window.jarvis.onVoiceAlwaysSpeakChanged(setSpeakRepliesLocal);
+    return () => {
+      off?.();
+    };
+  }, []);
+  useEffect(() => {
+    // Stop any in-flight TTS when switching conversations so we
+    // don't keep talking about a thread the user already moved away
+    // from. The preference itself stays.
     void window.jarvis.stopSpeaking();
   }, [taskId]);
+  const setSpeakReplies = (next: boolean) => {
+    setSpeakRepliesLocal(next);
+    void window.jarvis.writeVoiceAlwaysSpeak(next);
+  };
   /** Index of the most recently-spoken `result` item in the chat
    *  timeline. Used to identify which assistant text belongs to a
    *  fresh turn so we don't replay history. */
@@ -355,7 +371,7 @@ export function Conversation({ taskId, mode = 'cozy', onSelectTask }: Props) {
           resuming={canResumeReply}
           midTurn={canPingMidTurn}
           speakReplies={speakReplies}
-          onToggleSpeakReplies={() => setSpeakReplies((v) => !v)}
+          onToggleSpeakReplies={() => setSpeakReplies(!speakReplies)}
         />
       )}
     </section>

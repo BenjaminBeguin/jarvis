@@ -7,9 +7,11 @@ import {
   loadInboxPrefs,
   loadNotificationPrefs,
   loadSpeedBias,
+  loadVoiceAlwaysSpeak,
   saveInboxPrefs,
   saveNotificationPrefs,
   saveSpeedBias,
+  saveVoiceAlwaysSpeak,
 } from '../auth.js';
 import { asSpeedBias } from '../model-tiers.js';
 import type { IpcDeps } from './types.js';
@@ -78,6 +80,26 @@ export function registerPreferencesIpc({ preferences, activity }: IpcDeps): void
         kind: 'speed-bias.changed',
         label: `Speed bias · ${next}`,
         detail: { speedBias: next },
+      });
+      return next;
+    },
+  );
+
+  ipcMain.handle(IpcChannels.readVoiceAlwaysSpeak, () =>
+    loadVoiceAlwaysSpeak(),
+  );
+  ipcMain.handle(
+    IpcChannels.writeVoiceAlwaysSpeak,
+    (_e, value: unknown) => {
+      const next = value === true;
+      saveVoiceAlwaysSpeak(next);
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send(IpcChannels.readVoiceAlwaysSpeak, next);
+      }
+      activity.record({
+        kind: 'voice.always-speak.changed',
+        label: `Always read aloud · ${next ? 'on' : 'off'}`,
+        detail: { value: next },
       });
       return next;
     },

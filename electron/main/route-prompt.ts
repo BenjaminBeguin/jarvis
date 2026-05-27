@@ -1,5 +1,6 @@
 import type { AuthMode, RoutePromptResult, SessionConfig, TaskOrigin } from '@shared/types';
 
+import { loadVoiceAlwaysSpeak } from './auth.js';
 import { matchSkillIntent, parseIntent } from './intent-router.js';
 import type { ModuleRegistry } from './module-registry.js';
 import type { ReminderStore } from './reminders.js';
@@ -89,11 +90,21 @@ export async function routePrompt(
   // inventory bootstrap.
   const skillId = matchSkillIntent(intent.body);
 
+  // "Always read replies aloud" preference: if the caller didn't
+  // explicitly set speakReply, fall back to the global setting.
+  // Lets the user enable read-aloud once in Settings → Voice and
+  // have it apply to every palette / voice / module dispatch.
+  const baseConfig = opts.sessionConfig ?? {};
+  const sessionConfig: SessionConfig =
+    baseConfig.speakReply === undefined && loadVoiceAlwaysSpeak()
+      ? { ...baseConfig, speakReply: true }
+      : baseConfig;
+
   const task = deps.runner.launch({
     prompt: intent.body,
     origin: asTaskOrigin(opts.origin),
     ...(skillId ? { skillId } : {}),
-    ...(opts.sessionConfig ?? {}),
+    ...sessionConfig,
     ...(opts.projectName !== undefined ? { projectName: opts.projectName } : {}),
   });
   return { kind: 'task', task };

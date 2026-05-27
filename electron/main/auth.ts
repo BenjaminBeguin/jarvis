@@ -64,6 +64,13 @@ interface PersistedConfig {
    *  skill down a tier; `force-<tier>` clamps everything. See
    *  electron/main/model-tiers.ts. */
   speedBias?: string;
+  /** Global default for "read each completed reply aloud". When
+   *  true, every task launched from the Mac (palette free-text,
+   *  conversation composer, voice orb, /ask) gets speakReply:true
+   *  unless the caller explicitly overrides. The conversation
+   *  composer's per-conversation toggle starts from this default
+   *  and the user can flip it for any single conversation. */
+  voiceAlwaysSpeak?: boolean;
 }
 
 const CONFIG_PATH = join(homedir(), '.jarvis', 'config.json');
@@ -298,6 +305,23 @@ export function loadPaused(): boolean {
  */
 export function savePaused(value: boolean): void {
   saveAppMode(value ? 'paused' : 'running');
+}
+
+/**
+ * "Always read replies aloud" global preference. Default false —
+ * voice-loop and any explicit `speakReply:true` in SessionConfig
+ * still work without it. When true, every Mac-initiated task gets
+ * its completed reply spoken via macOS TTS unless the caller
+ * explicitly opts out.
+ */
+export function loadVoiceAlwaysSpeak(): boolean {
+  const cfg = readConfig();
+  return cfg.voiceAlwaysSpeak === true;
+}
+
+export function saveVoiceAlwaysSpeak(value: boolean): void {
+  const cfg = readConfig();
+  writeConfig({ ...cfg, voiceAlwaysSpeak: value === true });
 }
 
 /**
