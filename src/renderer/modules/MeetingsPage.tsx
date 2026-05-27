@@ -12,6 +12,13 @@ interface MeetingFile {
   mtimeMs: number;
   title: string;
   durationSec: number | null;
+  /** Engine that produced the transcript (frontmatter
+   *  `transcribed_by:`). Surfaced as a small label so the user can
+   *  spot when a meeting fell back to local Whisper vs ran on
+   *  Deepgram. Null when the frontmatter predates this field. */
+  transcribedBy: string | null;
+  /** Speaker count from Deepgram diarization, when available. */
+  speakerCount: number | null;
   /** First non-blank line of the transcript, ~120 chars. Used as the
    *  row's collapsed preview so the user can recall what a meeting
    *  was without expanding. */
@@ -49,6 +56,28 @@ function firstLinePreview(body: string, max = 140): string | null {
 
 const PUSH_PROMPT_PREFIX =
   'I just finished this meeting. Help me act on it — pull out concrete action items with owners and deadlines where stated, flag anything unclear, and suggest follow-ups I should write today.\n\n---\n\n';
+
+/** Bucket the raw `transcribed_by` frontmatter into one of three
+ *  visual styles so the row badge reads at a glance: cloud (deepgram),
+ *  local (whisper), or hybrid (live-chunk stitched). */
+function engineKind(raw: string): 'cloud' | 'local' | 'hybrid' | 'other' {
+  const v = raw.toLowerCase();
+  if (v.startsWith('deepgram')) return 'cloud';
+  if (v.startsWith('whisper')) return 'local';
+  if (v.startsWith('live-chunks')) return 'hybrid';
+  return 'other';
+}
+
+/** Short label for the row badge. Hides verbose `(fallback: …)`
+ *  suffixes that the meeting-recorder writes when Deepgram failed
+ *  and Whisper took over. */
+function engineLabel(raw: string): string {
+  const trimmed = raw.split(/\s*\(/)[0]?.trim() ?? raw;
+  if (trimmed.startsWith('deepgram')) return 'deepgram';
+  if (trimmed.startsWith('whisper-local')) return 'local whisper';
+  if (trimmed.startsWith('live-chunks')) return 'live chunks';
+  return trimmed;
+}
 
 /**
  * Meetings index. Visually matches Routines / Workflows pages —
@@ -88,6 +117,10 @@ export function MeetingsPage() {
             title: meta['title'] || entry.name.replace(/\.md$/, ''),
             durationSec: meta['duration_seconds']
               ? parseInt(meta['duration_seconds'], 10)
+              : null,
+            transcribedBy: meta['transcribed_by'] ?? null,
+            speakerCount: meta['speaker_count']
+              ? parseInt(meta['speaker_count'], 10)
               : null,
             preview: firstLinePreview(body),
           };
@@ -280,6 +313,20 @@ function MeetingRow({
                   {' · '}
                   {Math.floor(f.durationSec / 60)}m {f.durationSec % 60}s
                 </>
+              )}
+              {f.transcribedBy && (
+                <span
+                  className={`mt-row__engine mt-row__engine--${engineKind(f.transcribedBy)}`}
+                  title={`Transcribed by ${f.transcribedBy}${
+                    f.speakerCount && f.speakerCount > 1
+                      ? ` · ${f.speakerCount} speakers`
+                      : ''
+                  }`}
+                >
+                  {' · '}
+                  {engineLabel(f.transcribedBy)}
+                  {f.speakerCount && f.speakerCount > 1 && ` · ${f.speakerCount} voices`}
+                </span>
               )}
             </span>
           </div>

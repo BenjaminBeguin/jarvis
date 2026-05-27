@@ -141,12 +141,98 @@ export async function transcribePcm(pcm: Float32Array): Promise<string> {
   try {
     const text = await call<string>({ type: 'transcribe', pcm });
     emitProgress({ status: 'done' });
-    return text;
+    return collapseRepetitions(text);
   } catch (err) {
     emitProgress({ status: 'done' });
     console.error('[transcribe] failed', err);
     throw err;
   }
+}
+
+/**
+ * Whisper-base has a well-known failure mode: on quiet / silence /
+ * music it can latch onto a short phrase and loop it dozens of
+ * times ("be going to be going to be going..."). The model output
+ * is irrecoverable as content but easy to detect: any n-gram (2 to
+ * ~10 words) repeated 4+ times in a row is almost certainly a
+ * hallucination.
+ *
+ * We collapse those runs to a single occurrence followed by a
+ * marker so the reader knows something was elided rather than
+ * spoken once. The non-looping portions of the transcript are left
+ * unchanged.
+ *
+ * Cheap O(n*k) pass — words ≤ ~30 000 for an hour of dense talk,
+ * k ≤ 10. Runs in single-digit ms on real transcripts.
+ *
+ * Exported so the same scrub can be applied to live-chunk
+ * stitched transcripts in the renderer too if needed.
+ */
+export function collapseRepetitions(text: string): string {
+  if (!text || text.length < 80) return text;
+  // Tokenise but preserve original whitespace + punctuation by
+  // recording word offsets. Simpler approach: split on whitespace,
+  // detect repeats, rebuild with single spaces. We lose original
+  // formatting nuance but Whisper output is already a flat string.
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length < 16) return text;
+  const norm = words.map((w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ''));
+
+  // For each candidate n-gram size (largest first to catch big
+  // loops before short ones inside them), scan for consecutive
+  // repeats ≥ MIN_REPEATS.
+  const MIN_REPEATS = 4;
+  const MAX_N = 10;
+  const removed: boolean[] = new Array(words.length).fill(false);
+  let collapsedCount = 0;
+  for (let n = MAX_N; n >= 2; n--) {
+    let i = 0;
+    while (i + n * MIN_REPEATS <= words.length) {
+      if (removed[i]) { i++; continue; }
+      // Count how many times the n-gram starting at i repeats
+      // contiguously (allowing for already-removed positions to
+      // be skipped — they don't break the run).
+      let repeats = 1;
+      let cursor = i + n;
+      while (cursor + n <= words.length) {
+        // Skip over already-removed positions.
+        while (cursor < words.length && removed[cursor]) cursor++;
+        if (cursor + n > words.length) break;
+        let match = true;
+        for (let k = 0; k < n; k++) {
+          if (norm[i + k] !== norm[cursor + k]) { match = false; break; }
+          if (!norm[i + k]) { match = false; break; }
+        }
+        if (!match) break;
+        repeats++;
+        cursor += n;
+      }
+      if (repeats >= MIN_REPEATS) {
+        // Mark everything from i+n through the last copy as removed.
+        for (let k = i + n; k < cursor; k++) removed[k] = true;
+        collapsedCount++;
+        i = cursor;
+      } else {
+        i++;
+      }
+    }
+  }
+  if (collapsedCount === 0) return text;
+  const out: string[] = [];
+  let lastWasRemoved = false;
+  for (let i = 0; i < words.length; i++) {
+    if (removed[i]) {
+      if (!lastWasRemoved) out.push('… [repeated phrase elided] …');
+      lastWasRemoved = true;
+      continue;
+    }
+    lastWasRemoved = false;
+    out.push(words[i]!);
+  }
+  console.log(
+    `[transcribe] collapsed ${collapsedCount} repetition loop(s) from local Whisper output`,
+  );
+  return out.join(' ');
 }
 
 /**

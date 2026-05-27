@@ -11061,6 +11061,33 @@ button:disabled:hover {
   color: var(--danger, #ff6b6b);
 }
 
+/* Transcription engine badge — small tag next to the duration in
+   the row meta so the user can spot at a glance whether this meeting
+   ran on Deepgram (cloud, diarized) or local Whisper (quick fallback,
+   prone to loops). Color-coded so the cloud path stands out as the
+   preferred. */
+.mt-row__engine {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mt-row__engine--cloud {
+  color: var(--accent);
+}
+
+.mt-row__engine--local {
+  color: var(--warn);
+}
+
+.mt-row__engine--hybrid,
+.mt-row__engine--other {
+  color: var(--text-faint);
+}
+
 .mt-row__body {
   border: 1px solid var(--border-strong);
   border-top: 0;
