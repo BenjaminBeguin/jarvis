@@ -92,6 +92,14 @@ export interface HttpDeps {
    *  The default wiring stops an active recording, but the user can
    *  opt out via the meeting-recorder module setting. */
   onMeetingEnded(payload: { vendor?: string; url?: string }): void;
+  /** Fired on every Chrome-extension active-tab heartbeat (tab
+   *  focus change, navigation, or 90s timer). Backs the ambient
+   *  "currently viewing" context Jarvis injects into Claude turns. */
+  onBrowserActivity(payload: { url: string; title: string; at: number }): void;
+  /** Snapshot of the user's browser-tracking settings from the
+   *  Browser module config. The extension polls this so flipping
+   *  the toggle on the Mac propagates to the source. */
+  getBrowserSettings(): { activityTracking: boolean; activityExcludes: string[] };
   /** Snapshot of the active recording — pushed to SSE clients on
    *  connect AND on every state change. */
   getMeetingState(): MeetingRecordingSnapshot;
@@ -390,6 +398,37 @@ async function handle(
     const vendor =
       typeof body?.vendor === 'string' ? body.vendor.trim() : undefined;
     deps.onMeetingDetected({ source, title, url, vendor });
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  // GET /v1/browser/settings — Chrome extension pulls the user's
+  // activity-tracking preferences (opt-in flag + URL excludes) from
+  // the Mac module config, so flipping the toggle on the Mac
+  // propagates to the extension without manual popup edits.
+  if (req.method === 'GET' && path === '/v1/browser/settings') {
+    const cfg = deps.getBrowserSettings();
+    sendJson(res, 200, cfg);
+    return;
+  }
+
+  // POST /v1/browser/activity — Chrome extension reporting the
+  // currently-active tab. Routes into the in-memory ring buffer
+  // that the browser-activity context provider reads on every
+  // task launch. No-ops silently when the user has the Browser
+  // module's activityTracking toggle off (the extension also
+  // respects that — this endpoint is the second wall).
+  if (req.method === 'POST' && path === '/v1/browser/activity') {
+    const body = await readJson(req);
+    const url = typeof body?.url === 'string' ? body.url : '';
+    const title = typeof body?.title === 'string' ? body.title : '';
+    const at =
+      typeof body?.at === 'number' && body.at > 0 ? body.at : Date.now();
+    if (!url || !/^https?:\/\//i.test(url)) {
+      sendJson(res, 400, { error: 'invalid url' });
+      return;
+    }
+    deps.onBrowserActivity({ url, title, at });
     sendJson(res, 200, { ok: true });
     return;
   }

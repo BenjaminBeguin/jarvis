@@ -44,6 +44,7 @@ import {
   savePaused,
 } from './auth.js';
 import { awaitTurnResult } from './await-turn.js';
+import { recordBrowserActivity } from './browser-activity.js';
 import { notifier } from './notifier.js';
 import { routePrompt } from './route-prompt.js';
 import { BriefingsStore } from './briefings.js';
@@ -103,6 +104,7 @@ import { ModuleRegistry } from './module-registry.js';
 import { DashboardStore } from './dashboard-store.js';
 import { PreferencesStore } from './preferences-store.js';
 import { askModule } from './modules/ask.js';
+import { browserModule } from './modules/browser.js';
 import { calendarModule } from './modules/calendar.js';
 import { claudeCodeWatchModule } from './modules/claude-code-watch.js';
 import { dailyLearnModule } from './modules/daily-learn.js';
@@ -147,6 +149,7 @@ import { voiceModule } from './modules/voice/index.js';
 import {
   activeProjectProfileProvider,
   activeProjectProvider,
+  browserActivityProvider,
   inboxHighlightsProvider,
   projectsProvider,
   recentTaskProvider,
@@ -633,6 +636,7 @@ userContext.register(activeProjectProfileProvider(userContext, projects));
 userContext.register(projectsProvider(projects));
 userContext.register(inboxHighlightsProvider(inbox));
 userContext.register(recentTaskProvider(runner));
+userContext.register(browserActivityProvider);
 
 // Built-in inbox sources — all direct JS, no agent fires.
 //   - reminders / failed-routines: local stores
@@ -1621,6 +1625,7 @@ app.whenReady().then(async () => {
   await modules.register(jarvisSelfGradeModule);
   await modules.register(morningBriefModule);
   await modules.register(askModule);
+  await modules.register(browserModule);
   await modules.register(telegramBotModule);
   await modules.register(voiceModule);
 
@@ -1905,6 +1910,29 @@ app.whenReady().then(async () => {
       getStatus: () => getTrayMenuState(),
       onMeetingDetected: onExternalMeetingDetected,
       onMeetingEnded: onExternalMeetingEnded,
+      onBrowserActivity: (payload) => {
+        // Second-wall privacy gate — the extension also reads its
+        // local activityTracking flag and stops sending when off,
+        // but if the user toggled this OFF here and the extension
+        // hasn't refreshed yet, we silently drop incoming events
+        // until the extension catches up via /v1/browser/settings.
+        const cfg = loadModuleSettings('browser');
+        if (cfg.activityTracking !== true) return;
+        recordBrowserActivity(payload);
+      },
+      getBrowserSettings: () => {
+        const cfg = loadModuleSettings('browser');
+        const excludesRaw =
+          typeof cfg.activityExcludes === 'string' ? cfg.activityExcludes : '';
+        const activityExcludes = excludesRaw
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        return {
+          activityTracking: cfg.activityTracking === true,
+          activityExcludes,
+        };
+      },
       getMeetingState: () => currentMeetingState,
       subscribeMeetingState: subscribeMeetingState,
       onMeetingControl: onMeetingControlFromHttp,
@@ -1941,6 +1969,29 @@ app.whenReady().then(async () => {
         getStatus: () => getTrayMenuState(),
         onMeetingDetected: onExternalMeetingDetected,
       onMeetingEnded: onExternalMeetingEnded,
+      onBrowserActivity: (payload) => {
+        // Second-wall privacy gate — the extension also reads its
+        // local activityTracking flag and stops sending when off,
+        // but if the user toggled this OFF here and the extension
+        // hasn't refreshed yet, we silently drop incoming events
+        // until the extension catches up via /v1/browser/settings.
+        const cfg = loadModuleSettings('browser');
+        if (cfg.activityTracking !== true) return;
+        recordBrowserActivity(payload);
+      },
+      getBrowserSettings: () => {
+        const cfg = loadModuleSettings('browser');
+        const excludesRaw =
+          typeof cfg.activityExcludes === 'string' ? cfg.activityExcludes : '';
+        const activityExcludes = excludesRaw
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        return {
+          activityTracking: cfg.activityTracking === true,
+          activityExcludes,
+        };
+      },
       getMeetingState: () => currentMeetingState,
       subscribeMeetingState: subscribeMeetingState,
       onMeetingControl: onMeetingControlFromHttp,

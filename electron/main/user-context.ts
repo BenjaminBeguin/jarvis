@@ -401,3 +401,57 @@ export const focusModeProvider: UserContextProvider = {
     }
   },
 };
+
+/**
+ * Recent browser activity reported by the Chrome extension.
+ * Surfaces what the user was just looking at so the agent can
+ * connect "summarise this" / "what should I do next" to the
+ * actual page (PR, Linear ticket, doc) in front of them.
+ *
+ * Reads from the in-memory ring buffer in browser-activity.ts.
+ * Last 10 minutes, deduped by URL, capped at 5 entries — enough
+ * to ground "what I'm working on" without bloating the system
+ * prompt with every tab the user touched today.
+ *
+ * No signal when the user has the Browser module's activity
+ * tracking off — the extension stops sending, the buffer empties,
+ * and this provider returns null (the context block omits the
+ * section entirely).
+ */
+export const browserActivityProvider: UserContextProvider = {
+  name: 'browser-activity',
+  build() {
+    // Lazy require to dodge the circular-import risk between
+    // user-context (system-prompt builder) and main bootstrap.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('./browser-activity.js') as typeof import('./browser-activity.js');
+    const events = mod.readRecentActivity(10 * 60_000);
+    if (events.length === 0) return null;
+    const seen = new Set<string>();
+    const recent: typeof events = [];
+    // Walk newest-first, take the first 5 unique URLs.
+    for (let i = events.length - 1; i >= 0 && recent.length < 5; i--) {
+      const e = events[i]!;
+      if (seen.has(e.url)) continue;
+      seen.add(e.url);
+      recent.push(e);
+    }
+    const now = Date.now();
+    const lines = recent.map((e) => {
+      const ageMin = Math.max(0, Math.round((now - e.at) / 60_000));
+      const when = ageMin === 0 ? 'just now' : `${ageMin}m ago`;
+      const title = e.title?.trim() || hostFromUrl(e.url);
+      const display = title.length > 80 ? `${title.slice(0, 79)}…` : title;
+      return `  - ${display} (${hostFromUrl(e.url)} · ${when})`;
+    });
+    return `- Recent browsing (last 10m):\n${lines.join('\n')}`;
+  },
+};
+
+function hostFromUrl(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
