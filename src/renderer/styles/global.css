@@ -12395,19 +12395,25 @@ button:disabled:hover {
 }
 
 .routine-editor__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
-  border: 1px solid var(--border-strong);
-  color: var(--text-dim);
-  width: 26px;
-  height: 26px;
+  border: 0;
+  color: var(--text-faint);
+  width: 28px;
+  height: 28px;
   padding: 0;
-  font-size: 16px;
-  line-height: 1;
+  border-radius: 999px;
+  font-size: 18px;
+  line-height: 0;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .routine-editor__close:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+  background: rgba(150, 195, 220, 0.12);
+  color: var(--text);
 }
 
 .routine-editor label {
@@ -14987,21 +14993,26 @@ button:disabled:hover {
   position: absolute;
   top: 12px;
   right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
-  color: var(--text-dim);
-  border: 1px solid var(--border-strong);
+  color: var(--text-faint);
+  border: 0;
   width: 28px;
   height: 28px;
-  border-radius: 2px;
+  border-radius: 999px;
   font-size: 18px;
-  line-height: 1;
+  line-height: 0;
+  padding: 0;
   cursor: pointer;
   font-family: inherit;
   z-index: 1;
+  transition: background 120ms ease, color 120ms ease;
 }
 .task-overlay__close:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+  background: rgba(150, 195, 220, 0.12);
+  color: var(--text);
 }
 .task-overlay__empty {
   padding: 32px;
@@ -15073,21 +15084,33 @@ button:disabled:hover {
   letter-spacing: 0.08em;
 }
 .module-settings-modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
-  color: var(--text-dim);
-  border: 1px solid var(--border-strong);
+  color: var(--text-faint);
+  border: 0;
   width: 28px;
   height: 28px;
-  border-radius: 2px;
+  border-radius: 999px;
+  /* Use a fixed glyph height + line-height: 0 so the multiplication
+     sign sits dead-centre regardless of the font's vertical metrics.
+     The framed-box approach + line-height:1 was floating the X up
+     because Inter's × glyph isn't centered in its em-box. */
   font-size: 18px;
-  line-height: 1;
+  line-height: 0;
+  padding: 0;
   cursor: pointer;
   font-family: inherit;
   flex-shrink: 0;
+  transition: background 120ms ease, color 120ms ease;
 }
 .module-settings-modal__close:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+  background: rgba(150, 195, 220, 0.12);
+  color: var(--text);
+}
+.module-settings-modal__close:active {
+  background: rgba(150, 195, 220, 0.2);
 }
 .module-settings-modal__desc {
   margin: 0;
