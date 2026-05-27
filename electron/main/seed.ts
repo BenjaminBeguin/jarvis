@@ -59,7 +59,9 @@ const WORKFLOW_STALE_DETECTORS: Record<
   //   v6: noise-v5 marker (default query is DMs +
   //       mentions only; users add channel branches
   //       manually).
-  // Latest sentinel is noise-v5. NOTE: the rewrite overwrites
+  //   v7: noise-v6 marker (aggressive closure filter +
+  //       thread dedupe + question-detection gate).
+  // Latest sentinel is noise-v6. NOTE: the rewrite overwrites
   // user-edited query bodies — if the user appended OR-branches
   // for tracked channels, those get wiped on the next launch.
   // Acceptable for now; longer-term we want a per-user "tracked
@@ -73,7 +75,7 @@ const WORKFLOW_STALE_DETECTORS: Record<
     const transform = def.pipeline.find((n) => n.type === 'transform');
     if (transform) {
       const fn = (transform.params as { fn?: string })?.fn;
-      if (typeof fn === 'string' && !fn.includes('noise-v5')) return true;
+      if (typeof fn === 'string' && !fn.includes('noise-v6')) return true;
     }
     return (
       isUntouchedShorthandCron(def, '5m') ||
