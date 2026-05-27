@@ -53,6 +53,10 @@ export const IpcChannels = {
   setTelegramBotToken: 'app:setTelegramBotToken',
   clearTelegramBotToken: 'app:clearTelegramBotToken',
   hasTelegramBotToken: 'app:hasTelegramBotToken',
+
+  setDeepgramApiKey: 'app:setDeepgramApiKey',
+  clearDeepgramApiKey: 'app:clearDeepgramApiKey',
+  hasDeepgramApiKey: 'app:hasDeepgramApiKey',
   openObservatory: 'app:openObservatory',
   observatoryFocusTask: 'observatory:focusTask',
   shellNavigate: 'shell:navigate',

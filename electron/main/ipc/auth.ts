@@ -16,12 +16,15 @@ import {
 import {
   clearAnthropicApiKey,
   clearClaudeCodeOAuthToken,
+  clearDeepgramApiKey,
   clearTelegramBotToken,
   getAnthropicApiKey,
   getClaudeCodeOAuthToken,
+  getDeepgramApiKey,
   getTelegramBotToken,
   setAnthropicApiKey,
   setClaudeCodeOAuthToken,
+  setDeepgramApiKey,
   setTelegramBotToken,
 } from '../secrets.js';
 import { refreshTrayMenu } from '../tray.js';
@@ -159,6 +162,29 @@ export function registerAuthIpc({ auth, activity, modules }: IpcDeps): void {
 
   ipcMain.handle(IpcChannels.hasTelegramBotToken, async () => {
     return !!(await getTelegramBotToken());
+  });
+
+  ipcMain.handle(IpcChannels.setDeepgramApiKey, async (_e, value: string) => {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      throw new Error('Deepgram API key cannot be empty');
+    }
+    await setDeepgramApiKey(value.trim());
+    activity.record({
+      kind: 'deepgram.key-set',
+      label: 'Deepgram API key saved to Keychain',
+    });
+  });
+
+  ipcMain.handle(IpcChannels.clearDeepgramApiKey, async () => {
+    await clearDeepgramApiKey();
+    activity.record({
+      kind: 'deepgram.key-cleared',
+      label: 'Deepgram API key removed from Keychain',
+    });
+  });
+
+  ipcMain.handle(IpcChannels.hasDeepgramApiKey, async () => {
+    return !!(await getDeepgramApiKey());
   });
 
   ipcMain.handle(IpcChannels.setAuthMode, async (_e, mode: AuthMode) => {

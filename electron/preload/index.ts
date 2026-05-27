@@ -181,6 +181,13 @@ const api = {
   hasTelegramBotToken: (): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.hasTelegramBotToken),
 
+  setDeepgramApiKey: (value: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.setDeepgramApiKey, value),
+  clearDeepgramApiKey: (): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.clearDeepgramApiKey),
+  hasDeepgramApiKey: (): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.hasDeepgramApiKey),
+
   openObservatory: (taskId?: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.openObservatory, taskId),
   onObservatoryFocusTask: (listener: Listener<string>): Unsubscribe =>

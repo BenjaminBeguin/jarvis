@@ -8,6 +8,7 @@ const ACCOUNT_SUBSCRIPTION_TOKEN = 'claude-code-subscription-token';
 const ACCOUNT_HTTP_API_TOKEN = 'jarvis-http-api-token';
 const ACCOUNT_TELEGRAM_BOT_TOKEN = 'telegram-bot-token';
 const ACCOUNT_VAPID = 'jarvis-vapid';
+const ACCOUNT_DEEPGRAM_API_KEY = 'voice-deepgram-api-key';
 
 export async function getAnthropicApiKey(): Promise<string | null> {
   return keytar.getPassword(SERVICE, ACCOUNT_API_KEY);
@@ -77,6 +78,27 @@ export async function setTelegramBotToken(value: string): Promise<void> {
 
 export async function clearTelegramBotToken(): Promise<void> {
   await keytar.deletePassword(SERVICE, ACCOUNT_TELEGRAM_BOT_TOKEN);
+}
+
+/**
+ * Deepgram API key — drives the cloud transcription path
+ * (transcribe-deepgram.ts). Used for meetings when the voice
+ * module's `transcribeProvider` setting is set to 'deepgram'.
+ * Without a key the meeting-recorder falls back to local Whisper.
+ *
+ * Get one at https://console.deepgram.com/ — there's a free tier
+ * with $200 of credit on signup, which is ~775 hours of audio.
+ */
+export async function getDeepgramApiKey(): Promise<string | null> {
+  return keytar.getPassword(SERVICE, ACCOUNT_DEEPGRAM_API_KEY);
+}
+
+export async function setDeepgramApiKey(value: string): Promise<void> {
+  await keytar.setPassword(SERVICE, ACCOUNT_DEEPGRAM_API_KEY, value);
+}
+
+export async function clearDeepgramApiKey(): Promise<void> {
+  await keytar.deletePassword(SERVICE, ACCOUNT_DEEPGRAM_API_KEY);
 }
 
 /**

@@ -1,8 +1,12 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { loadModuleSettings } from '../auth.js';
+import { transcribeDeepgram } from './voice/transcribe-deepgram.js';
 import { transcribePcm } from './voice/transcribe.js';
 import type { Module, ModuleContext } from './types.js';
+
+const VOICE_MODULE_ID = 'voice';
 
 const CHANNEL_START = 'meeting:start';
 const CHANNEL_STOP_REQUEST = 'meeting:stop-request';
@@ -223,12 +227,40 @@ export async function persistMeeting(
   jarvisRoot: string,
   recording: FinishedRecording,
 ): Promise<string> {
-  const transcript =
-    typeof recording.transcript === 'string'
-      ? recording.transcript
-      : recording.pcm
-        ? await transcribePcm(recording.pcm)
-        : '';
+  // Provider selection lives on the VOICE module — it owns TTS +
+  // STT settings together. 'deepgram' gives diarization + faster +
+  // more robust transcripts; 'local' is the offline Whisper path.
+  // Pre-transcribed input (from the long-meeting live-chunk fast
+  // path) skips both — the renderer already did the work.
+  const voiceCfg = loadModuleSettings(VOICE_MODULE_ID);
+  const provider =
+    voiceCfg.transcribeProvider === 'deepgram' ? 'deepgram' : 'local';
+  let transcript = '';
+  let providerLine = '';
+  let speakerCount = 0;
+  if (typeof recording.transcript === 'string') {
+    transcript = recording.transcript;
+    providerLine = 'transcribed_by: live-chunks\n';
+  } else if (recording.pcm) {
+    if (provider === 'deepgram') {
+      try {
+        const result = await transcribeDeepgram(recording.pcm);
+        transcript = result.text;
+        speakerCount = result.speakerCount;
+        providerLine = `transcribed_by: deepgram-nova-3\nspeaker_count: ${speakerCount}\n`;
+      } catch (err) {
+        console.warn(
+          '[meeting] Deepgram failed, falling back to local Whisper:',
+          err,
+        );
+        transcript = await transcribePcm(recording.pcm);
+        providerLine = `transcribed_by: whisper-local (deepgram fallback: ${err instanceof Error ? err.message : String(err)})\n`;
+      }
+    } else {
+      transcript = await transcribePcm(recording.pcm);
+      providerLine = 'transcribed_by: whisper-local\n';
+    }
+  }
   const durationSec = Math.round(
     (recording.endedAt - recording.startedAt) / 1000,
   );
@@ -246,6 +278,7 @@ export async function persistMeeting(
     projectLine +
     `started_at: ${startedAtIso}\n` +
     `duration_seconds: ${durationSec}\n` +
+    providerLine +
     `---\n\n` +
     `# ${recording.title}\n\n` +
     `${transcript || '_no speech detected_'}\n`;

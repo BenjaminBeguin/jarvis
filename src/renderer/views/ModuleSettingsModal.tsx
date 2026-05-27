@@ -446,6 +446,9 @@ function helperUrlFor(moduleId: string, fieldKey: string): string | null {
   if (moduleId === 'telegram-bot' && fieldKey === 'botToken') {
     return 'https://t.me/BotFather';
   }
+  if (moduleId === 'voice' && fieldKey === 'deepgramApiKey') {
+    return 'https://console.deepgram.com/';
+  }
   return null;
 }
 
@@ -453,10 +456,13 @@ function helperLabelFor(moduleId: string, fieldKey: string): string {
   if (moduleId === 'telegram-bot' && fieldKey === 'botToken') {
     return '@BotFather';
   }
+  if (moduleId === 'voice' && fieldKey === 'deepgramApiKey') {
+    return 'Deepgram console';
+  }
   return 'docs';
 }
 
-/** Map (moduleId, fieldKey) → Keychain IPC handlers. V1 wires telegram-bot. */
+/** Map (moduleId, fieldKey) → Keychain IPC handlers. */
 function secretHandlersFor(
   moduleId: string,
   fieldKey: string,
@@ -466,6 +472,13 @@ function secretHandlersFor(
       has: () => window.jarvis.hasTelegramBotToken(),
       set: (v) => window.jarvis.setTelegramBotToken(v),
       clear: () => window.jarvis.clearTelegramBotToken(),
+    };
+  }
+  if (moduleId === 'voice' && fieldKey === 'deepgramApiKey') {
+    return {
+      has: () => window.jarvis.hasDeepgramApiKey(),
+      set: (v) => window.jarvis.setDeepgramApiKey(v),
+      clear: () => window.jarvis.clearDeepgramApiKey(),
     };
   }
   return null;

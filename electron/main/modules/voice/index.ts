@@ -46,8 +46,26 @@ export const voiceModule: Module = {
   version: '1.0.0',
   settings: {
     description:
-      "Default voice + rate for TTS read-back. Samantha is the most natural of the standard bundled voices. For a dramatically better sound, install a Premium voice in System Settings → Accessibility → Spoken Content → System Voice → Manage Voices, then type its exact name below.",
+      "Default voice + rate for TTS read-back, and the meeting-transcription provider. The Deepgram path uses cloud Nova-3 with speaker diarization — dramatically more reliable than the local Whisper-base on long / quiet audio, with speaker labels in the markdown. Local stays as an offline fallback.",
     fields: [
+      {
+        key: 'transcribeProvider',
+        label: 'Meeting transcription',
+        hint: 'Deepgram = cloud Nova-3 with speaker labels (~$0.0043/min, $200 free trial credit on signup). Local = offline Whisper-base — fine for short meetings but prone to looping on silences. Set the Deepgram API key below before switching.',
+        type: 'select',
+        default: 'local',
+        options: [
+          { value: 'local', label: 'Local Whisper (offline, no diarization)' },
+          { value: 'deepgram', label: 'Deepgram Nova-3 (cloud, speaker labels)' },
+        ],
+      },
+      {
+        key: 'deepgramApiKey',
+        label: 'Deepgram API key',
+        hint: 'Get one at console.deepgram.com — new accounts ship with $200 of credit (~775 hours of audio). Stored in macOS Keychain, never written to disk.',
+        type: 'secret',
+        default: '',
+      },
       {
         key: 'ttsVoice',
         label: 'TTS voice',
