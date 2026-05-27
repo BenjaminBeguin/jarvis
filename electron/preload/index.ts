@@ -187,6 +187,12 @@ const api = {
     ipcRenderer.invoke(IpcChannels.clearDeepgramApiKey),
   hasDeepgramApiKey: (): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.hasDeepgramApiKey),
+  testDeepgram: (): Promise<{
+    ok: boolean;
+    latencyMs?: number;
+    detail?: string;
+    provider?: string;
+  }> => ipcRenderer.invoke(IpcChannels.testDeepgram),
 
   openObservatory: (taskId?: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.openObservatory, taskId),

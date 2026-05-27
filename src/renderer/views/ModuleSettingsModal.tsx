@@ -407,6 +407,8 @@ function SecretField({
     );
   }
 
+  const tester = secretTesterFor(moduleId, fieldKey);
+
   return (
     <div className="module-settings__secret">
       <span className="module-settings__secret-status">
@@ -424,6 +426,9 @@ function SecretField({
           Clear
         </button>
       )}
+      {hasToken && tester && (
+        <SecretTestButton runTest={tester} />
+      )}
       {helperUrl && (
         <button
           className="module-settings__secret-helper"
@@ -435,6 +440,88 @@ function SecretField({
       )}
     </div>
   );
+}
+
+/**
+ * Inline "Test" button that pings the provider with the saved key
+ * and surfaces success / failure as a toast. Keeps the UX
+ * symmetrical: set a token, then immediately verify it without
+ * round-tripping to the relevant app to "see if anything happened".
+ *
+ * Result includes the active provider when the IPC supplies it —
+ * useful for the Deepgram path because the user might have a valid
+ * key set but the dropdown still on "local", and the test should
+ * tell them that explicitly.
+ */
+function SecretTestButton({
+  runTest,
+}: {
+  runTest: () => Promise<{
+    ok: boolean;
+    latencyMs?: number;
+    detail?: string;
+    provider?: string;
+  }>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const onClick = async () => {
+    setBusy(true);
+    try {
+      const r = await runTest();
+      if (r.ok) {
+        const latency =
+          typeof r.latencyMs === 'number'
+            ? ` (${r.latencyMs}ms)`
+            : '';
+        const providerWarning =
+          r.provider === 'local'
+            ? ' — but provider is set to "Local Whisper". Switch the dropdown above to Deepgram for it to actually be used.'
+            : '';
+        toast({
+          kind: providerWarning ? 'info' : 'success',
+          message: `✓ Connected to Deepgram${latency}${providerWarning}`,
+        });
+      } else {
+        toast({
+          kind: 'error',
+          message: r.detail ?? 'Test failed.',
+        });
+      }
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button onClick={() => void onClick()} disabled={busy}>
+      {busy ? 'Testing…' : 'Test'}
+    </button>
+  );
+}
+
+/** Map (moduleId, fieldKey) → "ping the provider with the saved key"
+ *  IPC. Returns null when no test affordance is wired for this
+ *  combo (e.g. the Telegram-bot token doesn't have a verify
+ *  endpoint — BotFather check is on the user). */
+function secretTesterFor(
+  moduleId: string,
+  fieldKey: string,
+):
+  | (() => Promise<{
+      ok: boolean;
+      latencyMs?: number;
+      detail?: string;
+      provider?: string;
+    }>)
+  | null {
+  if (moduleId === 'voice' && fieldKey === 'deepgramApiKey') {
+    return () => window.jarvis.testDeepgram();
+  }
+  return null;
 }
 
 /**

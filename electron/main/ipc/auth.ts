@@ -187,6 +187,62 @@ export function registerAuthIpc({ auth, activity, modules }: IpcDeps): void {
     return !!(await getDeepgramApiKey());
   });
 
+  ipcMain.handle(
+    IpcChannels.testDeepgram,
+    async (): Promise<{
+      ok: boolean;
+      latencyMs?: number;
+      detail?: string;
+      provider?: string;
+    }> => {
+      const key = await getDeepgramApiKey();
+      if (!key) {
+        return {
+          ok: false,
+          detail: 'No Deepgram API key set.',
+        };
+      }
+      // Read the current provider so we can flag the case where the
+      // key is set but the dropdown is still on "local" — the most
+      // common reason "I enabled Deepgram but logs show nothing".
+      const { loadModuleSettings } = await import('../auth.js');
+      const cfg = loadModuleSettings('voice');
+      const provider =
+        cfg.transcribeProvider === 'deepgram' ? 'deepgram' : 'local';
+      const t0 = Date.now();
+      try {
+        // /v1/projects is a cheap auth-only ping — confirms the key
+        // is recognised without burning a transcription minute.
+        const res = await fetch('https://api.deepgram.com/v1/projects', {
+          method: 'GET',
+          headers: { Authorization: `Token ${key}` },
+        });
+        const latencyMs = Date.now() - t0;
+        if (res.status === 401) {
+          return {
+            ok: false,
+            detail: 'Deepgram rejected the API key (401).',
+            provider,
+          };
+        }
+        if (!res.ok) {
+          return {
+            ok: false,
+            detail: `Deepgram returned HTTP ${res.status}.`,
+            provider,
+          };
+        }
+        return { ok: true, latencyMs, provider };
+      } catch (err) {
+        return {
+          ok: false,
+          detail: err instanceof Error ? err.message : String(err),
+          provider,
+        };
+      }
+    },
+  );
+
   ipcMain.handle(IpcChannels.setAuthMode, async (_e, mode: AuthMode) => {
     if (mode !== 'subscription' && mode !== 'api-key') {
       throw new Error(`Invalid auth mode: ${String(mode)}`);

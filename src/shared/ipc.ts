@@ -57,6 +57,7 @@ export const IpcChannels = {
   setDeepgramApiKey: 'app:setDeepgramApiKey',
   clearDeepgramApiKey: 'app:clearDeepgramApiKey',
   hasDeepgramApiKey: 'app:hasDeepgramApiKey',
+  testDeepgram: 'app:testDeepgram',
   openObservatory: 'app:openObservatory',
   observatoryFocusTask: 'observatory:focusTask',
   shellNavigate: 'shell:navigate',
