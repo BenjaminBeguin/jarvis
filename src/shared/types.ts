@@ -425,6 +425,16 @@ export interface Reminder {
   cron?: string | null;
   /** Task ID we kicked off when firing — lets the constellation link them. */
   firedTaskId: string | null;
+  /** Optional URL pointing to whatever spawned this reminder — used
+   *  by the inbox row's click affordance to take the user back to
+   *  the source. Today this is set by meeting-actions.ts for action
+   *  items extracted from a meeting transcript (vscode://file… of
+   *  the meeting markdown). Open-ended for future sources. */
+  sourceUrl?: string;
+  /** Human label for the source. Surfaces in the inbox subtitle so
+   *  the user can see "from <meeting title>" at a glance without
+   *  decoding the URL. */
+  sourceLabel?: string;
 }
 
 /**

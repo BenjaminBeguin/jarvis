@@ -90,6 +90,12 @@ export class ReminderStore extends EventEmitter {
     /** When provided, the reminder becomes recurring — after each fire
      *  the store reschedules to the next cron occurrence. */
     cron?: string;
+    /** Optional link back to whatever spawned this reminder — the
+     *  inbox row's click affordance uses it. Today: meeting-actions
+     *  passes vscode://file<transcript-path> so the user can jump
+     *  back to the meeting that produced the action item. */
+    sourceUrl?: string;
+    sourceLabel?: string;
   }): Reminder {
     const reminder: Reminder = {
       id: nanoid(8),
@@ -101,6 +107,8 @@ export class ReminderStore extends EventEmitter {
       firedAt: null,
       firedTaskId: null,
       cron: input.cron ?? null,
+      ...(input.sourceUrl ? { sourceUrl: input.sourceUrl } : {}),
+      ...(input.sourceLabel ? { sourceLabel: input.sourceLabel } : {}),
     };
     this.reminders.set(reminder.id, reminder);
     this.persist();

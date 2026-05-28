@@ -32,9 +32,15 @@ export function remindersInboxSource(reminders: ReminderStore): InboxSource {
           const baseLabel =
             r.mode === 'scheduled' ? 'Scheduled action' : 'Reminder';
           const recurringTag = r.cron ? ' · 🔁 recurring' : '';
+          // When the reminder carries a sourceLabel (e.g. spawned
+          // from a meeting), mention it in the subtitle so the
+          // user knows where it came from at a glance.
+          const sourceTag = r.sourceLabel
+            ? ` · from ${r.sourceLabel}`
+            : '';
           const subtitle = fired
-            ? `${baseLabel} · awaiting done${recurringTag}`
-            : `${baseLabel}${recurringTag}`;
+            ? `${baseLabel} · awaiting done${recurringTag}${sourceTag}`
+            : `${baseLabel}${recurringTag}${sourceTag}`;
           return {
             id: `reminder-${r.id}`,
             source: 'reminders',
@@ -45,6 +51,10 @@ export function remindersInboxSource(reminders: ReminderStore): InboxSource {
             // fireAt (which is now in the past).
             fireAt: fired ? (r.firedAt ?? r.fireAt) : r.fireAt,
             createdAt: r.createdAt,
+            // When set, the inbox row's click affordance opens this
+            // URL (vscode://file… for meeting transcripts) instead
+            // of navigating to the generic Reminders settings page.
+            ...(r.sourceUrl ? { url: r.sourceUrl } : {}),
           };
         });
     },

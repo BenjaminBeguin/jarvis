@@ -98,10 +98,17 @@ export function registerWindowIpc(_deps: IpcDeps): void {
   });
 
   ipcMain.handle(IpcChannels.openExternal, async (_e, url: string) => {
-    // Only allow http/https. mailto + other schemes are easy XSS vectors when
-    // the URL comes from rendered assistant content.
+    // Whitelist of schemes we'll hand to the OS. http/https for any
+    // standard link; vscode:// + cursor:// for Jarvis-internal "open
+    // this transcript / note in the editor" links that the meeting-
+    // actions + reminders sources mint. mailto + arbitrary schemes
+    // stay blocked — they're easy XSS vectors in assistant content.
     if (typeof url !== 'string') return;
-    if (!/^https?:\/\//i.test(url)) return;
+    const ok =
+      /^https?:\/\//i.test(url) ||
+      /^vscode:\/\/file/i.test(url) ||
+      /^cursor:\/\/file/i.test(url);
+    if (!ok) return;
     await shell.openExternal(url);
   });
 

@@ -241,6 +241,11 @@ function applyActionSideEffects(
           body: `${action.action} (from ${args.meetingTitle})`,
           mode: 'reminder',
           fireAt: parsed.fireAt,
+          // Link back so the inbox row's click opens the transcript
+          // in VS Code. The user can scroll up + see the conversation
+          // where this action item was raised.
+          sourceUrl: `vscode://file${args.transcriptPath}`,
+          sourceLabel: args.meetingTitle,
         });
         out.reminderCreated = true;
       }
