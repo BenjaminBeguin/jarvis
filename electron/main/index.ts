@@ -314,6 +314,72 @@ let meetingHeadsUpSnoozedUntil = 0;
  * fires (pause is about unattended work, not silencing user-visible
  * UI in the foreground window).
  */
+/**
+ * Pending "record this meeting?" prompts. Each entry is keyed by a
+ * detection-source id (vendor for the Chrome extension, "audio" for
+ * the mic watcher, the calendar event id for proximity fires) so
+ * incoming cancellation signals — meeting-ended, the user clicking
+ * Dismiss on a sibling prompt, etc. — can find and abort the right
+ * pending fire. Empty when no prompts are queued.
+ */
+const pendingMeetingPrompts = new Map<string, NodeJS.Timeout>();
+
+/** Settle window before a meeting prompt actually fires. Short
+ *  enough to feel responsive when the user did join a real meeting
+ *  ("a couple seconds before the toast appears"), long enough to
+ *  catch the common race where Chrome's content script detects join
+ *  and then immediately detects leave (e.g. the user clicks Leave a
+ *  beat after Join, or the join lobby never actually crosses into
+ *  the call). */
+const MEETING_PROMPT_SETTLE_MS = 4_000;
+
+/**
+ * Queue a meeting heads-up for `MEETING_PROMPT_SETTLE_MS` from now.
+ * The settle window gives any subsequent cancellation signal
+ * (Chrome extension reports the meeting ended, the user toggles
+ * AFK off, the duplicate-detection bucket catches up) a chance to
+ * intercept BEFORE the user sees the prompt. Calling this with the
+ * same key while a prompt is already pending replaces the prior
+ * timer — newer detection wins.
+ */
+function scheduleMeetingHeadsUp(item: InboxItem, key: string): void {
+  const existing = pendingMeetingPrompts.get(key);
+  if (existing) clearTimeout(existing);
+  console.log(
+    `[meeting-heads-up] scheduled prompt key=${key} settle=${MEETING_PROMPT_SETTLE_MS}ms`,
+  );
+  const timer = setTimeout(() => {
+    pendingMeetingPrompts.delete(key);
+    fireMeetingHeadsUp(item);
+  }, MEETING_PROMPT_SETTLE_MS);
+  pendingMeetingPrompts.set(key, timer);
+}
+
+/**
+ * Cancel any pending meeting heads-up prompts. Called when an
+ * authoritative "you're not in a meeting anymore" signal arrives in
+ * the settle window — most commonly the Chrome extension reporting
+ * the user closed the tab / left the call seconds after joining.
+ * Passing a key cancels just that one prompt; no key cancels all.
+ */
+function cancelPendingMeetingPrompts(key?: string): void {
+  if (key) {
+    const t = pendingMeetingPrompts.get(key);
+    if (t) {
+      clearTimeout(t);
+      pendingMeetingPrompts.delete(key);
+      console.log(`[meeting-heads-up] cancelled pending prompt key=${key}`);
+    }
+    return;
+  }
+  if (pendingMeetingPrompts.size === 0) return;
+  console.log(
+    `[meeting-heads-up] cancelled ${pendingMeetingPrompts.size} pending prompt(s)`,
+  );
+  for (const t of pendingMeetingPrompts.values()) clearTimeout(t);
+  pendingMeetingPrompts.clear();
+}
+
 function fireMeetingHeadsUp(item: InboxItem): void {
   if (Date.now() < meetingHeadsUpSnoozedUntil) {
     console.log(
@@ -372,7 +438,9 @@ const meetingActivity = new MeetingActivityWatcher((item) => {
   // matters elsewhere), it just doesn't prompt.
   const source = meetingDetectionSource();
   if (source !== 'audio' && source !== 'both') return;
-  fireMeetingHeadsUp(item);
+  // Use the settle window so any near-simultaneous "meeting ended"
+  // signal from the Chrome extension can intercept the prompt.
+  scheduleMeetingHeadsUp(item, 'audio');
 });
 
 /**
@@ -447,7 +515,13 @@ function onExternalMeetingDetected(payload: {
     ...(payload.url ? { url: payload.url } : {}),
     createdAt: Date.now(),
   };
-  fireMeetingHeadsUp(item);
+  // Queue with a settle window. The most common race we want to
+  // catch here is "Chrome content script detected join, user closed
+  // the tab a beat later" — the extension's tabs.onRemoved fires
+  // meeting-ended within ~1s and we want THAT to win over the
+  // prompt fire. Key by vendor so the same vendor pinging twice
+  // collapses to one pending prompt instead of stacking.
+  scheduleMeetingHeadsUp(item, `extension:${payload.vendor ?? 'unknown'}`);
 }
 
 /**
@@ -457,6 +531,19 @@ function onExternalMeetingDetected(payload: {
  * control action — same path the PWA's Finish button uses.
  */
 function onExternalMeetingEnded(_payload: { vendor?: string; url?: string }): void {
+  // First: cancel any pending heads-up prompt for this vendor (or
+  // the audio path), since the user already left. This is the
+  // primary "make sure the meeting still exists" guarantee — the
+  // settle window in scheduleMeetingHeadsUp paired with this
+  // cancellation means a quick join → leave never produces a stale
+  // prompt. We cancel BOTH the extension-keyed prompt for this
+  // vendor AND the audio-keyed one in case the mic watcher fired
+  // for the same call.
+  cancelPendingMeetingPrompts(
+    `extension:${_payload.vendor ?? 'unknown'}`,
+  );
+  cancelPendingMeetingPrompts('audio');
+
   if (!currentMeetingState.active) return;
   const settings = loadModuleSettings('meeting-recorder');
   // Default true. Explicit `false` opts out.
@@ -503,6 +590,9 @@ ipcMain.handle(IpcChannels.suppressMeetingPrompt, (_e, id: string) => {
 ipcMain.handle(IpcChannels.snoozeMeetingHeadsUp, (_e, ms: number) => {
   const dur = typeof ms === 'number' && ms > 0 ? Math.min(ms, 8 * 60 * 60_000) : 60 * 60_000;
   meetingHeadsUpSnoozedUntil = Date.now() + dur;
+  // Also kill anything in the settle window — if the user just
+  // snoozed, they don't want a pending prompt to fire in 3 seconds.
+  cancelPendingMeetingPrompts();
   console.log(
     `[meeting-heads-up] snoozed for ${Math.round(dur / 60_000)} min`,
   );
