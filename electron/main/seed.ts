@@ -61,11 +61,13 @@ const WORKFLOW_STALE_DETECTORS: Record<
   //       manually).
   //   v7: noise-v6 marker (aggressive closure filter +
   //       thread dedupe + question-detection gate).
-  // Latest sentinel is noise-v6. NOTE: the rewrite overwrites
+  //   v8: noise-v7 marker (more closure patterns:
+  //       agreement-to-act, small-talk replies, bare
+  //       greetings, scheduling-already-done + drops
+  //       messages addressed to other people).
+  // Latest sentinel is noise-v7. NOTE: the rewrite overwrites
   // user-edited query bodies — if the user appended OR-branches
   // for tracked channels, those get wiped on the next launch.
-  // Acceptable for now; longer-term we want a per-user "tracked
-  // channels" list separate from the seed.
   'slack-inbox-sync': (def) => {
     const fetch = def.pipeline.find((n) => n.type === 'http-fetch');
     if (fetch) {
@@ -75,7 +77,7 @@ const WORKFLOW_STALE_DETECTORS: Record<
     const transform = def.pipeline.find((n) => n.type === 'transform');
     if (transform) {
       const fn = (transform.params as { fn?: string })?.fn;
-      if (typeof fn === 'string' && !fn.includes('noise-v6')) return true;
+      if (typeof fn === 'string' && !fn.includes('noise-v7')) return true;
     }
     return (
       isUntouchedShorthandCron(def, '5m') ||

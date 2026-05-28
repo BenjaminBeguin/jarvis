@@ -17,17 +17,23 @@ import type { WorkflowDef } from '@shared/types';
  * round-trip needed.
  */
 
+// noise-v7: extends v6's closure list to catch the leaks
+// reported on real inboxes:
+//   - "yes sure", "sure will", "will do", "will check", "ok will" —
+//     someone agreeing to do something is conversation-end for the
+//     recipient.
+//   - "hey i am good" / "i am good" / "doing well" — small-talk
+//     replies to "how are you?"
+//   - bare greetings with no follow-up: "hi", "hey", "hello",
+//     "morning", "good morning" with nothing else (handled by the
+//     short-after-strip rule already, but tightened).
+//   - "anytime" / "you're welcome" / "of course" — already in v6
+//     but pattern made tolerant of trailing emoji like
+//     ":slightly_smiling_face:".
+//   - Messages addressed to OTHERS (start with <@OTHERID> and the
+//     user isn't mentioned anywhere in the body) — drop.
 // noise-v6: aggressive closure-signal filter + thread dedupe +
-// question-detection gate for non-DM channels. The pre-v6 transform
-// was naively passing every message through, so threads where the
-// user was actively participating (or chats that ended with
-// "thanks!") flooded the inbox. v6 drops:
-//   - closure/ack messages (thanks, perfect, lgtm, emoji-only, …)
-//   - <!channel> / <!here> / <!everyone> broadcasts
-//   - bots (github, linear, datadog, pagerduty, *-bot, …)
-//   - non-DM messages that don't look like a question/request
-//   - all-but-the-latest message per thread (so a 4-message thread
-//     surfaces ONE inbox row, not four)
+// question-detection gate for non-DM channels.
 // noise-v5: rolled back the hardcoded in:#jarvis default; the
 // default query is DMs + mentions only — users add OR-branches for
 // tracked channels manually.
@@ -36,9 +42,10 @@ const SLACK_TRANSFORM = `((() => {
   const now = Date.now();
 
   // --- Closure-signal filter ------------------------------------
-  // Messages whose body looks like an acknowledgement or sign-off
-  // should never make it into the inbox. The user didn't "miss"
-  // these — they're conversation-end markers.
+  // noise-v7: messages whose body looks like an acknowledgement /
+  // agreement-to-act / small-talk reply / bare greeting shouldn't
+  // make it into the inbox. The user didn't "miss" these — they're
+  // conversation-end markers.
   const CLOSURE_PATTERNS = [
     /^(thanks?( you)?|thx|ty|cool|great|perfect|awesome|nice|good)\\W*$/i,
     /^(got it|gotcha|ok(ay)?|k|sounds good|makes sense|noted|ack)\\W*$/i,
@@ -48,6 +55,15 @@ const SLACK_TRANSFORM = `((() => {
     /^(actually,? nevermind|ignore my last|resolved|fixed it myself)/i,
     /^(no worries|np|all good|sorry,?)\\W*$/i,
     /^(anytime|you're welcome|yw|of course)\\W*[!.:]?$/i,
+    // v7: agreement-to-act ("sure will check it after lunch")
+    /^(yes,?\\s*sure|sure,?\\s*will|sure,?\\s*can|will do|will check|will look|ok,?\\s*will|ok,?\\s*sure|on it|i'?ll (look|check|do|take a look)|i can do)/i,
+    // v7: small-talk replies to "how are you"
+    /^(hey)?,?\\s*(i'?m|i am)\\s+(good|fine|great|well|doing (good|well|fine))/i,
+    /^how are you\\??$/i,
+    // v7: bare greetings (no question/request follows)
+    /^(hi|hey|hello|morning|good morning|good afternoon|good evening)\\W*$/i,
+    // v7: scheduling-already-done ("yes sure we can do it at 1pm or 2pm")
+    /^(yes,?\\s*)?(sure,?\\s*)?(we|i) can (do|meet|chat|talk)\\b/i,
   ];
   const isClosure = (text) => {
     const t = (text || '').trim();
@@ -69,6 +85,29 @@ const SLACK_TRANSFORM = `((() => {
   // <!channel> / <!here> / <!everyone> are mass pings, not personal.
   const isBroadcast = (text) =>
     /<!(channel|here|everyone)>/i.test(text || '');
+
+  // --- Addressed-to-someone-else filter -------------------------
+  // Slack search returns mentions OF the user, but if the user is
+  // in a thread and someone @-mentions a THIRD person there, that
+  // message shows up too. Drop messages that START with a
+  // <@OTHERID> token AND don't mention the user further down.
+  // We don't know the user's slack id from the transform sandbox,
+  // so the heuristic: a message that begins with <@USERID> and
+  // contains ONLY one mention total (i.e. only one person was
+  // tagged, and it wasn't the user). search.messages wouldn't have
+  // returned this in the first place if the user was the SOLE
+  // mention — so this is the "+1 to Beverly. @Nitisha please..."
+  // case where the user is parenthetically in the thread.
+  const addressedToOthers = (text) => {
+    const t = text || '';
+    const m = t.match(/^<@[A-Z0-9]+(?:\\|[^>]+)?>/);
+    if (!m) return false;
+    const allMentions = t.match(/<@[A-Z0-9]+/g) || [];
+    // If the message tags multiple people AND the first tag is at
+    // the start, it's a directed message to those people — odds
+    // are the user is just an observer in the thread.
+    return allMentions.length >= 2;
+  };
 
   // --- Question detector ----------------------------------------
   // Whether the body LOOKS like a question or request directed at
@@ -101,10 +140,11 @@ const SLACK_TRANSFORM = `((() => {
     if (!Number.isFinite(seconds)) return false;
     const ts = Math.round(seconds * 1000);
     if (now - ts > MAX_AGE_MS) { droppedOld++; return false; }
-    // Closure / broadcast / empty.
+    // Closure / broadcast / addressed-to-others / empty.
     const text = m.text || '';
     if (isClosure(text)) { droppedClosures++; return false; }
     if (isBroadcast(text)) { droppedBroadcasts++; return false; }
+    if (addressedToOthers(text)) { droppedClosures++; return false; }
     return true;
   });
 

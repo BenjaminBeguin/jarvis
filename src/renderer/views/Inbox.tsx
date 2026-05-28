@@ -701,6 +701,21 @@ function InboxRow({
     }
   };
 
+  /** One-click "I handled this" — same effect as Snooze →
+   *  Dismiss forever, but no menu drill-down. Used as the primary
+   *  way to clear a Slack row the user already responded to. */
+  const markDone = async () => {
+    try {
+      await window.jarvis.dismissInboxItem(item.id, 4_102_444_800_000);
+      toast({ message: '✓ Done' });
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
   // Clicking the row routes to whatever surface owns this item — URL
   // for PR / calendar rows, the Reminders page for reminders, Routines
   // for failed routines, etc. Action buttons on the right stay primary;
@@ -903,6 +918,21 @@ function InboxRow({
             }}
             onForget={onForget}
           />
+        )}
+        {item.source !== 'reminders' && item.source !== 'goals' && (
+          // Reminders + Goals have their own purpose-specific "✓ Done"
+          // buttons that map to mark-reminder-done / set-goal-status.
+          // For every other source, "✓ Done" is the same as
+          // "Dismiss forever" — clear it from the active inbox.
+          // Single click, no menu — the common case shouldn't take
+          // two clicks to handle.
+          <button
+            className="inbox__row-done"
+            onClick={() => void markDone()}
+            title="I handled this — clear it from the inbox"
+          >
+            ✓
+          </button>
         )}
         <div className="inbox__row-dismiss">
           <button
