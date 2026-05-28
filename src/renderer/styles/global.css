@@ -3199,9 +3199,26 @@ button:disabled:hover {
   padding: 2px 8px;
 }
 
+/* Body is now a button so the whole text area is the click target
+   for expand/collapse. Strip native button chrome so it reads as
+   normal text. */
 .reminders-page__body {
   flex: 1 1 auto;
   min-width: 0;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  /* Indicates expandability without yelling about it. */
+  position: relative;
+}
+
+.reminders-page__body:hover .reminders-page__body-text {
+  color: var(--accent);
 }
 
 .reminders-page__body-text {
@@ -3209,6 +3226,21 @@ button:disabled:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: color 120ms ease;
+}
+
+/* Expanded state: let the text wrap to as many lines as it needs.
+   The row grows vertically; alignment switches from center to start
+   so the mode chip stays pinned to the top of a long body. */
+.reminders-page__row--expanded {
+  align-items: flex-start;
+}
+
+.reminders-page__row--expanded .reminders-page__body-text {
+  white-space: pre-wrap;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.5;
 }
 
 .reminders-page__body-meta {

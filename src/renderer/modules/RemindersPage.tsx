@@ -249,33 +249,57 @@ function ReminderList({
   return (
     <ul className="reminders-page__list">
       {rows.map((r) => (
-        <li key={r.id} className="reminders-page__row">
-          <span
-            className={`reminders-page__mode reminders-page__mode--${r.mode}`}
-            title={
-              r.mode === 'reminder'
-                ? 'Fires a notification only — no agent run.'
-                : 'Spawns a Claude task to carry it out.'
-            }
-          >
-            {r.mode === 'reminder' ? 'nudge' : 'action'}
-          </span>
-          {r.cron && (
-            <span
-              className="reminders-page__mode reminders-page__mode--recurring"
-              title={`Recurring · ${r.cron}`}
-            >
-              🔁 {humanizeCron(r.cron)}
-            </span>
-          )}
-          <div className="reminders-page__body">
-            <div className="reminders-page__body-text">{r.body}</div>
-            <div className="reminders-page__body-meta">{formatWhen(r)}</div>
-          </div>
-          <div className="reminders-page__actions">{renderActions(r)}</div>
-        </li>
+        <ReminderRow key={r.id} reminder={r} renderActions={renderActions} />
       ))}
     </ul>
+  );
+}
+
+function ReminderRow({
+  reminder: r,
+  renderActions,
+}: {
+  reminder: Reminder;
+  renderActions: (r: Reminder) => React.ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  // Only the body itself is clickable to expand — the action buttons
+  // on the right shouldn't toggle the row state.
+  const toggle = () => setExpanded((v) => !v);
+  return (
+    <li
+      className={`reminders-page__row${expanded ? ' reminders-page__row--expanded' : ''}`}
+    >
+      <span
+        className={`reminders-page__mode reminders-page__mode--${r.mode}`}
+        title={
+          r.mode === 'reminder'
+            ? 'Fires a notification only — no agent run.'
+            : 'Spawns a Claude task to carry it out.'
+        }
+      >
+        {r.mode === 'reminder' ? 'nudge' : 'action'}
+      </span>
+      {r.cron && (
+        <span
+          className="reminders-page__mode reminders-page__mode--recurring"
+          title={`Recurring · ${r.cron}`}
+        >
+          🔁 {humanizeCron(r.cron)}
+        </span>
+      )}
+      <button
+        type="button"
+        className="reminders-page__body"
+        onClick={toggle}
+        title={expanded ? 'Collapse' : 'Click to expand · ' + r.body}
+        aria-expanded={expanded}
+      >
+        <div className="reminders-page__body-text">{r.body}</div>
+        <div className="reminders-page__body-meta">{formatWhen(r)}</div>
+      </button>
+      <div className="reminders-page__actions">{renderActions(r)}</div>
+    </li>
   );
 }
 
