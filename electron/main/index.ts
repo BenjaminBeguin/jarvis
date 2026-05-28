@@ -263,18 +263,15 @@ const inboxProximity = new InboxProximityWatcher(
       },
     });
   },
-  // Imminent meeting prompt — bring the window forward and broadcast
-  // a meeting-imminent event. The renderer mounts a toast with [Record]
-  // / [Skip] buttons; the user picks. No native notification here —
-  // an in-app actionable toast is the only place we can offer buttons.
-  (item, minutesUntil) => {
-    try {
-      const win = openObservatory();
-      win.focus();
-      sendWhenReady(win, IpcChannels.meetingImminent, { item, minutesUntil });
-    } catch (err) {
-      console.warn('Meeting prompt broadcast failed:', err);
-    }
+  // Imminent meeting prompt — calendar item is about to start, ask
+  // the user if they want to record it. Routes through the same
+  // settle window as the audio + extension paths so any "meeting
+  // cancelled / user already left / I'm not actually going to it"
+  // signal in the next few seconds can intercept. Keyed by the
+  // calendar item id so a re-fire from the proximity watcher
+  // doesn't stack timers.
+  (item, _minutesUntil) => {
+    scheduleMeetingHeadsUp(item, `calendar:${item.id}`);
   },
 );
 
@@ -386,6 +383,31 @@ function fireMeetingHeadsUp(item: InboxItem): void {
       `[meeting-heads-up] snoozed (${Math.round((meetingHeadsUpSnoozedUntil - Date.now()) / 60_000)} min left); dropping prompt`,
     );
     return;
+  }
+  // Freshness check: for items that came from the inbox (calendar
+  // proximity, mostly), re-verify the underlying item still exists.
+  // Calendar workflow runs every 15 min; if the user cancelled the
+  // event since the last refresh, the item is gone from the live
+  // store — fire would point at a meeting that no longer exists.
+  // Ad-hoc detections (audio / extension with `ad-hoc-*` ids) skip
+  // this check — they don't live in the inbox store, they're
+  // ephemeral one-shot items minted at detection time.
+  const isInboxItem = !item.id.startsWith('ad-hoc-');
+  if (isInboxItem) {
+    // inbox.list() already filters out dismissed/snoozed items, so
+    // one lookup covers both cases: cancelled meeting AND user hit
+    // ✓ Done / 💤 snoozed during the settle window.
+    const current = inbox.list().find((it) => it.id === item.id);
+    if (!current) {
+      console.log(
+        `[meeting-heads-up] item ${item.id} no longer in inbox (cancelled or dismissed); dropping prompt`,
+      );
+      return;
+    }
+    // Use the freshest copy — calendar workflow may have updated
+    // title / url / fireAt since the proximity watcher captured
+    // the original snapshot.
+    item = current;
   }
   try {
     const win = openObservatory();
