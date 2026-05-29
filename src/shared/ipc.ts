@@ -110,6 +110,14 @@ export const IpcChannels = {
    *  the floating "STOP SPEAKING" pill. */
   speechActive: 'voice:speechActive',
 
+  /** Artifact substrate — used by the /memory graph view + future
+   *  power-user surfaces. */
+  artifactsList: 'artifacts:list',
+  artifactsRead: 'artifacts:read',
+  artifactsLinks: 'artifacts:links',
+  artifactsSemanticNeighbors: 'artifacts:semanticNeighbors',
+  artifactsCountByKind: 'artifacts:countByKind',
+
   /** Renderer-invoked control of the active meeting recording. Used
    *  by the tray menu's Pause/Resume/Finish buttons. Same path the
    *  PWA + Chrome extension hit via /v1/meeting/control. */

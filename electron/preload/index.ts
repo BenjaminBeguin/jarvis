@@ -230,6 +230,50 @@ const api = {
   onSpeechActive: (listener: Listener<boolean>): Unsubscribe =>
     subscribe(IpcChannels.speechActive, listener),
 
+  // ── Artifact substrate — used by /memory graph view ──────
+  artifactsList: (opts?: {
+    kind?: string | string[];
+    project?: string;
+    since?: number;
+    limit?: number;
+  }): Promise<
+    Array<{
+      id: string;
+      kind: string;
+      title: string;
+      project: string | null;
+      path: string | null;
+      url: string | null;
+      createdAt: number;
+      updatedAt: number;
+    }>
+  > => ipcRenderer.invoke(IpcChannels.artifactsList, opts ?? {}),
+  artifactsRead: (id: string): Promise<{
+    id: string;
+    kind: string;
+    title: string;
+    project: string | null;
+    path: string | null;
+    url: string | null;
+    createdAt: number;
+    updatedAt: number;
+    frontmatter: Record<string, unknown> | null;
+    content: string;
+    linksOut: Array<{ to: string; kind: string }>;
+    linksIn: Array<{ from: string; kind: string }>;
+  } | null> => ipcRenderer.invoke(IpcChannels.artifactsRead, id),
+  artifactsLinks: (): Promise<
+    Array<{ src: string; dst: string; kind: string }>
+  > => ipcRenderer.invoke(IpcChannels.artifactsLinks),
+  artifactsSemanticNeighbors: (opts?: {
+    threshold?: number;
+    k?: number;
+  }): Promise<Array<{ src: string; dst: string; similarity: number }>> =>
+    ipcRenderer.invoke(IpcChannels.artifactsSemanticNeighbors, opts ?? {}),
+  artifactsCountByKind: (): Promise<
+    Array<{ kind: string; count: number }>
+  > => ipcRenderer.invoke(IpcChannels.artifactsCountByKind),
+
   /** Tray-menu meeting controls. Routes to the renderer's
    *  MeetingRecorder through the same broadcast path the PWA +
    *  Chrome extension use. */

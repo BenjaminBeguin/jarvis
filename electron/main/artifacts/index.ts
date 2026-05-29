@@ -5,8 +5,10 @@ export {
   archiveArtifact,
   countByKind,
   deleteArtifact,
+  listAllLinks,
   listArtifacts,
   readArtifact,
+  semanticNeighbors,
   upsertArtifact,
   walkArtifactGraph,
 } from './registry.js';

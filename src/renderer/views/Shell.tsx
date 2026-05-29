@@ -14,6 +14,7 @@ import { NewProjectDialog } from './projects/NewProjectDialog';
 import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
 import { Activity } from './Activity';
+import { MemoryPage } from './memory/MemoryPage';
 import { BuildingHome } from './BuildingHome';
 import { Dashboard } from './Dashboard';
 import { Drafts } from './Drafts';
@@ -36,6 +37,7 @@ type Tab =
   | 'inbox'
   | 'drafts'
   | 'activity'
+  | 'memory'
   | 'projects'
   | 'routines'
   | 'skills'
@@ -611,6 +613,18 @@ export function Shell({ status }: Props) {
         },
         title: 'Log of side-effects Jarvis recorded',
       },
+      {
+        id: 'memory',
+        label: 'Memory',
+        icon: 'M',
+        isActive: tab === 'memory' && !openModuleId,
+        onClick: () => {
+          setTab('memory');
+          setOpenModuleId(null);
+        },
+        title:
+          'Graph of every Jarvis-owned artifact — meetings, notes, briefings, goals. Click a node for full detail.',
+      },
     ],
   };
   const buildingSection: SidebarSection = {
@@ -929,6 +943,8 @@ export function Shell({ status }: Props) {
           <Drafts />
         ) : tab === 'activity' ? (
           <Activity />
+        ) : tab === 'memory' ? (
+          <MemoryPage />
         ) : tab === 'projects' ? (
           <Projects />
         ) : tab === 'routines' ? (

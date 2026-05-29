@@ -379,3 +379,144 @@ export function countByKind(): Array<{ kind: string; count: number }> {
     )
     .all() as Array<{ kind: string; count: number }>;
 }
+
+/** Every explicit link in the substrate. Used by the /memory graph
+ *  view's edge layer. Cheap (~hundreds of rows). */
+export function listAllLinks(): ArtifactGraphEdge[] {
+  return getDb()
+    .prepare(`SELECT src_id AS src, dst_id AS dst, kind FROM artifact_links`)
+    .all() as ArtifactGraphEdge[];
+}
+
+/**
+ * Find pairs of artifacts whose embedding cosine similarity is above
+ * `threshold`. Used by the /memory graph's "semantic neighbours"
+ * overlay — surfaces "this meeting clusters with these notes even
+ * though nothing explicitly links them" relationships.
+ *
+ * For each chunk, query the top-k nearest neighbours; emit a
+ * deduplicated set of (src_artifact, dst_artifact, similarity)
+ * triples. Same-artifact pairs are skipped. Cosine similarity is
+ * `1 - distance` (sqlite-vec returns L2 cosine distance, in [0, 2]).
+ *
+ * Capped at `maxPerArtifact * artifactCount / 2` total edges so a
+ * hub artifact doesn't produce a hairball.
+ */
+export function semanticNeighbors(
+  threshold = 0.7,
+  k = 5,
+): Array<{ src: string; dst: string; similarity: number }> {
+  if (!isVecAvailable()) return [];
+  const db = getDb();
+  // Pull all chunks + their parent artifact so we can dedupe at the
+  // artifact level even when one chunk matches multiple of another
+  // artifact's chunks.
+  type Row = {
+    src_chunk: string;
+    src_artifact: string;
+    dst_chunk: string;
+    dst_artifact: string;
+    distance: number;
+  };
+  // sqlite-vec's KNN syntax needs the query embedding inline. We
+  // self-join the embeddings table: for each chunk's vector, find
+  // the k nearest OTHER vectors. Done as a single statement to avoid
+  // per-chunk round-trips.
+  let rows: Row[];
+  try {
+    rows = db
+      .prepare(
+        `WITH all_chunks AS (
+           SELECT id, artifact_id FROM artifact_chunks
+         )
+         SELECT
+           src.id AS src_chunk,
+           src.artifact_id AS src_artifact,
+           knn.chunk_id AS dst_chunk,
+           dst.artifact_id AS dst_artifact,
+           knn.distance AS distance
+         FROM all_chunks src
+         JOIN artifact_embeddings src_e ON src_e.chunk_id = src.id
+         CROSS JOIN LATERAL (
+           SELECT chunk_id, distance
+           FROM artifact_embeddings
+           WHERE embedding MATCH src_e.embedding AND k = ?
+           ORDER BY distance
+         ) knn
+         JOIN artifact_chunks dst ON dst.id = knn.chunk_id
+         WHERE src.artifact_id != dst.artifact_id`,
+      )
+      .all(k + 1) as Row[];
+  } catch (err) {
+    // CROSS JOIN LATERAL may not be supported in all sqlite-vec
+    // versions; fall back to a procedural Float32 round-trip.
+    console.warn('[artifacts:vec] LATERAL KNN failed, falling back', err);
+    return semanticNeighborsProcedural(threshold, k);
+  }
+
+  // Dedupe at artifact level — keep max similarity for each unique
+  // unordered pair.
+  const best = new Map<string, { src: string; dst: string; similarity: number }>();
+  for (const r of rows) {
+    const a = r.src_artifact;
+    const b = r.dst_artifact;
+    if (a === b) continue;
+    const [lo, hi] = a < b ? [a, b] : [b, a];
+    const key = `${lo}|${hi}`;
+    // sqlite-vec cosine distance: 1 - cos. Similarity = 1 - distance.
+    const sim = 1 - r.distance;
+    if (sim < threshold) continue;
+    const existing = best.get(key);
+    if (!existing || sim > existing.similarity) {
+      best.set(key, { src: lo, dst: hi, similarity: sim });
+    }
+  }
+  return Array.from(best.values()).sort(
+    (a, b) => b.similarity - a.similarity,
+  );
+}
+
+/** Procedural fallback when the SQL-side LATERAL KNN doesn't run.
+ *  Iterates each chunk in JS, makes one KNN call per chunk. Slower
+ *  for large corpora but correct. */
+function semanticNeighborsProcedural(
+  threshold: number,
+  k: number,
+): Array<{ src: string; dst: string; similarity: number }> {
+  const db = getDb();
+  type ChunkVec = { chunk_id: string; artifact_id: string; embedding: Buffer };
+  const chunks = db
+    .prepare(
+      `SELECT c.id AS chunk_id, c.artifact_id AS artifact_id, e.embedding AS embedding
+       FROM artifact_chunks c JOIN artifact_embeddings e ON e.chunk_id = c.id`,
+    )
+    .all() as ChunkVec[];
+  const knnStmt = db.prepare(
+    `SELECT chunk_id, distance FROM artifact_embeddings
+     WHERE embedding MATCH ? AND k = ? ORDER BY distance`,
+  );
+  const chunkMeta = new Map(chunks.map((c) => [c.chunk_id, c.artifact_id]));
+  const best = new Map<string, { src: string; dst: string; similarity: number }>();
+  for (const c of chunks) {
+    const hits = knnStmt.all(c.embedding, k + 1) as Array<{
+      chunk_id: string;
+      distance: number;
+    }>;
+    for (const h of hits) {
+      const dstArt = chunkMeta.get(h.chunk_id);
+      if (!dstArt || dstArt === c.artifact_id) continue;
+      const sim = 1 - h.distance;
+      if (sim < threshold) continue;
+      const [lo, hi] =
+        c.artifact_id < dstArt ? [c.artifact_id, dstArt] : [dstArt, c.artifact_id];
+      const key = `${lo}|${hi}`;
+      const existing = best.get(key);
+      if (!existing || sim > existing.similarity) {
+        best.set(key, { src: lo, dst: hi, similarity: sim });
+      }
+    }
+  }
+  return Array.from(best.values()).sort(
+    (a, b) => b.similarity - a.similarity,
+  );
+}
