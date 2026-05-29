@@ -40,6 +40,59 @@ interface LinkInputRow {
   created_at: number;
 }
 
+/**
+ * Return true when the input has enough signal to be worth indexing.
+ *
+ * Drops:
+ *   - Empty / placeholder bodies ("_no speech detected_", routine
+ *     prompts that produced no captured output, etc.)
+ *   - Very short bodies — fewer than ~8 meaningful words after
+ *     stripping markdown punctuation. Anything shorter is too thin
+ *     for either FTS or semantic to return a useful hit.
+ *   - Kinds we've decided are pure ephemera (tasks — the launch
+ *     prompt isn't a work artifact; the produced output lives in
+ *     meetings/notes/briefings/drafts when meaningful).
+ *
+ * Reminders + goals + meetings always pass when they have any body
+ * — they're cross-link anchors even when short.
+ */
+function isMeaningfulArtifact(input: ArtifactInput): boolean {
+  // Tasks are launch prompts + status; the actual outputs land in
+  // meetings/notes/briefings/drafts when meaningful. Indexing the
+  // launch prompts produces a flood of "routine fired" rows that
+  // dilute search quality.
+  if (input.kind === 'task') return false;
+
+  const title = (input.title ?? '').trim();
+  const content = (input.content ?? '').trim();
+
+  // Placeholder markers we know about.
+  if (
+    /^_?no speech detected_?$/i.test(content) ||
+    /^_?nothing to report_?$/i.test(content) ||
+    /^_?empty_?$/i.test(content) ||
+    /^_?no content_?$/i.test(content)
+  ) {
+    return false;
+  }
+
+  // Reminders + goals always pass — they're cross-link anchors and
+  // their value is the title + the relationship graph, not the body.
+  if (input.kind === 'reminder' || input.kind === 'goal') {
+    return title.length > 0;
+  }
+
+  // For everything else, require at least 8 word-like tokens of
+  // length >= 3. Markdown punctuation, URLs, and very short words
+  // ("a", "is", "to") don't count toward the threshold.
+  const tokens = content
+    .replace(/[`*_>#~|\\(){}[\]]/g, ' ')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length >= 3);
+  return tokens.length >= 8;
+}
+
 interface ArtifactRow {
   id: string;
   kind: string;
@@ -66,6 +119,14 @@ interface ArtifactRow {
  * once the worker returns. Callers don't need to await.
  */
 export async function upsertArtifact(input: ArtifactInput): Promise<void> {
+  // Quality gate — drop artifacts that would just be noise in the
+  // search surface (empty meetings, placeholder content, very short
+  // bodies with no signal). The agent surface shouldn't return rows
+  // it can't use. Cheap heuristics here; richer LLM-driven cleanup
+  // could come later as a periodic skill.
+  if (!isMeaningfulArtifact(input)) {
+    return;
+  }
   const now = Date.now();
   const createdAt = input.createdAt ?? now;
   const db = getDb();
@@ -407,78 +468,16 @@ export function semanticNeighbors(
   k = 5,
 ): Array<{ src: string; dst: string; similarity: number }> {
   if (!isVecAvailable()) return [];
-  const db = getDb();
-  // Pull all chunks + their parent artifact so we can dedupe at the
-  // artifact level even when one chunk matches multiple of another
-  // artifact's chunks.
-  type Row = {
-    src_chunk: string;
-    src_artifact: string;
-    dst_chunk: string;
-    dst_artifact: string;
-    distance: number;
-  };
-  // sqlite-vec's KNN syntax needs the query embedding inline. We
-  // self-join the embeddings table: for each chunk's vector, find
-  // the k nearest OTHER vectors. Done as a single statement to avoid
-  // per-chunk round-trips.
-  let rows: Row[];
-  try {
-    rows = db
-      .prepare(
-        `WITH all_chunks AS (
-           SELECT id, artifact_id FROM artifact_chunks
-         )
-         SELECT
-           src.id AS src_chunk,
-           src.artifact_id AS src_artifact,
-           knn.chunk_id AS dst_chunk,
-           dst.artifact_id AS dst_artifact,
-           knn.distance AS distance
-         FROM all_chunks src
-         JOIN artifact_embeddings src_e ON src_e.chunk_id = src.id
-         CROSS JOIN LATERAL (
-           SELECT chunk_id, distance
-           FROM artifact_embeddings
-           WHERE embedding MATCH src_e.embedding AND k = ?
-           ORDER BY distance
-         ) knn
-         JOIN artifact_chunks dst ON dst.id = knn.chunk_id
-         WHERE src.artifact_id != dst.artifact_id`,
-      )
-      .all(k + 1) as Row[];
-  } catch (err) {
-    // CROSS JOIN LATERAL may not be supported in all sqlite-vec
-    // versions; fall back to a procedural Float32 round-trip.
-    console.warn('[artifacts:vec] LATERAL KNN failed, falling back', err);
-    return semanticNeighborsProcedural(threshold, k);
-  }
-
-  // Dedupe at artifact level — keep max similarity for each unique
-  // unordered pair.
-  const best = new Map<string, { src: string; dst: string; similarity: number }>();
-  for (const r of rows) {
-    const a = r.src_artifact;
-    const b = r.dst_artifact;
-    if (a === b) continue;
-    const [lo, hi] = a < b ? [a, b] : [b, a];
-    const key = `${lo}|${hi}`;
-    // sqlite-vec cosine distance: 1 - cos. Similarity = 1 - distance.
-    const sim = 1 - r.distance;
-    if (sim < threshold) continue;
-    const existing = best.get(key);
-    if (!existing || sim > existing.similarity) {
-      best.set(key, { src: lo, dst: hi, similarity: sim });
-    }
-  }
-  return Array.from(best.values()).sort(
-    (a, b) => b.similarity - a.similarity,
-  );
+  return semanticNeighborsProcedural(threshold, k);
 }
 
-/** Procedural fallback when the SQL-side LATERAL KNN doesn't run.
- *  Iterates each chunk in JS, makes one KNN call per chunk. Slower
- *  for large corpora but correct. */
+/** Procedural KNN: iterate each chunk in JS and ask sqlite-vec for
+ *  its top-k neighbours one chunk at a time. Slower than a single
+ *  SQL-side LATERAL join would be, but sqlite-vec doesn't yet
+ *  support that shape — and at our scale (a few thousand chunks)
+ *  this still runs in well under a second. Dedup is at the artifact
+ *  level so a chunky meeting matching 4 chunks of one note still
+ *  produces a single edge. */
 function semanticNeighborsProcedural(
   threshold: number,
   k: number,

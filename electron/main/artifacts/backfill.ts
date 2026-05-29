@@ -6,7 +6,7 @@ import { extname, join, relative } from 'node:path';
 import type { ArtifactInput } from '@shared/types';
 
 import { getDb } from '../db.js';
-import { upsertArtifact } from './registry.js';
+import { deleteArtifact, upsertArtifact } from './registry.js';
 
 /**
  * One-time backfill pass: scan every Jarvis-owned artifact directory
@@ -47,6 +47,14 @@ let running = false;
 export async function backfillArtifacts(): Promise<void> {
   if (running) return;
   running = true;
+  // One-time prune: drop low-value artifacts already in the catalog
+  // from earlier (pre-quality-gate) backfill runs. Idempotent — re-
+  // runs just re-check + delete the same rows.
+  try {
+    pruneLowValueArtifacts();
+  } catch (err) {
+    console.warn('[backfill:prune]', err);
+  }
   const jarvisRoot = join(homedir(), '.jarvis');
   const pending: PendingArtifact[] = [];
 
@@ -106,6 +114,58 @@ export async function backfillArtifacts(): Promise<void> {
   backfillEvents.emit('done', { total });
   console.log(`[backfill] completed ${done}/${total}`);
   running = false;
+}
+
+/**
+ * Drop rows that fail the current quality bar — kind='task' (always),
+ * placeholder content, and bodies too short to produce useful hits.
+ * Idempotent. Used as a one-time prune on each backfill so the
+ * catalog converges to the current isMeaningful definition without
+ * the user having to nuke jarvis.sqlite.
+ */
+function pruneLowValueArtifacts(): void {
+  const db = getDb();
+  // Tasks — we no longer index these at all.
+  const taskIds = db
+    .prepare(`SELECT id FROM artifacts WHERE kind = 'task'`)
+    .all() as Array<{ id: string }>;
+  // Joined content per artifact, then per-row filter.
+  const others = db
+    .prepare(
+      `SELECT a.id AS id, a.kind AS kind, a.title AS title,
+              COALESCE((
+                SELECT GROUP_CONCAT(content, ' ')
+                FROM artifact_chunks WHERE artifact_id = a.id
+              ), '') AS content
+       FROM artifacts a WHERE a.kind != 'task'`,
+    )
+    .all() as Array<{
+    id: string;
+    kind: string;
+    title: string;
+    content: string;
+  }>;
+  const droppable: string[] = taskIds.map((r) => r.id);
+  for (const r of others) {
+    const content = r.content.trim();
+    if (
+      /^_?no speech detected_?$/i.test(content) ||
+      /^_?nothing to report_?$/i.test(content)
+    ) {
+      droppable.push(r.id);
+      continue;
+    }
+    if (r.kind === 'reminder' || r.kind === 'goal') continue; // anchors
+    const tokens = content
+      .replace(/[`*_>#~|\\(){}[\]]/g, ' ')
+      .replace(/https?:\/\/\S+/g, ' ')
+      .split(/\s+/)
+      .filter((t) => t.length >= 3);
+    if (tokens.length < 8) droppable.push(r.id);
+  }
+  if (droppable.length === 0) return;
+  for (const id of droppable) deleteArtifact(id);
+  console.log(`[backfill] pruned ${droppable.length} low-value artifacts`);
 }
 
 // ─── File scanners ──────────────────────────────────────────────────────
@@ -233,17 +293,6 @@ function parseFrontmatter(raw: string): {
 
 // ─── SQLite scanners ────────────────────────────────────────────────────
 
-interface TaskRow {
-  id: string;
-  title: string;
-  status: string;
-  origin: string;
-  started_at: number;
-  ended_at: number | null;
-  input_preview: string;
-  project_name: string | null;
-}
-
 interface DraftRow {
   id: string;
   source: string;
@@ -259,40 +308,12 @@ function scanSqliteStores(): PendingArtifact[] {
   const out: PendingArtifact[] = [];
   const db = getDb();
 
-  // Tasks — the prompt + result text is the most useful content.
-  // Skip tasks older than 90 days to keep the catalog focused on
-  // recent work.
-  try {
-    const SINCE = Date.now() - 90 * 86_400_000;
-    const tasks = db
-      .prepare(
-        `SELECT id, title, status, origin, started_at, ended_at,
-                input_preview, project_name
-         FROM tasks WHERE started_at >= ? ORDER BY started_at DESC`,
-      )
-      .all(SINCE) as TaskRow[];
-    for (const t of tasks) {
-      out.push({
-        _src: `sqlite:tasks:${t.id}`,
-        id: `task:${t.id}`,
-        kind: 'task',
-        title: t.title,
-        project: t.project_name,
-        path: null,
-        url: null,
-        frontmatter: {
-          status: t.status,
-          origin: t.origin,
-          started_at: t.started_at,
-          ended_at: t.ended_at,
-        },
-        content: t.input_preview ?? '',
-        createdAt: t.started_at,
-      });
-    }
-  } catch (err) {
-    console.warn('[backfill:tasks]', err);
-  }
+  // Tasks intentionally NOT backfilled. The launch prompt
+  // (input_preview) on its own is just "what someone asked Jarvis
+  // to do" — the actual produced work lives in meetings, notes,
+  // briefings, drafts. Indexing tasks dilutes the catalog with rows
+  // that have no useful body. (Quality gate in
+  // isMeaningfulArtifact also drops them defensively.)
 
   // Drafts — current_body + why is the searchable content.
   try {

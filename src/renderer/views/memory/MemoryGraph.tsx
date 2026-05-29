@@ -99,13 +99,12 @@ function Inner({ showSemantic, semanticThreshold, kindFilter, sinceMs }: Props) 
 
   const positions = useMemo(() => {
     if (visibleNodes.length === 0) return new Map<string, { x: number; y: number }>();
-    const positionsArr = computeLayout(
-      visibleNodes,
-      explicit,
-      showSemantic ? semantic : [],
-    );
+    // Semantic edges are ALWAYS used as a layout force — they're what
+    // produces topic clusters. The toggle controls whether the user
+    // SEES the dotted lines, not whether the simulation feels them.
+    const positionsArr = computeLayout(visibleNodes, explicit, semantic);
     return new Map(positionsArr.map((p) => [p.id, { x: p.x, y: p.y }]));
-  }, [visibleNodes, explicit, semantic, showSemantic]);
+  }, [visibleNodes, explicit, semantic]);
 
   const flowNodes: ArtifactNodeType[] = useMemo(
     () =>
