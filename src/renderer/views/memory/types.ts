@@ -10,7 +10,18 @@ export interface ArtifactNode {
   title: string;
   project: string | null;
   updatedAt: number;
+  /** Set when this node is a chunk-level facet of a longer
+   *  artifact. Drives the detail-panel "open full artifact"
+   *  affordance and the same-source edge layer. */
+  artifactId?: string;
+  /** Section heading (e.g. "Action items") when the node is a
+   *  facet. Used as the visible label since the title is shared
+   *  across siblings. */
+  heading?: string | null;
+  ord?: number;
 }
+
+export type GraphMode = 'artifact' | 'facet';
 
 export interface ExplicitEdge {
   src: string;

@@ -22539,3 +22539,37 @@ button:focus-visible,
   background: rgba(77, 200, 230, 0.08);
   box-shadow: var(--accent-glow-soft);
 }
+
+/* Facet mode adornments — subtitle (parent title), chunk-heading
+   label in the detail panel. */
+.mem-node--facet {
+  padding-bottom: 4px;
+}
+.mem-node__subtitle {
+  margin-top: 1px;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  text-transform: uppercase;
+}
+.mem-detail__kind-suffix {
+  color: var(--text-faint);
+  letter-spacing: 0.18em;
+}
+.mem-detail__facet-label {
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--text);
+  text-transform: uppercase;
+}
+.mem-detail__section-suffix {
+  color: var(--text-faint);
+  font-weight: 400;
+}

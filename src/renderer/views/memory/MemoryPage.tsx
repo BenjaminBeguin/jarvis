@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { MemoryGraph } from './MemoryGraph';
-import { KIND_STYLES } from './types';
+import { KIND_STYLES, type GraphMode } from './types';
 
 /**
  * /memory route — the "what Jarvis knows" graph view.
@@ -26,6 +26,7 @@ const RECENCY_MS: Record<Recency, number | null> = {
 const KIND_FILTER_KEY = 'jarvis.memory.kinds';
 const RECENCY_KEY = 'jarvis.memory.recency';
 const SEMANTIC_KEY = 'jarvis.memory.semantic';
+const MODE_KEY = 'jarvis.memory.mode';
 
 function loadStored<T>(key: string, fallback: T): T {
   try {
@@ -60,6 +61,9 @@ export function MemoryPage() {
   );
   const [semanticThreshold, setSemanticThreshold] = useState<number>(() =>
     loadStored<number>('jarvis.memory.threshold', 0.5),
+  );
+  const [mode, setMode] = useState<GraphMode>(() =>
+    loadStored<GraphMode>(MODE_KEY, 'facet'),
   );
 
   useEffect(() => {
@@ -167,6 +171,26 @@ export function MemoryPage() {
             </label>
           )}
         </div>
+        <div className="mem-page__toolbar-section">
+          <span className="mem-page__toolbar-label">VIEW</span>
+          {(['artifact', 'facet'] as const).map((m) => (
+            <button
+              key={m}
+              className={`mem-page__range${m === mode ? ' mem-page__range--active' : ''}`}
+              onClick={() => {
+                setMode(m);
+                saveStored(MODE_KEY, m);
+              }}
+              title={
+                m === 'artifact'
+                  ? 'One node per meeting / note / etc.'
+                  : 'One node per section — a meeting that covers 3 topics shows up in 3 clusters'
+              }
+            >
+              {m === 'artifact' ? 'by artifact' : 'by topic'}
+            </button>
+          ))}
+        </div>
       </header>
       <main className="mem-page__canvas">
         <MemoryGraph
@@ -174,6 +198,7 @@ export function MemoryPage() {
           semanticThreshold={semanticThreshold}
           kindFilter={activeKinds.size > 0 ? activeKinds : null}
           sinceMs={since}
+          mode={mode}
         />
       </main>
     </section>

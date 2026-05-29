@@ -1,4 +1,5 @@
 import type {
+  ArtifactFacet,
   ArtifactFull,
   ArtifactGraphEdge,
   ArtifactGraphSnapshot,
@@ -431,6 +432,48 @@ function rowToSummary(row: ArtifactRow): ArtifactSummary {
   };
 }
 
+/**
+ * Read a specific chunk's content + heading + parent artifact id.
+ * Used by the /memory detail panel in facet mode: when the user
+ * clicks a facet (a single section of a long meeting), we open the
+ * panel scrolled to that section first, with the parent meeting
+ * accessible via the linksIn view.
+ *
+ * `chunkId` is the same id surfaced by listFacets — either an
+ * artifact id (single-chunk artifact) or `<artifactId>::<ord>`.
+ */
+export function readChunk(chunkId: string): {
+  chunkId: string;
+  artifactId: string;
+  ord: number;
+  heading: string | null;
+  content: string;
+} | null {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT id, artifact_id, ord, heading, content
+       FROM artifact_chunks WHERE id = ?`,
+    )
+    .get(chunkId) as
+    | {
+        id: string;
+        artifact_id: string;
+        ord: number;
+        heading: string | null;
+        content: string;
+      }
+    | undefined;
+  if (!row) return null;
+  return {
+    chunkId: row.id,
+    artifactId: row.artifact_id,
+    ord: row.ord,
+    heading: row.heading,
+    content: row.content,
+  };
+}
+
 /** Return how many artifacts of each kind are indexed. Used for tray
  *  status + the backfill progress bar. */
 export function countByKind(): Array<{ kind: string; count: number }> {
@@ -439,6 +482,169 @@ export function countByKind(): Array<{ kind: string; count: number }> {
       `SELECT kind, COUNT(*) AS count FROM artifacts WHERE archived = 0 GROUP BY kind ORDER BY count DESC`,
     )
     .all() as Array<{ kind: string; count: number }>;
+}
+
+/**
+ * Facet view of the catalog — one node per chunk for multi-chunk
+ * artifacts, one node per artifact for single-chunk ones. Used by
+ * the /memory graph in "by topic" mode so a meeting that touches
+ * 3 topics shows up in 3 clusters instead of being averaged.
+ *
+ * Filters mirror listArtifacts (kind / project / since / limit).
+ * `limit` caps ARTIFACTS, not facets — a meeting with 4 chunks
+ * still counts as 1 toward the limit but produces 4 facets.
+ */
+export interface ListFacetsOpts {
+  kind?: ArtifactKind | ArtifactKind[];
+  project?: string;
+  since?: number;
+  limit?: number;
+  /** Skip chunks shorter than this length (defensive — the chunker
+   *  already enforces a floor, but tiny header-only chunks aren't
+   *  worth their own node). Default 60. */
+  minChunkChars?: number;
+}
+
+export function listFacets(opts: ListFacetsOpts = {}): ArtifactFacet[] {
+  const db = getDb();
+  const where: string[] = ['a.archived = 0'];
+  const params: Record<string, unknown> = {};
+  if (opts.kind) {
+    const kinds = Array.isArray(opts.kind) ? opts.kind : [opts.kind];
+    where.push(`a.kind IN (${kinds.map((_, i) => `@k${i}`).join(', ')})`);
+    kinds.forEach((k, i) => {
+      params[`k${i}`] = k;
+    });
+  }
+  if (opts.project) {
+    where.push(`a.project = @project`);
+    params.project = opts.project;
+  }
+  if (typeof opts.since === 'number') {
+    where.push(`a.updated_at >= @since`);
+    params.since = opts.since;
+  }
+  const minChunk = opts.minChunkChars ?? 60;
+  const limit = Math.max(1, Math.min(opts.limit ?? 500, 2000));
+
+  // Pull artifacts in scope first (capped), then each one's chunks.
+  // Window + GROUP BY would be denser but harder to read.
+  const artifacts = db
+    .prepare(
+      `SELECT a.id, a.kind, a.title, a.project, a.updated_at,
+              (SELECT COUNT(*) FROM artifact_chunks WHERE artifact_id = a.id) AS chunk_count
+       FROM artifacts a
+       WHERE ${where.join(' AND ')}
+       ORDER BY a.updated_at DESC
+       LIMIT ${limit}`,
+    )
+    .all(params) as Array<{
+    id: string;
+    kind: string;
+    title: string;
+    project: string | null;
+    updated_at: number;
+    chunk_count: number;
+  }>;
+
+  const facets: ArtifactFacet[] = [];
+  const chunkStmt = db.prepare(
+    `SELECT id, ord, heading, content FROM artifact_chunks
+     WHERE artifact_id = ? ORDER BY ord ASC`,
+  );
+  for (const a of artifacts) {
+    // Single-chunk artifacts: emit one facet whose id == artifact id
+    // (so click-through to detail works without an extra translation).
+    if (a.chunk_count <= 1) {
+      facets.push({
+        id: a.id,
+        artifactId: a.id,
+        kind: a.kind,
+        title: a.title,
+        heading: null,
+        ord: 0,
+        project: a.project,
+        updatedAt: a.updated_at,
+      });
+      continue;
+    }
+    const chunks = chunkStmt.all(a.id) as Array<{
+      id: string;
+      ord: number;
+      heading: string | null;
+      content: string;
+    }>;
+    // Filter out tiny chunks unless they're the only ones — keeps
+    // header-only sections from cluttering the graph.
+    const meaningful = chunks.filter((c) => c.content.length >= minChunk);
+    const toEmit = meaningful.length > 0 ? meaningful : chunks;
+    for (const c of toEmit) {
+      facets.push({
+        id: c.id,
+        artifactId: a.id,
+        kind: a.kind,
+        title: a.title,
+        heading: stripHeadingMarks(c.heading),
+        ord: c.ord,
+        project: a.project,
+        updatedAt: a.updated_at,
+      });
+    }
+  }
+  return facets;
+}
+
+function stripHeadingMarks(heading: string | null): string | null {
+  if (!heading) return null;
+  return heading.replace(/^#+\s*/, '').trim() || null;
+}
+
+/**
+ * Chunk-level semantic neighbours (no per-artifact dedupe). Used by
+ * the facet-mode graph layout — when chunks ARE the nodes, edges
+ * should connect at chunk granularity so the design-tokens section
+ * of meeting A links to the design-tokens section of meeting B, not
+ * to the whole-meeting average.
+ */
+export function semanticChunkNeighbors(
+  threshold = 0.4,
+  k = 6,
+): Array<{ src: string; dst: string; similarity: number }> {
+  if (!isVecAvailable()) return [];
+  const db = getDb();
+  type ChunkVec = { chunk_id: string; embedding: Buffer };
+  const chunks = db
+    .prepare(
+      `SELECT c.id AS chunk_id, e.embedding AS embedding
+       FROM artifact_chunks c JOIN artifact_embeddings e ON e.chunk_id = c.id`,
+    )
+    .all() as ChunkVec[];
+  const knnStmt = db.prepare(
+    `SELECT chunk_id, distance FROM artifact_embeddings
+     WHERE embedding MATCH ? AND k = ? ORDER BY distance`,
+  );
+  const best = new Map<string, { src: string; dst: string; similarity: number }>();
+  for (const c of chunks) {
+    const hits = knnStmt.all(c.embedding, k + 1) as Array<{
+      chunk_id: string;
+      distance: number;
+    }>;
+    for (const h of hits) {
+      if (h.chunk_id === c.chunk_id) continue;
+      const sim = 1 - h.distance;
+      if (sim < threshold) continue;
+      const [lo, hi] =
+        c.chunk_id < h.chunk_id ? [c.chunk_id, h.chunk_id] : [h.chunk_id, c.chunk_id];
+      const key = `${lo}|${hi}`;
+      const existing = best.get(key);
+      if (!existing || sim > existing.similarity) {
+        best.set(key, { src: lo, dst: hi, similarity: sim });
+      }
+    }
+  }
+  return Array.from(best.values()).sort(
+    (a, b) => b.similarity - a.similarity,
+  );
 }
 
 /** Every explicit link in the substrate. Used by the /memory graph

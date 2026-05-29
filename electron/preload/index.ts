@@ -273,6 +273,38 @@ const api = {
   artifactsCountByKind: (): Promise<
     Array<{ kind: string; count: number }>
   > => ipcRenderer.invoke(IpcChannels.artifactsCountByKind),
+  artifactsListFacets: (opts?: {
+    kind?: string | string[];
+    project?: string;
+    since?: number;
+    limit?: number;
+    minChunkChars?: number;
+  }): Promise<
+    Array<{
+      id: string;
+      artifactId: string;
+      kind: string;
+      title: string;
+      heading: string | null;
+      ord: number;
+      project: string | null;
+      updatedAt: number;
+    }>
+  > => ipcRenderer.invoke(IpcChannels.artifactsListFacets, opts ?? {}),
+  artifactsReadChunk: (
+    chunkId: string,
+  ): Promise<{
+    chunkId: string;
+    artifactId: string;
+    ord: number;
+    heading: string | null;
+    content: string;
+  } | null> => ipcRenderer.invoke(IpcChannels.artifactsReadChunk, chunkId),
+  artifactsSemanticChunkNeighbors: (opts?: {
+    threshold?: number;
+    k?: number;
+  }): Promise<Array<{ src: string; dst: string; similarity: number }>> =>
+    ipcRenderer.invoke(IpcChannels.artifactsSemanticChunkNeighbors, opts ?? {}),
 
   /** Tray-menu meeting controls. Routes to the renderer's
    *  MeetingRecorder through the same broadcast path the PWA +

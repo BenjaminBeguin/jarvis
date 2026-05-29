@@ -3,6 +3,11 @@ import { useEffect, useState } from 'react';
 import { MarkdownText } from '../MarkdownText';
 import { styleForKind, type ArtifactDetail } from './types';
 
+interface FacetView {
+  heading: string | null;
+  content: string;
+}
+
 interface Props {
   id: string;
   onClose: () => void;
@@ -11,26 +16,45 @@ interface Props {
 
 /**
  * Side panel that opens when the user clicks a node in the memory
- * graph. Shows the full artifact body + frontmatter + every link in
- * and out, so the user can drill into related nodes without leaving
- * the graph.
+ * graph. Shows the artifact's full body + frontmatter + links —
+ * and when the clicked node was a chunk facet (id contains `::`),
+ * opens with that chunk's section featured first, with a button to
+ * expand to the parent meeting/note.
  */
 export function MemoryDetailPanel({ id, onClose, onOpen }: Props) {
   const [data, setData] = useState<ArtifactDetail | null>(null);
+  const [facet, setFacet] = useState<FacetView | null>(null);
+  const [showFullParent, setShowFullParent] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void window.jarvis
-      .artifactsRead(id)
-      .then((res) => {
-        if (cancelled) return;
-        setData(res as ArtifactDetail | null);
-      })
-      .finally(() => {
+    setFacet(null);
+    setShowFullParent(false);
+    // Facet ids carry the `::<ord>` suffix; pull the chunk first
+    // and use its artifact_id to fetch the parent.
+    const isFacet = id.includes('::');
+    void (async () => {
+      try {
+        if (isFacet) {
+          const chunk = await window.jarvis.artifactsReadChunk(id);
+          if (cancelled) return;
+          if (chunk) {
+            setFacet({ heading: chunk.heading, content: chunk.content });
+            const parent = await window.jarvis.artifactsRead(chunk.artifactId);
+            if (cancelled) return;
+            setData(parent as ArtifactDetail | null);
+          }
+        } else {
+          const res = await window.jarvis.artifactsRead(id);
+          if (cancelled) return;
+          setData(res as ArtifactDetail | null);
+        }
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -60,17 +84,41 @@ export function MemoryDetailPanel({ id, onClose, onOpen }: Props) {
       )}
       {!loading && data && (
         <div className="mem-detail__body">
-          <DetailHeading data={data} />
+          <DetailHeading data={data} facetHeading={facet?.heading ?? null} />
           {data.frontmatter && Object.keys(data.frontmatter).length > 0 && (
             <Frontmatter data={data.frontmatter} />
           )}
           <Links data={data} onOpen={onOpen} />
-          <section className="mem-detail__content">
-            <h4 className="mem-detail__section-head">CONTENT</h4>
-            <div className="mem-detail__content-body">
-              <MarkdownText>{data.content || '_no content_'}</MarkdownText>
-            </div>
-          </section>
+          {facet && !showFullParent && (
+            <section className="mem-detail__content">
+              <h4 className="mem-detail__section-head">
+                THIS SECTION
+                {facet.heading && (
+                  <span className="mem-detail__section-suffix">
+                    {' · '}
+                    {facet.heading}
+                  </span>
+                )}
+              </h4>
+              <div className="mem-detail__content-body">
+                <MarkdownText>{facet.content || '_no content_'}</MarkdownText>
+              </div>
+              <button
+                className="mem-detail__open-external"
+                onClick={() => setShowFullParent(true)}
+              >
+                ▾ Show full {data.kind}
+              </button>
+            </section>
+          )}
+          {(!facet || showFullParent) && (
+            <section className="mem-detail__content">
+              <h4 className="mem-detail__section-head">FULL CONTENT</h4>
+              <div className="mem-detail__content-body">
+                <MarkdownText>{data.content || '_no content_'}</MarkdownText>
+              </div>
+            </section>
+          )}
           {data.url && /^https?:\/\//i.test(data.url) && (
             <button
               className="mem-detail__open-external"
@@ -93,7 +141,13 @@ export function MemoryDetailPanel({ id, onClose, onOpen }: Props) {
   );
 }
 
-function DetailHeading({ data }: { data: ArtifactDetail }) {
+function DetailHeading({
+  data,
+  facetHeading,
+}: {
+  data: ArtifactDetail;
+  facetHeading: string | null;
+}) {
   const style = styleForKind(data.kind);
   return (
     <div
@@ -102,8 +156,16 @@ function DetailHeading({ data }: { data: ArtifactDetail }) {
     >
       <div className="mem-detail__glyph">{style.glyph}</div>
       <div className="mem-detail__heading-text">
-        <div className="mem-detail__kind">{style.label}</div>
+        <div className="mem-detail__kind">
+          {style.label}
+          {facetHeading && (
+            <span className="mem-detail__kind-suffix"> · facet</span>
+          )}
+        </div>
         <h3 className="mem-detail__title">{data.title}</h3>
+        {facetHeading && (
+          <div className="mem-detail__facet-label">{facetHeading}</div>
+        )}
         <div className="mem-detail__meta">
           {data.project && (
             <span className="mem-detail__project">{data.project}</span>

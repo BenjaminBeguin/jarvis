@@ -19,6 +19,7 @@ import {
   styleForKind,
   type ArtifactNode,
   type ExplicitEdge,
+  type GraphMode,
   type SemanticEdge,
 } from './types';
 
@@ -27,6 +28,10 @@ interface Props {
   semanticThreshold: number;
   kindFilter: Set<string> | null;
   sinceMs: number | null;
+  /** 'artifact' = one node per meeting/note/etc. 'facet' = one node
+   *  per chunk for multi-chunk artifacts, so a meeting with 3 topics
+   *  shows up in 3 clusters. */
+  mode: GraphMode;
 }
 
 interface NodeData extends Record<string, unknown> {
@@ -61,7 +66,13 @@ export function MemoryGraph(props: Props) {
   );
 }
 
-function Inner({ showSemantic, semanticThreshold, kindFilter, sinceMs }: Props) {
+function Inner({
+  showSemantic,
+  semanticThreshold,
+  kindFilter,
+  sinceMs,
+  mode,
+}: Props) {
   const [allNodes, setAllNodes] = useState<ArtifactNode[]>([]);
   const [explicit, setExplicit] = useState<ExplicitEdge[]>([]);
   const [semantic, setSemantic] = useState<SemanticEdge[]>([]);
@@ -72,22 +83,47 @@ function Inner({ showSemantic, semanticThreshold, kindFilter, sinceMs }: Props) 
     void (async () => {
       setLoading(true);
       try {
-        const [list, links, neigh] = await Promise.all([
-          window.jarvis.artifactsList({ limit: 1000 }),
-          window.jarvis.artifactsLinks(),
-          window.jarvis.artifactsSemanticNeighbors({
-            threshold: semanticThreshold,
-            k: 4,
-          }),
-        ]);
-        setAllNodes(list);
-        setExplicit(links);
-        setSemantic(neigh);
+        if (mode === 'facet') {
+          const [facets, links, neigh] = await Promise.all([
+            window.jarvis.artifactsListFacets({ limit: 800 }),
+            window.jarvis.artifactsLinks(),
+            window.jarvis.artifactsSemanticChunkNeighbors({
+              threshold: semanticThreshold,
+              k: 5,
+            }),
+          ]);
+          setAllNodes(
+            facets.map((f) => ({
+              id: f.id,
+              kind: f.kind,
+              title: f.title,
+              project: f.project,
+              updatedAt: f.updatedAt,
+              artifactId: f.artifactId,
+              heading: f.heading,
+              ord: f.ord,
+            })),
+          );
+          setExplicit(links);
+          setSemantic(neigh);
+        } else {
+          const [list, links, neigh] = await Promise.all([
+            window.jarvis.artifactsList({ limit: 1000 }),
+            window.jarvis.artifactsLinks(),
+            window.jarvis.artifactsSemanticNeighbors({
+              threshold: semanticThreshold,
+              k: 4,
+            }),
+          ]);
+          setAllNodes(list);
+          setExplicit(links);
+          setSemantic(neigh);
+        }
       } finally {
         setLoading(false);
       }
     })();
-  }, [semanticThreshold]);
+  }, [semanticThreshold, mode]);
 
   const visibleNodes = useMemo(() => {
     return allNodes.filter((n) => {
@@ -179,8 +215,39 @@ function Inner({ showSemantic, semanticThreshold, kindFilter, sinceMs }: Props) 
         });
       }
     }
+    // Facet mode: emit thin grey "same source" edges between
+    // consecutive chunks of the same artifact. Lets the user see at
+    // a glance "these three nodes are all the same meeting" without
+    // exploding edge count (N-1 per artifact instead of N*(N-1)/2).
+    if (mode === 'facet') {
+      const bySource = new Map<string, ArtifactNode[]>();
+      for (const n of visibleNodes) {
+        if (!n.artifactId || n.artifactId === n.id) continue;
+        let arr = bySource.get(n.artifactId);
+        if (!arr) {
+          arr = [];
+          bySource.set(n.artifactId, arr);
+        }
+        arr.push(n);
+      }
+      for (const [artId, siblings] of bySource) {
+        siblings.sort((a, b) => (a.ord ?? 0) - (b.ord ?? 0));
+        for (let i = 0; i < siblings.length - 1; i++) {
+          out.push({
+            id: `ss:${artId}:${siblings[i]!.id}->${siblings[i + 1]!.id}`,
+            source: siblings[i]!.id,
+            target: siblings[i + 1]!.id,
+            style: {
+              stroke: 'rgba(160, 175, 195, 0.18)',
+              strokeWidth: 1,
+              strokeDasharray: '1 4',
+            },
+          });
+        }
+      }
+    }
     return out;
-  }, [explicit, cappedSemantic, showSemantic, visibleIds]);
+  }, [explicit, cappedSemantic, showSemantic, visibleIds, visibleNodes, mode]);
 
   return (
     <div className="memory-graph">
@@ -225,23 +292,39 @@ function Inner({ showSemantic, semanticThreshold, kindFilter, sinceMs }: Props) 
   );
 }
 
-/** Per-node renderer — small glyph + title under it. */
+/** Per-node renderer. In facet mode the visible label is the chunk
+ *  heading (since the artifact title is identical across siblings)
+ *  and the tooltip carries the parent's title. */
 function ArtifactGlyph({ data }: NodeProps<ArtifactNodeType>) {
   const { artifact, selected } = data;
   const style = styleForKind(artifact.kind);
-  const truncated =
-    artifact.title.length > 28
-      ? `${artifact.title.slice(0, 27)}…`
+  // Facet with a heading → show heading as the label, keep title in
+  // the tooltip. Falls back to the title for single-chunk facets and
+  // for nodes in artifact mode.
+  const labelText = artifact.heading || artifact.title;
+  const tooltip =
+    artifact.heading && artifact.title
+      ? `${artifact.title} · ${artifact.heading}`
       : artifact.title;
+  const truncated =
+    labelText.length > 28 ? `${labelText.slice(0, 27)}…` : labelText;
+  const isFacet = !!artifact.heading;
   return (
     <div
-      className={`mem-node mem-node--${artifact.kind}${selected ? ' mem-node--selected' : ''}`}
+      className={`mem-node mem-node--${artifact.kind}${selected ? ' mem-node--selected' : ''}${isFacet ? ' mem-node--facet' : ''}`}
       style={{ '--mem-tint': style.tint } as React.CSSProperties}
-      title={artifact.title}
+      title={tooltip}
     >
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
       <div className="mem-node__glyph">{style.glyph}</div>
       <div className="mem-node__title">{truncated}</div>
+      {isFacet && (
+        <div className="mem-node__subtitle">
+          {artifact.title.length > 30
+            ? `${artifact.title.slice(0, 29)}…`
+            : artifact.title}
+        </div>
+      )}
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
     </div>
   );

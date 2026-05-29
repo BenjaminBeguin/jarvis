@@ -7,7 +7,10 @@ import {
   countByKind,
   listAllLinks,
   listArtifacts,
+  listFacets,
   readArtifact,
+  readChunk,
+  semanticChunkNeighbors,
   semanticNeighbors,
 } from '../artifacts/index.js';
 
@@ -39,4 +42,28 @@ export function registerArtifactsIpc(): void {
       semanticNeighbors(opts.threshold ?? 0.7, opts.k ?? 5),
   );
   ipcMain.handle(IpcChannels.artifactsCountByKind, () => countByKind());
+
+  ipcMain.handle(
+    IpcChannels.artifactsListFacets,
+    (
+      _e,
+      opts: {
+        kind?: ArtifactKind | ArtifactKind[];
+        project?: string;
+        since?: number;
+        limit?: number;
+        minChunkChars?: number;
+      } = {},
+    ) => listFacets(opts),
+  );
+
+  ipcMain.handle(IpcChannels.artifactsReadChunk, (_e, chunkId: string) =>
+    readChunk(chunkId),
+  );
+
+  ipcMain.handle(
+    IpcChannels.artifactsSemanticChunkNeighbors,
+    (_e, opts: { threshold?: number; k?: number } = {}) =>
+      semanticChunkNeighbors(opts.threshold ?? 0.4, opts.k ?? 6),
+  );
 }

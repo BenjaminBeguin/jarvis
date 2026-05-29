@@ -117,6 +117,9 @@ export const IpcChannels = {
   artifactsLinks: 'artifacts:links',
   artifactsSemanticNeighbors: 'artifacts:semanticNeighbors',
   artifactsCountByKind: 'artifacts:countByKind',
+  artifactsListFacets: 'artifacts:listFacets',
+  artifactsReadChunk: 'artifacts:readChunk',
+  artifactsSemanticChunkNeighbors: 'artifacts:semanticChunkNeighbors',
 
   /** Renderer-invoked control of the active meeting recording. Used
    *  by the tray menu's Pause/Resume/Finish buttons. Same path the

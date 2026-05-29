@@ -1593,3 +1593,33 @@ export interface ArtifactGraphSnapshot {
   nodes: ArtifactSummary[];
   edges: ArtifactGraphEdge[];
 }
+
+/**
+ * A facet is a single chunk rendered as a graph node, so a long
+ * meeting that covers 3 topics can sit in 3 clusters instead of
+ * being pulled to whatever the "average" of its content is.
+ *
+ * For artifacts that produced only one chunk (short notes,
+ * reminders), the facet's `id` matches the artifact's id and
+ * `heading` is null — same shape as before. Multi-chunk artifacts
+ * emit one facet per chunk with `id = <artifactId>::<ord>`.
+ */
+export interface ArtifactFacet {
+  /** Stable id — equals artifactId for single-chunk artifacts,
+   *  `${artifactId}::${ord}` for chunks of multi-chunk ones. */
+  id: string;
+  /** Parent artifact id. Same as `id` for single-chunk facets. */
+  artifactId: string;
+  kind: ArtifactKind;
+  /** Artifact title. Same for every facet of the same artifact. */
+  title: string;
+  /** Section heading the chunk came from (e.g. "## Action items").
+   *  Null for single-chunk artifacts. Used as the visible node
+   *  label in facet view since the title is identical across
+   *  siblings. */
+  heading: string | null;
+  /** Order within the parent artifact (0 for single-chunk). */
+  ord: number;
+  project: string | null;
+  updatedAt: number;
+}
