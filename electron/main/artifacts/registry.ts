@@ -173,18 +173,32 @@ async function refreshEmbeddings(
   const vectors = await embed(texts);
   if (vectors.length === 0) return;
   const db = getDb();
-  // sqlite-vec wants the embedding as a Buffer (raw bytes of the
-  // Float32Array). Insert one row per chunk.
-  const insert = db.prepare(
-    `INSERT INTO artifact_embeddings (chunk_id, embedding)
-     VALUES (?, ?)`,
-  );
+  // The embed call is async, so two concurrent upserts of the same
+  // artifact can race: upsert#1 commits its tx (deletes old
+  // embeddings, inserts new chunks), fires embed worker; before that
+  // returns, upsert#2 commits its tx (same deletes/inserts). Now
+  // when upsert#1's vectors arrive they collide with whatever
+  // upsert#2 already wrote — INSERT throws UNIQUE constraint.
+  //
+  // sqlite-vec's vec0 doesn't support ON CONFLICT, so we do an
+  // explicit DELETE-then-INSERT inside the embedding tx, and key
+  // the whole thing on the chunk ids we're about to write. Whichever
+  // upsert finishes embedding last wins for those specific chunks.
   const tx = db.transaction(() => {
+    const del = db.prepare(
+      `DELETE FROM artifact_embeddings WHERE chunk_id = ?`,
+    );
+    const insert = db.prepare(
+      `INSERT INTO artifact_embeddings (chunk_id, embedding)
+       VALUES (?, ?)`,
+    );
     for (let i = 0; i < chunks.length; i++) {
       const vec = vectors[i];
       if (!vec) continue;
+      const id = chunkId(artifactId, chunks[i]!.ord);
+      del.run(id);
       insert.run(
-        chunkId(artifactId, chunks[i]!.ord),
+        id,
         Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength),
       );
     }
