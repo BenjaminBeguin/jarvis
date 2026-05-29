@@ -13,17 +13,26 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        // Two entries: the main process bundle + a standalone
-        // transcribe-worker we fork() for Whisper inference. The
-        // worker has to run out-of-process because ONNX Runtime
-        // segfaults on some setups (Apple Silicon + q8 model)
-        // would otherwise take the whole app down — a process
+        // Multiple entries: the main process bundle + standalone
+        // workers we fork() for crash-isolated ML inference. The
+        // workers HAVE to run out-of-process because ONNX Runtime
+        // can segfault on some setups (Apple Silicon + q8 model)
+        // and would otherwise take the whole app down — a process
         // boundary is the only thing native crashes respect.
+        //
+        // The host-side `fork()` call constructs the worker path
+        // at runtime as a string, so the bundler can't auto-detect
+        // it as a dependency. We list each worker as its own entry
+        // here; the output filename matches what the host expects.
         input: {
           index: resolve(__dirname, 'electron/main/index.ts'),
           'transcribe-worker': resolve(
             __dirname,
             'electron/main/modules/voice/transcribe-worker.ts',
+          ),
+          'embed-worker': resolve(
+            __dirname,
+            'electron/main/embeddings/embed-worker.ts',
           ),
         },
         output: {
