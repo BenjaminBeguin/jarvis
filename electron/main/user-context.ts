@@ -10,6 +10,8 @@ import type {
   TrayMenuState,
 } from '@shared/types';
 
+import { countByKind, listArtifacts } from './artifacts/registry.js';
+import { readRecentActivity } from './browser-activity.js';
 import type { InboxStore } from './inbox.js';
 import type { ProjectStore } from './projects.js';
 import type { TaskRunner } from './task-runner.js';
@@ -421,11 +423,7 @@ export const focusModeProvider: UserContextProvider = {
 export const browserActivityProvider: UserContextProvider = {
   name: 'browser-activity',
   build() {
-    // Lazy require to dodge the circular-import risk between
-    // user-context (system-prompt builder) and main bootstrap.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('./browser-activity.js') as typeof import('./browser-activity.js');
-    const events = mod.readRecentActivity(10 * 60_000);
+    const events = readRecentActivity(10 * 60_000);
     if (events.length === 0) return null;
     const seen = new Set<string>();
     const recent: typeof events = [];
@@ -467,12 +465,10 @@ function hostFromUrl(url: string): string {
 export const recentArtifactsProvider: UserContextProvider = {
   name: 'recent-artifacts',
   build() {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('./artifacts/registry.js') as typeof import('./artifacts/registry.js');
     const since = Date.now() - 24 * 60 * 60_000;
-    const recent = mod.listArtifacts({ since, limit: 5 });
+    const recent = listArtifacts({ since, limit: 5 });
     if (recent.length === 0) return null;
-    const counts = mod.countByKind();
+    const counts = countByKind();
     const countLine = counts
       .map((c) => `${c.kind}=${c.count}`)
       .join(', ');
