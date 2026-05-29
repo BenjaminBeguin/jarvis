@@ -97,14 +97,24 @@ function Inner({ showSemantic, semanticThreshold, kindFilter, sinceMs }: Props) 
     });
   }, [allNodes, kindFilter, sinceMs]);
 
-  const positions = useMemo(() => {
-    if (visibleNodes.length === 0) return new Map<string, { x: number; y: number }>();
-    // Semantic edges are ALWAYS used as a layout force — they're what
-    // produces topic clusters. The toggle controls whether the user
-    // SEES the dotted lines, not whether the simulation feels them.
-    const positionsArr = computeLayout(visibleNodes, explicit, semantic);
-    return new Map(positionsArr.map((p) => [p.id, { x: p.x, y: p.y }]));
+  const layout = useMemo(() => {
+    if (visibleNodes.length === 0) {
+      return {
+        positions: new Map<string, { x: number; y: number }>(),
+        usedEdges: [] as SemanticEdge[],
+      };
+    }
+    // Semantic edges drive both layout AND visual edges. We cap per-
+    // node inside the layout so a hub artifact doesn't produce a
+    // hairball; the SAME capped set is what we render below.
+    const { positions, usedEdges } = computeLayout(visibleNodes, explicit, semantic);
+    return {
+      positions: new Map(positions.map((p) => [p.id, { x: p.x, y: p.y }])),
+      usedEdges,
+    };
   }, [visibleNodes, explicit, semantic]);
+  const positions = layout.positions;
+  const cappedSemantic = layout.usedEdges;
 
   const flowNodes: ArtifactNodeType[] = useMemo(
     () =>
@@ -145,22 +155,32 @@ function Inner({ showSemantic, semanticThreshold, kindFilter, sinceMs }: Props) 
       });
     }
     if (showSemantic) {
-      for (const s of semantic) {
+      for (const s of cappedSemantic) {
         if (!visibleIds.has(s.src) || !visibleIds.has(s.dst)) continue;
+        // Color + opacity scale with similarity so the strongest
+        // topic ties are most prominent. At sim ≥ 0.75 they're
+        // bright cyan-tinted; lower ties fade toward purple/dim.
+        const t = Math.min(1, Math.max(0, (s.similarity - 0.4) / 0.4));
+        const alpha = 0.18 + t * 0.45;
+        // Hue blends purple (180, 138, 255) → bright cyan-ish
+        // (138, 220, 255) as similarity climbs.
+        const r = Math.round(180 - 42 * t);
+        const g = Math.round(138 + 82 * t);
+        const b = Math.round(255);
         out.push({
           id: `s:${s.src}~${s.dst}`,
           source: s.src,
           target: s.dst,
           style: {
-            stroke: `rgba(180, 138, 255, ${Math.min(0.6, s.similarity * 0.7)})`,
-            strokeWidth: 0.8,
-            strokeDasharray: '4 4',
+            stroke: `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`,
+            strokeWidth: 0.6 + t * 0.9,
+            strokeDasharray: t > 0.7 ? undefined : '3 3',
           },
         });
       }
     }
     return out;
-  }, [explicit, semantic, showSemantic, visibleIds]);
+  }, [explicit, cappedSemantic, showSemantic, visibleIds]);
 
   return (
     <div className="memory-graph">
@@ -197,8 +217,8 @@ function Inner({ showSemantic, semanticThreshold, kindFilter, sinceMs }: Props) 
       )}
       <div className="memory-graph__legend">
         <span className="memory-graph__legend-count">
-          {visibleNodes.length} nodes · {explicit.length} links
-          {showSemantic && ` · ${semantic.length} semantic`}
+          {visibleNodes.length} nodes · {explicit.length} explicit
+          {showSemantic && ` · ${cappedSemantic.length} semantic`}
         </span>
       </div>
     </div>

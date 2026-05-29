@@ -464,8 +464,8 @@ export function listAllLinks(): ArtifactGraphEdge[] {
  * hub artifact doesn't produce a hairball.
  */
 export function semanticNeighbors(
-  threshold = 0.7,
-  k = 5,
+  threshold = 0.4,
+  k = 8,
 ): Array<{ src: string; dst: string; similarity: number }> {
   if (!isVecAvailable()) return [];
   return semanticNeighborsProcedural(threshold, k);

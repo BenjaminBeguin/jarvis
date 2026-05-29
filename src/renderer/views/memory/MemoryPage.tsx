@@ -56,9 +56,11 @@ export function MemoryPage() {
     loadStored<Recency>(RECENCY_KEY, '90d'),
   );
   const [showSemantic, setShowSemantic] = useState<boolean>(() =>
-    loadStored<boolean>(SEMANTIC_KEY, false),
+    loadStored<boolean>(SEMANTIC_KEY, true),
   );
-  const [semanticThreshold, setSemanticThreshold] = useState<number>(0.7);
+  const [semanticThreshold, setSemanticThreshold] = useState<number>(() =>
+    loadStored<number>('jarvis.memory.threshold', 0.5),
+  );
 
   useEffect(() => {
     void window.jarvis.artifactsCountByKind().then((c) => {
@@ -151,13 +153,15 @@ export function MemoryPage() {
               <span>sim ≥</span>
               <input
                 type="range"
-                min={0.5}
-                max={0.95}
+                min={0.35}
+                max={0.9}
                 step={0.05}
                 value={semanticThreshold}
-                onChange={(e) =>
-                  setSemanticThreshold(parseFloat(e.target.value))
-                }
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setSemanticThreshold(v);
+                  saveStored('jarvis.memory.threshold', v);
+                }}
               />
               <span>{semanticThreshold.toFixed(2)}</span>
             </label>
