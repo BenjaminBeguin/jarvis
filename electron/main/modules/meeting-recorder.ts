@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { upsertArtifact } from '../artifacts/index.js';
 import { loadModuleSettings } from '../auth.js';
 import { transcribeDeepgram } from './voice/transcribe-deepgram.js';
 import { transcribePcm } from './voice/transcribe.js';
@@ -283,6 +284,33 @@ export async function persistMeeting(
     `# ${recording.title}\n\n` +
     `${transcript || '_no speech detected_'}\n`;
   writeFileSync(filePath, body, 'utf8');
+  // Register into the artifact substrate so the agent can search /
+  // walk to this meeting via search_artifacts / walk_artifact_graph.
+  // The watcher would also catch it, but doing it here gives an
+  // immediate id we can return + lets us include rich frontmatter
+  // (transcription engine, duration, speaker count) the agent can
+  // filter on.
+  const meetingSlug = recording.project
+    ? `${slugify(recording.project)}__${filename.replace(/\.md$/i, '')}`
+    : filename.replace(/\.md$/i, '');
+  void upsertArtifact({
+    id: `meeting:${meetingSlug}`,
+    kind: 'meeting',
+    title: recording.title,
+    project: recording.project ?? null,
+    path: filePath,
+    url: `vscode://file${filePath}`,
+    frontmatter: {
+      started_at: startedAtIso,
+      duration_seconds: durationSec,
+      transcribed_by: providerLine.trim() || null,
+      speaker_count: speakerCount || null,
+    },
+    content: transcript || '_no speech detected_',
+    createdAt: recording.startedAt,
+  }).catch((err) => {
+    console.warn('[meeting-recorder] artifact register failed:', err);
+  });
   // Return path relative to ~/.jarvis/meetings/ so the caller can show a
   // useful breadcrumb.
   return recording.project

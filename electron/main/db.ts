@@ -2,6 +2,7 @@ import { app } from 'electron';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import Database, { type Database as DatabaseType } from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 
 import type { TaskEvent, TaskOrigin, TaskStatus, TaskSummary } from '@shared/types';
 
@@ -117,9 +118,106 @@ const MIGRATIONS = [
   // single-action list at read time (from the row's intent +
   // send_action JSON).
   `ALTER TABLE ai_drafts ADD COLUMN actions TEXT NOT NULL DEFAULT '[]';`,
+  // ─── Artifact substrate ────────────────────────────────────────────────────
+  // The "memory backbone" for everything Jarvis knows about your work.
+  // Every meeting / note / briefing / goal / reminder / task / draft / etc.
+  // registers a row here so a single search surface (FTS5 lexical +
+  // sqlite-vec semantic) can find anything across silos. Links table
+  // captures explicit relationships (meeting → spawned → reminder, etc.)
+  // so the agent can walk the graph.
+  //
+  // `kind` is intentionally a free-form string — adding a new artifact
+  // type later doesn't need a schema migration.
+  // `id` convention: '<kind>:<sub-id>' (e.g. 'meeting:2026-05-27-153012-standup').
+  `CREATE TABLE IF NOT EXISTS artifacts (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    project TEXT,
+    path TEXT,
+    url TEXT,
+    frontmatter_json TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    archived INTEGER NOT NULL DEFAULT 0
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_artifacts_kind_updated ON artifacts(kind, updated_at DESC);`,
+  `CREATE INDEX IF NOT EXISTS idx_artifacts_project_updated ON artifacts(project, updated_at DESC) WHERE project IS NOT NULL;`,
+  `CREATE INDEX IF NOT EXISTS idx_artifacts_updated ON artifacts(updated_at DESC) WHERE archived = 0;`,
+  // Explicit relationships between artifacts. Kind examples:
+  //   'spawned'      — meeting → reminder (action item became a nudge)
+  //   'sourced-from' — action-item → meeting (reverse of spawned)
+  //   'mentions'     — note → goal (keyword match)
+  //   'parent'       — chunk → meeting
+  //   'addresses'    — PR → goal
+  // No FK constraint on dst_id because external-system artifacts (PRs,
+  // Linear tickets) won't always have a corresponding row.
+  `CREATE TABLE IF NOT EXISTS artifact_links (
+    src_id TEXT NOT NULL,
+    dst_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (src_id, dst_id, kind),
+    FOREIGN KEY (src_id) REFERENCES artifacts(id) ON DELETE CASCADE
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_links_dst ON artifact_links(dst_id, kind);`,
+  // Chunks let long artifacts (meeting transcripts especially) get
+  // searched + embedded at section granularity, so hits highlight the
+  // relevant block instead of returning the whole 30-minute transcript.
+  // `ord` preserves order within the parent; `heading` carries the
+  // section title (e.g. "## Action items") for snippet context.
+  // Short artifacts (notes, reminders) get a single chunk with ord=0.
+  `CREATE TABLE IF NOT EXISTS artifact_chunks (
+    id TEXT PRIMARY KEY,
+    artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+    ord INTEGER NOT NULL,
+    heading TEXT,
+    content TEXT NOT NULL
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_chunks_artifact ON artifact_chunks(artifact_id, ord);`,
+  // FTS5 virtual table over chunk content + artifact title. Porter stem
+  // + unicode61 tokenizer handles English well; remove_diacritics so
+  // queries with/without accents collide.
+  `CREATE VIRTUAL TABLE IF NOT EXISTS artifact_fts USING fts5(
+    artifact_id UNINDEXED,
+    chunk_id UNINDEXED,
+    kind UNINDEXED,
+    title,
+    content,
+    tokenize = 'porter unicode61 remove_diacritics 2'
+  );`,
+  // Triggers keep FTS in lockstep with the chunks table. INSERT + DELETE
+  // are sufficient (UPDATE = DELETE + INSERT by the registry).
+  `CREATE TRIGGER IF NOT EXISTS artifact_fts_ai AFTER INSERT ON artifact_chunks
+    BEGIN
+      INSERT INTO artifact_fts (artifact_id, chunk_id, kind, title, content)
+      SELECT new.artifact_id, new.id, a.kind, a.title, new.content
+      FROM artifacts a WHERE a.id = new.artifact_id;
+    END;`,
+  `CREATE TRIGGER IF NOT EXISTS artifact_fts_ad AFTER DELETE ON artifact_chunks
+    BEGIN
+      DELETE FROM artifact_fts WHERE chunk_id = old.id;
+    END;`,
+  // sqlite-vec vector index — 384 dims to match Xenova/all-MiniLM-L6-v2.
+  // Conditional CREATE: if sqlite-vec failed to load (binary missing or
+  // platform unsupported), this throws and we catch + log in
+  // initDatabase. Semantic search degrades to "unavailable", FTS5
+  // lexical still works.
+  `CREATE VIRTUAL TABLE IF NOT EXISTS artifact_embeddings USING vec0(
+    chunk_id TEXT PRIMARY KEY,
+    embedding FLOAT[384]
+  );`,
 ];
 
 let db: DatabaseType | null = null;
+let vecLoaded = false;
+
+/** True when sqlite-vec was loaded successfully on init. When false,
+ *  the artifact_embeddings virtual table doesn't exist and semantic
+ *  search is unavailable; FTS5 lexical still works. */
+export function isVecAvailable(): boolean {
+  return vecLoaded;
+}
 
 export function initDatabase(): DatabaseType {
   if (db) return db;
@@ -129,7 +227,24 @@ export function initDatabase(): DatabaseType {
   db = new Database(path);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
+  // Load sqlite-vec BEFORE migrations so the vec0 virtual table CREATE
+  // succeeds. Soft-fail: if the platform binary is missing, we log and
+  // skip the vec0 migration — FTS5 lexical search still works.
+  try {
+    sqliteVec.load(db);
+    vecLoaded = true;
+  } catch (err) {
+    console.warn(
+      '[db] sqlite-vec failed to load — semantic search disabled:',
+      err instanceof Error ? err.message : String(err),
+    );
+    vecLoaded = false;
+  }
   for (const sql of MIGRATIONS) {
+    // Skip the vec0 CREATE when sqlite-vec didn't load — it would throw
+    // and abort all subsequent migrations. The artifact_embeddings
+    // table just won't exist until vec is available.
+    if (!vecLoaded && /USING\s+vec0/i.test(sql)) continue;
     try {
       db.exec(sql);
     } catch (err) {

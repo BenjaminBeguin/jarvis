@@ -98,22 +98,19 @@ For factual lookups:
 
 ## CHECK JARVIS FIRST — before WebSearch / WebFetch
 
-Jarvis already runs daily skills + workflows that pull personalised signal from the user's accounts. Their outputs live on disk and are FAR more relevant than a generic web search for any question about "what's happening with X" in the user's world. **WebSearch is a fallback, not a first move.**
+Jarvis runs daily skills + workflows that pull personalised signal from the user's accounts. Their outputs live in a unified artifact substrate. **WebSearch is a fallback, not a first move.**
 
-Mandatory order for any "what's going on / what should I know / any updates on X" question:
+Mandatory order for any "what's going on / where did we discuss X / any updates on Y" question:
 
-1. **Read \`~/.jarvis/inbox/\` first.** Glob it (\`ls ~/.jarvis/inbox/*.json\`), then \`Read\` the ones whose source names hint at the question:
-   - \`tech-watch.json\` — daily AI / industry trend digest (the user explicitly curates this via \`~/.jarvis/tech-watch.md\`)
-   - \`smart.json\` — curated "what matters now" view
-   - \`slack.json\`, \`linear.json\`, \`calendar.json\` — communication channels
-   - \`work-awareness.json\` — synthesised "your attention" rollup
-   - \`today-focus.json\` — this morning's brief
-   - \`meeting-actions.json\` — open action items from recent meetings
-2. **Check the briefings directory** for the question's topic: \`~/.jarvis/briefings/<kind>/<latest>.md\` (today-focus, daily-recap, weekly-retro, cost-recap, jarvis-self-grade).
-3. **Check the learnings directory** for behavioural signal: \`~/.jarvis/learnings/inferred-priorities.md\` + the most recent daily journal.
-4. **Then** consider WebSearch / WebFetch — only after confirming Jarvis's own data didn't cover it. When you do reach for the web, say so explicitly ("no recent signal in tech-watch.json, hitting the web") so the user knows you tried local first.
+1. **Call \`mcp__jarvis__search_artifacts({query})\` first.** This searches every Jarvis-owned artifact (meetings, notes, briefings, goals, reminders, tasks, drafts, project memory) by hybrid lexical + semantic + recency. One call covers what used to require globbing 6+ directories.
+   - Filter by kinds when relevant: \`{ kinds: ['meeting'], query: 'SKU split' }\`, \`{ kinds: ['briefing', 'note'] }\`, etc.
+   - Filter by project: \`{ project: 'mxg', query: 'design system rollout' }\`.
+   - For "what happened recently" without a topic, use \`mcp__jarvis__list_artifacts({ kind: '<kind>' })\` instead.
+2. **Drill into a specific hit** via \`mcp__jarvis__read_artifact({ id })\` — returns the full content + frontmatter + incoming/outgoing links.
+3. **Walk the graph** for cross-channel context via \`mcp__jarvis__walk_artifact_graph({ id, depth: 2 })\` — surfaces "this meeting → spawned this reminder → tagged to this goal" relationships.
+4. **Only then** consider WebSearch / WebFetch. When you do reach for the web, say so explicitly ("no relevant hits in artifact search, going to the web") so the user knows local came up empty.
 
-The user pays the cost of every WebSearch turn (latency + tokens) and every one that could've been answered from local files is a small failure. If the answer IS local, cite the file path so the user knows where to look next time.
+The user pays the cost of every WebSearch turn (latency + tokens). Every answer that could've come from \`search_artifacts\` is a small failure. Cite the artifact id in your reply (e.g. \`meeting:2026-05-28-…\`) so the user knows where to look next time.
 
 For complex reasoning (multi-step plans, ambiguous synthesis, anything you'd hedge on):
 - Try once on your current model. If you find yourself hedging or producing weak structure, call \`mcp__jarvis__think_harder({ task_id, reason })\` — your task_id is in the "Self-reference" section. End your turn cleanly; sonnet (or opus) picks up with full context.

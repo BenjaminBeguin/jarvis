@@ -1487,3 +1487,109 @@ export interface ConnectInit {
   flowId: string;
   authUrl: string;
 }
+
+// ─── Artifact substrate ─────────────────────────────────────────────────────
+//
+// Every Jarvis-owned work artifact (meeting, note, briefing, goal, reminder,
+// task, draft, action item, project-memory file) registers itself in the
+// artifacts SQLite table so a unified search surface can find anything. The
+// agent reaches this through 4 MCP tools (search_artifacts, list_artifacts,
+// read_artifact, walk_artifact_graph) — the surface stays kind-agnostic so
+// new artifact types don't need MCP changes.
+
+/** Stable string identifying an artifact category. New kinds can be added
+ *  freely — the schema doesn't enforce the union, this type is just for IDE
+ *  hints. Conventional values today: meeting, note, briefing, project-memory,
+ *  draft, action-item, goal, reminder, task, inbox-item. */
+export type ArtifactKind = string;
+
+/** Kinds of explicit relationships between artifacts. The agent can walk
+ *  these via walk_artifact_graph. */
+export type ArtifactLinkKind =
+  | 'spawned' // src produced dst (meeting → reminder)
+  | 'sourced-from' // dst is the origin of src (action-item → meeting)
+  | 'mentions' // src references dst (note → goal)
+  | 'parent' // dst contains src (chunk → meeting)
+  | 'addresses' // src works toward dst (PR → goal)
+  | string; // open-ended
+
+export interface ArtifactLinkRef {
+  /** Target artifact id. Need not exist yet — link is recorded either way. */
+  to: string;
+  kind: ArtifactLinkKind;
+}
+
+/** Shape passed by callers to `artifactRegistry.upsert`. */
+export interface ArtifactInput {
+  id: string;
+  kind: ArtifactKind;
+  title: string;
+  project?: string | null;
+  path?: string | null;
+  url?: string | null;
+  /** Per-kind structured metadata. Stored as JSON; not searched. */
+  frontmatter?: Record<string, unknown> | null;
+  /** Full text content. Long artifacts are auto-chunked by section
+   *  (## headings) so search results highlight the relevant block. */
+  content: string;
+  createdAt?: number;
+  /** Outgoing links from this artifact. Replaced wholesale on each
+   *  upsert — pass the full current list. */
+  links?: ArtifactLinkRef[];
+}
+
+export interface ArtifactSummary {
+  id: string;
+  kind: ArtifactKind;
+  title: string;
+  project: string | null;
+  path: string | null;
+  url: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ArtifactFull extends ArtifactSummary {
+  frontmatter: Record<string, unknown> | null;
+  content: string;
+  linksOut: Array<{ to: string; kind: ArtifactLinkKind }>;
+  linksIn: Array<{ from: string; kind: ArtifactLinkKind }>;
+}
+
+export interface ArtifactSearchHit {
+  id: string;
+  kind: ArtifactKind;
+  title: string;
+  project: string | null;
+  updatedAt: number;
+  /** Best-matching chunk's snippet, with the matched terms highlighted
+   *  via FTS5's snippet() function (or empty for pure semantic hits). */
+  snippet: string;
+  /** Fused score after RRF + rerank. Higher = more relevant. */
+  score: number;
+  /** Which search mode produced this hit. */
+  via: 'lexical' | 'semantic' | 'both';
+}
+
+export type ArtifactSearchMode = 'lexical' | 'semantic' | 'hybrid';
+
+export interface ArtifactSearchQuery {
+  query: string;
+  mode?: ArtifactSearchMode;
+  kinds?: ArtifactKind[];
+  project?: string;
+  since?: number;
+  limit?: number;
+}
+
+export interface ArtifactGraphEdge {
+  src: string;
+  dst: string;
+  kind: ArtifactLinkKind;
+}
+
+export interface ArtifactGraphSnapshot {
+  root: ArtifactSummary;
+  nodes: ArtifactSummary[];
+  edges: ArtifactGraphEdge[];
+}

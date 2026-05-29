@@ -1,5 +1,6 @@
 import type {
   ActivityEventInput,
+  ArtifactInput,
   CostBreakdown,
   Goal,
   GoalProgressEntry,
@@ -126,6 +127,23 @@ export interface ModuleContext {
    * Renderer merges these with task-derived /send rows.
    */
   logActivity(event: ActivityEventInput): void;
+  /**
+   * Register a work artifact (meeting, note, briefing, draft, etc.)
+   * into the unified search substrate. Fire-and-forget — the call
+   * returns immediately; embedding happens async. Idempotent: re-
+   * calling with the same id replaces the artifact's chunks and
+   * outgoing links.
+   *
+   * Modules SHOULD call this at the end of any persist step that
+   * lands meaningful text on disk — meeting-recorder.persistMeeting,
+   * quick-note's append-entry path, etc. The agent finds it through
+   * `mcp__jarvis__search_artifacts` / `list_artifacts` /
+   * `walk_artifact_graph`.
+   *
+   * `links` is treated as the complete outgoing set for this
+   * artifact — pass the full current list each time.
+   */
+  registerArtifact(input: ArtifactInput): void;
   /**
    * Dispatch raw free-text through the same logic as the palette: verbal-
    * intent match → module dispatch → reminder/scheduled parse → task

@@ -455,3 +455,43 @@ function hostFromUrl(url: string): string {
     return url;
   }
 }
+
+/**
+ * Recent artifacts the user has touched. Surfaces a short headline
+ * of "what's in the index" so the agent knows which kinds of things
+ * are searchable without needing to call list_artifacts first.
+ *
+ * 5 most-recent across all kinds in the last 24h. Cheap — single
+ * indexed query on artifacts.updated_at.
+ */
+export const recentArtifactsProvider: UserContextProvider = {
+  name: 'recent-artifacts',
+  build() {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('./artifacts/registry.js') as typeof import('./artifacts/registry.js');
+    const since = Date.now() - 24 * 60 * 60_000;
+    const recent = mod.listArtifacts({ since, limit: 5 });
+    if (recent.length === 0) return null;
+    const counts = mod.countByKind();
+    const countLine = counts
+      .map((c) => `${c.kind}=${c.count}`)
+      .join(', ');
+    const now = Date.now();
+    const lines = recent.map((a) => {
+      const ageMin = Math.max(0, Math.round((now - a.updatedAt) / 60_000));
+      const when =
+        ageMin < 60
+          ? `${ageMin}m ago`
+          : ageMin < 1440
+            ? `${Math.round(ageMin / 60)}h ago`
+            : `${Math.round(ageMin / 1440)}d ago`;
+      const title = a.title.length > 70 ? `${a.title.slice(0, 70)}…` : a.title;
+      return `  - [${a.kind}] ${title} (${when}) · id=${a.id}`;
+    });
+    return (
+      `- Recent artifacts (last 24h, search the rest via \`mcp__jarvis__search_artifacts\`):\n` +
+      lines.join('\n') +
+      `\n  · index: ${countLine}`
+    );
+  },
+};

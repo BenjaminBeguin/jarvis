@@ -23,7 +23,9 @@ process.on('exit', (code) => {
 import { IpcChannels } from '@shared/ipc';
 import type {
   AppStatus,
+  Goal,
   InboxItem,
+  Reminder,
   TaskEvent,
   TaskSummary,
   WorkflowRun,
@@ -43,8 +45,16 @@ import {
   saveAppMode,
   savePaused,
 } from './auth.js';
+import {
+  artifactIdFromVscodeUrl,
+  backfillArtifacts,
+  startArtifactWatchers,
+  stopArtifactWatchers,
+  upsertArtifact,
+} from './artifacts/index.js';
 import { awaitTurnResult } from './await-turn.js';
 import { recordBrowserActivity } from './browser-activity.js';
+import { warmUpEmbeddings } from './embeddings/embed-worker-host.js';
 import { notifier } from './notifier.js';
 import { routePrompt } from './route-prompt.js';
 import { BriefingsStore } from './briefings.js';
@@ -152,6 +162,7 @@ import {
   browserActivityProvider,
   inboxHighlightsProvider,
   projectsProvider,
+  recentArtifactsProvider,
   recentTaskProvider,
   runtimeProvider,
   timeProvider,
@@ -749,6 +760,7 @@ userContext.register(projectsProvider(projects));
 userContext.register(inboxHighlightsProvider(inbox));
 userContext.register(recentTaskProvider(runner));
 userContext.register(browserActivityProvider);
+userContext.register(recentArtifactsProvider);
 
 // Built-in inbox sources — all direct JS, no agent fires.
 //   - reminders / failed-routines: local stores
@@ -1556,6 +1568,19 @@ app.whenReady().then(async () => {
   goals.init();
   skillSuggestions.init();
 
+  // Artifact substrate: backfill existing markdown / SQLite artifacts
+  // into the catalog, start watchers for out-of-band edits, warm up
+  // the embedding worker so the first semantic query doesn't pay
+  // the cold-start tax. Backfill runs in the background; the rest of
+  // boot doesn't wait on it.
+  startArtifactWatchers();
+  setTimeout(() => {
+    void backfillArtifacts().catch((err) => {
+      console.warn('[artifacts] backfill failed:', err);
+    });
+    void warmUpEmbeddings();
+  }, 3_000);
+
   // Module foundation: every user-asked feature ships as a module that
   // registers here. Built-ins live in electron/main/modules/. External
   // (community) modules can follow the same shape later.
@@ -1606,6 +1631,14 @@ app.whenReady().then(async () => {
     registerContextProvider: (provider) => userContext.register(provider),
     unregisterContextProvider: (name) => userContext.unregister(name),
     logActivity: (event) => activity.record(event),
+    registerArtifact: (input) => {
+      void upsertArtifact(input).catch((err) => {
+        console.warn(
+          `[artifacts] registerArtifact failed for ${input.id}:`,
+          err,
+        );
+      });
+    },
     routePrompt: (input, opts) =>
       routePrompt(input, opts ?? {}, {
         modules,
@@ -1867,9 +1900,77 @@ app.whenReady().then(async () => {
 
   // Goals: every mutation broadcasts to the renderer + nudges the inbox
   // to refresh so the surface stays in sync without a full poll cycle.
-  goals.on('changed', (list) => {
+  goals.on('changed', (list: Goal[]) => {
     broadcast(IpcChannels.goalsChanged, list);
     void inbox.refresh().catch(() => {});
+    // Mirror every goal into the artifact substrate so the agent can
+    // search "what goals mention X?". Active + done goals both
+    // register; abandoned ones too — historical context matters.
+    for (const g of list) {
+      void upsertArtifact({
+        id: `goal:${g.id}`,
+        kind: 'goal',
+        title: g.title,
+        project: g.project ?? null,
+        path: null,
+        url: null,
+        frontmatter: {
+          status: g.status,
+          deadline: g.deadline,
+          relatedKeywords: g.relatedKeywords,
+        },
+        content:
+          g.body +
+          (g.progressLog.length > 0
+            ? '\n\n## Progress\n' +
+              g.progressLog
+                .map(
+                  (p) =>
+                    `- ${new Date(p.at).toISOString().slice(0, 10)}: ${p.note}`,
+                )
+                .join('\n')
+            : ''),
+        createdAt: g.createdAt,
+      }).catch(() => {});
+    }
+  });
+
+  // Reminders: register each as an artifact too. Reminders are tiny
+  // but they're often the cross-link target (meeting → spawned
+  // → reminder) so having them in the catalog is what makes
+  // walk_artifact_graph work end-to-end.
+  reminders.on('changed', (list: Reminder[]) => {
+    for (const r of list) {
+      if (r.status === 'cancelled') continue;
+      void upsertArtifact({
+        id: `reminder:${r.id}`,
+        kind: 'reminder',
+        title: r.body.slice(0, 200),
+        project: null,
+        path: null,
+        url: r.sourceUrl ?? null,
+        frontmatter: {
+          mode: r.mode,
+          fireAt: r.fireAt,
+          status: r.status,
+          cron: r.cron ?? null,
+          sourceLabel: r.sourceLabel ?? null,
+        },
+        content: r.body,
+        createdAt: r.createdAt,
+        // If this reminder was spawned from a meeting (via meeting-
+        // actions), record the back-link so the agent can walk
+        // reminder → sourced-from → meeting.
+        links: r.sourceUrl
+          ? [
+              {
+                to: artifactIdFromVscodeUrl(r.sourceUrl) ?? 'unknown',
+                kind: 'sourced-from',
+              },
+            ]
+          : [],
+      }).catch(() => {});
+    }
   });
 
   skillSuggestions.on('changed', (list) =>
@@ -2220,6 +2321,7 @@ app.on('before-quit', () => {
   approvalBridge.closeAll('app shutdown');
   tokenRefresher.stop();
   meetingActivity.stop();
+  stopArtifactWatchers();
   briefings.close();
   void httpServer?.close();
   closeDatabase();

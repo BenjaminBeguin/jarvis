@@ -25,6 +25,12 @@ import { nextCronFire } from '@shared/cron';
 import type { AppMode, DraftStatus, InboxItem } from '@shared/types';
 
 import type { ActivityStore } from './activity-store.js';
+import {
+  listArtifacts,
+  readArtifact,
+  searchArtifacts,
+  walkArtifactGraph,
+} from './artifacts/index.js';
 import type { getCostBreakdown as getCostBreakdownFn } from './db.js';
 import { dispatchDraftSend } from './draft-send.js';
 import type { DraftsStore } from './drafts-store.js';
@@ -367,6 +373,81 @@ export function createJarvisMcp(
           return ok(
             `appended progress to goal ${args.id} (${updated.progressLog.length} entries total)`,
           );
+        },
+      ),
+
+      tool(
+        'search_artifacts',
+        'PREFERRED retrieval tool. Searches the unified artifact substrate (meetings, notes, briefings, goals, reminders, tasks, drafts, project memory) by content. Hybrid mode runs FTS5 lexical + sqlite-vec semantic in parallel, fuses ranks, and reranks by recency + active-project match. Use this BEFORE WebSearch for any "where did we discuss X" / "what notes mention Y" / "any drafts about Z" question. Returns id, kind, title, snippet (with «matched» terms highlighted on lexical hits), project, updated_at, score, and which mode produced the hit. Feed `id` into read_artifact / walk_artifact_graph for details.',
+        {
+          query: z.string().min(1).max(500),
+          mode: z.enum(['lexical', 'semantic', 'hybrid']).optional(),
+          kinds: z.array(z.string()).optional(),
+          project: z.string().optional(),
+          since: z.number().int().positive().optional(),
+          limit: z.number().int().min(1).max(50).optional(),
+        },
+        async (args) => {
+          const activeProject = deps.userContext.getActiveProject();
+          const hits = await searchArtifacts(
+            {
+              query: args.query,
+              ...(args.mode ? { mode: args.mode } : {}),
+              ...(args.kinds ? { kinds: args.kinds } : {}),
+              ...(args.project ? { project: args.project } : {}),
+              ...(args.since ? { since: args.since } : {}),
+              ...(args.limit ? { limit: args.limit } : {}),
+            },
+            activeProject,
+          );
+          return json(hits);
+        },
+      ),
+
+      tool(
+        'list_artifacts',
+        'Enumerate artifacts by kind / project / recency without a content query. Useful for "what meetings happened this week" / "show me my goals" / "any drafts pending". Replaces (and recommended over) the older list_recent_meetings / list_recent_notes / list_goals / list_drafts tools — works for every kind through one tool.',
+        {
+          kind: z.union([z.string(), z.array(z.string())]).optional(),
+          project: z.string().optional(),
+          since: z.number().int().positive().optional(),
+          limit: z.number().int().min(1).max(200).optional(),
+        },
+        async (args) => {
+          return json(
+            listArtifacts({
+              ...(args.kind ? { kind: args.kind } : {}),
+              ...(args.project ? { project: args.project } : {}),
+              ...(args.since ? { since: args.since } : {}),
+              ...(args.limit ? { limit: args.limit } : {}),
+            }),
+          );
+        },
+      ),
+
+      tool(
+        'read_artifact',
+        'Read the full content + frontmatter + incoming/outgoing links for an artifact by id (e.g. "meeting:2026-05-28-153012-standup"). Use after search_artifacts to drill into a specific result, or after walk_artifact_graph to read a related node.',
+        { id: z.string().min(1) },
+        async (args) => {
+          const item = readArtifact(args.id);
+          if (!item) return err(`unknown artifact id: ${args.id}`);
+          return json(item);
+        },
+      ),
+
+      tool(
+        'walk_artifact_graph',
+        'BFS outward from an artifact through the explicit-links graph (spawned, sourced-from, mentions, parent, addresses) up to `depth` hops. Use to answer "show me everything related to this meeting" — returns the meeting + the reminders it spawned + the goals those reminders are tagged to. Capped at 64 nodes.',
+        {
+          id: z.string().min(1),
+          depth: z.number().int().min(1).max(3).optional(),
+          kinds: z.array(z.string()).optional(),
+        },
+        async (args) => {
+          const out = walkArtifactGraph(args.id, args.depth ?? 1, args.kinds);
+          if (!out) return err(`unknown artifact id: ${args.id}`);
+          return json(out);
         },
       ),
 
