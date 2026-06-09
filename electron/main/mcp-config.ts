@@ -88,11 +88,37 @@ export class McpConfigStore extends EventEmitter {
   private servers = new Map<string, McpServerConfig>();
   private watcher: FSWatcher | null = null;
   private managed: ManagedMcpSource | null = null;
+  /** Resolver for the currently-active workspace id. When set,
+   *  mergedEntries() also reads `~/.jarvis/workspaces/<id>/mcp.json`
+   *  if it exists and merges those entries ON TOP OF the base + managed
+   *  (workspace wins on key collisions). Lets the user keep Work-only
+   *  Slack/Linear MCPs out of Personal context, etc. */
+  private workspaceResolver: (() => string | null) | null = null;
+  private overlayRoot: string;
+  /** Chokidar watcher for `~/.jarvis/workspaces/{*\,*\}/mcp.json` so
+   *  overlay edits broadcast 'changed' just like the base file. */
+  private overlayWatcher: FSWatcher | null = null;
   readonly path: string;
 
   constructor(path = join(homedir(), '.jarvis', 'mcp.json')) {
     super();
     this.path = path;
+    this.overlayRoot = join(homedir(), '.jarvis', 'workspaces');
+  }
+
+  /** Wire the workspace resolver. Called from index.ts once the
+   *  WorkspaceStore is up. After this, `mergedEntries()` consults
+   *  the active workspace's overlay. */
+  setWorkspaceResolver(fn: () => string | null): void {
+    this.workspaceResolver = fn;
+  }
+
+  /** Notify consumers when the active workspace changes — the
+   *  effective resolve() output may have shifted (overlay entries
+   *  added / removed). Called from `ipc/workspaces.ts` after a
+   *  switch. */
+  notifyWorkspaceSwitched(): void {
+    this.emit('changed', this.list());
   }
 
   /** Attach a managed source (the IntegrationsStore). Its entries
@@ -117,11 +143,30 @@ export class McpConfigStore extends EventEmitter {
       this.servers.clear();
       this.emit('changed', this.list());
     });
+    // Workspace overlay watcher. Edits to any
+    // `~/.jarvis/workspaces/<id>/mcp.json` re-broadcast 'changed' so
+    // consumers re-resolve against the new overlay. Pattern matches
+    // every workspace directory; chokidar's ignoreInitial=true means
+    // we don't re-emit on app start (the reload above already did).
+    mkdirSync(this.overlayRoot, { recursive: true });
+    this.overlayWatcher = chokidar.watch(
+      join(this.overlayRoot, '*', 'mcp.json'),
+      {
+        ignoreInitial: true,
+        awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 100 },
+      },
+    );
+    const onOverlay = () => this.emit('changed', this.list());
+    this.overlayWatcher.on('add', onOverlay);
+    this.overlayWatcher.on('change', onOverlay);
+    this.overlayWatcher.on('unlink', onOverlay);
   }
 
   close(): void {
     void this.watcher?.close();
     this.watcher = null;
+    void this.overlayWatcher?.close();
+    this.overlayWatcher = null;
   }
 
   list(): McpServerSummary[] {
@@ -160,7 +205,46 @@ export class McpConfigStore extends EventEmitter {
         out.set(id, cfg);
       }
     }
+    // Workspace overlay — read fresh from disk on every resolve so
+    // file edits take effect on the next launch without restart.
+    // Overlay entries WIN over base + managed, letting a workspace
+    // replace a globally-defined server (e.g. Personal's Slack
+    // points at a different account than Work's).
+    const wsId = this.workspaceResolver?.() ?? null;
+    if (wsId) {
+      const overlay = this.readOverlay(wsId);
+      for (const [id, cfg] of overlay.entries()) {
+        out.set(id, cfg);
+      }
+    }
     return out;
+  }
+
+  /**
+   * Read the active workspace's overlay file. Returns an empty map
+   * when the file doesn't exist OR has malformed contents. Same
+   * `mcpServers` shape as the base `mcp.json`.
+   */
+  private readOverlay(workspaceId: string): Map<string, McpServerConfig> {
+    const overlayPath = join(this.overlayRoot, workspaceId, 'mcp.json');
+    if (!existsSync(overlayPath)) return new Map();
+    try {
+      const raw = JSON.parse(readFileSync(overlayPath, 'utf8'));
+      const parsed = (raw as RawConfig)?.mcpServers ?? {};
+      const m = new Map<string, McpServerConfig>();
+      for (const [id, cfg] of Object.entries(parsed)) {
+        if (cfg && typeof cfg === 'object') {
+          m.set(id, cfg as McpServerConfig);
+        }
+      }
+      return m;
+    } catch (err) {
+      console.warn(
+        `mcp-config: failed to parse workspace overlay ${overlayPath}:`,
+        err,
+      );
+      return new Map();
+    }
   }
 
   /**

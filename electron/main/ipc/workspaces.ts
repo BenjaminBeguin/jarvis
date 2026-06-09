@@ -23,6 +23,7 @@ import type { IpcDeps } from './types.js';
 export function registerWorkspacesIpc({
   workspaces,
   workflowScheduler,
+  mcp,
 }: IpcDeps): void {
   ipcMain.handle(IpcChannels.listWorkspaces, () => workspaces.list());
 
@@ -97,6 +98,10 @@ export function registerWorkspacesIpc({
     // the new workspace's hours. Safe to call even when nothing
     // depends on the token; resync is idempotent for unchanged jobs.
     workflowScheduler.resync();
+    // MCP overlay may have shifted — re-broadcast so MCP-aware
+    // surfaces (Skills picker, Integrations page, runner spawns)
+    // re-resolve against the new workspace's overlay.
+    mcp.notifyWorkspaceSwitched();
     return target;
   });
 }

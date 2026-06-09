@@ -1507,6 +1507,10 @@ app.whenReady().then(async () => {
   // backfill (any project missing a workspaceId gets the default)
   // has a valid id to point at.
   workspaces.init();
+  // MCP overlay needs the active workspace id at resolve time. Wired
+  // before projects.init so any project init paths that touch MCP
+  // see the overlay-aware resolver.
+  mcp.setWorkspaceResolver(() => loadActiveWorkspaceId());
   projects.init();
   // One-shot migration: any project without a workspaceId on disk
   // gets the default workspace stamped onto it. Idempotent — second
