@@ -1547,6 +1547,12 @@ export interface ConnectorAccount {
   id: string;
   connectorId: ConnectorId;
   label: string;
+  /** Workspace this account belongs to. Null = global (shared across
+   *  every workspace, the legacy default). When set, the MCP overlay
+   *  only materializes this account's entries when the workspace is
+   *  active. Lets the user keep "Work Slack" + "Personal Slack" both
+   *  connected without crossing wires at agent dispatch time. */
+  workspaceId?: string | null;
   addedAt: number;
   /** ms epoch; null = non-expiring (Slack, Notion). */
   expiresAt: number | null;

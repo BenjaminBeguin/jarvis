@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 
-import type { ConnectorAccount, ConnectorSummary } from '../../../shared/types';
+import type {
+  ConnectorAccount,
+  ConnectorSummary,
+  WorkspaceDef,
+} from '../../../shared/types';
 import { toast } from '../Toaster';
+import { useWorkspace } from '../workspaces/useWorkspace';
 import { ConnectorIcon } from './ConnectorIcon';
 import { getConnectorSetup, type ConnectorSetup } from './connectorSetup';
 
@@ -19,6 +24,7 @@ import { getConnectorSetup, type ConnectorSetup } from './connectorSetup';
  * registering them in electron/main/index.ts.
  */
 export function ConnectedAccounts() {
+  const { all: workspaces } = useWorkspace();
   const [summaries, setSummaries] = useState<ConnectorSummary[]>([]);
   const [pending, setPending] = useState<Set<string>>(new Set());
   // Which connector's inline setup panel is open. Open one at a time —
@@ -210,6 +216,31 @@ export function ConnectedAccounts() {
     }
   };
 
+  const handleSetAccountWorkspace = async (
+    account: ConnectorAccount,
+    workspaceId: string | null,
+  ): Promise<void> => {
+    const r = await window.jarvis.setIntegrationAccountWorkspace(
+      account.id,
+      workspaceId,
+    );
+    if (!r.ok) {
+      toast({
+        kind: 'error',
+        message: r.message ?? 'Could not change account workspace',
+      });
+      return;
+    }
+    if (workspaceId) {
+      const ws = workspaces.find((w) => w.id === workspaceId);
+      toast({
+        message: `${account.label} is now scoped to ${ws?.name ?? workspaceId}`,
+      });
+    } else {
+      toast({ message: `${account.label} now available in every workspace` });
+    }
+  };
+
   if (summaries.length === 0) {
     return (
       <section>
@@ -254,6 +285,10 @@ export function ConnectedAccounts() {
             onSetSlackSendAs={(account, value) =>
               void handleSetSlackSendAs(account, value)
             }
+            onSetAccountWorkspace={(account, workspaceId) =>
+              void handleSetAccountWorkspace(account, workspaceId)
+            }
+            workspaces={workspaces}
             isAccountBusy={(accountId) => pending.has(accountId)}
             testResults={testResults}
           />
@@ -278,6 +313,11 @@ interface RowProps {
   onDisconnect: (account: ConnectorAccount) => void;
   onSetDefault: (accountId: string) => void;
   onSetSlackSendAs: (account: ConnectorAccount, value: 'bot' | 'user') => void;
+  onSetAccountWorkspace: (
+    account: ConnectorAccount,
+    workspaceId: string | null,
+  ) => void;
+  workspaces: WorkspaceDef[];
   isAccountBusy: (accountId: string) => boolean;
   testResults: Record<
     string,
@@ -352,6 +392,8 @@ function ConnectorRow({
   onDisconnect,
   onSetDefault,
   onSetSlackSendAs,
+  onSetAccountWorkspace,
+  workspaces,
   isAccountBusy,
   testResults,
 }: RowProps) {
@@ -494,6 +536,37 @@ function ConnectorRow({
                       >
                         <option value="bot">bot</option>
                         <option value="user">me</option>
+                      </select>
+                    </label>
+                  )}
+                  {workspaces.length > 1 && (
+                    <label
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.7,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                      title="Pick which workspace this account is active in. Global = every workspace."
+                    >
+                      in
+                      <select
+                        value={account.workspaceId ?? ''}
+                        onChange={(e) =>
+                          onSetAccountWorkspace(
+                            account,
+                            e.target.value === '' ? null : e.target.value,
+                          )
+                        }
+                        disabled={isAccountBusy(account.id)}
+                      >
+                        <option value="">Global (all)</option>
+                        {workspaces.map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {w.name}
+                          </option>
+                        ))}
                       </select>
                     </label>
                   )}

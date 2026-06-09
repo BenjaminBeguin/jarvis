@@ -1495,6 +1495,11 @@ app.whenReady().then(async () => {
     integrationsStore.get(accountId),
   );
   integrationsStore.init();
+  // Workspace-aware managed source: integrations filter their MCP
+  // entries by active workspace, mirroring the pattern PreferencesStore
+  // + McpConfigStore overlay use. Lets "Work Slack" + "Personal Slack"
+  // coexist without crossing wires at agent dispatch time.
+  integrationsStore.setWorkspaceResolver(() => loadActiveWorkspaceId());
   mcp.setManagedSource(integrationsStore);
   mcp.init();
   // Warm any connector caches (stdio-MCP connectors like GitHub need

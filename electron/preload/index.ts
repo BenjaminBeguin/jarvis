@@ -984,6 +984,14 @@ const api = {
       connectorId,
       accountId,
     }),
+  setIntegrationAccountWorkspace: (
+    accountId: string,
+    workspaceId: string | null,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke(IpcChannels.setIntegrationAccountWorkspace, {
+      accountId,
+      workspaceId,
+    }),
   setIntegrationCredentials: (
     connectorId: ConnectorId,
     clientId: string,

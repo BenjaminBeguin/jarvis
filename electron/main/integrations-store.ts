@@ -23,6 +23,11 @@ interface RawFile {
  */
 export class IntegrationsStore extends EventEmitter {
   private file: RawFile = { version: 1, accounts: [], defaults: {} };
+  /** Resolver for the active workspace id. When set, `allMcpEntries()`
+   *  filters out accounts tagged to other workspaces — only accounts
+   *  whose workspaceId matches the active id (or is null = global)
+   *  contribute MCP entries. Wired from index.ts at boot. */
+  private workspaceResolver: (() => string | null) | null = null;
 
   constructor(
     private readonly path: string,
@@ -36,6 +41,27 @@ export class IntegrationsStore extends EventEmitter {
    *  managed MCP entries are derived per-call. */
   setRegistry(registry: ConnectorRegistry): void {
     this.registry = registry;
+  }
+
+  setWorkspaceResolver(fn: () => string | null): void {
+    this.workspaceResolver = fn;
+  }
+
+  /** Update an account's workspaceId tag. null = global. Emits
+   *  'changed' so the MCP overlay re-resolves and the Integrations
+   *  UI reflects the new assignment. */
+  setAccountWorkspace(
+    accountId: string,
+    workspaceId: string | null,
+  ): boolean {
+    const idx = this.file.accounts.findIndex((a) => a.id === accountId);
+    if (idx < 0) return false;
+    const existing = this.file.accounts[idx]!;
+    if ((existing.workspaceId ?? null) === workspaceId) return false;
+    this.file.accounts[idx] = { ...existing, workspaceId };
+    this.write();
+    this.emit('changed');
+    return true;
   }
 
   init(): void {
@@ -152,7 +178,19 @@ export class IntegrationsStore extends EventEmitter {
   allMcpEntries(): Record<string, McpServerConfig> {
     if (!this.registry) return {};
     const out: Record<string, McpServerConfig> = {};
-    for (const account of this.file.accounts) {
+    const activeWorkspace = this.workspaceResolver?.() ?? null;
+    // Workspace filter: when a workspace is active, drop accounts
+    // tagged to a DIFFERENT workspace. Accounts with null workspaceId
+    // are "global" — visible everywhere. When NO workspace is active
+    // (boot-time / early reads), all accounts contribute, preserving
+    // legacy behaviour.
+    const visible = this.file.accounts.filter((a) => {
+      if (!activeWorkspace) return true;
+      const tag = a.workspaceId ?? null;
+      if (!tag) return true;
+      return tag === activeWorkspace;
+    });
+    for (const account of visible) {
       const connector = this.registry.get(account.connectorId);
       if (!connector) continue;
       const entries = connector.mcpEntries(account);
@@ -166,6 +204,11 @@ export class IntegrationsStore extends EventEmitter {
       // entry named `<prefix>-<rest>` exposes itself as `<prefix>` too.
       // First default wins on conflict (per the existing iteration
       // order — connectors registered earlier shadow later ones).
+      //
+      // When two accounts in the same workspace are both connected
+      // (e.g. user has two Work Slack workspaces), the `default`
+      // pointer decides which gets the bare alias — same rule as
+      // before, just workspace-scoped via the filter above.
       if (this.file.defaults[account.connectorId] === account.id) {
         for (const [id, cfg] of Object.entries(entries)) {
           const dashIdx = id.indexOf('-');

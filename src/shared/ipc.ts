@@ -342,6 +342,12 @@ export const IpcChannels = {
   disconnectIntegration: 'integrations:disconnect',
   setIntegrationAccountMeta: 'integrations:setAccountMeta',
   setIntegrationDefault: 'integrations:setDefault',
+  /** Assign an OAuth account to a workspace (or null for global).
+   *  When set, the managed MCP overlay only contributes that account's
+   *  servers when the workspace is active. Lets multiple accounts of
+   *  the same provider (e.g. two Slacks) coexist without crossing
+   *  wires. */
+  setIntegrationAccountWorkspace: 'integrations:setAccountWorkspace',
   setIntegrationCredentials: 'integrations:setCredentials',
   clearIntegrationCredentials: 'integrations:clearCredentials',
   cancelIntegrationFlow: 'integrations:cancelFlow',

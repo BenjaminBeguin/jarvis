@@ -24,6 +24,7 @@ export function registerWorkspacesIpc({
   workspaces,
   workflowScheduler,
   mcp,
+  integrations,
 }: IpcDeps): void {
   ipcMain.handle(IpcChannels.listWorkspaces, () => workspaces.list());
 
@@ -102,6 +103,9 @@ export function registerWorkspacesIpc({
     // surfaces (Skills picker, Integrations page, runner spawns)
     // re-resolve against the new workspace's overlay.
     mcp.notifyWorkspaceSwitched();
+    // The effective OAuth account set shifted too — the Integrations
+    // page's "active in current workspace" indicator needs to refresh.
+    integrations.emit('changed');
     return target;
   });
 }

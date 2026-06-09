@@ -278,6 +278,41 @@ export function registerIntegrationsIpc(deps: IntegrationsIpcDeps): void {
   );
 
   ipcMain.handle(
+    IpcChannels.setIntegrationAccountWorkspace,
+    (
+      _e,
+      payload: { accountId: string; workspaceId: string | null },
+    ): { ok: boolean; message?: string } => {
+      if (
+        !payload ||
+        typeof payload.accountId !== 'string' ||
+        (payload.workspaceId !== null && typeof payload.workspaceId !== 'string')
+      ) {
+        return { ok: false, message: 'Invalid payload' };
+      }
+      const ok = integrations.setAccountWorkspace(
+        payload.accountId,
+        payload.workspaceId,
+      );
+      if (!ok) return { ok: false, message: 'No change (already that workspace)' };
+      // Activity audit so the user can see in their history when
+      // they reassigned an account between workspaces.
+      const account = integrations.get(payload.accountId);
+      activity.record({
+        kind: 'mcp.updated',
+        label: account
+          ? `Account ${account.label} → workspace ${payload.workspaceId ?? 'global'}`
+          : `Account ${payload.accountId} → workspace ${payload.workspaceId ?? 'global'}`,
+        detail: {
+          accountId: payload.accountId,
+          workspaceId: payload.workspaceId,
+        },
+      });
+      return { ok: true };
+    },
+  );
+
+  ipcMain.handle(
     IpcChannels.setIntegrationCredentials,
     async (
       _e,
