@@ -5,7 +5,8 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 
 import preferencesTemplate from './seeds/preferences-template.js';
@@ -23,11 +24,27 @@ import preferencesTemplate from './seeds/preferences-template.js';
 export class PreferencesStore extends EventEmitter {
   private cached = '';
   private watcher: FSWatcher | null = null;
+  /** Per-workspace overlay files live at
+   *  `~/.jarvis/workspaces/<id>/preferences.md`. They APPEND to the
+   *  base preferences (not replace) so the user can keep a "global
+   *  tone" baseline + add workspace-specific nuance ("formal in Work",
+   *  "casual in Personal"). */
+  private overlayRoot: string;
+  private overlayWatcher: FSWatcher | null = null;
+  /** Resolver for the active workspace id. When set, `readOverlay()`
+   *  consults the workspace's preferences.md and includes it in
+   *  `readFull()`. Wired from index.ts after WorkspaceStore inits. */
+  private workspaceResolver: (() => string | null) | null = null;
   readonly path: string;
 
   constructor(path: string) {
     super();
     this.path = path;
+    this.overlayRoot = join(homedir(), '.jarvis', 'workspaces');
+  }
+
+  setWorkspaceResolver(fn: () => string | null): void {
+    this.workspaceResolver = fn;
   }
 
   init(): void {
@@ -47,11 +64,70 @@ export class PreferencesStore extends EventEmitter {
       this.cached = '';
       this.emit('changed', this.cached);
     });
+    // Workspace overlay watcher — broadcast 'changed' when any
+    // `~/.jarvis/workspaces/<id>/preferences.md` changes so the
+    // renderer's Settings editor + the TaskRunner re-read.
+    mkdirSync(this.overlayRoot, { recursive: true });
+    this.overlayWatcher = chokidar.watch(
+      join(this.overlayRoot, '*', 'preferences.md'),
+      {
+        ignoreInitial: true,
+        awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 100 },
+      },
+    );
+    const onOverlay = () => this.emit('changed', this.cached);
+    this.overlayWatcher.on('add', onOverlay);
+    this.overlayWatcher.on('change', onOverlay);
+    this.overlayWatcher.on('unlink', onOverlay);
   }
 
   close(): void {
     void this.watcher?.close();
     this.watcher = null;
+    void this.overlayWatcher?.close();
+    this.overlayWatcher = null;
+  }
+
+  /** Workspace overlay path for the given id (or null when no
+   *  workspace is active). Public so Settings UI can show / edit. */
+  overlayPathFor(workspaceId: string): string {
+    return join(this.overlayRoot, workspaceId, 'preferences.md');
+  }
+
+  /** Read the active workspace's overlay file. Returns empty string
+   *  when no workspace is active, no resolver is set, or the file
+   *  doesn't exist. */
+  readOverlay(workspaceId?: string | null): string {
+    const id = workspaceId ?? this.workspaceResolver?.();
+    if (!id) return '';
+    const p = this.overlayPathFor(id);
+    if (!existsSync(p)) return '';
+    try {
+      return readFileSync(p, 'utf8');
+    } catch (err) {
+      console.warn(`failed to read overlay preferences ${p}:`, err);
+      return '';
+    }
+  }
+
+  /** Persist a workspace overlay. Caller passes the workspace id +
+   *  the markdown body. Empty body clears the file. */
+  writeOverlay(workspaceId: string, content: string): void {
+    const p = this.overlayPathFor(workspaceId);
+    mkdirSync(dirname(p), { recursive: true });
+    if (!content.trim()) {
+      // Empty save = remove the overlay (it's an additive layer; an
+      // empty file would still trigger a useless ## heading).
+      if (existsSync(p)) {
+        try {
+          writeFileSync(p, '', 'utf8');
+        } catch {
+          /* swallow */
+        }
+      }
+      return;
+    }
+    writeFileSync(p, content, 'utf8');
   }
 
   /** Current file contents (cached). Empty string if the file is missing. */

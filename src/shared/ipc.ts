@@ -157,6 +157,10 @@ export const IpcChannels = {
   writePreferences: 'preferences:write',
   revealPreferences: 'preferences:reveal',
   preferencesChanged: 'preferences:changed',
+  // Workspace overlay — `~/.jarvis/workspaces/<id>/preferences.md`.
+  // Append-only to base preferences in the agent's system prompt.
+  readWorkspacePreferences: 'preferences:readWorkspace',
+  writeWorkspacePreferences: 'preferences:writeWorkspace',
 
   readNotificationPrefs: 'notif:read',
   writeNotificationPrefs: 'notif:write',

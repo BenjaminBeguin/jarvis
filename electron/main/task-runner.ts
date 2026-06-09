@@ -471,6 +471,16 @@ export class TaskRunner extends EventEmitter {
         const body = prefs.replace(/^#\s+Preferences\s*\n+/i, '');
         sections.push(`## User preferences\n${body}`);
       }
+      // Workspace overlay APPENDS to base preferences — additive so
+      // the user can keep a global tone baseline + add workspace-
+      // specific nuance ("formal for Work", "casual for Personal").
+      // Nested under its own H3 so the agent reads it as
+      // "preferences for THIS context."
+      const overlay = this.preferences.readOverlay().trim();
+      if (overlay) {
+        const body = overlay.replace(/^#\s+Preferences\s*\n+/i, '');
+        sections.push(`### Workspace preferences (current context)\n${body}`);
+      }
     }
     if (this.userContext) {
       // Pass the launching prompt so the eager-RAG provider can

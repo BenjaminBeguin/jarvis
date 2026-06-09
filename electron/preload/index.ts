@@ -561,6 +561,22 @@ const api = {
   onPreferencesChanged: (listener: Listener<string>): Unsubscribe =>
     subscribe(IpcChannels.preferencesChanged, listener),
 
+  /** Workspace overlay preferences. Additive markdown appended to the
+   *  base preferences in the agent's system prompt for the named
+   *  workspace. */
+  readWorkspacePreferences: (
+    workspaceId: string,
+  ): Promise<{ path: string; contents: string }> =>
+    ipcRenderer.invoke(IpcChannels.readWorkspacePreferences, workspaceId),
+  writeWorkspacePreferences: (
+    workspaceId: string,
+    contents: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.writeWorkspacePreferences, {
+      workspaceId,
+      contents,
+    }),
+
   readNotificationPrefs: (): Promise<NotificationPrefs> =>
     ipcRenderer.invoke(IpcChannels.readNotificationPrefs),
   writeNotificationPrefs: (prefs: NotificationPrefs): Promise<void> =>

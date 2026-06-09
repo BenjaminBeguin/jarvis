@@ -1511,6 +1511,7 @@ app.whenReady().then(async () => {
   // before projects.init so any project init paths that touch MCP
   // see the overlay-aware resolver.
   mcp.setWorkspaceResolver(() => loadActiveWorkspaceId());
+  preferences.setWorkspaceResolver(() => loadActiveWorkspaceId());
   projects.init();
   // One-shot migration: any project without a workspaceId on disk
   // gets the default workspace stamped onto it. Idempotent — second

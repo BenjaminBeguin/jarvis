@@ -50,6 +50,47 @@ export function registerPreferencesIpc({ preferences, activity }: IpcDeps): void
     shell.showItemInFolder(preferences.path);
   });
 
+  // Workspace overlay — additive markdown that appends to the base
+  // preferences in the agent's system prompt. Reader returns {path,
+  // contents} just like the base channel so the renderer can show
+  // the path in a "Reveal in Finder" hint.
+  ipcMain.handle(
+    IpcChannels.readWorkspacePreferences,
+    (_e, workspaceId: string) => {
+      if (typeof workspaceId !== 'string' || !workspaceId) {
+        throw new Error('readWorkspacePreferences: workspaceId required');
+      }
+      return {
+        path: preferences.overlayPathFor(workspaceId),
+        contents: preferences.readOverlay(workspaceId),
+      };
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannels.writeWorkspacePreferences,
+    (_e, payload: { workspaceId: string; contents: string }) => {
+      if (
+        !payload ||
+        typeof payload.workspaceId !== 'string' ||
+        typeof payload.contents !== 'string'
+      ) {
+        throw new Error(
+          'writeWorkspacePreferences: { workspaceId, contents } required',
+        );
+      }
+      preferences.writeOverlay(payload.workspaceId, payload.contents);
+      activity.record({
+        kind: 'preferences.edited',
+        label: `Workspace preferences · ${payload.workspaceId} · ${payload.contents.length} bytes`,
+        detail: {
+          workspaceId: payload.workspaceId,
+          bytes: payload.contents.length,
+        },
+      });
+    },
+  );
+
   ipcMain.handle(IpcChannels.readNotificationPrefs, () =>
     loadNotificationPrefs(),
   );
