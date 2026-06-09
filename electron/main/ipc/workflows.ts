@@ -3,7 +3,11 @@ import { ipcMain } from 'electron';
 import { IpcChannels } from '@shared/ipc';
 import type { WorkflowDef, WorkingHoursPrefs } from '@shared/types';
 
-import { loadWorkingHours, saveWorkingHours } from '../auth.js';
+import {
+  loadActiveWorkspaceId,
+  loadWorkingHours,
+  saveWorkingHours,
+} from '../auth.js';
 import { validateWorkflow } from '../workflow-validate.js';
 import { broadcast } from '../windows.js';
 import type { IpcDeps } from './types.js';
@@ -23,6 +27,7 @@ export function registerWorkflowsIpc({
   activity,
   skills,
   mcp,
+  workspaces: workspacesStore,
 }: IpcDeps): void {
   workflows.on('changed', (list: WorkflowDef[]) => {
     broadcast(IpcChannels.workflowsChanged, list);
@@ -70,6 +75,15 @@ export function registerWorkflowsIpc({
       def: WorkflowDef,
     ): { ok: boolean; message?: string; warnings?: string[] } => {
       const before = workflows.get(def.id);
+      // Auto-stamp active workspace at create time so new workflows
+      // belong to the context they were created in. Existing workflows
+      // keep whatever they had. Renderer override via explicit
+      // workspaceId still wins (validateWorkflow doesn't gate this).
+      if (!before && def.workspaceId === undefined) {
+        const activeId =
+          loadActiveWorkspaceId() ?? workspacesStore.getDefault().id;
+        def = { ...def, workspaceId: activeId };
+      }
       // Validate first — hard errors block the save, soft warnings
       // ride along with `ok: true` so the renderer can surface them.
       const v = validateWorkflow(def, { skills, mcp });

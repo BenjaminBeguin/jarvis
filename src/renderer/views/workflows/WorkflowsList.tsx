@@ -1,5 +1,7 @@
 import type { WorkflowDef, WorkflowRun } from '../../../shared/types';
 
+import { useWorkspace } from '../workspaces/useWorkspace';
+
 /**
  * Index page — lists every workflow as a row. Click anywhere on a
  * row to open its detail page (graph + dock); click the inline
@@ -122,6 +124,7 @@ function WorkflowRow({
       <div className="wf-list__main">
         <div className="wf-list__head">
           <span className="wf-list__name">{w.name}</span>
+          <WorkspaceBadge workspaceId={w.workspaceId} />
           <span className="wf-list__meta">
             {trigger} · {w.pipeline.length} node
             {w.pipeline.length === 1 ? '' : 's'}
@@ -194,4 +197,40 @@ function triggerLabel(t: WorkflowDef['trigger']): string {
       : `autopilot · on ${(t.sources ?? []).join(', ') || 'inbox'}`;
   }
   return `manual${t.palette ? ' · /' + t.palette : ''}`;
+}
+
+/**
+ * Small workspace-ownership chip next to a workflow name. Renders
+ * nothing for global (workspaceId-less) workflows so the chrome stays
+ * quiet on shared entries (daily-learn, calendar-sync, etc.) — the
+ * absence of a chip IS the "global" indicator.
+ *
+ * Pulls workspace name + color from the shared hook so renames and
+ * theme changes update everywhere without prop drilling.
+ */
+function WorkspaceBadge({ workspaceId }: { workspaceId?: string | null }) {
+  const workspace = useWorkspace();
+  if (!workspaceId) return null;
+  const def = workspace.all.find((w) => w.id === workspaceId);
+  if (!def) {
+    return (
+      <span
+        className="wf-list__ws wf-list__ws--orphan"
+        title="Workspace deleted — workflow will fire as global"
+      >
+        ws · ?
+      </span>
+    );
+  }
+  return (
+    <span
+      className="wf-list__ws"
+      title={`Workspace · ${def.name}`}
+      style={
+        def.color ? { borderColor: def.color, color: def.color } : undefined
+      }
+    >
+      {def.icon ?? def.name.charAt(0).toUpperCase()} {def.name}
+    </span>
+  );
 }

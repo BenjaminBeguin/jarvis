@@ -18159,6 +18159,27 @@ button:disabled:hover {
   letter-spacing: 0.04em;
 }
 
+.wf-list__ws {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border: 1px solid rgba(110, 231, 255, 0.4);
+  border-radius: 3px;
+  color: rgba(110, 231, 255, 0.85);
+  background: rgba(110, 231, 255, 0.05);
+  flex-shrink: 0;
+}
+.wf-list__ws--orphan {
+  color: rgba(255, 194, 102, 0.85);
+  border-color: rgba(255, 194, 102, 0.5);
+  background: rgba(255, 194, 102, 0.06);
+}
+
 .wf-list__meta {
   font-family: var(--mono);
   font-size: 10.5px;

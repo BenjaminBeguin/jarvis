@@ -147,6 +147,7 @@ import { parseIntent } from './intent-router.js';
 import { ProjectMemoryStore } from './project-memory.js';
 import { ProjectStore } from './projects.js';
 import { WorkspaceStore } from './workspaces.js';
+import { buildWorkspaceGate } from './workspace-gate.js';
 import { ReminderStore } from './reminders.js';
 import { RoutineStore } from './routines.js';
 import { seedDefaultsIfEmpty } from './seed.js';
@@ -252,10 +253,12 @@ const activity = new ActivityStore();
 const briefings = new BriefingsStore(BUILTIN_BRIEFING_KINDS);
 const workflows = new WorkflowStore();
 const workflowRunner = new WorkflowRunner();
+const workspaceGate = buildWorkspaceGate(workspaces);
 const workflowScheduler = new WorkflowScheduler(workflows, workflowRunner, {
   isPaused: () => loadPaused(),
   isAutopilot: () => loadAppMode() === 'autopilot',
   workingHours: () => loadWorkingHours(),
+  isWorkspaceActive: workspaceGate,
 });
 // Dispatches autopilot/`when: 'inbox-changed'` workflows on InboxStore
 // emissions. Started + stopped alongside other scheduler-style
@@ -265,6 +268,7 @@ const inboxEventBridge = new InboxEventBridge({
   workflows,
   runner: workflowRunner,
   isAutopilot: () => loadAppMode() === 'autopilot',
+  isWorkspaceActive: workspaceGate,
 });
 // "Heads up" notifications when an inbox item with fireAt is within 5
 // min. Calendar events flow naturally through this; reminders are
@@ -887,6 +891,7 @@ runner.setJarvisMcp(
 
 routines.setRunner(runner);
 routines.setPausePredicate(() => loadPaused());
+routines.setWorkspaceGate(workspaceGate);
 notifier.setPausePredicate(() => loadPaused());
 inbox.setPausePredicate(() => loadPaused());
 
@@ -1596,6 +1601,33 @@ app.whenReady().then(async () => {
         detail: { id: reminder.id, body: reminder.body, paused: true },
       });
       reminders.markFired(reminder.id, null);
+      return;
+    }
+
+    // Workspace gate — ONLY for scheduled (agentic) reminders. Plain
+    // notification reminders ("pick up groceries") are time-driven
+    // personal commitments and stay global so a workspace switch
+    // doesn't make me miss them. Scheduled actions spawn agents whose
+    // output should land in the right context, so those defer until
+    // the matching workspace is active.
+    if (
+      reminder.mode === 'scheduled' &&
+      !workspaceGate(reminder.workspaceId)
+    ) {
+      activity.record({
+        kind: 'reminder.fired',
+        label: `Scheduled action deferred (workspace) · ${preview}`,
+        detail: {
+          id: reminder.id,
+          body: reminder.body,
+          deferredFor: 'workspace',
+          workspaceId: reminder.workspaceId ?? null,
+        },
+      });
+      // Re-arm 30 min out so we re-check after the user may have
+      // switched workspaces. Avoids burning the fire on a context
+      // mismatch.
+      reminders.snooze(reminder.id, 30 * 60_000);
       return;
     }
 

@@ -32,6 +32,7 @@ interface PersistedWorkflow {
   name?: unknown;
   description?: unknown;
   enabled?: unknown;
+  workspaceId?: unknown;
   trigger?: unknown;
   pipeline?: unknown;
 }
@@ -227,6 +228,10 @@ export class WorkflowStore extends EventEmitter {
       id: raw.id,
       name: raw.name,
       description: typeof raw.description === 'string' ? raw.description : undefined,
+      workspaceId:
+        typeof raw.workspaceId === 'string' && raw.workspaceId.trim()
+          ? raw.workspaceId.trim()
+          : undefined,
       enabled: raw.enabled !== false,
       trigger: raw.trigger as WorkflowDef['trigger'],
       pipeline,

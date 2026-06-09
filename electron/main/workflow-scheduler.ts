@@ -38,6 +38,11 @@ interface SchedulerOptions {
    *  cron substitution; the seed defaults reference this token so a
    *  single config change updates every workflow that opts in. */
   workingHours?: () => { startHour: number; endHour: number; daysOfWeek: string };
+  /** Workspace gate. Returns true iff a workflow tagged with this
+   *  workspaceId should fire right now (workspaceId === active OR
+   *  workspaceId == null). Workflows tagged to another workspace are
+   *  silenced until the user switches contexts. See workspace-gate.ts. */
+  isWorkspaceActive?: (workspaceId: string | null | undefined) => boolean;
 }
 
 interface ActiveJob {
@@ -111,6 +116,9 @@ export class WorkflowScheduler {
     endHour: number;
     daysOfWeek: string;
   };
+  private readonly isWorkspaceActive?: (
+    workspaceId: string | null | undefined,
+  ) => boolean;
   private jobs = new Map<string, ActiveJob>();
 
   constructor(
@@ -123,6 +131,7 @@ export class WorkflowScheduler {
     this.isPaused = opts.isPaused;
     this.isAutopilot = opts.isAutopilot;
     this.workingHours = opts.workingHours;
+    this.isWorkspaceActive = opts.isWorkspaceActive;
     this.store.on('changed', () => this.syncAll());
   }
 
@@ -171,6 +180,13 @@ export class WorkflowScheduler {
       }
       if (!every) continue;
       if (isAutopilotTrigger && !this.isAutopilot?.()) continue;
+      // Same workspace gate as the live cron path — don't catch up
+      // workflows that belong to a workspace we're not currently in.
+      // Otherwise opening Jarvis in "Personal" would replay all the
+      // overdue "Work" workflows that should stay silent.
+      if (this.isWorkspaceActive && !this.isWorkspaceActive(def.workspaceId)) {
+        continue;
+      }
       const resolved = substituteBusinessHours(every, this.workingHours);
       const cronExpr = expandEvery(resolved);
       if (!cron.validate(cronExpr)) continue;
@@ -276,6 +292,21 @@ export class WorkflowScheduler {
       // creation and fire takes effect.
       const fresh = this.store.get(def.id);
       if (!fresh || !fresh.enabled) return;
+      // Workspace gate: cron-driven fires only happen when the
+      // workflow's workspaceId matches the active workspace (or is
+      // null = global). Lets users keep "work autopilot" workflows
+      // silent while they're in "Side Project" mode without disabling
+      // them. Manual runs (palette / "Run now" UI / mcp__run_workflow)
+      // bypass this — those are explicit user actions.
+      if (
+        this.isWorkspaceActive &&
+        !this.isWorkspaceActive(fresh.workspaceId)
+      ) {
+        console.log(
+          `[workflow-scheduler] ${fresh.id} skipped — workspace mismatch (def="${fresh.workspaceId ?? 'global'}")`,
+        );
+        return;
+      }
       try {
         this.runner.run(fresh, isAutopilotTrigger ? 'autopilot' : 'cron');
       } catch (err) {

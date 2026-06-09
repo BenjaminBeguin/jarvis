@@ -4,6 +4,7 @@ import { IpcChannels } from '@shared/ipc';
 import type { SessionConfig } from '@shared/types';
 
 import { prewarmEagerRag } from '../artifacts/index.js';
+import { loadActiveWorkspaceId } from '../auth.js';
 import { parseIntent } from '../intent-router.js';
 import { notifier } from '../notifier.js';
 import { routePrompt as routePromptShared } from '../route-prompt.js';
@@ -22,6 +23,7 @@ export function registerIntentIpc({
   auth,
   activity,
   userContext,
+  workspaces,
 }: IpcDeps): void {
   ipcMain.handle(IpcChannels.previewIntent, (_e, prompt: string) => {
     if (typeof prompt !== 'string') return { kind: 'task', body: '' };
@@ -62,6 +64,8 @@ export function registerIntentIpc({
           reminders,
           runner,
           authStatus: auth.refresh,
+          activeWorkspaceId: () =>
+            loadActiveWorkspaceId() ?? workspaces.getDefault().id,
           onReminderCreated: (reminder, { hadCron }) => {
             const when = new Date(reminder.fireAt).toLocaleString(undefined, {
               hour: '2-digit',

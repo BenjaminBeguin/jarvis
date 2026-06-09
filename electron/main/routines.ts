@@ -15,6 +15,7 @@ const execAsync = promisify(exec);
 interface PersistedRoutine {
   id: string;
   skillId: string;
+  workspaceId?: string;
   cron: string;
   input?: string;
   enabled?: boolean;
@@ -52,6 +53,13 @@ export class RoutineStore extends EventEmitter {
   /** Optional predicate: when present and returns true, fire() bails
    *  silently. Set by index.ts to honor the global pause flag. */
   private isPaused: (() => boolean) | null = null;
+  /** Workspace gate. Returns true iff a routine tagged with this
+   *  workspaceId should fire right now (workspaceId === active OR
+   *  workspaceId == null). Routines tagged to another workspace are
+   *  silenced. Set by index.ts via setWorkspaceGate. */
+  private isWorkspaceActive:
+    | ((workspaceId: string | null | undefined) => boolean)
+    | null = null;
 
   constructor(path = join(homedir(), '.jarvis', 'routines.json')) {
     super();
@@ -60,6 +68,12 @@ export class RoutineStore extends EventEmitter {
 
   setPausePredicate(fn: () => boolean): void {
     this.isPaused = fn;
+  }
+
+  setWorkspaceGate(
+    fn: (workspaceId: string | null | undefined) => boolean,
+  ): void {
+    this.isWorkspaceActive = fn;
   }
 
   setRunner(runner: TaskRunner): void {
@@ -86,6 +100,16 @@ export class RoutineStore extends EventEmitter {
     const def: RoutineDef = {
       id,
       skillId: input.skillId,
+      // Workspace stamping. Honor an explicit input.workspaceId
+      // (including `null`/undefined to mark global). For NEW routines
+      // with nothing specified, fall through to the existing
+      // workspaceId or undefined; the IPC layer stamps the active
+      // workspace at creation time so routines created from the
+      // Routines UI auto-belong to the current context.
+      workspaceId:
+        input.workspaceId !== undefined
+          ? input.workspaceId
+          : existing?.def.workspaceId,
       cron: input.cron,
       input: input.input ?? '',
       enabled: input.enabled ?? existing?.def.enabled ?? true,
@@ -204,6 +228,16 @@ export class RoutineStore extends EventEmitter {
       console.log(`[routine ${def.id}] paused — skipping fire`);
       return;
     }
+    // Workspace gate. A routine pinned to "Work" workspace shouldn't
+    // fire its cron while the user is in "Personal" — that's the
+    // whole point of workspace contexts. Null workspaceId = legacy /
+    // global, always fires.
+    if (this.isWorkspaceActive && !this.isWorkspaceActive(def.workspaceId)) {
+      console.log(
+        `[routine ${def.id}] workspace mismatch (def="${def.workspaceId ?? 'global'}") — skipping fire`,
+      );
+      return;
+    }
     const task = this.runner.launch({
       skillId: def.skillId,
       prompt: def.input || 'Run.',
@@ -254,6 +288,7 @@ export class RoutineStore extends EventEmitter {
         const def: RoutineDef = {
           id: item.id,
           skillId: item.skillId,
+          workspaceId: item.workspaceId,
           cron: item.cron,
           input: item.input ?? '',
           enabled: item.enabled ?? true,
@@ -281,6 +316,7 @@ export class RoutineStore extends EventEmitter {
     const list: PersistedRoutine[] = [...this.routines.values()].map((r) => ({
       id: r.def.id,
       skillId: r.def.skillId,
+      workspaceId: r.def.workspaceId,
       cron: r.def.cron,
       input: r.def.input,
       enabled: r.def.enabled,

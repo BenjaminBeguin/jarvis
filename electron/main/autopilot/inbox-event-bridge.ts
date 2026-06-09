@@ -24,6 +24,10 @@ export interface InboxEventBridgeDeps {
   workflows: WorkflowStore;
   runner: WorkflowRunner;
   isAutopilot: () => boolean;
+  /** Workspace gate — same shape as the WorkflowScheduler's. Suppresses
+   *  inbox-changed dispatches for workflows belonging to a workspace
+   *  that isn't the active one. Omit to disable workspace gating. */
+  isWorkspaceActive?: (workspaceId: string | null | undefined) => boolean;
 }
 
 const DEFAULT_MIN_INTERVAL_MS = 60_000;
@@ -121,6 +125,15 @@ export class InboxEventBridge {
       try {
         const fresh = this.deps.workflows.get(def.id);
         if (!fresh || !fresh.enabled) continue;
+        // Workspace gate — same rule as the cron scheduler. Workspaces
+        // exist precisely so "Work" autopilot can stay silent while
+        // I'm in "Side Project" mode.
+        if (
+          this.deps.isWorkspaceActive &&
+          !this.deps.isWorkspaceActive(fresh.workspaceId)
+        ) {
+          continue;
+        }
         // Feed the matched InboxItem in as prev — the pipeline's
         // first transform / run-skill step receives `$` = the item.
         this.deps.runner.runWithSeed(fresh, 'inbox-event', { kind: 'inbox-changed', item: pick });

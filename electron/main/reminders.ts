@@ -11,6 +11,7 @@ interface PersistedReminder {
   id: string;
   body: string;
   mode?: ReminderMode;
+  workspaceId?: string;
   createdAt: number;
   fireAt: number;
   status?: ReminderStatus;
@@ -87,6 +88,12 @@ export class ReminderStore extends EventEmitter {
     body: string;
     mode: ReminderMode;
     fireAt: number;
+    /** Workspace tag. Stamped by callers (route-prompt / IPC handlers)
+     *  with the active workspace at create time. Scheduled (agentic)
+     *  reminders honour this at fire time; plain notification
+     *  reminders ignore it and fire globally (they're personal
+     *  time-driven commitments, not context-driven actions). */
+    workspaceId?: string;
     /** When provided, the reminder becomes recurring — after each fire
      *  the store reschedules to the next cron occurrence. */
     cron?: string;
@@ -101,6 +108,7 @@ export class ReminderStore extends EventEmitter {
       id: nanoid(8),
       body: input.body,
       mode: input.mode,
+      workspaceId: input.workspaceId,
       createdAt: Date.now(),
       fireAt: input.fireAt,
       status: 'pending',
@@ -297,6 +305,10 @@ export class ReminderStore extends EventEmitter {
         id: item.id,
         body: item.body,
         mode: item.mode ?? 'reminder',
+        workspaceId:
+          typeof item.workspaceId === 'string' && item.workspaceId.trim()
+            ? item.workspaceId.trim()
+            : undefined,
         createdAt: item.createdAt,
         fireAt: item.fireAt,
         status: item.status ?? 'pending',
@@ -314,6 +326,7 @@ export class ReminderStore extends EventEmitter {
       id: r.id,
       body: r.body,
       mode: r.mode,
+      workspaceId: r.workspaceId,
       createdAt: r.createdAt,
       fireAt: r.fireAt,
       status: r.status,

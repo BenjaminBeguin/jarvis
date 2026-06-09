@@ -57,6 +57,10 @@ export interface RoutePromptDeps {
    *  the IPC handler uses this to fire the inline "Reminder set" toast,
    *  while a non-renderer caller (e.g. Telegram bot) can skip it. */
   onReminderCreated?: (reminder: Reminder, opts: { hadCron: boolean }) => void;
+  /** Currently-selected workspace id at dispatch time. Used to stamp
+   *  reminders + future per-workspace entities at create time so the
+   *  scheduler / fire-handler can gate on workspace match. */
+  activeWorkspaceId?: () => string | null | undefined;
 }
 
 export interface RoutePromptOpts {
@@ -99,11 +103,16 @@ export async function routePrompt(
 
   const intent = parseIntent(text);
   if (intent.kind === 'reminder') {
+    // Auto-stamp the active workspace so scheduled (agentic)
+    // reminders fire in the right context. Plain notification
+    // reminders carry the tag too but the fire handler ignores it
+    // for them — see `index.ts` reminders.setFireHandler.
     const reminder = deps.reminders.create({
       body: intent.body,
       mode: intent.mode,
       fireAt: intent.fireAt,
       cron: intent.cron,
+      workspaceId: deps.activeWorkspaceId?.() ?? undefined,
     });
     deps.onReminderCreated?.(reminder, { hadCron: !!intent.cron });
     return { kind: 'reminder', reminder };

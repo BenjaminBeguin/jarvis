@@ -2,12 +2,25 @@ import { ipcMain } from 'electron';
 
 import { IpcChannels } from '@shared/ipc';
 
+import { loadActiveWorkspaceId } from '../auth.js';
 import type { IpcDeps } from './types.js';
 
-export function registerRoutinesIpc({ routines, activity }: IpcDeps): void {
+export function registerRoutinesIpc({
+  routines,
+  activity,
+  workspaces,
+}: IpcDeps): void {
   ipcMain.handle(IpcChannels.listRoutines, () => routines.list());
   ipcMain.handle(IpcChannels.saveRoutine, (_e, input) => {
     const before = routines.list().find((r) => r.id === input?.id);
+    // Auto-stamp the active workspace at create time. Existing
+    // routines preserve whatever they already had. The renderer can
+    // override by passing an explicit workspaceId.
+    if (input && !before && input.workspaceId === undefined) {
+      const activeId =
+        loadActiveWorkspaceId() ?? workspaces.getDefault().id;
+      input = { ...input, workspaceId: activeId };
+    }
     const result = routines.save(input);
     if (input && typeof input.id === 'string') {
       activity.record({
