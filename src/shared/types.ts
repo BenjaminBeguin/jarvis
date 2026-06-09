@@ -410,6 +410,11 @@ export interface Reminder {
   /** Original prompt the user gave (without the "remind me" / time wrapper). */
   body: string;
   mode: ReminderMode;
+  /** Owning workspace. Null = fires regardless of active workspace
+   *  (cross-cutting reminders the user wants no matter what context
+   *  they're in). The scheduler gates non-null reminders on a
+   *  workspace match. */
+  workspaceId?: string;
   createdAt: number;
   fireAt: number;
   status: ReminderStatus;
@@ -582,6 +587,9 @@ export interface MeetingDetectionStatus {
 export interface RoutineDef {
   id: string;
   skillId: string;
+  /** Owning workspace. Null = fires in every workspace (legacy +
+   *  global routines like daily-learn). */
+  workspaceId?: string;
   cron: string;
   input: string;
   enabled: boolean;
@@ -707,32 +715,122 @@ export interface ProjectMemoryFile {
   sizeBytes: number;
 }
 
+/**
+ * A workspace is a top-level grouping above projects. Switching workspace
+ * narrows the entire app: project picker, Bridge cards, inbox feed,
+ * drafts list, activity log, cron-driven workflows + reminders.
+ *
+ * Use case: keep "Work" and "Side Project" and "Personal" cleanly
+ * separated without running multiple Jarvis instances. Same Claude
+ * subscription, same skills, but the surface area shrinks to what
+ * matters in the current context.
+ *
+ * Workspaces are a TAG, not a directory tree — every per-entity field
+ * is `workspaceId?: string` (nullable = "shared across all workspaces").
+ * Avoids breaking every file path in the codebase + makes "global"
+ * artifacts a natural fall-through.
+ */
+export interface WorkspaceDef {
+  /** Stable slug — immutable once created. Used as the foreign key
+   *  on every `workspaceId?: string` field across the app. */
+  id: string;
+  /** Display name shown in the switcher. */
+  name: string;
+  /** Optional one-line hint. */
+  description?: string;
+  /** Hex color for the HUD accent + switcher pill (e.g. #6ee7ff). */
+  color?: string;
+  /** Single glyph for the switcher icon column. */
+  icon?: string;
+  /** Exactly one workspace is the default — used when an entity has
+   *  no workspaceId set OR when the user hasn't picked an active one
+   *  yet. The seeder always creates one default workspace ("Personal"). */
+  default?: boolean;
+}
+
+export interface WorkspaceInput {
+  id?: string; // generated if not provided
+  name: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  default?: boolean;
+}
+
 export interface ProjectDef {
   /** Canonical name — what the user typically says/types. */
   name: string;
+  /** Owning workspace id. Null = visible in every workspace
+   *  (legacy projects + cross-workspace concerns). Defaults to the
+   *  seeded "personal" workspace on migration. */
+  workspaceId?: string;
   /** Fuzzy match strings the user might say ("cs ai", "csai", …). */
   aliases: string[];
   /** Absolute path on disk; resolved against home if it starts with ~. */
   path?: string;
-  /** GitHub repo identifier ("owner/name") or full URL. */
+  /**
+   * GitHub repo identifier ("owner/name") or full URL. Legacy
+   * single-repo shape; new code should write to `repos`. Kept here
+   * so existing config files keep working — at read time the runtime
+   * merges `repo` into `repos` for matching.
+   */
   repo?: string;
+  /**
+   * Multiple repos can belong to one project (BE + FE + mobile), and
+   * one repo can belong to multiple projects (a monolith backend
+   * serving several frontend products). The matcher walks each entry
+   * to decide if an inbox item (PR, Linear ticket, …) belongs to this
+   * project. Set in Settings → Projects; persisted to projects.json.
+   */
+  repos?: string[];
+  /**
+   * Free-form keywords the matcher checks against an inbox item's
+   * title / subtitle / url alongside `repos` and `aliases`. Use this
+   * for cross-cutting concepts that don't have their own repo
+   * ("checkout flow", "billing migration"). Case-insensitive,
+   * substring match.
+   */
+  keywords?: string[];
   /** One-line description that helps the agent decide relevance. */
   description?: string;
   /**
-   * Should the inbox PR sources scan this repo? Defaults to true when
-   * `repo` is set. Set to `false` to exclude a project from PR scanning
-   * without removing it as a project (you might still want it in the
-   * scope picker / memory). Toggled from Settings → Inbox.
+   * Should the inbox PR sources scan this project's repos? Defaults
+   * to true when any repo is set. Set to `false` to exclude a project
+   * from PR scanning without removing it as a project (you might still
+   * want it in the scope picker / memory). Toggled from Settings →
+   * Inbox.
    */
   inboxScan?: boolean;
+}
+
+/**
+ * Helper: collapse the legacy `repo` string + the new `repos` array
+ * into a single deduplicated list. Renderer-side matching + Settings
+ * UI should always use this rather than reading the fields directly.
+ */
+export function allRepos(def: ProjectDef): string[] {
+  const out = new Set<string>();
+  if (def.repo) out.add(def.repo.trim());
+  for (const r of def.repos ?? []) {
+    if (typeof r === 'string' && r.trim()) out.add(r.trim());
+  }
+  return [...out];
 }
 
 /** Payload for creating a new project from the UI. */
 export interface ProjectInput {
   name: string;
+  /** Workspace this project belongs to. Pass undefined on create to
+   *  inherit the active workspace at write time (back-compat path). */
+  workspaceId?: string;
   aliases?: string[];
   path?: string;
+  /** Legacy single-repo shape. Prefer `repos` for new entries. */
   repo?: string;
+  /** Multi-repo: BE + FE + mobile, etc. See ProjectDef.repos. */
+  repos?: string[];
+  /** Cross-cutting concept keywords for the inbox matcher. */
+  keywords?: string[];
   description?: string;
   /** Default for inboxScan when this project is created. Defaults to
    * undefined (= included by default if repo is set). */
@@ -890,6 +988,14 @@ export interface InboxItem {
     /** open-url only — URL to open. Falls back to item.url if absent. */
     url?: string;
   };
+  /**
+   * For calendar-sourced items: number of attendees on the event (the
+   * organiser counted in). Used by the meeting heads-up gate to skip
+   * solo blockers / focus blocks — recording yourself thinking out loud
+   * isn't a meeting. Absent for non-calendar sources or when the
+   * source didn't surface attendee data.
+   */
+  attendeeCount?: number;
 }
 
 /** Renderer-facing summary of a workflow template — body lives in main. */
@@ -1115,6 +1221,11 @@ export interface NotifierEmitPayload {
 export interface WorkflowDef {
   id: string;
   name: string;
+  /** Owning workspace. Null = the workflow fires regardless of which
+   *  workspace is active (used for global workflows like daily-learn,
+   *  morning-brief, and any legacy seeds that pre-date workspaces).
+   *  The scheduler gates non-null cron triggers on a workspace match. */
+  workspaceId?: string;
   description?: string;
   enabled: boolean;
   trigger: WorkflowTrigger;

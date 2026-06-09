@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { AppMode, InboxItem } from '../../shared/types';
+import type { InboxItem } from '../../shared/types';
 import { toast } from './Toaster';
-
-const AUTOPILOT_COUNTDOWN_MS = 5_000;
 
 interface PendingPrompt {
   item: InboxItem;
@@ -29,26 +27,17 @@ interface PendingPrompt {
  *
  * Auto-dismisses after 90 seconds if the user does nothing — so a
  * forgotten prompt doesn't sit on screen forever.
+ *
+ * **Never auto-records.** Even in autopilot mode the recording start
+ * is gated on an explicit Record click — recording without consent is
+ * a privacy footgun (someone in the call didn't expect a transcript;
+ * a "meeting" was actually a 1:1 you didn't want captured; the
+ * detection false-positived). Better to miss a recording than to
+ * surprise the user with one they didn't authorise.
  */
 export function MeetingPrompt() {
   const [pending, setPending] = useState<PendingPrompt | null>(null);
-  // Autopilot mode = auto-start recording after a visible countdown.
-  // Tracked in a ref so the auto-trigger effect can read the live
-  // value without re-binding when only the mode changes.
-  const [appMode, setAppMode] = useState<AppMode>('running');
   const cancelledRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    let cancelled = false;
-    void window.jarvis.getAppMode().then((m) => {
-      if (!cancelled) setAppMode(m);
-    });
-    const off = window.jarvis.onAppModeChanged((m) => setAppMode(m));
-    return () => {
-      cancelled = true;
-      off();
-    };
-  }, []);
 
   useEffect(() => {
     return window.jarvis.onMeetingImminent(({ item, minutesUntil }) => {
@@ -62,22 +51,6 @@ export function MeetingPrompt() {
     const t = setTimeout(() => setPending(null), 90_000);
     return () => clearTimeout(t);
   }, [pending]);
-
-  // Autopilot: auto-Record after a short visible countdown. The
-  // user can still cancel by clicking Skip or ✕ during the window.
-  useEffect(() => {
-    if (!pending) return;
-    if (appMode !== 'autopilot') return;
-    if (cancelledRef.current.has(pending.item.id)) return;
-    const t = setTimeout(() => {
-      // Re-read state at fire time so an in-flight Skip during the
-      // countdown still wins.
-      if (cancelledRef.current.has(pending.item.id)) return;
-      void startRecording();
-    }, AUTOPILOT_COUNTDOWN_MS);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pending?.item.id, appMode]);
 
   if (!pending) return null;
 

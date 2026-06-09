@@ -50,6 +50,19 @@ interface ReviewQueuePr {
   /** Reviews I've submitted on this PR (filtered to current viewer
    * client-side via viewerLogin). */
   myReviewCount: number;
+  /** GitHub `isDraft` — drafts are still WIP; the author hasn't
+   *  asked for review yet. Filtered out of the review queue so we
+   *  don't badger the user about half-finished PRs. */
+  isDraft: boolean;
+  /**
+   * True when the viewer is requested individually (their user is
+   * in `reviewRequests`), false when only their team is requested.
+   * The Bridge surfaces only direct asks — team-level requests
+   * tend to be passive ("if anyone has cycles") and would clutter
+   * the focus queue. Power-users can still see team requests via
+   * the underlying GitHub UI.
+   */
+  isDirectRequest: boolean;
 }
 
 interface MyOpenPr {
@@ -94,9 +107,18 @@ async function fetchGh(repoFilter: string[]): Promise<GhFetchResult> {
         nodes {
           ... on PullRequest {
             number title url createdAt
+            isDraft
             author { login }
             repository { nameWithOwner }
             reviews(first: 30) { nodes { author { login } } }
+            reviewRequests(first: 30) {
+              nodes {
+                requestedReviewer {
+                  __typename
+                  ... on User { login }
+                }
+              }
+            }
           }
         }
       }
@@ -124,9 +146,18 @@ async function fetchGh(repoFilter: string[]): Promise<GhFetchResult> {
       viewer: { login: string };
       needsReview: { nodes: Array<{
         number: number; title: string; url: string; createdAt: string;
+        isDraft: boolean;
         author: { login: string } | null;
         repository: { nameWithOwner: string };
         reviews: { nodes: Array<{ author: { login: string } | null }> };
+        reviewRequests: {
+          nodes: Array<{
+            requestedReviewer:
+              | { __typename: 'User'; login: string }
+              | { __typename: string }
+              | null;
+          }>;
+        };
       } | null> };
       myOpen: { nodes: Array<{
         number: number; title: string; url: string; updatedAt: string; createdAt: string;
@@ -153,6 +184,15 @@ async function fetchGh(repoFilter: string[]): Promise<GhFetchResult> {
     const myReviewCount = n.reviews.nodes.filter(
       (r) => r.author?.login?.toLowerCase() === viewerLogin.toLowerCase(),
     ).length;
+    const isDirectRequest = (n.reviewRequests?.nodes ?? []).some((rr) => {
+      const reviewer = rr.requestedReviewer;
+      if (!reviewer || reviewer.__typename !== 'User') return false;
+      const login = (reviewer as { login?: string }).login;
+      return (
+        typeof login === 'string' &&
+        login.toLowerCase() === viewerLogin.toLowerCase()
+      );
+    });
     needsReview.push({
       number: n.number,
       title: n.title,
@@ -161,6 +201,8 @@ async function fetchGh(repoFilter: string[]): Promise<GhFetchResult> {
       author: n.author,
       repository: n.repository,
       myReviewCount,
+      isDraft: !!n.isDraft,
+      isDirectRequest,
     });
   }
 
@@ -244,8 +286,17 @@ function scanRepos(projects: ProjectStore | undefined): string[] {
 
 /**
  * PRs across all repos (or only configured ones) where review is
- * requested from the current user AND I haven't submitted a review yet.
- * `myReviewCount === 0` is the "still need to look" signal.
+ * requested from the current user AND I haven't submitted a review
+ * yet. Filters:
+ *
+ *   - `myReviewCount === 0` — I haven't already reviewed
+ *   - `isDirectRequest` — I'm requested as a USER (not via a team).
+ *     Team-only requests tend to be passive ("if anyone has cycles")
+ *     and would clutter the Bridge focus queue. Direct requests
+ *     mean someone specifically pinged me.
+ *   - `!isDraft` — drafts are still WIP; the author hasn't actually
+ *     asked for review yet. Surfacing them creates noise and pressure
+ *     to review work that isn't ready.
  */
 export function prReviewQueueInboxSource(projects?: ProjectStore): InboxSource {
   return {
@@ -256,6 +307,8 @@ export function prReviewQueueInboxSource(projects?: ProjectStore): InboxSource {
       const now = Date.now();
       return needsReview
         .filter((pr) => pr.myReviewCount === 0)
+        .filter((pr) => !pr.isDraft)
+        .filter((pr) => pr.isDirectRequest)
         .map((pr) => {
           const repoLabel = pr.repository.nameWithOwner;
           return {

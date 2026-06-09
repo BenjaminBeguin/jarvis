@@ -368,6 +368,23 @@ export function CommandPalette() {
     };
   }, [text, activeSkill, activeIntent]);
 
+  // Speculative speed-up: pre-warm the eager-RAG LRU on the main side
+  // as the user types. By the time they press Enter, retrieval is in
+  // cache and the launch path skips the embedding-worker round-trip
+  // (~100–200ms saved on the first ask of a session). Debounced longer
+  // than the schedule preview so we only fire on stable typing pauses;
+  // the cache TTL covers the gap before submit. Fire-and-forget — the
+  // main side swallows everything.
+  useEffect(() => {
+    if (activeSkill || activeIntent || text.startsWith('/')) return;
+    const trimmed = text.trim();
+    if (trimmed.length < 12) return;
+    const handle = setTimeout(() => {
+      window.jarvis.prewarmAsk(trimmed);
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [text, activeSkill, activeIntent]);
+
   // If the user types a full intent prefix as the first word, promote it to
   // an active intent chip so Enter dispatches it (don't open the skill picker).
   useEffect(() => {

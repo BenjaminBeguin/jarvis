@@ -113,10 +113,12 @@ export function registerTasksIpc({
         taskId,
         text,
         images,
+        interrupt,
       }: {
         taskId: string;
         text: string;
         images?: Array<{ mediaType: string; base64: string }>;
+        interrupt?: boolean;
       },
     ) => {
       const safeImages = Array.isArray(images)
@@ -131,7 +133,9 @@ export function registerTasksIpc({
             // almost certainly accidental (drag-drop of a folder).
             .slice(0, 8)
         : [];
-      return runner.sendMessage(taskId, text, safeImages);
+      return runner.sendMessage(taskId, text, safeImages, {
+        interrupt: interrupt === true,
+      });
     },
   );
 

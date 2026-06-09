@@ -2,10 +2,45 @@ import type { AuthMode, RoutePromptResult, SessionConfig, TaskOrigin } from '@sh
 
 import { loadVoiceAlwaysSpeak } from './auth.js';
 import { matchSkillIntent, parseIntent } from './intent-router.js';
+import { modelForTier } from './model-tiers.js';
 import type { ModuleRegistry } from './module-registry.js';
 import type { ReminderStore } from './reminders.js';
 import type { Reminder } from '@shared/types';
 import { asTaskOrigin, type TaskRunner } from './task-runner.js';
+
+/**
+ * Decide whether a free-text ask is "snappy enough" to run on the
+ * fast tier (Haiku) instead of the balanced default (Sonnet). Saves
+ * ~300–600ms time-to-first-token on the common "quick question"
+ * pattern while leaving anything that smells like real work on the
+ * regular path.
+ *
+ * Conservative gate — when in doubt, stay on the default tier.
+ * If Haiku gets a question it can't handle, the agent can call
+ * `mcp__jarvis__think_harder` to escalate mid-flight (the runner
+ * preserves session continuity), so an under-tier is recoverable.
+ */
+function shouldUseFastTier(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length === 0 || trimmed.length > 200) return false;
+  // Lines with code-shaped content read as dev work — leave on Sonnet.
+  if (/```|`[^`\n]+`|\b(class|function|const|let|var|import|export)\b/.test(trimmed)) {
+    return false;
+  }
+  // Explicit "think hard" hints — user wants the smart tier.
+  if (/\b(think hard|deep|analyse|analyze|reason|architect|design)\b/i.test(trimmed)) {
+    return false;
+  }
+  // Multi-paragraph asks usually carry more context / expect more work.
+  if ((trimmed.match(/\n/g) ?? []).length > 1) return false;
+  // Question-shaped or status-shaped — typical fast-tier candidates.
+  if (/\?/.test(trimmed)) return true;
+  if (/^(what|where|when|why|who|which|how|is|are|do|does|did|can|could|should)\b/i.test(trimmed)) {
+    return true;
+  }
+  if (/^(show|tell|find|list|summari[sz]e|recap|status|update)\b/i.test(trimmed)) return true;
+  return false;
+}
 
 export interface RoutePromptDeps {
   modules: ModuleRegistry;
@@ -100,11 +135,23 @@ export async function routePrompt(
       ? { ...baseConfig, speakReply: true }
       : baseConfig;
 
+  // Auto-pick fast tier for short conversational asks (no skill, no
+  // explicit model). Skill dispatches keep their declared tier; the
+  // user's caller-supplied model in sessionConfig wins over our hint.
+  // Falls back silently to the default tier when none of the
+  // heuristics match — see shouldUseFastTier.
+  const wantFastTier =
+    !skillId && !sessionConfig.model && shouldUseFastTier(intent.body);
+  const tierHint: Partial<SessionConfig> = wantFastTier
+    ? { model: modelForTier('fast') }
+    : {};
+
   const task = deps.runner.launch({
     prompt: intent.body,
     origin: asTaskOrigin(opts.origin),
     ...(skillId ? { skillId } : {}),
     ...sessionConfig,
+    ...tierHint,
     ...(opts.projectName !== undefined ? { projectName: opts.projectName } : {}),
   });
   return { kind: 'task', task };

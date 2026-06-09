@@ -13,9 +13,11 @@ import { MeetingPrompt } from './MeetingPrompt';
 import { NewProjectDialog } from './projects/NewProjectDialog';
 import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
+import { WorkspaceSwitcher } from './workspaces/WorkspaceSwitcher';
 import { Activity } from './Activity';
 import { MemoryPage } from './memory/MemoryPage';
 import { BuildingHome } from './BuildingHome';
+import { BridgePage } from './bridge/BridgePage';
 import { Dashboard } from './Dashboard';
 import { Drafts } from './Drafts';
 import { FlowStream } from './FlowStream';
@@ -31,6 +33,7 @@ import { Observatory } from './Observatory';
 import { Routines } from './Routines';
 
 type Tab =
+  | 'bridge'
   | 'dashboard'
   | 'observatory'
   | 'ai-agent'
@@ -85,7 +88,11 @@ function saveUiMode(mode: UiMode): void {
  *  on the canonical first tab of that mode so they're not stranded
  *  on a tab the new mode hides. */
 const MODE_DEFAULT_TAB: Record<UiMode, Tab> = {
-  working: 'dashboard',
+  // The new Bridge is the canonical Working home. The old Dashboard
+  // is still reachable from the sidebar for cost / briefings / skill
+  // browsing — those will migrate behind Bridge drilldowns in a later
+  // pass.
+  working: 'bridge',
   observing: 'observatory',
   building: 'building-home',
 };
@@ -218,7 +225,7 @@ export function Shell({ status }: Props) {
   // dropdown. They're still reachable programmatically by setTab().
   useEffect(() => {
     const tabsOrder: Tab[] = [
-      'dashboard',
+      'bridge',
       'observatory',
       'inbox',
       'routines',
@@ -528,6 +535,17 @@ export function Shell({ status }: Props) {
     id: 'main',
     items: [
       {
+        id: 'bridge',
+        label: 'Bridge',
+        icon: 'B',
+        isActive: tab === 'bridge' && !openModuleId,
+        onClick: () => {
+          setTab('bridge');
+          setOpenModuleId(null);
+        },
+        title: '⌘1 · Command bridge — focus / project pulse / activity stream',
+      },
+      {
         id: 'dashboard',
         label: 'Dashboard',
         icon: 'D',
@@ -536,7 +554,7 @@ export function Shell({ status }: Props) {
           setTab('dashboard');
           setOpenModuleId(null);
         },
-        title: '⌘1 · Curated home — pinned briefings + inbox + routines',
+        title: 'Briefings, skill grid, cost panel — config-side surfaces',
       },
       {
         id: 'inbox',
@@ -760,6 +778,21 @@ export function Shell({ status }: Props) {
           </button>
         </div>
         <div className="shell__right">
+          <WorkspaceSwitcher
+            onSwitch={() => {
+              // Switching workspace clears any active project scope.
+              // The picker will repopulate from the new workspace's
+              // project list on next render. Phase 2 will also push
+              // a `jarvis:active-project-changed` event so subscribers
+              // (Bridge, Inbox, etc.) all reset their scope at once.
+              setActiveProject(null);
+              try {
+                window.localStorage.removeItem('jarvis.activeProject');
+              } catch {
+                /* private mode etc. */
+              }
+            }}
+          />
           <ScopePicker
             projects={projectList}
             active={activeProject}
@@ -931,6 +964,8 @@ export function Shell({ status }: Props) {
         />
         {openModuleId && PageComponent ? (
           <PageComponent />
+        ) : tab === 'bridge' ? (
+          <BridgePage />
         ) : tab === 'dashboard' ? (
           <Dashboard />
         ) : tab === 'observatory' ? (

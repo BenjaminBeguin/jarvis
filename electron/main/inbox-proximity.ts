@@ -39,6 +39,20 @@ function isMeetingShaped(item: InboxItem): boolean {
   return false;
 }
 
+/**
+ * Calendar items can be "blockers" (focus time, "me only", lunch)
+ * that the user doesn't want recorded. Skip the recording prompt
+ * when the calendar event has zero or one accepted attendees —
+ * a meeting needs at least two people for a transcript to mean
+ * anything. Non-calendar sources (Meet URL detection) don't carry
+ * attendee data, so they pass through unchanged.
+ */
+function isSoloCalendarBlock(item: InboxItem): boolean {
+  if (item.source !== 'calendar') return false;
+  if (typeof item.attendeeCount !== 'number') return false;
+  return item.attendeeCount <= 1;
+}
+
 export interface ProximityNotifier {
   (item: InboxItem, minutesUntil: number): void;
 }
@@ -94,11 +108,13 @@ export class InboxProximityWatcher {
         }
       }
 
-      // 2-min "record this?" meeting prompt (calendar / meet-URL items)
+      // 2-min "record this?" meeting prompt (calendar / meet-URL items).
+      // Skip solo blockers — see isSoloCalendarBlock.
       if (
         ms <= IMMINENT_MS &&
         this.promptMeeting &&
         isMeetingShaped(item) &&
+        !isSoloCalendarBlock(item) &&
         !this.meetingPrompted.has(item.id)
       ) {
         this.meetingPrompted.add(item.id);

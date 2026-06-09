@@ -700,6 +700,26 @@ export function listWorkflowRuns(
   return rows.map((r) => safeParseRun(r.run_json));
 }
 
+/**
+ * Latest run start time for a workflow, or null if it never ran.
+ * Used by the boot-time catch-up pass to detect overdue crons after
+ * the app was closed (e.g. closed laptop overnight; on reopen we
+ * want any 15m / hourly / daily workflows that should have fired
+ * during the gap to fire once).
+ */
+export function getLastWorkflowRunStartedAt(workflowId: string): number | null {
+  const db = getDb();
+  const row = db
+    .prepare<[string], { started_at: number }>(
+      `SELECT started_at FROM workflow_runs
+       WHERE workflow_id = ?
+       ORDER BY started_at DESC
+       LIMIT 1`,
+    )
+    .get(workflowId);
+  return row?.started_at ?? null;
+}
+
 export function getWorkflowRun(id: string): unknown | null {
   const db = getDb();
   const row = db

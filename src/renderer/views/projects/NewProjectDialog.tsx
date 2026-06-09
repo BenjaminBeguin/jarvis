@@ -34,7 +34,11 @@ export function NewProjectDialog({
   const isEdit = !!editing;
   const [name, setName] = useState(initialName ?? '');
   const [aliases, setAliases] = useState('');
-  const [repo, setRepo] = useState('');
+  // Repos input is a textarea — one entry per line — so the user can
+  // wire BE + FE + mobile repos to a single project. The legacy
+  // single `repo` field still flows in/out for backwards compat.
+  const [reposText, setReposText] = useState('');
+  const [keywords, setKeywords] = useState('');
   const [path, setPath] = useState('');
   const [description, setDescription] = useState('');
   const [templateId, setTemplateId] = useState<string>('none');
@@ -50,13 +54,22 @@ export function NewProjectDialog({
     if (editing) {
       setName(editing.name);
       setAliases(editing.aliases.join(', '));
-      setRepo(editing.repo ?? '');
+      // Merge legacy `repo` + new `repos[]` so editing an existing
+      // project doesn't lose either source. We persist back via
+      // `repos` only (the legacy field gets cleared on save below).
+      const reposList = [
+        ...(editing.repo ? [editing.repo] : []),
+        ...(editing.repos ?? []),
+      ];
+      setReposText([...new Set(reposList)].join('\n'));
+      setKeywords((editing.keywords ?? []).join(', '));
       setPath(editing.path ?? '');
       setDescription(editing.description ?? '');
     } else {
       setName(initialName ?? '');
       setAliases('');
-      setRepo('');
+      setReposText('');
+      setKeywords('');
       setPath('');
       setDescription('');
     }
@@ -95,10 +108,23 @@ export function NewProjectDialog({
         .split(/[,\n]/)
         .map((a) => a.trim())
         .filter(Boolean);
+      const repoList = reposText
+        .split(/[\n,]/)
+        .map((r) => r.trim())
+        .filter(Boolean);
+      const keywordList = keywords
+        .split(/[,\n]/)
+        .map((k) => k.trim())
+        .filter(Boolean);
       const fields = {
         name: trimmed,
         aliases: aliasList,
-        repo: repo.trim() || undefined,
+        // New canonical shape: persist multi-repo through `repos[]`.
+        // The legacy `repo` field is cleared on save so the source
+        // of truth lives in one place going forward.
+        repos: repoList.length > 0 ? repoList : undefined,
+        repo: repoList[0] ?? undefined, // back-compat single value
+        keywords: keywordList.length > 0 ? keywordList : undefined,
         path: path.trim() || undefined,
         description: description.trim() || undefined,
       };
@@ -205,14 +231,35 @@ export function NewProjectDialog({
           </label>
 
           <label className="project-dialog__field">
-            <span>Repo</span>
+            <span>Repos</span>
+            <textarea
+              value={reposText}
+              onChange={(e) => setReposText(e.target.value)}
+              placeholder="owner/backend&#10;owner/frontend&#10;owner/mobile"
+              spellCheck={false}
+              rows={3}
+            />
+            <small>
+              One <code>owner/name</code> per line. List every repo
+              that belongs to this project — backend + frontend +
+              mobile, etc. A repo may also appear under multiple
+              projects (monolith case).
+            </small>
+          </label>
+
+          <label className="project-dialog__field">
+            <span>Keywords</span>
             <input
-              value={repo}
-              onChange={(e) => setRepo(e.target.value)}
-              placeholder="owner/name"
+              value={keywords}
+              onChange={(e) => setKeywords(e.target.value)}
+              placeholder="checkout, billing-migration, MXG"
               spellCheck={false}
             />
-            <small>GitHub identifier so PR/review skills can find it.</small>
+            <small>
+              Comma-separated. Free-form strings the matcher checks
+              against PR titles, Linear tickets, Slack threads —
+              useful for cross-cutting concepts that aren't a repo.
+            </small>
           </label>
 
           <label className="project-dialog__field">

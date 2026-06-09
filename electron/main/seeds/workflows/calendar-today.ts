@@ -78,6 +78,16 @@ const CAL_TRANSFORM = `((() => {
       const endLabel = endIso ? hhmm(endIso) : '';
       const time = startLabel + (endLabel ? '–' + endLabel : '');
       const subtitle = time || (loc.length > 0 && loc.length < 60 ? loc : '');
+      // Surface attendee count so the meeting heads-up prompt can
+      // skip solo blockers / focus blocks (single-attendee = me only,
+      // not a meeting). The MCP slim shape carries declined attendees
+      // too — filter those out so a calendar with 3 invitees but
+      // 2 declines reads as a 1-person event (= no prompt).
+      const attendees = Array.isArray(evt.attendees) ? evt.attendees : [];
+      const accepted = attendees.filter(
+        (a) => a && a.responseStatus !== 'declined',
+      );
+      const attendeeCount = accepted.length || 1;
       return {
         id: 'calendar-' + (evt.id || startIso),
         source: 'calendar',
@@ -85,6 +95,7 @@ const CAL_TRANSFORM = `((() => {
         subtitle,
         fireAt: startMs,
         createdAt: Date.now(),
+        attendeeCount,
         ...(meetingUrl ? { url: meetingUrl } : evt.htmlLink ? { url: evt.htmlLink } : {}),
       };
     })

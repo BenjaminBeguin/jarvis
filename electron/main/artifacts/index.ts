@@ -18,6 +18,12 @@ export {
 export { searchArtifacts } from './search.js';
 export { backfillArtifacts, backfillEvents } from './backfill.js';
 export { startArtifactWatchers, stopArtifactWatchers } from './watchers.js';
+export {
+  eagerRetrieve,
+  shouldEagerRetrieve,
+  clearEagerRagCache,
+  prewarmEagerRag,
+} from './eager-rag.js';
 
 /**
  * Given a `vscode://file<absolute-path>` URL pointing at a Jarvis-

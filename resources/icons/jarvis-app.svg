@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!--
+    Jarvis macOS app icon — 1024×1024 source.
+    Composition follows the macOS Big Sur+ icon language:
+      - Rounded squircle hull (corner radius 22.37 % of side = 229 / 1024)
+      - Optical-centered glyph (Y nudged ~6 % below geometric centre)
+      - Subtle inner bevel + outer drop shadow handled by macOS at render time
+    Glyph: concentric rings around a gradient core with a centred "J" —
+    reads as a personal AI nucleus at every size.
+  -->
+  <defs>
+    <!-- Hull: deep ink to near-black, slight diagonal so the bevel hint reads. -->
+    <linearGradient id="hull" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0e1622"/>
+      <stop offset="55%" stop-color="#05080f"/>
+      <stop offset="100%" stop-color="#02050a"/>
+    </linearGradient>
+
+    <!-- Background nebula: very faint cyan glow centred behind the orb. -->
+    <radialGradient id="nebula" cx="50%" cy="56%" r="55%">
+      <stop offset="0%" stop-color="#00d4ff" stop-opacity="0.18"/>
+      <stop offset="45%" stop-color="#0089b0" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Core orb: cyan highlight, deep teal mid, near-black at edge. -->
+    <radialGradient id="core" cx="42%" cy="34%" r="68%">
+      <stop offset="0%" stop-color="#9af7ff"/>
+      <stop offset="30%" stop-color="#3fc4f0"/>
+      <stop offset="65%" stop-color="#0a7da8"/>
+      <stop offset="100%" stop-color="#031826"/>
+    </radialGradient>
+
+    <!-- Outer ring stroke gradient — bright apex fading at the base. -->
+    <linearGradient id="ringStroke" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7be5ff" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#0083a8" stop-opacity="0.35"/>
+    </linearGradient>
+
+    <!-- Rim highlight: thin glassy top edge on the hull. -->
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.20"/>
+      <stop offset="20%" stop-color="#ffffff" stop-opacity="0.03"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Soft inner shadow under the hull's top rim. -->
+    <filter id="orbGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Clip path matching the squircle so nothing bleeds outside. -->
+    <clipPath id="hullClip">
+      <rect x="0" y="0" width="1024" height="1024" rx="229" ry="229"/>
+    </clipPath>
+  </defs>
+
+  <!-- Squircle hull. -->
+  <rect x="0" y="0" width="1024" height="1024" rx="229" ry="229" fill="url(#hull)"/>
+
+  <g clip-path="url(#hullClip)">
+    <!-- Background nebula behind the orb. -->
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#nebula)"/>
+
+    <!-- Concentric rings — three layers, optically centred ~30px below geo centre. -->
+    <g transform="translate(512 542)">
+      <!-- Outer ring -->
+      <circle r="380" fill="none" stroke="url(#ringStroke)" stroke-width="3" opacity="0.55"/>
+      <!-- Mid ring with arc accents -->
+      <circle r="300" fill="none" stroke="url(#ringStroke)" stroke-width="4" opacity="0.78"/>
+      <!-- Arc accents on the mid ring (top + bottom-right) -->
+      <path d="M -300 0 A 300 300 0 0 1 -110 -279" fill="none" stroke="#9af7ff" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+      <path d="M  300 0 A 300 300 0 0 1  110  279" fill="none" stroke="#9af7ff" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+      <!-- Inner ring close to the core -->
+      <circle r="225" fill="none" stroke="#3fc4f0" stroke-width="2.5" opacity="0.55"/>
+
+      <!-- Core orb with soft glow -->
+      <g filter="url(#orbGlow)">
+        <circle r="170" fill="url(#core)" stroke="#7be5ff" stroke-width="2.5"/>
+      </g>
+
+      <!-- Specular highlight on the orb -->
+      <ellipse cx="-55" cy="-72" rx="78" ry="38" fill="#ffffff" opacity="0.22"/>
+
+      <!-- "J" glyph — sits inside the orb, slightly off-axis for personality. -->
+      <text x="0" y="58" text-anchor="middle"
+            font-family="ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace"
+            font-size="195" font-weight="700" fill="#f3fcff" letter-spacing="6">J</text>
+    </g>
+
+    <!-- Top rim highlight for the glassy bevel. -->
+    <rect x="0" y="0" width="1024" height="180" fill="url(#rim)"/>
+  </g>
+
+  <!-- Hairline border to crisp the silhouette at small sizes. -->
+  <rect x="0.5" y="0.5" width="1023" height="1023" rx="228.5" ry="228.5"
+        fill="none" stroke="#000000" stroke-opacity="0.55" stroke-width="1"/>
+</svg>

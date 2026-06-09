@@ -1,8 +1,18 @@
-import { app, globalShortcut, ipcMain, powerSaveBlocker, shell } from 'electron';
+import {
+  app,
+  globalShortcut,
+  ipcMain,
+  nativeImage,
+  powerSaveBlocker,
+  shell,
+} from 'electron';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 // Surface any uncaught errors so silent native crashes (ONNX
 // Runtime / transformers.js segfaults, …) show up in the dev
@@ -136,6 +146,7 @@ import { workflowsModule } from './modules/workflows.js';
 import { parseIntent } from './intent-router.js';
 import { ProjectMemoryStore } from './project-memory.js';
 import { ProjectStore } from './projects.js';
+import { WorkspaceStore } from './workspaces.js';
 import { ReminderStore } from './reminders.js';
 import { RoutineStore } from './routines.js';
 import { seedDefaultsIfEmpty } from './seed.js';
@@ -160,6 +171,7 @@ import {
   activeProjectProfileProvider,
   activeProjectProvider,
   browserActivityProvider,
+  eagerRagProvider,
   inboxHighlightsProvider,
   projectsProvider,
   recentArtifactsProvider,
@@ -181,10 +193,12 @@ import {
 } from './tray.js';
 import {
   broadcast,
+  getObservatoryWindow,
   hideVoiceOrb,
   openObservatory,
   openPalette,
   sendWhenReady,
+  setAppQuitting,
   showVoiceOrb,
   surfaceConversation,
 } from './windows.js';
@@ -201,6 +215,7 @@ process.setMaxListeners(50);
 
 const skills = new SkillStore();
 const mcp = new McpConfigStore();
+const workspaces = new WorkspaceStore();
 const projects = new ProjectStore();
 const runner = new TaskRunner();
 const routines = new RoutineStore();
@@ -392,6 +407,19 @@ function fireMeetingHeadsUp(item: InboxItem): void {
   if (Date.now() < meetingHeadsUpSnoozedUntil) {
     console.log(
       `[meeting-heads-up] snoozed (${Math.round((meetingHeadsUpSnoozedUntil - Date.now()) / 60_000)} min left); dropping prompt`,
+    );
+    return;
+  }
+  // Already-recording guard. The Chrome extension and the audio
+  // watcher both fire detection signals while a meeting is in
+  // progress — if the user has already hit Record on this (or any)
+  // session, the heads-up prompt would just be asking "record this
+  // meeting you're already recording?" which is confusing. Suppress.
+  // Cancelling / finishing the active recording clears the gate;
+  // a subsequent detection then fires normally.
+  if (currentMeetingState.active) {
+    console.log(
+      '[meeting-heads-up] dropping prompt — recording already in progress',
     );
     return;
   }
@@ -761,6 +789,7 @@ userContext.register(inboxHighlightsProvider(inbox));
 userContext.register(recentTaskProvider(runner));
 userContext.register(browserActivityProvider);
 userContext.register(recentArtifactsProvider);
+userContext.register(eagerRagProvider(userContext));
 
 // Built-in inbox sources — all direct JS, no agent fires.
 //   - reminders / failed-routines: local stores
@@ -1287,6 +1316,33 @@ function registerGlobalShortcut(): void {
  * needs the PAT in main-process memory because mcpEntries is sync).
  * Connectors without init() are skipped — most don't need it.
  */
+/**
+ * One-shot migration on first launch with workspaces enabled. Any
+ * project that doesn't carry a `workspaceId` gets the default
+ * workspace stamped on it. Idempotent — a second launch finds every
+ * project already tagged and no-ops, so we can leave this on every
+ * boot without worrying.
+ *
+ * Same pattern we'd use for routines / workflows / reminders if we
+ * ever start gating those by workspace too — call this from boot,
+ * skip the work when nothing's stale.
+ */
+function backfillProjectWorkspaces(): void {
+  const defaultId = workspaces.getDefault().id;
+  const stale = projects.list().filter((p) => !p.workspaceId);
+  if (stale.length === 0) return;
+  console.info(
+    `[workspaces] backfilling ${stale.length} project(s) with default workspace "${defaultId}"`,
+  );
+  for (const p of stale) {
+    try {
+      projects.update(p.name, { name: p.name, workspaceId: defaultId });
+    } catch (err) {
+      console.warn(`[workspaces] backfill failed for ${p.name}:`, err);
+    }
+  }
+}
+
 async function warmConnectorCaches(): Promise<void> {
   for (const connector of connectorRegistry.list()) {
     if (!connector.init) continue;
@@ -1328,6 +1384,55 @@ function makeConnectorHooks(connectorId: string): ConnectorHooks {
 
 // ─── bootstrap ───────────────────────────────────────────────────────────────
 
+/**
+ * Augment process.env.PATH with the user-binary directories macOS apps
+ * launched from Finder / Dock / ⌘Tab don't inherit by default. Without
+ * this, every workflow shell node (`gh`, `git`, `jq`) and MCP server
+ * spawn fails with `spawn <cmd> ENOENT` in the packaged build even
+ * though `pnpm dev` works fine (the dev binary inherits the user's
+ * interactive shell PATH).
+ *
+ * We hardcode the common locations rather than spawning a login shell
+ * to grab the live PATH — login-shell probing is ~150ms slower at
+ * boot and brittle when the user's profile rc files do exotic things.
+ * The hardcoded list covers ~99% of Mac dev setups: Homebrew (M-series
+ * + Intel), pyenv / pipx / cargo user installs, ~/bin convention.
+ *
+ * Runs SYNCHRONOUSLY before any module that might spawn subprocesses
+ * (workflows, MCP, claude CLI), so its effect propagates everywhere
+ * via process.env inheritance.
+ */
+function augmentPathForGuiLaunch(): void {
+  if (process.platform !== 'darwin') return;
+  const home = homedir();
+  // Order: Homebrew first (most common), then user-scoped tool managers.
+  const candidates = [
+    '/opt/homebrew/bin',
+    '/opt/homebrew/sbin',
+    '/usr/local/bin',
+    '/usr/local/sbin',
+    `${home}/.local/bin`,
+    `${home}/.cargo/bin`,
+    `${home}/.volta/bin`,
+    `${home}/.fnm/aliases/default/bin`,
+    `${home}/.bun/bin`,
+    `${home}/bin`,
+  ];
+  const current = (process.env['PATH'] ?? '').split(':').filter(Boolean);
+  const seen = new Set(current);
+  const toPrepend: string[] = [];
+  for (const c of candidates) {
+    if (seen.has(c)) continue;
+    if (!existsSync(c)) continue;
+    toPrepend.push(c);
+    seen.add(c);
+  }
+  if (toPrepend.length === 0) return;
+  process.env['PATH'] = [...toPrepend, ...current].join(':');
+  console.info(`[boot] augmented PATH: prepended ${toPrepend.join(':')}`);
+}
+augmentPathForGuiLaunch();
+
 app.setName('Jarvis');
 
 // Single-instance lock. Belt-and-suspenders against stale Electron mains
@@ -1341,7 +1446,19 @@ if (!app.requestSingleInstanceLock()) {
 app.whenReady().then(async () => {
   // macOS: show in Dock + Cmd+Tab so it feels like a "real app" while the
   // tray icon stays the always-on entry point.
-  if (process.platform === 'darwin' && app.dock) void app.dock.show();
+  if (process.platform === 'darwin' && app.dock) {
+    // In production the .app bundle's Info.plist + .icns supply the dock
+    // icon. In dev (`pnpm dev`) the binary is Electron itself, so the
+    // generic Electron logo would show up in Cmd+Tab — set our PNG
+    // imperatively so dev matches production at a glance. The icns
+    // wins automatically once the app is packaged.
+    const iconPath = path.join(__dirname, '../../resources/icons/icon.png');
+    if (existsSync(iconPath)) {
+      const img = nativeImage.createFromPath(iconPath);
+      if (!img.isEmpty()) app.dock.setIcon(img);
+    }
+    void app.dock.show();
+  }
 
   initDatabase();
   // Boot-time zombie reap: any task row stuck on status='running' from
@@ -1379,7 +1496,15 @@ app.whenReady().then(async () => {
   // Start the refresher AFTER the integrations store init so the
   // first tick sees the actually-restored accounts.
   tokenRefresher.start();
+  // Workspaces come up BEFORE projects so the project store's
+  // backfill (any project missing a workspaceId gets the default)
+  // has a valid id to point at.
+  workspaces.init();
   projects.init();
+  // One-shot migration: any project without a workspaceId on disk
+  // gets the default workspace stamped onto it. Idempotent — second
+  // launch finds them already tagged and no-ops.
+  backfillProjectWorkspaces();
   preferences.init();
   dashboard.init();
   briefings.init();
@@ -2225,6 +2350,7 @@ app.whenReady().then(async () => {
   registerAllIpc({
     skills,
     mcp,
+    workspaces,
     projects,
     projectMemory,
     modules,
@@ -2303,7 +2429,31 @@ app.on('window-all-closed', () => {
   // Stay alive in tray.
 });
 
+app.on('activate', () => {
+  // macOS fires this on dock-icon click, ⌘Tab selection, Spotlight
+  // launch, etc. — anything that means "the user is trying to focus
+  // Jarvis." If the Observatory was closed (we still run in the tray),
+  // there's no visible window and ⌘Tab won't even list us. Reopen so
+  // the app behaves like every other native macOS app: front-and-
+  // center on activation, available in ⌘Tab as long as it's running.
+  if (process.platform === 'darwin' && app.dock) {
+    void app.dock.show();
+  }
+  const obs = getObservatoryWindow();
+  if (!obs || obs.isDestroyed()) {
+    openObservatory();
+  } else {
+    if (obs.isMinimized()) obs.restore();
+    obs.show();
+    obs.focus();
+  }
+});
+
 app.on('before-quit', () => {
+  // Tell the Observatory close-interceptor to actually let the window
+  // go on this pass — otherwise the hide-on-close behaviour would
+  // veto shutdown.
+  setAppQuitting(true);
   runner.abortAll();
   shellRunner.abortAll();
   globalShortcut.unregisterAll();
@@ -2314,6 +2464,7 @@ app.on('before-quit', () => {
   skills.close();
   mcp.close();
   projects.close();
+  workspaces.close();
   preferences.close();
   inbox.stopAutoRefresh();
   inboxProximity.stop();

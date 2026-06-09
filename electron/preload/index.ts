@@ -42,6 +42,8 @@ import type {
   ProjectInput,
   ProjectMemoryFile,
   ProjectTemplateSummary,
+  WorkspaceDef,
+  WorkspaceInput,
   Reminder,
   DashboardConfig,
   RoutePromptResult,
@@ -497,6 +499,27 @@ const api = {
     ipcRenderer.invoke(IpcChannels.setProjectInboxScan, { name, enabled }),
   onProjectsChanged: (listener: Listener<ProjectDef[]>): Unsubscribe =>
     subscribe(IpcChannels.projectsChanged, listener),
+
+  // ─── Workspaces ──────────────────────────────────────────────────
+  listWorkspaces: (): Promise<WorkspaceDef[]> =>
+    ipcRenderer.invoke(IpcChannels.listWorkspaces),
+  createWorkspace: (input: WorkspaceInput): Promise<WorkspaceDef> =>
+    ipcRenderer.invoke(IpcChannels.createWorkspace, input),
+  updateWorkspace: (
+    id: string,
+    input: WorkspaceInput,
+  ): Promise<WorkspaceDef> =>
+    ipcRenderer.invoke(IpcChannels.updateWorkspace, { id, input }),
+  deleteWorkspace: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannels.deleteWorkspace, id),
+  onWorkspacesChanged: (listener: Listener<WorkspaceDef[]>): Unsubscribe =>
+    subscribe(IpcChannels.workspacesChanged, listener),
+  getActiveWorkspace: (): Promise<string> =>
+    ipcRenderer.invoke(IpcChannels.getActiveWorkspace),
+  setActiveWorkspace: (id: string | null): Promise<string> =>
+    ipcRenderer.invoke(IpcChannels.setActiveWorkspace, id),
+  onActiveWorkspaceChanged: (listener: Listener<string>): Unsubscribe =>
+    subscribe(IpcChannels.activeWorkspaceChanged, listener),
   listProjectMemory: (project: string): Promise<ProjectMemoryFile[]> =>
     ipcRenderer.invoke(IpcChannels.listProjectMemory, project),
   readProjectMemory: (project: string, file: string): Promise<string> =>
@@ -783,6 +806,11 @@ const api = {
         cron?: string;
       }
   > => ipcRenderer.invoke(IpcChannels.previewIntent, prompt),
+  // Speedup: fire as the user types so the eager-RAG LRU is warm
+  // by the time they submit. Fire-and-forget — caller doesn't await.
+  prewarmAsk: (prompt: string): void => {
+    ipcRenderer.send(IpcChannels.prewarmAsk, prompt);
+  },
 
   listSkillSuggestions: (): Promise<SkillSuggestion[]> =>
     ipcRenderer.invoke(IpcChannels.listSkillSuggestions),
@@ -851,11 +879,13 @@ const api = {
     taskId: string,
     text: string,
     images?: Array<{ mediaType: string; base64: string }>,
+    opts?: { interrupt?: boolean },
   ): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.sendTaskMessage, {
       taskId,
       text,
       ...(images && images.length > 0 ? { images } : {}),
+      ...(opts?.interrupt ? { interrupt: true } : {}),
     }),
   listTasks: (): Promise<TaskSummary[]> =>
     ipcRenderer.invoke(IpcChannels.listTasks),
@@ -876,6 +906,15 @@ const api = {
     ipcRenderer.invoke(IpcChannels.listActivity, limit),
   onActivityChanged: (listener: Listener<ActivityEvent>): Unsubscribe =>
     subscribe(IpcChannels.activityChanged, listener),
+
+  /** RAM-only Chrome-extension browser events (1h rolling window).
+   *  Lives only as long as the app process; quitting Jarvis wipes it. */
+  listBrowserActivity: (): Promise<
+    Array<{ url: string; title: string; at: number }>
+  > => ipcRenderer.invoke(IpcChannels.listBrowserActivity),
+  onBrowserActivityChanged: (
+    listener: Listener<{ url: string; title: string; at: number }>,
+  ): Unsubscribe => subscribe(IpcChannels.browserActivityChanged, listener),
 
   /** Live notifier broadcasts — every notifier.post() emits one. Used
    *  by the FlowStream page for terminal-stage orbs. */

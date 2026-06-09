@@ -71,6 +71,10 @@ interface PersistedConfig {
    *  composer's per-conversation toggle starts from this default
    *  and the user can flip it for any single conversation. */
   voiceAlwaysSpeak?: boolean;
+  /** Currently-selected workspace id. Null / missing = the
+   *  WorkspaceStore's default ("personal" by default). Persisted
+   *  here so the user's last choice survives an app restart. */
+  activeWorkspaceId?: string;
 }
 
 const CONFIG_PATH = join(homedir(), '.jarvis', 'config.json');
@@ -264,6 +268,29 @@ export function loadAfkMode(): boolean {
 
 export function saveAfkMode(value: boolean): void {
   writeConfig({ ...readConfig(), afkMode: value });
+}
+
+/**
+ * Currently-selected workspace id. Null means "no explicit selection" —
+ * the WorkspaceStore's default workspace is the implicit answer. We
+ * keep this distinct from "default workspace" so the user can flip
+ * back and forth across sessions without us clobbering their last
+ * choice on every load.
+ */
+export function loadActiveWorkspaceId(): string | null {
+  const v = readConfig().activeWorkspaceId;
+  return typeof v === 'string' && v.trim() ? v.trim() : null;
+}
+
+export function saveActiveWorkspaceId(id: string | null): void {
+  const cfg = readConfig();
+  const next = { ...cfg };
+  if (id) {
+    next.activeWorkspaceId = id;
+  } else {
+    delete (next as { activeWorkspaceId?: string }).activeWorkspaceId;
+  }
+  writeConfig(next);
 }
 
 /**

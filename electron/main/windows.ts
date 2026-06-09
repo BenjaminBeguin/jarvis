@@ -1,4 +1,5 @@
-import { BrowserWindow, screen } from 'electron';
+import { BrowserWindow, nativeImage, screen } from 'electron';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,6 +9,32 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const preloadPath = join(__dirname, '../preload/index.cjs');
 const rendererDevUrl = process.env['ELECTRON_RENDERER_URL'];
 const rendererProdEntry = join(__dirname, '../renderer/index.html');
+
+/**
+ * App icon used for BrowserWindow icon (Linux / Windows) + the Mac
+ * dock badge in dev mode. macOS production reads the icon from the
+ * .icns baked into the .app bundle by electron-builder, but in dev
+ * the binary is Electron itself — so we set it imperatively. Lazy
+ * so we don't hit disk on every window open; resolved once on first
+ * read.
+ */
+let cachedAppIcon: Electron.NativeImage | null = null;
+function appIcon(): Electron.NativeImage | null {
+  if (cachedAppIcon) return cachedAppIcon;
+  const candidate = join(__dirname, '../../resources/icons/icon.png');
+  if (!existsSync(candidate)) return null;
+  cachedAppIcon = nativeImage.createFromPath(candidate);
+  return cachedAppIcon.isEmpty() ? null : cachedAppIcon;
+}
+
+/** Apply the Jarvis icon to a window when one exists. macOS uses
+ *  the .icns from the bundle in production, but dev mode + Linux /
+ *  Windows need this set on the window itself. */
+function withIcon<T extends Electron.BrowserWindowConstructorOptions>(opts: T): T {
+  const icon = appIcon();
+  if (!icon) return opts;
+  return { ...opts, icon };
+}
 
 function loadRoute(win: BrowserWindow, route: string): void {
   if (rendererDevUrl) {
@@ -71,31 +98,57 @@ export function surfaceConversation(taskId: string): void {
 
 export function openObservatory(): BrowserWindow {
   if (observatoryWindow && !observatoryWindow.isDestroyed()) {
+    // Window kept alive by the hide-on-close interceptor. Restore +
+    // surface it instead of creating a new instance.
+    if (observatoryWindow.isMinimized()) observatoryWindow.restore();
     observatoryWindow.show();
     observatoryWindow.focus();
     return observatoryWindow;
   }
-  observatoryWindow = new BrowserWindow({
-    width: 1100,
-    height: 720,
-    minWidth: 720,
-    minHeight: 480,
-    titleBarStyle: 'hiddenInset',
-    backgroundColor: '#0b0d12',
-    show: false,
-    webPreferences: {
-      preload: preloadPath,
-      sandbox: false,
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
+  observatoryWindow = new BrowserWindow(
+    withIcon({
+      width: 1100,
+      height: 720,
+      minWidth: 720,
+      minHeight: 480,
+      titleBarStyle: 'hiddenInset',
+      backgroundColor: '#0b0d12',
+      show: false,
+      webPreferences: {
+        preload: preloadPath,
+        sandbox: false,
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    }),
+  );
   observatoryWindow.on('ready-to-show', () => observatoryWindow?.show());
+  // Hide-instead-of-destroy on the red close button (Slack/Discord
+  // pattern). Keeps the BrowserWindow alive so macOS treats Jarvis
+  // as a "real" app with a window, which keeps it visible in ⌘Tab
+  // and the dock even when no Jarvis surface is on screen. Quit goes
+  // through `before-quit` → `isQuitting = true` so we don't trap
+  // shutdown. The reopen path (dock click / ⌘Tab / `activate`) just
+  // calls `openObservatory()` again, which re-shows this hidden
+  // instance instead of constructing a new one.
+  observatoryWindow.on('close', (e) => {
+    if (!isAppQuitting && observatoryWindow && !observatoryWindow.isDestroyed()) {
+      e.preventDefault();
+      observatoryWindow.hide();
+    }
+  });
   observatoryWindow.on('closed', () => {
     observatoryWindow = null;
   });
   loadRoute(observatoryWindow, '/observatory');
   return observatoryWindow;
+}
+
+/** Set by index.ts on `before-quit` so the close interceptor above
+ *  knows to actually let the window go when the user is quitting. */
+let isAppQuitting = false;
+export function setAppQuitting(value: boolean): void {
+  isAppQuitting = value;
 }
 
 export function openPalette(): BrowserWindow {

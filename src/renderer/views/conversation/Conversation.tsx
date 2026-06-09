@@ -603,7 +603,7 @@ function SendReply({
     setError(null);
   }, [task.id]);
 
-  const send = async () => {
+  const send = async (opts: { interrupt?: boolean } = {}) => {
     const value = text.trim();
     if (!value && images.length === 0) return;
     setSending(true);
@@ -613,7 +613,12 @@ function SendReply({
         mediaType: i.mediaType,
         base64: i.base64,
       }));
-      const ok = await window.jarvis.sendTaskMessage(task.id, value, payload);
+      const ok = await window.jarvis.sendTaskMessage(
+        task.id,
+        value,
+        payload,
+        opts.interrupt ? { interrupt: true } : undefined,
+      );
       if (!ok) {
         setError("Couldn't send — task isn't accepting input anymore.");
         return;
@@ -783,22 +788,23 @@ function SendReply({
               : resuming
                 ? 'Continue this conversation. ↵ to send, ⇧↵ for newline. Paste or drop images to attach.'
                 : midTurn
-                  ? 'Agent is working — your message queues for the next turn. ↵ to send.'
+                  ? 'Agent is working — ↵ sends now (interrupts), ⌘↵ queues for next turn.'
                   : 'Reply to keep the conversation going. ↵ to send, ⇧↵ for newline. Paste or drop images to attach.'
         }
         disabled={sending || transcribing}
         onChange={(e) => setText(e.target.value)}
         onPaste={(e) => void onPaste(e)}
         onKeyDown={(e) => {
-          if (
-            e.key === 'Enter' &&
-            !e.shiftKey &&
-            !e.metaKey &&
-            !e.ctrlKey &&
-            !e.altKey
-          ) {
+          if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
+            // Default Enter while mid-turn = INTERRUPT — the typical
+            // case is "I'm asking a new thing, drop what you were
+            // doing." ⌘/Ctrl+Enter falls back to the queue path for
+            // the advanced "ping while working" pattern (add context
+            // without cancelling the active tool-loop).
+            const isModified = e.metaKey || e.ctrlKey;
+            const interrupt = midTurn && !isModified;
             e.preventDefault();
-            void send();
+            void send({ interrupt });
           }
         }}
       />
@@ -816,14 +822,12 @@ function SendReply({
       />
       {resuming && !error && (
         <div className="detail__reply-hint">
-          Turn complete — your reply will resume the session and start
-          a new turn.
+          Turn complete — reply resumes the session.
         </div>
       )}
       {midTurn && !error && (
         <div className="detail__reply-hint">
-          Agent is mid-turn. Your message will be picked up at the start
-          of its next iteration — usually within a few seconds.
+          Mid-turn — ↵ interrupts & sends now, ⌘↵ queues for next turn.
         </div>
       )}
       {error && (
@@ -876,8 +880,32 @@ function SendReply({
           {speakReplies ? '🔊' : '🔈'}
         </button>
         <div className="detail__reply-spacer" />
-        <button onClick={() => void send()} disabled={!canSend}>
-          {sending ? 'Sending…' : resuming ? 'Continue' : 'Send'}
+        {midTurn && (
+          <button
+            onClick={() => void send({ interrupt: false })}
+            disabled={!canSend}
+            title="Add this to the current turn without interrupting (⌘↵)"
+            style={{ marginRight: 6 }}
+          >
+            {sending ? 'Sending…' : 'Queue'}
+          </button>
+        )}
+        <button
+          onClick={() =>
+            void send(midTurn ? { interrupt: true } : undefined)
+          }
+          disabled={!canSend}
+          title={
+            midTurn ? 'Cancel current turn and send now (↵)' : undefined
+          }
+        >
+          {sending
+            ? 'Sending…'
+            : resuming
+              ? 'Continue'
+              : midTurn
+                ? '⚡ Send now'
+                : 'Send'}
         </button>
       </div>
     </div>

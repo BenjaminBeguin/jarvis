@@ -24,10 +24,15 @@ import type { WorkflowDef } from '@shared/types';
 
 const FILTER_FN = `(() => {
   const items = Array.isArray($) ? $ : [];
-  // Keep PRs where the author is NOT an OWNER / MEMBER / COLLABORATOR
-  // of the repo — i.e. external or non-team contributors. Edit the
-  // allowlist if your team's GitHub-association shape differs.
+  // Filters applied:
+  //   1. !isDraft     — drafts are still WIP; the author hasn't asked
+  //                      for review yet, no point auto-drafting feedback.
+  //   2. assoc filter — keep PRs where the author is NOT an OWNER /
+  //                      MEMBER / COLLABORATOR of the repo (external
+  //                      contributors). Edit the allowlist if your
+  //                      team's GitHub-association shape differs.
   return items.filter(pr => {
+    if (pr && pr.isDraft) return false;
     const assoc = String(pr.authorAssociation || '').toUpperCase();
     return assoc !== 'OWNER' && assoc !== 'MEMBER' && assoc !== 'COLLABORATOR';
   }).slice(0, 10);
@@ -77,7 +82,7 @@ export const AUTOPILOT_PR_REVIEW_NON_TEAM_WORKFLOW: WorkflowDef = {
           '--state',
           'open',
           '--json',
-          'number,title,url,repository,author,authorAssociation,updatedAt',
+          'number,title,url,repository,author,authorAssociation,updatedAt,isDraft',
           '--limit',
           '20',
         ],

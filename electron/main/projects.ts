@@ -8,11 +8,32 @@ import type { ProjectDef, ProjectInput } from '@shared/types';
 
 interface PersistedProject {
   name?: string;
+  workspaceId?: string;
   aliases?: unknown;
   path?: string;
   repo?: string;
+  repos?: unknown;
+  keywords?: unknown;
   description?: string;
   inboxScan?: boolean;
+}
+
+/** Normalise an unknown-shaped list field (repos / keywords) into a
+ *  clean, deduplicated `string[]` (or `undefined` if empty). Strings
+ *  separated by commas / newlines are accepted too, so users can type
+ *  comma-separated values into the textarea without us having to
+ *  pre-parse on every write site. */
+function normaliseList(value: unknown): string[] | undefined {
+  if (value == null) return undefined;
+  let raw: unknown[];
+  if (Array.isArray(value)) raw = value;
+  else if (typeof value === 'string') raw = value.split(/[\n,]/);
+  else return undefined;
+  const cleaned = raw
+    .map((v) => (typeof v === 'string' ? v.trim() : ''))
+    .filter(Boolean);
+  if (cleaned.length === 0) return undefined;
+  return [...new Set(cleaned)];
 }
 
 interface PersistedFile {
@@ -99,9 +120,12 @@ export class ProjectStore extends EventEmitter {
     }
     const def: ProjectDef = {
       name,
+      workspaceId: input.workspaceId?.trim() || undefined,
       aliases,
       path: input.path?.trim() || undefined,
       repo: input.repo?.trim() || undefined,
+      repos: normaliseList(input.repos),
+      keywords: normaliseList(input.keywords),
       description: input.description?.trim() || undefined,
       inboxScan: input.inboxScan,
     };
@@ -136,12 +160,21 @@ export class ProjectStore extends EventEmitter {
     }
     const def: ProjectDef = {
       name: nextName,
+      workspaceId:
+        input.workspaceId !== undefined
+          ? input.workspaceId.trim() || undefined
+          : existing.workspaceId,
       aliases:
         input.aliases !== undefined
           ? input.aliases.map((a) => a.trim()).filter(Boolean)
           : existing.aliases,
       path: input.path !== undefined ? input.path.trim() || undefined : existing.path,
       repo: input.repo !== undefined ? input.repo.trim() || undefined : existing.repo,
+      repos: input.repos !== undefined ? normaliseList(input.repos) : existing.repos,
+      keywords:
+        input.keywords !== undefined
+          ? normaliseList(input.keywords)
+          : existing.keywords,
       description:
         input.description !== undefined
           ? input.description.trim() || undefined
@@ -187,9 +220,12 @@ export class ProjectStore extends EventEmitter {
     const next: PersistedFile = {
       projects: this.projects.map((p) => ({
         name: p.name,
+        workspaceId: p.workspaceId,
         aliases: p.aliases,
         path: p.path,
         repo: p.repo,
+        repos: p.repos,
+        keywords: p.keywords,
         description: p.description,
         inboxScan: p.inboxScan,
       })),
@@ -232,9 +268,12 @@ export class ProjectStore extends EventEmitter {
       const items = Array.isArray(persisted.projects) ? persisted.projects : [];
       this.projects = items.filter(isPersistedProject).map((p) => ({
         name: String(p.name).trim(),
+        workspaceId: p.workspaceId?.trim() || undefined,
         aliases: toStringArray(p.aliases),
         path: expandHome(p.path),
         repo: p.repo?.trim() || undefined,
+        repos: normaliseList(p.repos),
+        keywords: normaliseList(p.keywords),
         description: p.description?.trim() || undefined,
         inboxScan: typeof p.inboxScan === 'boolean' ? p.inboxScan : undefined,
       }));

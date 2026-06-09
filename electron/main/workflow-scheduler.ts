@@ -2,6 +2,8 @@ import cron, { type ScheduledTask } from 'node-cron';
 
 import type { WorkflowDef } from '@shared/types';
 
+import { isOverdue } from './cron-matcher.js';
+import { getLastWorkflowRunStartedAt } from './db.js';
 import type { WorkflowRunner } from './workflow-runner.js';
 import type { WorkflowStore } from './workflow-store.js';
 
@@ -135,6 +137,59 @@ export class WorkflowScheduler {
 
   init(): void {
     this.syncAll();
+    // Catch-up pass: when the app starts (or after `pnpm dev` reload),
+    // some cron workflows may have missed their scheduled fires while
+    // the app was closed. Fire each one once if its last run is
+    // overdue relative to its cron expression. Single-shot — not a
+    // replay of every missed fire. Delayed slightly so the rest of
+    // boot (auth refresh, MCP load, etc.) settles first.
+    setTimeout(() => this.catchUpOverdue(), 5_000);
+  }
+
+  /**
+   * For each enabled cron / autopilot-cron workflow, check whether
+   * its cron expression should have fired between the last persisted
+   * run and now. If yes — fire it once. Skipped when globally paused
+   * or when the autopilot gate isn't open (matches the normal cron
+   * tick's gating).
+   */
+  private catchUpOverdue(): void {
+    if (this.isPaused?.()) return;
+    const now = Date.now();
+    for (const def of this.store.list()) {
+      if (!def.enabled) continue;
+      let every: string | undefined;
+      let isAutopilotTrigger = false;
+      if (def.trigger.kind === 'cron') {
+        every = def.trigger.every;
+      } else if (def.trigger.kind === 'autopilot') {
+        isAutopilotTrigger = true;
+        if (def.trigger.when !== 'cron') continue;
+        every = def.trigger.every;
+      } else {
+        continue;
+      }
+      if (!every) continue;
+      if (isAutopilotTrigger && !this.isAutopilot?.()) continue;
+      const resolved = substituteBusinessHours(every, this.workingHours);
+      const cronExpr = expandEvery(resolved);
+      if (!cron.validate(cronExpr)) continue;
+      const lastRunAt = getLastWorkflowRunStartedAt(def.id);
+      if (!isOverdue(cronExpr, lastRunAt, now)) continue;
+      console.info(
+        `[workflow-scheduler] ${def.id} overdue (last run ${
+          lastRunAt ? new Date(lastRunAt).toISOString() : 'never'
+        }) — firing catch-up`,
+      );
+      try {
+        this.runner.run(def, isAutopilotTrigger ? 'autopilot' : 'cron');
+      } catch (err) {
+        console.warn(
+          `[workflow-scheduler] ${def.id} catch-up fire failed:`,
+          err,
+        );
+      }
+    }
   }
 
   /**

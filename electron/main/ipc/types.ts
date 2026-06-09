@@ -24,6 +24,7 @@ import type { UserContextStore } from '../user-context.js';
 import type { WorkflowRunner } from '../workflow-runner.js';
 import type { WorkflowScheduler } from '../workflow-scheduler.js';
 import type { WorkflowStore } from '../workflow-store.js';
+import type { WorkspaceStore } from '../workspaces.js';
 
 /**
  * Dependency bag passed into every per-domain IPC registrar. Each file
@@ -36,6 +37,7 @@ export interface IpcDeps {
   skills: SkillStore;
   mcp: McpConfigStore;
   projects: ProjectStore;
+  workspaces: WorkspaceStore;
   projectMemory: ProjectMemoryStore;
   modules: ModuleRegistry;
   runner: TaskRunner;

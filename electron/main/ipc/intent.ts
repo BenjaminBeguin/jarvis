@@ -3,6 +3,7 @@ import { ipcMain } from 'electron';
 import { IpcChannels } from '@shared/ipc';
 import type { SessionConfig } from '@shared/types';
 
+import { prewarmEagerRag } from '../artifacts/index.js';
 import { parseIntent } from '../intent-router.js';
 import { notifier } from '../notifier.js';
 import { routePrompt as routePromptShared } from '../route-prompt.js';
@@ -20,10 +21,24 @@ export function registerIntentIpc({
   runner,
   auth,
   activity,
+  userContext,
 }: IpcDeps): void {
   ipcMain.handle(IpcChannels.previewIntent, (_e, prompt: string) => {
     if (typeof prompt !== 'string') return { kind: 'task', body: '' };
     return parseIntent(prompt);
+  });
+
+  // Speculative eager-RAG prewarm. Renderer debounces on the user's
+  // keystrokes so by the time they press Enter, the LRU is already
+  // populated and the launch path skips the search-worker round-trip.
+  // Pure fan-and-forget — never throws.
+  ipcMain.on(IpcChannels.prewarmAsk, (_e, prompt: unknown) => {
+    if (typeof prompt !== 'string' || prompt.length < 12) return;
+    try {
+      prewarmEagerRag(prompt, userContext.getActiveProject());
+    } catch {
+      // Swallow — prewarm failures must never leak to the renderer.
+    }
   });
 
   ipcMain.handle(

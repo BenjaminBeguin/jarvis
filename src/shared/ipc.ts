@@ -133,6 +133,18 @@ export const IpcChannels = {
   setActiveProject: 'projects:setActive',
   setProjectInboxScan: 'projects:setInboxScan',
   projectsChanged: 'projects:changed',
+
+  // Workspaces — top-level grouping above projects. Switching workspace
+  // narrows projects, inbox, drafts, activity, and gates scheduled
+  // workflows / routines / reminders.
+  listWorkspaces: 'workspaces:list',
+  createWorkspace: 'workspaces:create',
+  updateWorkspace: 'workspaces:update',
+  deleteWorkspace: 'workspaces:delete',
+  workspacesChanged: 'workspaces:changed',
+  getActiveWorkspace: 'workspaces:getActive',
+  setActiveWorkspace: 'workspaces:setActive',
+  activeWorkspaceChanged: 'workspaces:activeChanged',
   listProjectTemplates: 'projects:listTemplates',
   listProjectMemory: 'projects:listMemory',
   readProjectMemory: 'projects:readMemory',
@@ -265,6 +277,11 @@ export const IpcChannels = {
 
   routePrompt: 'palette:routePrompt',
   previewIntent: 'palette:previewIntent',
+  // Fire-and-forget speedup: as the user types in the palette, the
+  // renderer debounces this channel to pre-warm the eager-RAG LRU
+  // so press-Enter resolves context from cache instead of waiting
+  // on a search-worker round-trip. Returns nothing.
+  prewarmAsk: 'palette:prewarmAsk',
 
   listSkillSuggestions: 'skill-suggestions:list',
   acceptSkillSuggestion: 'skill-suggestions:accept',
@@ -299,6 +316,13 @@ export const IpcChannels = {
   taskRemoved: 'task:removed',
 
   listActivity: 'activity:list',
+  // In-memory browser activity (Chrome-extension ring buffer). Lives
+  // only as long as the app process — quitting Jarvis wipes it. The
+  // Activity feed merges this stream with the persistent activity_events
+  // table so the user can see "what I was just reading" alongside
+  // notes / workflow runs / inbox actions.
+  listBrowserActivity: 'activity:listBrowser',
+  browserActivityChanged: 'activity:browserChanged',
   activityChanged: 'activity:changed',
 
   /** Live notifier broadcast — fires every time notifier.post() runs.

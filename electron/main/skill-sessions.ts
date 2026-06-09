@@ -50,13 +50,27 @@ interface IndexEntry {
   turnCount: number;
 }
 
-/** Bucket key — skill + origin + project so different threads don't mix. */
+/**
+ * Sentinel skillId used for free-text (no-skill) ask pooling. A
+ * palette free-text dispatch with this synthetic id pools with
+ * other free-text asks under the same model + origin + project,
+ * letting the SDK skip cold-start on follow-up questions.
+ */
+export const FREE_TEXT_BUCKET = '__freetext__';
+
+/** Bucket key — skill + model + origin + project so different threads
+ *  don't mix. Model is part of the key so a Sonnet ask can't accidentally
+ *  resume a Haiku session (different model on the same conversation
+ *  thread = jarring switch in voice). Defaults to '_' when the caller
+ *  didn't pin a model — skill-pooled tasks land there since their
+ *  model comes from skill frontmatter, not the request. */
 function keyFor(
   skillId: string,
+  model: string | null | undefined,
   origin: string,
   projectName: string | null | undefined,
 ): string {
-  return `${skillId}|${origin}|${projectName ?? '_'}`;
+  return `${skillId}|${model ?? '_'}|${origin}|${projectName ?? '_'}`;
 }
 
 export interface SkillPoolingDecision {
@@ -110,12 +124,17 @@ export class SkillSessionStore {
    * user opts out for a specific dispatch).
    */
   decide(input: {
+    /** null = free-text ask (no skill). Pools under FREE_TEXT_BUCKET
+     *  scoped by model so different tiers don't graft onto each
+     *  other. */
     skillId: string | null | undefined;
+    /** Model id for free-text scoping. Ignored for skill pools
+     *  (skill frontmatter pins the model). */
+    model?: string | null | undefined;
     origin: string;
     projectName: string | null | undefined;
     forceFresh?: boolean;
   }): SkillPoolingDecision | null {
-    if (!input.skillId) return null;
     // Pool user-initiated work AND api-origin dispatches (Telegram
     // bot, other module-launched tasks). Routine + scheduled-action
     // reminders still fork their own fresh sessions — those fires
@@ -127,7 +146,18 @@ export class SkillSessionStore {
     ) {
       return null;
     }
-    const bucketKey = keyFor(input.skillId, input.origin, input.projectName);
+    const skillSlot = input.skillId ?? FREE_TEXT_BUCKET;
+    // Free-text pools include model in the key (Haiku ask shouldn't
+    // resume a Sonnet thread); skill pools key on the skillId only
+    // (the skill's frontmatter already pins the model, so adding
+    // it to the key would just make a single bucket per skill).
+    const modelSlot = input.skillId ? null : input.model ?? null;
+    const bucketKey = keyFor(
+      skillSlot,
+      modelSlot,
+      input.origin,
+      input.projectName,
+    );
     if (input.forceFresh) {
       this.index.delete(bucketKey);
       this.persist();
@@ -175,10 +205,16 @@ export class SkillSessionStore {
    *  palette flag or a "Start new session" affordance in the UI. */
   fork(input: {
     skillId: string;
+    model?: string | null | undefined;
     origin: string;
     projectName: string | null | undefined;
   }): void {
-    const key = keyFor(input.skillId, input.origin, input.projectName);
+    const key = keyFor(
+      input.skillId,
+      input.model ?? null,
+      input.origin,
+      input.projectName,
+    );
     if (this.index.delete(key)) this.persist();
   }
 

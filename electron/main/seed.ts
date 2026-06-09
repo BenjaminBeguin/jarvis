@@ -45,7 +45,18 @@ const WORKFLOW_STALE_DETECTORS: Record<
   //      Calendar.app dependency at all. Detect any earlier shape
   //      (any osascript step) and rewrite.
   'calendar-today-sync': (def) => {
-    return def.pipeline.some((n) => n.type === 'osascript');
+    // (1) Old shape — AppleScript/JXA. Always replace.
+    if (def.pipeline.some((n) => n.type === 'osascript')) return true;
+    // (2) Transform missing attendeeCount — the meeting heads-up
+    //     gate uses it to skip solo blockers (focus blocks, "me only"
+    //     events). Detect by absence of the `attendeeCount` keyword
+    //     in the transform body and rewrite to the latest seed.
+    const transform = def.pipeline.find((n) => n.type === 'transform');
+    if (transform) {
+      const fn = (transform.params as { fn?: string })?.fn;
+      if (typeof fn === 'string' && !fn.includes('attendeeCount')) return true;
+    }
+    return false;
   },
   // Slack workflow versions:
   //   v1: cron '5m', no validate clause                  → migrate
@@ -112,7 +123,21 @@ const WORKFLOW_STALE_DETECTORS: Record<
   },
   'autopilot-pr-review-non-team': (def) => {
     const last = def.pipeline[def.pipeline.length - 1];
-    return last?.type === 'batch-prompt-output';
+    if (last?.type === 'batch-prompt-output') return true;
+    // v2 of the filter pass adds an isDraft skip + asks gh for the
+    // `isDraft` json field. If the on-disk workflow doesn't request
+    // `isDraft`, treat as stale and rewrite with the latest seed.
+    const shell = def.pipeline.find((n) => n.type === 'shell');
+    if (shell) {
+      const args = (shell.params as { args?: unknown[] })?.args ?? [];
+      const jsonIdx = args.indexOf('--json');
+      const jsonFields =
+        jsonIdx >= 0 && typeof args[jsonIdx + 1] === 'string'
+          ? String(args[jsonIdx + 1])
+          : '';
+      if (jsonFields && !jsonFields.includes('isDraft')) return true;
+    }
+    return false;
   },
   // Gmail autopilot v1 AGENT_PROMPT told the skill to emit
   // archive items as drafts whose BODY was "(suggest archive —

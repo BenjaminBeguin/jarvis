@@ -1,0 +1,1253 @@
+/* ============================================================
+   Bridge — the "command bridge" home view.
+
+   Iron-Man / Stark-HUD aesthetic. Bracket markers around live
+   values, alignment notches in the corners of every frame, a
+   subtle scanline pulse on the active panel, tabular-figures
+   for stats so columns of digits sit flush on the eye.
+   ============================================================ */
+
+.bridge {
+  /* The Shell body can be a flex / grid parent; without min-width:0
+     here, any long unbreakable string inside (Linear URLs, deep
+     subtitles, repo names) blows the whole frame past the viewport
+     edge. min-width:0 also has to cascade to every grid child below.
+     overflow-x: hidden clips horizontal blow-outs; overflow-y: auto
+     keeps the page scrollable when the Focus queue + Pulse + Stream
+     overflow vertically (which they will, especially on smaller
+     windows). */
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  --bridge-cyan: #6ee7ff;
+  --bridge-cyan-dim: #2a8aa8;
+  --bridge-amber: #ffc266;
+  --bridge-orange: #ff8044;
+  --bridge-red: #ff5577;
+  --bridge-magenta: #d9a8ff;
+  --bridge-green: #7df0b8;
+  --bridge-bg: #04070b;
+  --bridge-panel: rgba(12, 22, 32, 0.55);
+  --bridge-edge: rgba(110, 231, 255, 0.18);
+  --bridge-edge-strong: rgba(110, 231, 255, 0.55);
+  --bridge-fg: #d6eef7;
+  --bridge-mute: #8aa4b3;
+
+  display: block;
+  padding: 20px;
+  height: 100%;
+  color: var(--bridge-fg);
+  font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-feature-settings: 'tnum' 1, 'cv11' 1; /* tabular figures */
+  background:
+    radial-gradient(
+      ellipse at top,
+      rgba(20, 50, 80, 0.18),
+      transparent 60%
+    ),
+    var(--bridge-bg);
+  background-attachment: fixed;
+}
+
+/* Outer HUD frame with the four corner alignment notches + the
+   ever-so-slow scanline. */
+.bridge__hud-frame {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto auto auto auto auto;
+  /* Pin the column to the available width so children can't expand it.
+     Default `auto` lets a long unbreakable child push the column wider
+     than its parent — which propagates back up and blows the HUD frame
+     past the viewport. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid var(--bridge-edge);
+  border-radius: 14px;
+  background: var(--bridge-panel);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  /* Clip horizontal blow-outs but let the page grow vertically —
+     the outer .bridge container handles vertical scroll. */
+  overflow-x: hidden;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.bridge__notch {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--bridge-edge-strong);
+  pointer-events: none;
+}
+.bridge__notch--tl {
+  top: 8px;
+  left: 8px;
+  border-right: none;
+  border-bottom: none;
+}
+.bridge__notch--tr {
+  top: 8px;
+  right: 8px;
+  border-left: none;
+  border-bottom: none;
+}
+.bridge__notch--bl {
+  bottom: 8px;
+  left: 8px;
+  border-right: none;
+  border-top: none;
+}
+.bridge__notch--br {
+  bottom: 8px;
+  right: 8px;
+  border-left: none;
+  border-top: none;
+}
+
+.bridge__scanline {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(110, 231, 255, 0.06) 50%,
+      transparent 100%
+    );
+  background-size: 100% 6px;
+  opacity: 0.4;
+  animation: bridge-scan 14s linear infinite;
+}
+@keyframes bridge-scan {
+  from { background-position: 0 -200px; }
+  to   { background-position: 0 600px; }
+}
+
+.bridge__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  z-index: 1;
+}
+.bridge__header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+.bridge__title {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 4px;
+  color: var(--bridge-cyan);
+  font-weight: 700;
+}
+.bridge__sub {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--bridge-mute);
+  text-transform: uppercase;
+}
+
+.bridge__focus-zone,
+.bridge__today-zone,
+.bridge__pulse-zone,
+.bridge__stream-zone,
+.bridge__rail-zone {
+  z-index: 1;
+  /* min-width:0 on the grid zone so children with long content can
+     truncate / wrap instead of pushing the row wider than the frame. */
+  min-width: 0;
+}
+
+/* ----- Focus (hero card) -------------------------------------- */
+
+.bridge-focus {
+  position: relative;
+  padding: 22px 28px;
+  border: 1px solid var(--bridge-edge-strong);
+  border-radius: 10px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(20, 50, 80, 0.45),
+      rgba(8, 14, 22, 0.65)
+    );
+  box-shadow:
+    0 0 0 1px rgba(110, 231, 255, 0.08) inset,
+    0 10px 40px rgba(0, 0, 0, 0.45);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+.bridge-focus--imminent {
+  border-color: rgba(255, 194, 102, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(255, 194, 102, 0.18) inset,
+    0 0 24px rgba(255, 128, 68, 0.18);
+}
+.bridge-focus--overdue {
+  border-color: rgba(255, 85, 119, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(255, 85, 119, 0.18) inset,
+    0 0 24px rgba(255, 85, 119, 0.22);
+  animation: bridge-pulse 2.4s ease-in-out infinite;
+}
+@keyframes bridge-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255, 85, 119, 0.18) inset, 0 0 24px rgba(255, 85, 119, 0.22); }
+  50%      { box-shadow: 0 0 0 1px rgba(255, 85, 119, 0.32) inset, 0 0 36px rgba(255, 85, 119, 0.36); }
+}
+.bridge-focus--empty {
+  opacity: 0.6;
+}
+.bridge-focus__label {
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--bridge-cyan);
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+}
+.bridge-focus--imminent .bridge-focus__label,
+.bridge-focus--overdue .bridge-focus__label {
+  color: var(--bridge-amber);
+}
+.bridge-focus--overdue .bridge-focus__label {
+  color: var(--bridge-red);
+}
+.bridge-focus__eta {
+  color: var(--bridge-mute);
+}
+.bridge-focus__title {
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 24px;
+  line-height: 1.25;
+  margin: 0 0 10px 0;
+  font-weight: 600;
+  color: #ecf6fc;
+  /* Break long unbreakable strings (Linear URLs, hashes, etc.) so the
+     hero card respects its container width. The combination handles
+     both natural word boundaries AND solid runs without whitespace. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  /* Clamp to 3 lines so a 200-char title doesn't push the hero card
+     into a wall of text. The hover-title attribute carries the full
+     string for power users who need it. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.bridge-focus__subtitle,
+.bridge-focus__why,
+.bridge-focus__hint {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.bridge-focus__why {
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--bridge-cyan);
+  opacity: 0.85;
+}
+.bridge-focus__subtitle {
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  margin: 0 0 16px 0;
+  font-size: 13px;
+  color: var(--bridge-mute);
+}
+.bridge-focus__hint {
+  margin: 8px 0 0 0;
+  font-size: 12px;
+  color: var(--bridge-mute);
+}
+.bridge-focus__actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 8px;
+}
+.bridge-focus__cta {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: 1.2px;
+  padding: 9px 18px;
+  background: linear-gradient(180deg, rgba(110, 231, 255, 0.22), rgba(42, 138, 168, 0.18));
+  color: #d8f6ff;
+  border: 1px solid var(--bridge-edge-strong);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.06s ease;
+}
+.bridge-focus__cta:hover {
+  filter: brightness(1.15);
+}
+.bridge-focus__cta:active {
+  transform: translateY(1px);
+}
+.bridge-focus__secondary {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--bridge-mute);
+  text-decoration: none;
+}
+.bridge-focus__secondary:hover {
+  color: var(--bridge-cyan);
+}
+
+/* HUD bracket markers around the focus label. */
+.bridge-brackets {
+  position: relative;
+  padding: 0 18px;
+}
+.bridge-brackets__tl,
+.bridge-brackets__tr,
+.bridge-brackets__bl,
+.bridge-brackets__br {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--bridge-edge-strong);
+}
+.bridge-brackets__tl { top: -3px; left: 0; border-right: none; border-bottom: none; }
+.bridge-brackets__tr { top: -3px; right: 0; border-left: none; border-bottom: none; }
+.bridge-brackets__bl { bottom: -3px; left: 0; border-right: none; border-top: none; }
+.bridge-brackets__br { bottom: -3px; right: 0; border-left: none; border-top: none; }
+
+/* ----- Project Pulse (vital cards strip) ---------------------- */
+
+.bridge-pulse {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+.bridge-pulse--empty {
+  padding: 14px;
+  border: 1px dashed var(--bridge-edge);
+  border-radius: 8px;
+  color: var(--bridge-mute);
+  font-size: 12px;
+  text-align: center;
+}
+.bridge-pulse__card {
+  appearance: none;
+  text-align: left;
+  cursor: pointer;
+  padding: 12px 14px;
+  background: rgba(8, 14, 22, 0.55);
+  border: 1px solid var(--bridge-edge);
+  border-radius: 8px;
+  color: var(--bridge-fg);
+  font-family: inherit;
+  position: relative;
+  transition: border-color 0.15s ease, transform 0.06s ease;
+  min-width: 0;
+  overflow: hidden;
+}
+.bridge-pulse__card:hover {
+  border-color: var(--bridge-edge-strong);
+  transform: translateY(-1px);
+}
+.bridge-pulse__card--active {
+  border-color: var(--bridge-cyan);
+  box-shadow: inset 3px 0 0 var(--bridge-cyan);
+}
+.bridge-pulse__card--warm {
+  border-color: rgba(255, 194, 102, 0.45);
+}
+.bridge-pulse__card--hot {
+  border-color: rgba(255, 85, 119, 0.55);
+  animation: bridge-pulse-card 3s ease-in-out infinite;
+}
+@keyframes bridge-pulse-card {
+  0%, 100% { border-color: rgba(255, 85, 119, 0.45); }
+  50%      { border-color: rgba(255, 85, 119, 0.75); }
+}
+.bridge-pulse__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+.bridge-pulse__name {
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ecf6fc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.bridge-pulse__repo {
+  font-size: 10px;
+  color: var(--bridge-mute);
+  letter-spacing: 0.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 50%;
+  flex-shrink: 0;
+}
+.bridge-pulse__vitals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.bridge-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 0;
+  border-radius: 3px;
+}
+.bridge-stat__value {
+  font-size: 16px;
+  color: var(--bridge-mute);
+  font-feature-settings: 'tnum' 1;
+}
+.bridge-stat--on .bridge-stat__value {
+  color: var(--bridge-cyan);
+}
+.bridge-pulse__card--warm .bridge-stat--on .bridge-stat__value {
+  color: var(--bridge-amber);
+}
+.bridge-pulse__card--hot .bridge-stat--on .bridge-stat__value {
+  color: var(--bridge-red);
+}
+.bridge-stat__label {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--bridge-mute);
+  margin-top: 2px;
+}
+.bridge-pulse__footer {
+  margin-top: 10px;
+  font-size: 10px;
+  color: var(--bridge-mute);
+  letter-spacing: 0.6px;
+}
+.bridge-pulse__live {
+  color: var(--bridge-green);
+  animation: bridge-live 1.6s ease-in-out infinite;
+}
+@keyframes bridge-live {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+.bridge-pulse__quiet {
+  font-style: italic;
+  opacity: 0.6;
+}
+
+/* ----- Stream (ambient ticker) -------------------------------- */
+
+.bridge-stream {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--bridge-edge);
+  border-radius: 6px;
+  background: rgba(8, 14, 22, 0.45);
+  overflow: hidden;
+  min-width: 0;
+}
+.bridge-stream__label {
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--bridge-cyan);
+  flex-shrink: 0;
+}
+.bridge-stream--empty {
+  color: var(--bridge-mute);
+  font-size: 10px;
+  letter-spacing: 3px;
+  justify-content: center;
+}
+.bridge-stream__rail {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  flex: 1;
+  min-width: 0;
+}
+.bridge-stream__rail::-webkit-scrollbar { display: none; }
+.bridge-stream__chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--bridge-edge);
+  border-radius: 999px;
+  background: rgba(12, 22, 32, 0.45);
+  color: var(--bridge-fg);
+  font-family: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.bridge-stream__chip:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+.bridge-stream__chip--cyan { border-color: rgba(110, 231, 255, 0.4); color: var(--bridge-cyan); }
+.bridge-stream__chip--amber { border-color: rgba(255, 194, 102, 0.4); color: var(--bridge-amber); }
+.bridge-stream__chip--magenta { border-color: rgba(217, 168, 255, 0.4); color: var(--bridge-magenta); }
+.bridge-stream__chip--green { border-color: rgba(125, 240, 184, 0.4); color: var(--bridge-green); }
+.bridge-stream__chip--slate { border-color: rgba(138, 164, 179, 0.4); color: var(--bridge-mute); }
+.bridge-stream__icon {
+  font-size: 12px;
+  opacity: 0.9;
+}
+.bridge-stream__text {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ----- Focus queue (next-up under hero) ----------------------- */
+
+.bridge-focus__queue {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--bridge-edge);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bridge-focus__queue-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bridge-focus__queue-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.bridge-focus__queue-label {
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--bridge-cyan);
+}
+.bridge-focus__queue-count {
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--bridge-mute);
+}
+.bridge-focus__queue-list {
+  list-style: none;
+  margin: 4px 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bridge-focus__queue-item {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--bridge-fg);
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+  min-width: 0;
+}
+.bridge-focus__queue-item:hover {
+  background: rgba(110, 231, 255, 0.04);
+  border-color: var(--bridge-edge);
+}
+.bridge-focus__queue-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bridge-focus__queue-eta {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--bridge-mute);
+  flex-shrink: 0;
+}
+
+/* ----- Action chip (right-edge "what happens on click") ------- */
+
+.bridge-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
+  border: 1px solid var(--bridge-edge);
+  border-radius: 999px;
+  background: rgba(8, 14, 22, 0.55);
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  color: var(--bridge-mute);
+  flex-shrink: 0;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+.bridge-action__icon {
+  font-size: 11px;
+  line-height: 1;
+}
+.bridge-action__label {
+  text-transform: uppercase;
+}
+/* Tone variants — cyan = standard open, magenta = agent dispatch,
+   amber = time-pressured action (join meeting), slate = no clear
+   action (jumps to Inbox so the user can decide). */
+.bridge-action--cyan {
+  color: var(--bridge-cyan);
+  border-color: rgba(110, 231, 255, 0.4);
+}
+.bridge-action--magenta {
+  color: var(--bridge-magenta);
+  border-color: rgba(217, 168, 255, 0.45);
+}
+.bridge-action--amber {
+  color: var(--bridge-amber);
+  border-color: rgba(255, 194, 102, 0.45);
+}
+.bridge-action--slate {
+  color: var(--bridge-mute);
+  border-color: rgba(138, 164, 179, 0.4);
+}
+.bridge-action--running {
+  color: var(--bridge-magenta);
+  border-color: rgba(217, 168, 255, 0.6);
+  background: rgba(217, 168, 255, 0.08);
+}
+.bridge-action--running .bridge-action__icon {
+  animation: bridge-action-pulse 1.4s ease-in-out infinite;
+}
+@keyframes bridge-action-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+/* Active-row treatment when a RowSession is mounted under it. The
+   click target switches semantics (open transcript vs launch agent),
+   so the button reads "engaged" — magenta tint matches the running
+   chip. */
+.bridge-focus__queue-item--active {
+  background: rgba(217, 168, 255, 0.06);
+  border-color: rgba(217, 168, 255, 0.4) !important;
+}
+
+/* ----- Inline live agent session under a row ------------------ */
+
+.bridge-session {
+  margin: 6px 0 2px 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(217, 168, 255, 0.35);
+  border-radius: 5px;
+  background: rgba(217, 168, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: bridge-session-in 0.18s ease-out;
+}
+@keyframes bridge-session-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.bridge-session--done {
+  border-color: rgba(125, 240, 184, 0.4);
+  background: rgba(125, 240, 184, 0.05);
+}
+.bridge-session--errored,
+.bridge-session--aborted {
+  border-color: rgba(255, 85, 119, 0.45);
+  background: rgba(255, 85, 119, 0.05);
+}
+.bridge-session__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bridge-session__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  font-weight: 600;
+  color: var(--bridge-magenta);
+}
+.bridge-session__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.bridge-session__pill--running .bridge-session__dot,
+.bridge-session__pill--pending .bridge-session__dot {
+  animation: bridge-session-blink 1.4s ease-in-out infinite;
+}
+@keyframes bridge-session-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+.bridge-session__pill--running { color: var(--bridge-magenta); }
+.bridge-session__pill--pending { color: var(--bridge-cyan); }
+.bridge-session__pill--awaiting { color: var(--bridge-amber); }
+.bridge-session__pill--done { color: var(--bridge-green); }
+.bridge-session__pill--errored,
+.bridge-session__pill--aborted {
+  color: var(--bridge-red);
+}
+.bridge-session__skill {
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--bridge-mute);
+}
+.bridge-session__spacer {
+  flex: 1;
+}
+.bridge-session__cancel,
+.bridge-session__open {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--bridge-edge);
+  border-radius: 3px;
+  padding: 3px 9px;
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--bridge-mute);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.bridge-session__cancel:hover {
+  color: var(--bridge-red);
+  border-color: rgba(255, 85, 119, 0.55);
+}
+.bridge-session__open:hover {
+  color: var(--bridge-cyan);
+  border-color: var(--bridge-cyan);
+}
+.bridge-session__tail {
+  margin: 0;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--bridge-fg);
+  opacity: 0.85;
+  /* Clamp to 3 lines — keep the row footprint small, the full
+     transcript is one click away. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+/* On row hover the chip lifts slightly to confirm "this is the
+   thing about to happen if you click." */
+.bridge-focus__queue-item:hover .bridge-action {
+  filter: brightness(1.15);
+}
+
+/* ----- Today timeline ----------------------------------------- */
+
+.bridge-today {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: rgba(8, 14, 22, 0.55);
+  border: 1px solid var(--bridge-edge);
+  border-radius: 6px;
+  min-height: 64px;
+}
+.bridge-today__label {
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--bridge-cyan);
+  flex-shrink: 0;
+}
+.bridge-today__scroll {
+  flex: 1;
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 48px;
+  /* Edge fade so the off-screen content reads as scrollable without
+     a visible scrollbar fighting the HUD aesthetic. */
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 14px,
+    #000 calc(100% - 14px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 14px,
+    #000 calc(100% - 14px),
+    transparent 100%
+  );
+}
+.bridge-today__scroll::-webkit-scrollbar { display: none; }
+.bridge-today__scroll { scrollbar-width: none; }
+
+.bridge-today__rail {
+  position: relative;
+  height: 100%;
+}
+.bridge-today__recenter {
+  appearance: none;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--bridge-edge);
+  border-radius: 50%;
+  background: rgba(12, 22, 32, 0.6);
+  color: var(--bridge-cyan);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: filter 0.15s ease, border-color 0.15s ease;
+}
+.bridge-today__recenter:hover {
+  border-color: var(--bridge-cyan);
+  filter: brightness(1.2);
+}
+
+.bridge-today__work-window {
+  position: absolute;
+  top: 16px;
+  height: 14px;
+  background: rgba(110, 231, 255, 0.08);
+  border-top: 1px solid rgba(110, 231, 255, 0.18);
+  border-bottom: 1px solid rgba(110, 231, 255, 0.18);
+  border-radius: 1px;
+}
+.bridge-today__tick {
+  position: absolute;
+  top: 30px;
+  width: 1px;
+  height: 4px;
+  background: rgba(138, 164, 179, 0.3);
+}
+.bridge-today__tick--major {
+  height: 8px;
+  background: rgba(138, 164, 179, 0.55);
+  top: 28px;
+}
+.bridge-today__tick-label {
+  position: absolute;
+  bottom: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--bridge-mute);
+}
+.bridge-today__tick-label--minor {
+  opacity: 0.45;
+  font-size: 8px;
+}
+.bridge-today__blip {
+  appearance: none;
+  background: none;
+  border: none;
+  position: absolute;
+  top: 0;
+  height: 28px;
+  transform: translateX(-50%);
+  padding: 2px 6px 2px 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+.bridge-today__blip-dot {
+  display: block;
+  width: 9px;
+  height: 9px;
+  background: var(--bridge-cyan);
+  border: 1px solid var(--bridge-edge-strong);
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(110, 231, 255, 0.4);
+  flex-shrink: 0;
+}
+.bridge-today__blip-title {
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 10px;
+  color: var(--bridge-fg);
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bridge-today__blip:hover .bridge-today__blip-title {
+  color: var(--bridge-cyan);
+}
+.bridge-today__blip:hover .bridge-today__blip-dot {
+  filter: brightness(1.25);
+}
+.bridge-today__blip--past .bridge-today__blip-dot {
+  background: transparent;
+  border-color: var(--bridge-edge);
+  box-shadow: none;
+}
+.bridge-today__blip--imminent .bridge-today__blip-dot {
+  background: var(--bridge-amber);
+  border-color: var(--bridge-orange);
+  box-shadow: 0 0 12px rgba(255, 128, 68, 0.55);
+  animation: bridge-blip-pulse 1.5s ease-in-out infinite;
+}
+@keyframes bridge-blip-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(255, 128, 68, 0.45); }
+  50%      { box-shadow: 0 0 18px rgba(255, 128, 68, 0.75); }
+}
+
+.bridge-today__now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-1px);
+  pointer-events: none;
+}
+.bridge-today__now-line {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 128, 68, 0.05),
+    var(--bridge-orange) 30%,
+    var(--bridge-orange) 70%,
+    rgba(255, 128, 68, 0.05)
+  );
+  box-shadow: 0 0 8px rgba(255, 128, 68, 0.55);
+  animation: bridge-now-pulse 2.4s ease-in-out infinite;
+}
+@keyframes bridge-now-pulse {
+  0%, 100% { opacity: 0.9; }
+  50%      { opacity: 0.55; }
+}
+.bridge-today__now-time {
+  position: absolute;
+  top: -4px;
+  left: 5px;
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--bridge-orange);
+  background: rgba(4, 7, 11, 0.85);
+  padding: 1px 4px;
+  border: 1px solid rgba(255, 128, 68, 0.4);
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+/* ----- System status pill row --------------------------------- */
+
+.bridge-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bridge-status__pill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  border: 1px solid var(--bridge-edge);
+  border-radius: 999px;
+  background: rgba(12, 22, 32, 0.6);
+  color: var(--bridge-fg);
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+}
+.bridge-status__pill:not(button) {
+  cursor: default;
+}
+.bridge-status__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--bridge-mute);
+  box-shadow: 0 0 4px currentColor;
+}
+.bridge-status__label {
+  font-weight: 600;
+}
+.bridge-status__pill--running {
+  border-color: rgba(125, 240, 184, 0.45);
+  color: var(--bridge-green);
+}
+.bridge-status__pill--running .bridge-status__dot {
+  background: var(--bridge-green);
+}
+.bridge-status__pill--autopilot {
+  border-color: rgba(217, 168, 255, 0.55);
+  color: var(--bridge-magenta);
+}
+.bridge-status__pill--autopilot .bridge-status__dot {
+  background: var(--bridge-magenta);
+  animation: bridge-status-blink 1.6s ease-in-out infinite;
+}
+.bridge-status__pill--paused {
+  border-color: rgba(255, 194, 102, 0.55);
+  color: var(--bridge-amber);
+}
+.bridge-status__pill--paused .bridge-status__dot {
+  background: var(--bridge-amber);
+}
+.bridge-status__pill--afk {
+  border-color: rgba(138, 164, 179, 0.55);
+  color: var(--bridge-mute);
+}
+.bridge-status__pill--afk .bridge-status__dot {
+  background: var(--bridge-mute);
+}
+@keyframes bridge-status-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
+/* ----- Command rail (HUD prompt input) ------------------------ */
+
+.bridge-rail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: linear-gradient(
+    180deg,
+    rgba(8, 14, 22, 0.7),
+    rgba(8, 14, 22, 0.55)
+  );
+  border: 1px solid var(--bridge-edge);
+  border-radius: 6px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.bridge-rail:focus-within {
+  border-color: var(--bridge-edge-strong);
+  box-shadow:
+    inset 0 -1px 0 0 var(--bridge-cyan),
+    0 0 18px rgba(110, 231, 255, 0.18);
+}
+.bridge-rail__prompt {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--bridge-cyan);
+  flex-shrink: 0;
+  animation: bridge-rail-caret 1.4s steps(2, end) infinite;
+}
+@keyframes bridge-rail-caret {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.6; }
+}
+.bridge-rail__input {
+  flex: 1;
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #ecf6fc;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 13px;
+  outline: none;
+  min-width: 0;
+}
+.bridge-rail__input::placeholder {
+  color: var(--bridge-mute);
+}
+.bridge-rail__input:disabled {
+  opacity: 0.5;
+}
+.bridge-rail__hint {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--bridge-cyan);
+  white-space: nowrap;
+  animation: bridge-rail-hint 0.25s ease-out;
+}
+@keyframes bridge-rail-hint {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ----- Pulse stat-as-button + drilldown ----------------------- */
+
+.bridge-stat {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+}
+.bridge-stat:disabled {
+  cursor: default;
+}
+.bridge-stat--on:hover {
+  border-color: var(--bridge-edge);
+  background: rgba(110, 231, 255, 0.05);
+}
+.bridge-stat--open {
+  border-color: var(--bridge-edge-strong);
+  background: rgba(110, 231, 255, 0.08);
+}
+
+.bridge-pulse__name-btn {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+}
+.bridge-pulse__name-btn:hover .bridge-pulse__name {
+  color: var(--bridge-cyan);
+}
+
+.bridge-pulse__card--expanded {
+  grid-column: span 2;
+}
+.bridge-pulse__drill {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--bridge-edge);
+  animation: bridge-drill-in 0.18s ease-out;
+}
+@keyframes bridge-drill-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.bridge-pulse__drill-label {
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--bridge-cyan);
+}
+.bridge-pulse__drill-list {
+  list-style: none;
+  margin: 6px 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.bridge-pulse__drill-item {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 5px 8px;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--bridge-fg);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+  min-width: 0;
+  overflow: hidden;
+}
+.bridge-pulse__drill-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.bridge-pulse__drill-item:hover .bridge-action {
+  filter: brightness(1.15);
+}
+.bridge-pulse__drill-title,
+.bridge-pulse__drill-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ----- Inline link inside Linkified text ---------------------- */
+
+.bridge-link {
+  color: var(--bridge-cyan);
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(110, 231, 255, 0.4);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.bridge-link:hover {
+  color: #aef3ff;
+  border-bottom-color: var(--bridge-cyan);
+}
+/* When the parent row is its own button (queue item, drilldown row),
+   the hover background shouldn't double up with link styling — keep
+   the link readable without the underline competing with the chrome. */
+.bridge-focus__queue-item .bridge-link,
+.bridge-pulse__drill-item .bridge-link {
+  border-bottom: 1px dotted rgba(110, 231, 255, 0.35);
+}
+.bridge-pulse__drill-item:hover {
+  background: rgba(110, 231, 255, 0.05);
+  border-color: var(--bridge-edge);
+}
+.bridge-pulse__drill-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bridge-pulse__drill-sub {
+  font-size: 10px;
+  color: var(--bridge-mute);
+  margin-top: 2px;
+}
+.bridge-pulse__drill-more {
+  display: block;
+  margin-top: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--bridge-mute);
+}

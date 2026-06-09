@@ -23,6 +23,7 @@ import { registerTasksIpc } from './tasks.js';
 import type { IpcDeps } from './types.js';
 import { registerWindowIpc } from './windows.js';
 import { registerWorkflowsIpc } from './workflows.js';
+import { registerWorkspacesIpc } from './workspaces.js';
 
 export type { IpcDeps } from './types.js';
 
@@ -61,4 +62,5 @@ export function registerAllIpc(deps: IpcDeps): void {
   registerTasksIpc(deps);
   registerWindowIpc(deps);
   registerWorkflowsIpc(deps);
+  registerWorkspacesIpc(deps);
 }

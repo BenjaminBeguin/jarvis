@@ -17,9 +17,12 @@ import type { ActivityEvent, TaskSummary } from '../../shared/types';
  * filter bar across the top; for now everything is one stream.
  */
 
+type BrowserVisit = { url: string; title: string; at: number };
+
 type Row =
   | { kind: 'send'; ts: number; task: TaskSummary }
-  | { kind: 'event'; ts: number; event: ActivityEvent };
+  | { kind: 'event'; ts: number; event: ActivityEvent }
+  | { kind: 'browser'; ts: number; visit: BrowserVisit };
 
 /** Filter chip selections — null means "show everything." */
 type CategoryFilter =
@@ -31,7 +34,8 @@ type CategoryFilter =
   | 'inbox'
   | 'reminder'
   | 'workflow'
-  | 'dedupe';
+  | 'dedupe'
+  | 'browser';
 
 const FILTER_KEY = 'jarvis.activity.filter';
 
@@ -65,7 +69,7 @@ export function Activity() {
       const stored = window.localStorage.getItem(FILTER_KEY);
       if (stored === null) return null;
       const valid: CategoryFilter[] = [
-        'send', 'note', 'meeting', 'integration', 'inbox', 'reminder', 'workflow', 'dedupe',
+        'send', 'note', 'meeting', 'integration', 'inbox', 'reminder', 'workflow', 'dedupe', 'browser',
       ];
       return (valid as string[]).includes(stored) ? (stored as CategoryFilter) : null;
     } catch {
@@ -110,6 +114,19 @@ export function Activity() {
     return off;
   }, []);
 
+  // RAM-only browser ring buffer from the Chrome extension. Lives
+  // only as long as the app process — quitting Jarvis wipes it.
+  // Re-fetched on each `browserActivityChanged` so refreshed
+  // heartbeat timestamps surface in the feed.
+  const [browserVisits, setBrowserVisits] = useState<BrowserVisit[]>([]);
+  useEffect(() => {
+    void window.jarvis.listBrowserActivity().then(setBrowserVisits);
+    const off = window.jarvis.onBrowserActivityChanged(() => {
+      void window.jarvis.listBrowserActivity().then(setBrowserVisits);
+    });
+    return off;
+  }, []);
+
   const rows = useMemo<Row[]>(() => {
     const sendRows: Row[] = tasks
       .filter((t) => t.skillId === 'send')
@@ -119,10 +136,18 @@ export function Activity() {
       ts: e.ts,
       event: e,
     }));
-    let merged = [...sendRows, ...eventRows].sort((a, b) => b.ts - a.ts);
+    const browserRows: Row[] = browserVisits.map((v) => ({
+      kind: 'browser',
+      ts: v.at,
+      visit: v,
+    }));
+    let merged = [...sendRows, ...eventRows, ...browserRows].sort(
+      (a, b) => b.ts - a.ts,
+    );
     if (filter !== null) {
       merged = merged.filter((r) => {
         if (r.kind === 'send') return filter === 'send';
+        if (r.kind === 'browser') return filter === 'browser';
         const meta = EVENT_KIND_META[r.event.kind];
         return meta?.category === filter;
       });
@@ -137,6 +162,8 @@ export function Activity() {
         if (r.kind === 'send') {
           return !r.task.projectName || r.task.projectName === activeProject;
         }
+        // Browser visits don't carry a project — always show (global).
+        if (r.kind === 'browser') return true;
         const detail = r.event.detail as
           | { projectName?: unknown; project?: unknown }
           | null
@@ -152,7 +179,7 @@ export function Activity() {
       });
     }
     return merged.slice(0, 200);
-  }, [tasks, events, filter, activeProject]);
+  }, [tasks, events, browserVisits, filter, activeProject]);
 
   // Counts per category — surfaces in the chip labels so the user
   // sees "Reminders 3" instead of just "Reminders." Helps decide what
@@ -168,6 +195,7 @@ export function Activity() {
       reminder: 0,
       workflow: 0,
       dedupe: 0,
+      browser: 0,
     };
     for (const t of tasks) {
       if (t.skillId !== 'send') continue;
@@ -194,8 +222,9 @@ export function Activity() {
       }
       out[cat] = (out[cat] ?? 0) + 1;
     }
+    out.browser = browserVisits.length;
     return out;
-  }, [tasks, events, activeProject]);
+  }, [tasks, events, browserVisits, activeProject]);
 
   return (
     <section className="activity">
@@ -243,6 +272,11 @@ export function Activity() {
                 {group.rows.map((row) =>
                   row.kind === 'send' ? (
                     <SendRow key={`send-${row.task.id}`} task={row.task} />
+                  ) : row.kind === 'browser' ? (
+                    <BrowserRow
+                      key={`browser-${row.visit.url}-${row.visit.at}`}
+                      visit={row.visit}
+                    />
                   ) : (
                     <EventRow key={`event-${row.event.id}`} event={row.event} />
                   ),
@@ -523,6 +557,59 @@ function EventRow({ event }: { event: ActivityEvent }) {
   );
 }
 
+/**
+ * Row for an in-memory Chrome-extension browser visit. Click opens
+ * the URL in the user's default browser (same affordance the
+ * browser-activity context provider implies).
+ *
+ * No persistence — these rows vanish when the app quits (the ring
+ * buffer is RAM-only). Hostname is extracted for a compact prefix;
+ * the full URL is in the title attribute for hover.
+ */
+function BrowserRow({ visit }: { visit: BrowserVisit }) {
+  const host = safeHost(visit.url);
+  const title = visit.title?.trim() || visit.url;
+  const onClick = () => {
+    // External link → uses the system default browser. shell.openExternal
+    // is exposed by the existing jarvis API for opening artifact paths;
+    // a URL string works the same.
+    void window.jarvis.openExternal(visit.url);
+  };
+  return (
+    <li>
+      <button
+        className="activity__row"
+        onClick={onClick}
+        title={visit.url}
+      >
+        <span
+          className="activity__cat activity__cat--browser"
+          title="browser visit (RAM only, wipes on quit)"
+        >
+          browser
+        </span>
+        {host && (
+          <span className="activity__channel" title={host}>
+            {host}
+          </span>
+        )}
+        <span className="activity__preview" title={title}>
+          {title}
+        </span>
+        <span className="activity__time">{formatRel(visit.at)}</span>
+      </button>
+    </li>
+  );
+}
+
+function safeHost(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
+
 type StatusKind = 'in-progress' | 'awaiting' | 'sent' | 'failed' | 'cancelled';
 
 function statusKind(t: TaskSummary): StatusKind {
@@ -607,6 +694,7 @@ const FILTER_CHIPS: Array<{
   { value: 'workflow', label: 'Workflows' },
   { value: 'inbox', label: 'Inbox' },
   { value: 'dedupe', label: 'Dedupe' },
+  { value: 'browser', label: 'Browser' },
 ];
 
 function CategoryFilterStrip({

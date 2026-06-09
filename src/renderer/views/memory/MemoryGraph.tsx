@@ -249,6 +249,14 @@ function Inner({
     return out;
   }, [explicit, cappedSemantic, showSemantic, visibleIds, visibleNodes, mode]);
 
+  // Count same-source chunk links separately from the explicit /
+  // semantic categories so the legend can show them. They're emitted
+  // above with an id prefix of `ss:` — counting filters that prefix.
+  const sameSourceCount = useMemo(
+    () => flowEdges.filter((e) => e.id.startsWith('ss:')).length,
+    [flowEdges],
+  );
+
   return (
     <div className="memory-graph">
       {loading && (
@@ -283,9 +291,17 @@ function Inner({
         />
       )}
       <div className="memory-graph__legend">
-        <span className="memory-graph__legend-count">
+        <span
+          className="memory-graph__legend-count"
+          title={
+            mode === 'facet'
+              ? 'Same-source: faint dotted lines connect chunks of the same artifact (a meeting / note split across multiple sections).\n\nExplicit: solid cyan lines from spawned / mentions / sourced-from links in the artifact_links table.\n\nSemantic: dashed→solid lines between chunks whose cosine similarity is above the threshold (lower the slider to see more).'
+              : 'Explicit: solid cyan lines from spawned / mentions / sourced-from links.\n\nSemantic: dashed→solid lines between artifacts whose cosine similarity is above the threshold.'
+          }
+        >
           {visibleNodes.length} nodes · {explicit.length} explicit
           {showSemantic && ` · ${cappedSemantic.length} semantic`}
+          {mode === 'facet' && ` · ${sameSourceCount} same-source`}
         </span>
       </div>
     </div>

@@ -10,6 +10,7 @@ import type {
   TrayMenuState,
 } from '@shared/types';
 
+import { eagerRetrieve } from './artifacts/eager-rag.js';
 import { countByKind, listArtifacts } from './artifacts/registry.js';
 import { readRecentActivity } from './browser-activity.js';
 import type { InboxStore } from './inbox.js';
@@ -31,11 +32,24 @@ const execFileAsync = promisify(execFile);
  * registry is the order in the output, so register the most-important
  * providers first.
  */
+/**
+ * Optional context every provider's build() receives. Most providers
+ * ignore it (their output is prompt-agnostic) — the eager-RAG
+ * provider is the exception, using `prompt` to do per-launch
+ * retrieval. New providers should accept and ignore any fields they
+ * don't use.
+ */
+export interface BuildContext {
+  /** The launching prompt text, when one is available. Empty for
+   *  resume turns and prompt-less context refreshes. */
+  prompt?: string;
+}
+
 export interface UserContextProvider {
   /** Stable identifier — used to dedupe + log. */
   name: string;
   /** Build the provider's markdown line(s). Return null to skip this turn. */
-  build(): Promise<string | null> | string | null;
+  build(ctx?: BuildContext): Promise<string | null> | string | null;
 }
 
 /**
@@ -103,13 +117,18 @@ export class UserContextStore {
    *     the same block. Cache invalidates naturally on TTL OR via
    *     invalidateCache() when wholesale state changes.
    */
-  async build(): Promise<string> {
+  async build(ctx?: BuildContext): Promise<string> {
+    // Cache only applies to prompt-agnostic builds. When a prompt
+    // is supplied (eager RAG path), every launch is potentially
+    // unique — bypass the userContext cache. The eager-RAG provider
+    // maintains its own LRU keyed by prompt so back-to-back identical
+    // prompts still skip the search worker.
     const cached = this.cached;
-    if (cached && Date.now() - cached.ts < BUILD_CACHE_TTL_MS) {
+    if (!ctx?.prompt && cached && Date.now() - cached.ts < BUILD_CACHE_TTL_MS) {
       return cached.result;
     }
     const settled = await Promise.allSettled(
-      this.providers.map(async (p) => ({ name: p.name, out: await p.build() })),
+      this.providers.map(async (p) => ({ name: p.name, out: await p.build(ctx) })),
     );
     const lines: string[] = [];
     for (const r of settled) {
@@ -124,7 +143,8 @@ export class UserContextStore {
       }
     }
     const result = lines.join('\n');
-    this.cached = { result, ts: Date.now() };
+    // Only memoise the prompt-agnostic shape.
+    if (!ctx?.prompt) this.cached = { result, ts: Date.now() };
     return result;
   }
 }
@@ -143,13 +163,27 @@ export const timeProvider: UserContextProvider = {
     const now = new Date();
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const day = now.toLocaleDateString(undefined, { weekday: 'long' });
+    // Human-friendly date format ("May 31, 2026") matches how the
+    // agent tends to write the date back in replies — pre-formatting
+    // it here removes the temptation to re-derive the weekday from
+    // the ISO date (Haiku gets this wrong sometimes, especially when
+    // the question is queued and the model second-guesses its
+    // context).
+    const longDate = now.toLocaleDateString(undefined, {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
     const iso = now.toISOString().slice(0, 10);
     const hhmm = now.toLocaleTimeString(undefined, {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
     });
-    return `- Now: ${day} ${iso}, ${hhmm} (${tz})`;
+    return (
+      `- Now: ${hhmm} ${tz} · ${day}, ${longDate} (ISO ${iso}T${hhmm})\n` +
+      `  When asked the time or date, reply with this verbatim — do NOT re-derive the weekday from the ISO date or recompute the month, trust the "${day}, ${longDate}" above.`
+    );
   },
 };
 
@@ -491,3 +525,33 @@ export const recentArtifactsProvider: UserContextProvider = {
     );
   },
 };
+
+/**
+ * **Eager retrieval-augmented generation.** When the launching prompt
+ * looks like a memory query ("where did we discuss X", "summarise
+ * the Q3 meeting", "any update on Y"), run hybrid FTS + semantic
+ * search against the artifact catalog and inject the top hits into
+ * the system prompt — so the agent gets relevant memory without
+ * having to call `search_artifacts` mid-turn.
+ *
+ * Saves one round-trip (~200ms latency + tool-call output tokens)
+ * AND guarantees the memory is available even when the agent forgets
+ * to look. Skip heuristic in `shouldEagerRetrieve()` keeps this off
+ * for shell-shaped / imperative prompts so we don't pollute every
+ * task's context with irrelevant snippets.
+ */
+export function eagerRagProvider(store: UserContextStore): UserContextProvider {
+  return {
+    name: 'eager-rag',
+    async build(ctx) {
+      const prompt = ctx?.prompt?.trim();
+      if (!prompt) return null;
+      try {
+        return await eagerRetrieve(prompt, store.getActiveProject());
+      } catch (err) {
+        console.warn('[eager-rag] provider failed:', err);
+        return null;
+      }
+    },
+  };
+}

@@ -65,6 +65,16 @@ const DEFAULT_SYSTEM_PROMPT = `You are Jarvis, this user's personal AI operating
 
 You are NOT a generic assistant. You are THIS user's. The system prompt above carries their preferences, active project scope, calendar, inbox highlights, recent tasks, pending reminders, runtime state. **Use them.** Never give a generic answer when the injected context lets you give a specific one.
 
+# Answer immediately when the answer is already in your context
+
+If the user's question can be answered from the "Current context" section above (time, date, active project, current task, recent activity, calendar, inbox highlights, runtime state) — **reply in one sentence with NO tool calls**. Examples:
+- "what time is it" → look at \`- Now:\` and answer. Don't run \`date\`, don't search artifacts, don't WebSearch.
+- "what day is today" / "what's the date" → same.
+- "what project am I on" / "am I AFK" → read context and answer.
+- "what was my last task" → read \`- Recent task:\` and answer.
+
+This rule wins over every other "use tools first" directive below. Tool calls are for things the context doesn't carry — not for things it does.
+
 # What you have
 
 Tools you should reach for instead of guessing:
@@ -168,6 +178,12 @@ interface TaskRecord {
    *  mid-conversation. Persists for the task's lifetime so subsequent
    *  turns continue on the upgraded tier. */
   tierOverride?: ModelTier | null;
+  /** The full launching prompt that started this task — kept on the
+   *  record so every system-prompt rebuild (initial launch, mid-flight
+   *  escalation, resume) can feed it to the eager-RAG provider for
+   *  per-launch artifact retrieval. summary.inputPreview only stores
+   *  the first 240 chars; this is the untruncated source. */
+  launchPrompt?: string;
 }
 
 /**
@@ -442,6 +458,7 @@ export class TaskRunner extends EventEmitter {
   private async composeSystemPrompt(
     skill: SkillRecord | null,
     taskId?: string,
+    launchPrompt?: string,
   ): Promise<string> {
     const base = skill?.hasBody ? skill.body : DEFAULT_SYSTEM_PROMPT;
     const sections: string[] = [ENVIRONMENT_PROMPT, base];
@@ -456,7 +473,12 @@ export class TaskRunner extends EventEmitter {
       }
     }
     if (this.userContext) {
-      const block = await this.userContext.build();
+      // Pass the launching prompt so the eager-RAG provider can
+      // pre-retrieve relevant artifacts before the agent starts
+      // turning. Other providers ignore it.
+      const block = await this.userContext.build(
+        launchPrompt ? { prompt: launchPrompt } : undefined,
+      );
       if (block) sections.push(`## Current context\n${block}`);
     }
     if (taskId) {
@@ -617,6 +639,15 @@ export class TaskRunner extends EventEmitter {
     taskId: string,
     text: string,
     images: UserImageAttachment[] = [],
+    opts: {
+      /** Tear down the current SDK query before sending. Default behavior
+       *  (false) queues into the live stream and the SDK eats it on its
+       *  next iteration — which can be 10s+ if the agent is grinding
+       *  through tool calls. interrupt=true aborts the in-flight query
+       *  and immediately resumes the same session with the new message,
+       *  so the user sees their reply land within a frame. */
+      interrupt?: boolean;
+    } = {},
   ): boolean {
     const rec = this.records.get(taskId);
     if (!rec || rec.external) return false;
@@ -643,7 +674,10 @@ export class TaskRunner extends EventEmitter {
       rec.inputs &&
       !rec.inputs.isClosed();
 
-    if (queueAlive) {
+    // Soft queue path — only when caller didn't ask for interrupt AND
+    // the stream is currently consuming. Same as before: the user's
+    // message lands on the SDK's next iteration.
+    if (queueAlive && !opts.interrupt) {
       rec.inputs!.push(userMessage(text, rec.summary.id, images));
       this.recordEvent(rec, {
         type: 'user',
@@ -654,12 +688,30 @@ export class TaskRunner extends EventEmitter {
       return true;
     }
 
-    // Stream ended — restart as a fresh turn with resume.
+    // Need to spin a fresh turn — either the stream ended on its own,
+    // or the caller asked to interrupt. Both require an SDK session to
+    // resume from (otherwise we have nothing to attach to).
     if (!rec.sdkSessionId) return false;
     const resumeId = rec.sdkSessionId;
     const skill = rec.summary.skillId
       ? this.skills?.get(rec.summary.skillId) ?? null
       : null;
+    // Tear down the live query if it's still running. Same shape as
+    // escalate(): close the input queue, abort the controller. The
+    // current run()'s try/finally will mark the task back to "ended"
+    // briefly until our new run() takes over below.
+    if (queueAlive) {
+      try {
+        rec.inputs?.close();
+      } catch {
+        /* already closed */
+      }
+      try {
+        rec.abort.abort();
+      } catch {
+        /* already aborted */
+      }
+    }
     // Fresh queue + AbortController for the new turn.
     rec.inputs = new AsyncMessageQueue();
     rec.inputs.push(userMessage(text, rec.summary.id, images));
@@ -898,12 +950,23 @@ export class TaskRunner extends EventEmitter {
     // an explicit resumeSessionId is already on the request (e.g. the
     // user clicked "↪ Resume" in TaskDetail), respect that; pooling
     // is only the default fallback when nothing else was specified.
+    //
+    // Both skill-pinned AND free-text asks pool. Free-text asks share
+    // a synthetic bucket keyed by model so a Haiku-tier quick question
+    // doesn't accidentally resume a Sonnet-tier thread. The biggest
+    // single perceived-speed win for the palette: second + nth
+    // free-text asks of a session skip the SDK cold-start +
+    // MCP-server boot + tool-inventory scan.
     let resumeSessionId = req.resumeSessionId;
     let pooledBucketKey: string | undefined;
     let pooledThisLaunch = false;
-    if (!resumeSessionId && this.skillSessions && skillId) {
+    if (!resumeSessionId && this.skillSessions) {
       const decision = this.skillSessions.decide({
         skillId,
+        // Only free-text pools care about model (skill pools use the
+        // skill's pinned model). Pass undefined for skill asks so the
+        // store keys on skillId alone.
+        ...(skillId ? {} : { model: req.model }),
         origin,
         projectName,
         forceFresh: req.forceFreshSession === true,
@@ -950,6 +1013,7 @@ export class TaskRunner extends EventEmitter {
       nextSeq: 0,
       inputs,
       config,
+      launchPrompt: req.prompt,
       ...(pooledBucketKey ? { pooledBucketKey } : {}),
       ...(req.unattended ? { unattended: true } : {}),
     };
@@ -985,7 +1049,11 @@ export class TaskRunner extends EventEmitter {
     let finalStatus: TaskStatus = 'completed';
     try {
       const cfg = record.config ?? {};
-      const systemPrompt = await this.composeSystemPrompt(skill, id);
+      const systemPrompt = await this.composeSystemPrompt(
+        skill,
+        id,
+        record.launchPrompt,
+      );
       const options: Parameters<typeof query>[0]['options'] = {
         abortController: record.abort,
         // Default to bypassPermissions for back-compat with the rest of
