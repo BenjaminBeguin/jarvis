@@ -264,12 +264,36 @@ function rebuildTitle(): void {
   if (meetingRecording) {
     parts.push(meetingPaused ? '⏸' : '🔴');
   }
+  // Workspace pip: shown ONLY when the user is in a non-default
+  // workspace. Default workspace is the implicit one so the
+  // unprefixed "J" reads as "Personal." Visibly switching contexts
+  // gives the menu-bar glance some signal.
+  if (workspaceLabel && !workspaceIsDefault) parts.push(workspaceLabel);
   parts.push('J');
   if (runningTasks > 0) parts.push(`●${runningTasks}`);
   if (pinnedConversations.length > 0) {
     parts.push(`📌${pinnedConversations.length}`);
   }
   tray.setTitle(parts.join(' '));
+}
+
+/**
+ * Workspace badge state for the tray title. `workspaceLabel` is the
+ * glyph/icon character; `workspaceIsDefault` suppresses the prefix
+ * when the user's in the default Personal workspace (no glyph clutter
+ * for the canonical home context). Updated from index.ts when the
+ * active workspace changes.
+ */
+let workspaceLabel: string | null = null;
+let workspaceIsDefault = true;
+
+export function setTrayWorkspace(opts: {
+  label: string | null;
+  isDefault: boolean;
+}): void {
+  workspaceLabel = opts.label;
+  workspaceIsDefault = opts.isDefault;
+  rebuildTitle();
 }
 
 export function initTray(): Tray {

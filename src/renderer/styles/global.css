@@ -1651,6 +1651,29 @@ button:disabled:hover {
   background: rgba(110, 231, 255, 0.18);
   margin: 4px 6px;
 }
+/* Onboarding card inside the dropdown — visible only while the user
+   has just the default workspace. Inline so they discover workspaces
+   the moment they open the switcher, no separate settings hop. */
+.workspace-switcher__nudge {
+  padding: 8px 10px;
+  margin: 4px 6px;
+  border: 1px dashed rgba(110, 231, 255, 0.35);
+  border-radius: 4px;
+  background: rgba(110, 231, 255, 0.04);
+  font-family: inherit;
+}
+.workspace-switcher__nudge strong {
+  display: block;
+  font-size: 11px;
+  color: rgba(110, 231, 255, 0.95);
+  margin-bottom: 4px;
+}
+.workspace-switcher__nudge p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(214, 238, 247, 0.7);
+}
 .workspace-switcher__add {
   appearance: none;
   width: 100%;

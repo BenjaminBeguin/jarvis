@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { InboxItem } from '../../../shared/types';
 
 
+import { useWorkspace } from '../workspaces/useWorkspace';
 import { CommandRail } from './CommandRail';
 import { FocusCard } from './FocusCard';
 import { ProjectPulse } from './ProjectPulse';
@@ -174,8 +175,24 @@ export function BridgePage() {
     );
   }, []);
 
+  // Workspace tint — bleeds through `--workspace-accent` into the
+  // HUD frame border, notch chrome, header underline. Stays subtle:
+  // doesn't override the dominant cyan vocabulary, just whispers
+  // "you are in <workspace>" so the user has continuous reassurance.
+  // Falls back to the cyan brand color when no workspace has a color
+  // set (e.g. user removed the default's color attribute).
+  const workspace = useWorkspace();
+  const workspaceAccent =
+    workspace.active?.color ?? 'var(--bridge-cyan)';
   return (
-    <section className="bridge">
+    <section
+      className="bridge"
+      style={
+        {
+          '--workspace-accent': workspaceAccent,
+        } as React.CSSProperties
+      }
+    >
       <div className="bridge__hud-frame">
         <span className="bridge__notch bridge__notch--tl" aria-hidden />
         <span className="bridge__notch bridge__notch--tr" aria-hidden />
@@ -187,6 +204,13 @@ export function BridgePage() {
           <div className="bridge__header-left">
             <h1 className="bridge__title">BRIDGE</h1>
             <span className="bridge__sub">
+              {workspace.active && (
+                <span
+                  className="bridge__workspace-pip"
+                  aria-hidden
+                  title={`Workspace · ${workspace.active.name}`}
+                />
+              )}
               {activeProject
                 ? `scope · ${activeProject}`
                 : 'scope · all projects'}

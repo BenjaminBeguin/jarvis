@@ -43,6 +43,7 @@ import type {
 
 import {
   detectClaudeBinary,
+  loadActiveWorkspaceId,
   loadAfkMode,
   loadAppMode,
   loadAuthMode,
@@ -191,6 +192,7 @@ import {
   setPendingRemindersCount,
   setRunningTasksCount,
   setTodaySpend,
+  setTrayWorkspace,
 } from './tray.js';
 import {
   broadcast,
@@ -1510,6 +1512,22 @@ app.whenReady().then(async () => {
   // gets the default workspace stamped onto it. Idempotent — second
   // launch finds them already tagged and no-ops.
   backfillProjectWorkspaces();
+  // Push the current workspace into the tray title and keep it in
+  // sync as the user switches contexts or edits workspace metadata.
+  // Default workspace = no prefix (canonical "home" state); other
+  // workspaces get their icon glyph leading the title so the menu
+  // bar communicates context at a glance.
+  const syncTrayWorkspace = (): void => {
+    const active =
+      workspaces.get(loadActiveWorkspaceId() ?? '') ??
+      workspaces.getDefault();
+    setTrayWorkspace({
+      label: active.icon ?? active.name.charAt(0).toUpperCase(),
+      isDefault: active.default === true,
+    });
+  };
+  syncTrayWorkspace();
+  workspaces.on('changed', syncTrayWorkspace);
   preferences.init();
   dashboard.init();
   briefings.init();

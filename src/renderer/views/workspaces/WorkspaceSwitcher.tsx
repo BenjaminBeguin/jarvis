@@ -139,6 +139,22 @@ export function WorkspaceSwitcher({ onSwitch }: Props) {
             </button>
           ))}
           <div className="workspace-switcher__divider" />
+          {workspaces.length <= 1 && !creating && (
+            // Onboarding nudge — only shown until the user creates a
+            // second workspace. The "what's a workspace?" affordance
+            // sits inside the dropdown they'd open to discover the
+            // feature; once they've made a second workspace it's
+            // obvious and the nudge can retire itself.
+            <div className="workspace-switcher__nudge">
+              <strong>Try a workspace.</strong>
+              <p>
+                Group "Work" projects + workflows separately from "Side
+                Project" or "Personal." Switching context narrows
+                everything: Bridge, Inbox, drafts, cron-driven
+                workflows.
+              </p>
+            </div>
+          )}
           {creating ? (
             <div className="workspace-switcher__create">
               <input

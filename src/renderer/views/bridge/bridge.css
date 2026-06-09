@@ -63,11 +63,18 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   padding: 22px;
-  border: 1px solid var(--bridge-edge);
+  /* Frame border picks up the workspace accent (workspace color set
+     by the .bridge style attribute). Falls back to var(--bridge-edge)
+     cyan when the workspace has no color — the variable IS the
+     workspace color when set, else inherits the cyan brand. */
+  border: 1px solid color-mix(in srgb, var(--workspace-accent, var(--bridge-cyan)) 35%, transparent);
   border-radius: 14px;
   background: var(--bridge-panel);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+  /* Subtle glow with the workspace accent — barely there, just a
+     reassurance pulse. */
+  box-shadow: 0 0 28px -8px color-mix(in srgb, var(--workspace-accent, var(--bridge-cyan)) 22%, transparent);
   /* Clip horizontal blow-outs but let the page grow vertically —
      the outer .bridge container handles vertical scroll. */
   overflow-x: hidden;
@@ -79,7 +86,9 @@
   position: absolute;
   width: 22px;
   height: 22px;
-  border: 1px solid var(--bridge-edge-strong);
+  /* Corner notches also pick up the workspace accent so the HUD
+     framing reads as a unified colored boundary. */
+  border: 1px solid color-mix(in srgb, var(--workspace-accent, var(--bridge-cyan)) 55%, transparent);
   pointer-events: none;
 }
 .bridge__notch--tl {
@@ -151,6 +160,20 @@
   letter-spacing: 1px;
   color: var(--bridge-mute);
   text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Tiny dot in the workspace accent color sits before the scope label —
+   peripheral-vision confirmation of which workspace you're in without
+   having to look at the switcher pill. */
+.bridge__workspace-pip {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--workspace-accent, var(--bridge-cyan));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--workspace-accent, var(--bridge-cyan)) 60%, transparent);
 }
 
 .bridge__focus-zone,

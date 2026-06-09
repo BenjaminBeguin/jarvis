@@ -7,6 +7,7 @@ import {
   loadActiveWorkspaceId,
   saveActiveWorkspaceId,
 } from '../auth.js';
+import { setTrayWorkspace } from '../tray.js';
 import type { IpcDeps } from './types.js';
 
 /**
@@ -67,6 +68,15 @@ export function registerWorkspacesIpc({
     // bad input to the default so the active id is never dangling.
     const target = id && workspaces.get(id) ? id : workspaces.getDefault().id;
     saveActiveWorkspaceId(target);
+    // Tray title prefix updates in lockstep so the menu bar reflects
+    // the new context immediately. Default workspace = no prefix.
+    const def = workspaces.get(target);
+    if (def) {
+      setTrayWorkspace({
+        label: def.icon ?? def.name.charAt(0).toUpperCase(),
+        isDefault: def.default === true,
+      });
+    }
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(IpcChannels.activeWorkspaceChanged, target);
     }
