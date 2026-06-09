@@ -109,6 +109,7 @@ export class WorkflowRunner extends EventEmitter {
     const runCtx: WorkflowNodeContext = {
       ...this.nodeCtx,
       workflowId: def.id,
+      workspaceId: def.workspaceId ?? null,
       seed,
     };
     const compile = compileWorkflow(def, runCtx, seed);

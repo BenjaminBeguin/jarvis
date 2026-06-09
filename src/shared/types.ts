@@ -1451,6 +1451,10 @@ export interface Draft {
   why?: string | null;
   /** Workflow run that produced this draft, if any. Audit trail. */
   workflowId?: string | null;
+  /** Workspace this draft belongs to. Inherited from the originating
+   *  workflow at create time, or null for legacy drafts. Drafts tab
+   *  filters by this when a workspace is active. */
+  workspaceId?: string | null;
   createdAt: number;
   updatedAt: number;
   sentAt?: number | null;
@@ -1477,6 +1481,10 @@ export interface NewDraft {
    *  sendAction } pair. */
   actions: DraftAction[];
   workflowId?: string | null;
+  /** Workspace this draft belongs to. Stamped by the workflow node
+   *  from the originating workflow's workspaceId, OR by callers that
+   *  know the user's active context. */
+  workspaceId?: string | null;
 }
 
 export interface WorkflowNodeDef {

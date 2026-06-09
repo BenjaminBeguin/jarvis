@@ -149,6 +149,10 @@ export const draftStoreWriteNode = fromPromise<
       why: coerceString(raw.why) ?? null,
       actions,
       workflowId: ctx.workflowId ?? null,
+      // Inherit the workspace from the originating workflow so the
+      // Drafts tab can filter by current context. Null = legacy /
+      // cross-workspace draft, visible everywhere.
+      workspaceId: ctx.workspaceId ?? null,
     };
     created.push(ctx.drafts.create(newDraft));
   }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Draft } from '../../shared/types';
 import { toast } from './Toaster';
+import { useWorkspace } from './workspaces/useWorkspace';
 
 /**
  * Drafts — the user-facing surface for AI-generated drafts awaiting
@@ -142,10 +143,21 @@ export function Drafts() {
     return ['all', ...Array.from(set).sort()];
   }, [drafts]);
 
+  const workspace = useWorkspace();
   const filtered = useMemo(() => {
-    if (channelFilter === 'all') return drafts;
-    return drafts.filter((d) => d.channel === channelFilter);
-  }, [drafts, channelFilter]);
+    // Workspace filter: drop drafts tied to a different workspace.
+    // Drafts without a workspaceId (legacy / pre-tag) stay visible
+    // everywhere — same as the other "global = visible" rule across
+    // the app.
+    let next = drafts;
+    if (workspace.id) {
+      next = next.filter(
+        (d) => !d.workspaceId || d.workspaceId === workspace.id,
+      );
+    }
+    if (channelFilter === 'all') return next;
+    return next.filter((d) => d.channel === channelFilter);
+  }, [drafts, channelFilter, workspace.id]);
 
   const pendingCount = useMemo(
     () => drafts.filter((d) => d.status === 'pending').length,

@@ -13,7 +13,7 @@ import type {
   TaskSummary,
 } from '@shared/types';
 import { AsyncMessageQueue } from './async-message-queue.js';
-import { loadSpeedBias } from './auth.js';
+import { loadActiveWorkspaceId, loadSpeedBias } from './auth.js';
 import { appendTaskEvent, insertTask, updateTaskStatus } from './db.js';
 import {
   modelForTier,
@@ -967,6 +967,12 @@ export class TaskRunner extends EventEmitter {
         // skill's pinned model). Pass undefined for skill asks so the
         // store keys on skillId alone.
         ...(skillId ? {} : { model: req.model }),
+        // Workspace at dispatch time. Pools never cross workspaces —
+        // resuming a Personal-context session while in Work would
+        // graft the wrong project memory + preferences onto the
+        // turn. Reads loadActiveWorkspaceId() lazily so launches in
+        // the milliseconds after a workspace switch see the new id.
+        workspaceId: loadActiveWorkspaceId(),
         origin,
         projectName,
         forceFresh: req.forceFreshSession === true,

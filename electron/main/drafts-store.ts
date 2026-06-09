@@ -28,6 +28,7 @@ interface DraftRow {
   why: string | null;
   send_action: string;
   workflow_id: string | null;
+  workspace_id: string | null;
   created_at: number;
   updated_at: number;
   sent_at: number | null;
@@ -122,6 +123,7 @@ function rowToDraft(row: DraftRow): Draft {
     originalBody: row.original_body,
     why: row.why,
     workflowId: row.workflow_id,
+    workspaceId: row.workspace_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     sentAt: row.sent_at,
@@ -224,12 +226,12 @@ export class DraftsStore extends EventEmitter {
       `INSERT INTO ai_drafts (
         id, source, channel, source_item_id, status, intent, actions, title,
         context_summary, context_full, current_body, original_body,
-        why, send_action, workflow_id, created_at, updated_at,
+        why, send_action, workflow_id, workspace_id, created_at, updated_at,
         sent_at, sent_result
       ) VALUES (
         @id, @source, @channel, @sourceItemId, 'pending', @intent, @actions, @title,
         @contextSummary, @contextFull, @body, @body,
-        @why, @sendAction, @workflowId, @now, @now,
+        @why, @sendAction, @workflowId, @workspaceId, @now, @now,
         NULL, NULL
       )`,
     ).run({
@@ -246,6 +248,7 @@ export class DraftsStore extends EventEmitter {
       why: input.why ?? null,
       sendAction: JSON.stringify(primaryAction?.sendAction ?? {}),
       workflowId: input.workflowId ?? null,
+      workspaceId: input.workspaceId ?? null,
       now,
     });
     const draft = this.get(id);

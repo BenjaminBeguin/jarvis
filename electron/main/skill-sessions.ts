@@ -58,19 +58,22 @@ interface IndexEntry {
  */
 export const FREE_TEXT_BUCKET = '__freetext__';
 
-/** Bucket key — skill + model + origin + project so different threads
- *  don't mix. Model is part of the key so a Sonnet ask can't accidentally
- *  resume a Haiku session (different model on the same conversation
- *  thread = jarring switch in voice). Defaults to '_' when the caller
- *  didn't pin a model — skill-pooled tasks land there since their
- *  model comes from skill frontmatter, not the request. */
+/** Bucket key — skill + model + workspace + origin + project so
+ *  different threads don't mix. Model is part of the key so a Sonnet
+ *  ask can't accidentally resume a Haiku session (different model on
+ *  the same conversation thread = jarring switch in voice). Workspace
+ *  segregates contexts: switching workspaces should never resume the
+ *  other workspace's pooled session — a "Side Project" /status turn
+ *  shouldn't graft onto "Work" context. Defaults to '_' for missing
+ *  slots. */
 function keyFor(
   skillId: string,
   model: string | null | undefined,
+  workspaceId: string | null | undefined,
   origin: string,
   projectName: string | null | undefined,
 ): string {
-  return `${skillId}|${model ?? '_'}|${origin}|${projectName ?? '_'}`;
+  return `${skillId}|${model ?? '_'}|${workspaceId ?? '_'}|${origin}|${projectName ?? '_'}`;
 }
 
 export interface SkillPoolingDecision {
@@ -131,6 +134,10 @@ export class SkillSessionStore {
     /** Model id for free-text scoping. Ignored for skill pools
      *  (skill frontmatter pins the model). */
     model?: string | null | undefined;
+    /** Workspace id at dispatch time. Segregates pools by context so
+     *  resuming a Work-context session while in Personal doesn't
+     *  graft the wrong project / preferences onto the new turn. */
+    workspaceId?: string | null | undefined;
     origin: string;
     projectName: string | null | undefined;
     forceFresh?: boolean;
@@ -155,6 +162,7 @@ export class SkillSessionStore {
     const bucketKey = keyFor(
       skillSlot,
       modelSlot,
+      input.workspaceId,
       input.origin,
       input.projectName,
     );
@@ -206,12 +214,14 @@ export class SkillSessionStore {
   fork(input: {
     skillId: string;
     model?: string | null | undefined;
+    workspaceId?: string | null | undefined;
     origin: string;
     projectName: string | null | undefined;
   }): void {
     const key = keyFor(
       input.skillId,
       input.model ?? null,
+      input.workspaceId ?? null,
       input.origin,
       input.projectName,
     );

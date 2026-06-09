@@ -118,6 +118,13 @@ const MIGRATIONS = [
   // single-action list at read time (from the row's intent +
   // send_action JSON).
   `ALTER TABLE ai_drafts ADD COLUMN actions TEXT NOT NULL DEFAULT '[]';`,
+  // Workspace tag — Phase 2 of workspaces. Drafts produced by a
+  // workspace-tagged workflow inherit that workspaceId so the
+  // Drafts tab can filter to current-context entries. Null = legacy
+  // / cross-workspace; the renderer treats null as "always visible."
+  `ALTER TABLE ai_drafts ADD COLUMN workspace_id TEXT;`,
+  `CREATE INDEX IF NOT EXISTS idx_ai_drafts_workspace
+    ON ai_drafts(workspace_id, status, updated_at DESC);`,
   // ─── Artifact substrate ────────────────────────────────────────────────────
   // The "memory backbone" for everything Jarvis knows about your work.
   // Every meeting / note / briefing / goal / reminder / task / draft / etc.

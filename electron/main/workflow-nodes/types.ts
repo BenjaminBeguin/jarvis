@@ -35,6 +35,11 @@ export interface WorkflowNodeContext {
    *  workflow runner before each run; undefined when a node is being
    *  exercised outside a workflow run (rare). */
   workflowId?: string;
+  /** Workspace tag from the originating WorkflowDef. Threaded through
+   *  so nodes that produce persistent artifacts (drafts, inbox items,
+   *  activity events) can stamp the same workspaceId on the output.
+   *  Null/undefined for workspace-less workflows (legacy / global). */
+  workspaceId?: string | null;
   /** Initial input passed to the first node (the "trigger payload").
    *  For autopilot inbox-changed scenarios, this is `{ kind:
    *  'inbox-changed', item }`. Threaded through so later nodes —
