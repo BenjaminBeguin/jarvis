@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { ActivityEvent, TaskSummary } from '../../shared/types';
+import type {
+  ActivityEvent,
+  ProjectDef,
+  TaskSummary,
+} from '../../shared/types';
+
+import { entityInActiveWorkspace } from './workspaces/workspaceFilters';
+import { useWorkspace } from './workspaces/useWorkspace';
 
 /**
  * Activity tab — Phase 2.
@@ -42,6 +49,12 @@ const FILTER_KEY = 'jarvis.activity.filter';
 export function Activity() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
+  const [projects, setProjects] = useState<ProjectDef[]>([]);
+  const workspace = useWorkspace();
+  useEffect(() => {
+    void window.jarvis.listProjects().then(setProjects);
+    return window.jarvis.onProjectsChanged(setProjects);
+  }, []);
   // Active project from the Shell's scope picker. When set, the feed
   // restricts to task-derived rows whose projectName matches and
   // event rows whose detail.projectName matches. Event rows without
@@ -152,6 +165,40 @@ export function Activity() {
         return meta?.category === filter;
       });
     }
+    // Workspace filter — runs BEFORE the project-scope filter so the
+    // user only ever sees rows tied to projects in the current
+    // workspace. Rows without any project tag (auth changes, API key
+    // updates, browser visits) stay visible — those are global audit
+    // trail.
+    if (workspace.id) {
+      merged = merged.filter((r) => {
+        if (r.kind === 'browser') return true;
+        if (r.kind === 'send') {
+          return entityInActiveWorkspace({
+            projectName: r.task.projectName ?? null,
+            projects,
+            activeWorkspaceId: workspace.id,
+          });
+        }
+        const detail = r.event.detail as
+          | { projectName?: unknown; project?: unknown }
+          | null
+          | undefined;
+        const evtProject =
+          detail && typeof detail === 'object'
+            ? typeof detail.projectName === 'string'
+              ? detail.projectName
+              : typeof detail.project === 'string'
+                ? detail.project
+                : null
+            : null;
+        return entityInActiveWorkspace({
+          projectName: evtProject,
+          projects,
+          activeWorkspaceId: workspace.id,
+        });
+      });
+    }
     // Scope filter — task rows respect projectName exactly; event rows
     // either carry a project in detail.projectName / detail.project,
     // or are global (kept). The "always-show-global" rule mirrors the
@@ -179,7 +226,7 @@ export function Activity() {
       });
     }
     return merged.slice(0, 200);
-  }, [tasks, events, browserVisits, filter, activeProject]);
+  }, [tasks, events, browserVisits, filter, activeProject, workspace.id, projects]);
 
   // Counts per category — surfaces in the chip labels so the user
   // sees "Reminders 3" instead of just "Reminders." Helps decide what

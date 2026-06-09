@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { AppMode, AppStatus, ModuleSummary, ProjectDef } from '../../shared/types';
 import { getModulePage } from '../modules/registry';
@@ -14,6 +14,7 @@ import { NewProjectDialog } from './projects/NewProjectDialog';
 import { Projects } from './projects/Projects';
 import { ScopePicker } from './projects/ScopePicker';
 import { WorkspaceSwitcher } from './workspaces/WorkspaceSwitcher';
+import { useWorkspace } from './workspaces/useWorkspace';
 import { Activity } from './Activity';
 import { MemoryPage } from './memory/MemoryPage';
 import { BuildingHome } from './BuildingHome';
@@ -138,7 +139,7 @@ export function Shell({ status }: Props) {
       return null;
     }
   });
-  const [projectList, setProjectList] = useState<ProjectDef[]>([]);
+  const [projectListAll, setProjectListAll] = useState<ProjectDef[]>([]);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectInitial, setNewProjectInitial] = useState<string>('');
   // Skip the toast on the initial render — the activeProject useEffect
@@ -147,10 +148,39 @@ export function Shell({ status }: Props) {
   const scopeToastSeededRef = useRef(false);
 
   useEffect(() => {
-    const apply = (list: ProjectDef[]) => setProjectList(list);
+    const apply = (list: ProjectDef[]) => setProjectListAll(list);
     void window.jarvis.listProjects().then(apply);
     return window.jarvis.onProjectsChanged(apply);
   }, []);
+
+  // Workspace-scoped project list — every downstream consumer (scope
+  // picker, Bridge Pulse, NewProject defaults) reads this filtered
+  // view. Workspace-less ("global") projects show in every workspace
+  // by design — they're shared concerns that don't belong to one
+  // context.
+  const workspace = useWorkspace();
+  const projectList = useMemo(
+    () => projectListAll.filter((p) => workspace.belongs(p)),
+    [projectListAll, workspace],
+  );
+
+  // When the workspace changes, drop any active project scope that
+  // doesn't belong to the new workspace. Without this you'd be on
+  // "Side Project" workspace but still scoped to a "work" project,
+  // which is the exact mental confusion workspaces exist to avoid.
+  useEffect(() => {
+    if (!workspace.id || !activeProject) return;
+    const stillVisible = projectList.some((p) => p.name === activeProject);
+    if (!stillVisible) {
+      setActiveProject(null);
+      try {
+        window.localStorage.removeItem('jarvis.activeProject');
+      } catch {
+        // private mode etc.
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace.id]);
 
   // Pending-draft count for the sidebar badge. Re-counts on every
   // drafts:changed broadcast — cheap because listDrafts is a SQLite

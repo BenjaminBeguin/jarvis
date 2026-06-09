@@ -6,6 +6,7 @@ import {
   type ProjectDef,
 } from '../../../shared/types';
 
+import { useWorkspace } from '../workspaces/useWorkspace';
 import { Linkified } from './Linkified';
 import { predictAction } from './predictAction';
 import { RowSession } from './RowSession';
@@ -47,7 +48,8 @@ export function FocusCard({
   onOpenSession,
 }: Props) {
   const [items, setItems] = useState<InboxItem[]>([]);
-  const [projects, setProjects] = useState<ProjectDef[]>([]);
+  const [projectsAll, setProjectsAll] = useState<ProjectDef[]>([]);
+  const workspace = useWorkspace();
 
   useEffect(() => {
     void window.jarvis.listInbox().then(setItems);
@@ -57,9 +59,19 @@ export function FocusCard({
   }, []);
 
   useEffect(() => {
-    void window.jarvis.listProjects().then(setProjects);
-    return window.jarvis.onProjectsChanged?.(setProjects);
+    void window.jarvis.listProjects().then(setProjectsAll);
+    return window.jarvis.onProjectsChanged?.(setProjectsAll);
   }, []);
+
+  // Only project rows in the current workspace participate in
+  // matching. An inbox item that would have been assigned to a
+  // project outside this workspace falls through to "no project
+  // match" → still visible (global), so workspace switching narrows
+  // attention without hiding cross-cutting items.
+  const projects = useMemo(
+    () => projectsAll.filter((p) => workspace.belongs(p)),
+    [projectsAll, workspace],
+  );
 
   // Apply project scope BEFORE picking focus. When scope is set, only
   // items matched to that project (via repo / alias / keyword) make
@@ -80,13 +92,27 @@ export function FocusCard({
         typeof it.attendeeCount === 'number' &&
         it.attendeeCount <= 1
       );
-    if (!activeProject) return items.filter(dropSolo);
+    // Workspace pass: drop items whose matched project lives in a
+    // DIFFERENT workspace. Items matching no project are kept
+    // (global / cross-workspace). Items matching a current-workspace
+    // project or a workspace-less project are kept.
+    const inActiveWorkspace = (it: InboxItem): boolean => {
+      if (!workspace.id) return true;
+      // Use the full project list (projectsAll) for cross-workspace
+      // detection — the scoped `projects` list would never match a
+      // foreign-workspace project so we couldn't tell "doesn't match
+      // anything" apart from "matches something out of scope."
+      const matchedAll = findMatchingProject(it, projectsAll);
+      if (!matchedAll) return true;
+      if (!matchedAll.workspaceId) return true; // global project
+      return matchedAll.workspaceId === workspace.id;
+    };
+    const base = items.filter(dropSolo).filter(inActiveWorkspace);
+    if (!activeProject) return base;
     const active = projects.find((p) => p.name === activeProject);
-    if (!active) return items.filter(dropSolo);
-    return items
-      .filter(dropSolo)
-      .filter((it) => itemBelongsToProject(it, active, projects));
-  }, [items, activeProject, projects]);
+    if (!active) return base;
+    return base.filter((it) => itemBelongsToProject(it, active, projects));
+  }, [items, activeProject, projects, projectsAll, workspace.id]);
 
   const focus = useMemo(() => pickFocus(scopedItems), [scopedItems]);
   const grouped = useMemo(
@@ -463,6 +489,22 @@ function itemBelongsToProject(
     if (k.length > 2 && haystack.includes(k.toLowerCase())) return true;
   }
   return false;
+}
+
+/**
+ * Find the first project that claims an inbox item — used by the
+ * workspace filter to detect "this item belongs to another workspace
+ * I'm not in." Walks every project (not the workspace-scoped subset)
+ * so cross-workspace items can be filtered out cleanly.
+ */
+function findMatchingProject(
+  item: InboxItem,
+  allProjects: ProjectDef[],
+): ProjectDef | null {
+  for (const p of allProjects) {
+    if (itemBelongsToProject(item, p, allProjects)) return p;
+  }
+  return null;
 }
 
 function sourceLabel(item: InboxItem): string {

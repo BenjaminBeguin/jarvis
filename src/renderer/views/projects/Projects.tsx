@@ -7,6 +7,7 @@ import type {
 import { MarkdownText } from '../MarkdownText';
 import { formatRelative } from '../TaskList';
 import { toast } from '../Toaster';
+import { useWorkspace } from '../workspaces/useWorkspace';
 import { NewProjectDialog } from './NewProjectDialog';
 
 /**
@@ -24,6 +25,55 @@ import { NewProjectDialog } from './NewProjectDialog';
 export function Projects() {
   const [projects, setProjects] = useState<ProjectDef[]>([]);
   const [activeProject, setActiveProject] = useState<string | null>(null);
+  const workspace = useWorkspace();
+  // Bucket the project list by workspace so the Settings page reads
+  // as "Personal · Side Project · Work" rather than a flat alphabetical
+  // dump. Workspaces appear in the canonical order (default first),
+  // followed by an "Other workspaces" / "No workspace" bucket if any
+  // dangling-id projects exist (e.g. a deleted workspace's leftovers).
+  const groupedProjects = useMemo(() => {
+    const buckets = new Map<string, ProjectDef[]>();
+    const orphans: ProjectDef[] = [];
+    const noWorkspace: ProjectDef[] = [];
+    for (const p of projects) {
+      if (!p.workspaceId) {
+        noWorkspace.push(p);
+        continue;
+      }
+      if (!workspace.all.find((w) => w.id === p.workspaceId)) {
+        orphans.push(p);
+        continue;
+      }
+      const arr = buckets.get(p.workspaceId) ?? [];
+      arr.push(p);
+      buckets.set(p.workspaceId, arr);
+    }
+    const out: Array<{
+      id: string;
+      label: string;
+      color?: string;
+      icon?: string;
+      items: ProjectDef[];
+    }> = [];
+    for (const w of workspace.all) {
+      const items = buckets.get(w.id) ?? [];
+      if (items.length === 0) continue;
+      out.push({
+        id: w.id,
+        label: w.name,
+        color: w.color,
+        icon: w.icon,
+        items,
+      });
+    }
+    if (noWorkspace.length > 0) {
+      out.push({ id: '__global', label: 'Global (no workspace)', items: noWorkspace });
+    }
+    if (orphans.length > 0) {
+      out.push({ id: '__orphan', label: 'Unassigned (workspace deleted)', items: orphans });
+    }
+    return out;
+  }, [projects, workspace.all]);
   const [memory, setMemory] = useState<ProjectMemoryFile[]>([]);
   const [memoryCounts, setMemoryCounts] = useState<Record<string, number>>({});
   // Per-project 30-day spend from the cost breakdown — small badge on
@@ -207,49 +257,72 @@ export function Projects() {
             <code>~/.jarvis/projects.json</code> directly.
           </div>
         )}
-        <ul className="projects__list">
-          {projects.map((p) => {
-            const count = memoryCounts[p.name] ?? 0;
-            return (
-              <li key={p.name} className="projects__list-item">
-                <button
-                  className={`project-card${
-                    p.name === activeProject ? ' project-card--active' : ''
-                  }`}
-                  onClick={() => setActiveProject(p.name)}
+        {groupedProjects.map((group) => (
+          <section key={group.id} className="projects__group">
+            <header className="projects__group-head">
+              {group.icon && (
+                <span
+                  className="projects__group-icon"
+                  style={
+                    group.color
+                      ? { background: group.color }
+                      : undefined
+                  }
+                  aria-hidden
                 >
-                  <div className="project-card__name">{p.name}</div>
-                  {p.repo && <div className="project-card__repo">{p.repo}</div>}
-                  {p.description && (
-                    <div className="project-card__desc">{p.description}</div>
-                  )}
-                  <div className="project-card__meta">
-                    <span>{count} memory file{count === 1 ? '' : 's'}</span>
-                    {p.aliases.length > 0 && (
-                      <span>· {p.aliases.length} alias{p.aliases.length === 1 ? '' : 'es'}</span>
-                    )}
-                    {projectCost[p.name] != null && projectCost[p.name]! > 0 && (
-                      <span title="Last 30 days of agent spend scoped to this project">
-                        · ${projectCost[p.name]!.toFixed(2)}/30d
-                      </span>
-                    )}
-                  </div>
-                </button>
-                <button
-                  className="projects__edit-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditProject(p);
-                  }}
-                  title="Edit name / aliases / repo / path / description"
-                  aria-label={`Edit ${p.name}`}
-                >
-                  ✎
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+                  {group.icon}
+                </span>
+              )}
+              <span className="projects__group-label">{group.label}</span>
+              <span className="projects__group-count">
+                {group.items.length}
+              </span>
+            </header>
+            <ul className="projects__list">
+              {group.items.map((p) => {
+                const count = memoryCounts[p.name] ?? 0;
+                return (
+                  <li key={p.name} className="projects__list-item">
+                    <button
+                      className={`project-card${
+                        p.name === activeProject ? ' project-card--active' : ''
+                      }`}
+                      onClick={() => setActiveProject(p.name)}
+                    >
+                      <div className="project-card__name">{p.name}</div>
+                      {p.repo && <div className="project-card__repo">{p.repo}</div>}
+                      {p.description && (
+                        <div className="project-card__desc">{p.description}</div>
+                      )}
+                      <div className="project-card__meta">
+                        <span>{count} memory file{count === 1 ? '' : 's'}</span>
+                        {p.aliases.length > 0 && (
+                          <span>· {p.aliases.length} alias{p.aliases.length === 1 ? '' : 'es'}</span>
+                        )}
+                        {projectCost[p.name] != null && projectCost[p.name]! > 0 && (
+                          <span title="Last 30 days of agent spend scoped to this project">
+                            · ${projectCost[p.name]!.toFixed(2)}/30d
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                    <button
+                      className="projects__edit-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditProject(p);
+                      }}
+                      title="Edit name / aliases / repo / path / description"
+                      aria-label={`Edit ${p.name}`}
+                    >
+                      ✎
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
       </aside>
 
       <main className="projects__main">

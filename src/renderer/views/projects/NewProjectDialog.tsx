@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { ProjectDef, ProjectTemplateSummary } from '../../../shared/types';
 import { toast } from '../Toaster';
+import { useWorkspace } from '../workspaces/useWorkspace';
 
 interface Props {
   open: boolean;
@@ -32,7 +33,9 @@ export function NewProjectDialog({
   onDelete,
 }: Props) {
   const isEdit = !!editing;
+  const workspace = useWorkspace();
   const [name, setName] = useState(initialName ?? '');
+  const [workspaceId, setWorkspaceId] = useState<string>('');
   const [aliases, setAliases] = useState('');
   // Repos input is a textarea — one entry per line — so the user can
   // wire BE + FE + mobile repos to a single project. The legacy
@@ -53,6 +56,9 @@ export function NewProjectDialog({
     if (!open) return;
     if (editing) {
       setName(editing.name);
+      // Empty string in the select maps to "no workspace" (global
+      // project — visible in every workspace).
+      setWorkspaceId(editing.workspaceId ?? '');
       setAliases(editing.aliases.join(', '));
       // Merge legacy `repo` + new `repos[]` so editing an existing
       // project doesn't lose either source. We persist back via
@@ -67,6 +73,9 @@ export function NewProjectDialog({
       setDescription(editing.description ?? '');
     } else {
       setName(initialName ?? '');
+      // Default the new project to the active workspace. Falls back
+      // to the default workspace id when nothing's selected.
+      setWorkspaceId(workspace.id ?? workspace.active?.id ?? '');
       setAliases('');
       setReposText('');
       setKeywords('');
@@ -118,6 +127,9 @@ export function NewProjectDialog({
         .filter(Boolean);
       const fields = {
         name: trimmed,
+        // Empty string from the picker = "no workspace" (global).
+        // Anything else is the explicit workspace selection.
+        workspaceId: workspaceId.trim() || undefined,
         aliases: aliasList,
         // New canonical shape: persist multi-repo through `repos[]`.
         // The legacy `repo` field is cleared on save so the source
@@ -214,6 +226,27 @@ export function NewProjectDialog({
               }}
             />
             <small>What you'll say or type. Used as the canonical label.</small>
+          </label>
+
+          <label className="project-dialog__field">
+            <span>Workspace</span>
+            <select
+              value={workspaceId}
+              onChange={(e) => setWorkspaceId(e.target.value)}
+            >
+              <option value="">No workspace (global — show everywhere)</option>
+              {workspace.all.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                  {w.default ? ' · default' : ''}
+                </option>
+              ))}
+            </select>
+            <small>
+              Which workspace owns this project. Switch workspaces in the
+              header to narrow / widen what you see. Leave as "No workspace"
+              for shared concerns that span every context.
+            </small>
           </label>
 
           <label className="project-dialog__field">

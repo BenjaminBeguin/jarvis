@@ -5,6 +5,7 @@ import type {
   InboxItem,
   InboxPrefs,
   MeetingDetectionStatus,
+  ProjectDef,
   TaskSummary,
 } from '../../shared/types';
 import { DEFAULT_INBOX_PREFS } from '../../shared/types';
@@ -12,6 +13,8 @@ import { openTaskOverlay } from '../task-overlay-store';
 import { TaskBindingBadge } from './TaskBindingBadge';
 import { toast } from './Toaster';
 import { useTaskBinding, type TaskBindingState } from './useTaskBinding';
+import { entityInActiveWorkspace } from './workspaces/workspaceFilters';
+import { useWorkspace } from './workspaces/useWorkspace';
 
 /**
  * Daily-driver triage view. Lists PRs to review, comments on your PRs,
@@ -56,6 +59,12 @@ export function Inbox({
   // snooze / open-url / action treatment.
   const singleSource = sourceFilter !== undefined;
   const [items, setItems] = useState<InboxItem[]>([]);
+  const [projectList, setProjectList] = useState<ProjectDef[]>([]);
+  const workspace = useWorkspace();
+  useEffect(() => {
+    void window.jarvis.listProjects().then(setProjectList);
+    return window.jarvis.onProjectsChanged(setProjectList);
+  }, []);
   const [dismissed, setDismissed] = useState<InboxItem[]>([]);
   const [showDismissed, setShowDismissed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -294,12 +303,26 @@ export function Inbox({
       });
     }
 
-    // 3. Project scope: items matching the active project AND items
+    // 3. Workspace scope: drop items whose `project` belongs to a
+    //    different workspace. Items without a project tag stay
+    //    (cross-workspace concerns); items pointing at a project the
+    //    store doesn't recognise also stay (don't lose orphans on
+    //    rename).
+    if (workspace.id) {
+      next = next.filter((it) =>
+        entityInActiveWorkspace({
+          projectName: it.project ?? null,
+          projects: projectList,
+          activeWorkspaceId: workspace.id,
+        }),
+      );
+    }
+    // 4. Project scope: items matching the active project AND items
     //    with no project tag (calendar events, generic reminders, …)
     //    stay; items belonging to OTHER projects are hidden.
     if (!filterByScope || !activeProject) return next;
     return next.filter((it) => !it.project || it.project === activeProject);
-  }, [items, filterByScope, activeProject, inboxPrefs, singleSource, sourceFilter, maxItems]);
+  }, [items, filterByScope, activeProject, inboxPrefs, singleSource, sourceFilter, maxItems, workspace.id, projectList]);
 
   const grouped = useMemo(() => groupBySource(filteredItems), [filteredItems]);
   const hiddenCount = items.length - filteredItems.length;

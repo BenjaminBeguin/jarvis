@@ -13073,6 +13073,50 @@ button:disabled:hover {
   gap: 6px;
 }
 
+/* Workspace-grouped project section in Settings. Each group has a
+   small label + count and the project list nests under it; the
+   workspace icon (when set) gets a tiny colored chip so the user can
+   eyeball which context owns each project. */
+.projects__group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.projects__group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+  margin-top: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 1.8px;
+  color: rgba(214, 238, 247, 0.55);
+  text-transform: uppercase;
+}
+.projects__group-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  color: rgba(4, 7, 11, 0.9);
+  font-size: 9px;
+  font-weight: 700;
+}
+.projects__group-label {
+  color: rgba(214, 238, 247, 0.85);
+}
+.projects__group-count {
+  background: rgba(110, 231, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: rgba(110, 231, 255, 0.85);
+  font-size: 9px;
+}
+
 .projects__empty {
   font-family: var(--mono);
   font-size: 11px;

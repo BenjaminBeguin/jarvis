@@ -7,6 +7,7 @@ import {
   type TaskSummary,
 } from '../../../shared/types';
 
+import { useWorkspace } from '../workspaces/useWorkspace';
 import { Linkified } from './Linkified';
 import { predictAction } from './predictAction';
 
@@ -66,14 +67,23 @@ interface Props {
 }
 
 export function ProjectPulse({ activeProject, onSelectProject }: Props) {
-  const [projects, setProjects] = useState<ProjectDef[]>([]);
+  const [projectsAll, setProjectsAll] = useState<ProjectDef[]>([]);
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
+  const workspace = useWorkspace();
 
   useEffect(() => {
-    void window.jarvis.listProjects().then(setProjects);
-    return window.jarvis.onProjectsChanged?.(setProjects);
+    void window.jarvis.listProjects().then(setProjectsAll);
+    return window.jarvis.onProjectsChanged?.(setProjectsAll);
   }, []);
+
+  // Workspace-scoped projects — only cards for the current workspace
+  // render. Workspace-less projects ("global") appear in every
+  // workspace as a fall-through, matching the rest of the app.
+  const projects = useMemo(
+    () => projectsAll.filter((p) => workspace.belongs(p)),
+    [projectsAll, workspace],
+  );
 
   useEffect(() => {
     void window.jarvis.listInbox().then(setInbox);
