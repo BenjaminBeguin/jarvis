@@ -1725,6 +1725,297 @@ button:disabled:hover {
   cursor: default;
 }
 
+/* Workspaces settings page (Settings → Workspaces). Two-column layout
+   like the Projects page: rail of workspaces on the left, editor on
+   the right (name / icon / color / description / overlay markdown /
+   delete). */
+.workspaces-page {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  height: 100%;
+  overflow: hidden;
+}
+.workspaces-page__rail {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(110, 231, 255, 0.15);
+  overflow-y: auto;
+  padding: 18px 14px;
+  gap: 12px;
+}
+.workspaces-page__rail-head h2 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: 1px;
+  color: #ecf6fc;
+}
+.workspaces-page__rail-head p {
+  margin: 4px 0 0 0;
+  font-size: 11px;
+  color: rgba(214, 238, 247, 0.55);
+}
+.workspaces-page__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.workspaces-page__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #d6eef7;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.workspaces-page__item:hover {
+  background: rgba(110, 231, 255, 0.05);
+}
+.workspaces-page__item--selected {
+  background: rgba(110, 231, 255, 0.1);
+  border-color: rgba(110, 231, 255, 0.4);
+}
+.workspaces-page__item-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: rgba(4, 7, 11, 0.9);
+  font-size: 12px;
+  font-weight: 700;
+}
+.workspaces-page__item-name {
+  flex: 1;
+}
+.workspaces-page__item-badge {
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(214, 238, 247, 0.5);
+  background: rgba(110, 231, 255, 0.07);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.workspaces-page__item-badge--active {
+  color: rgba(125, 240, 184, 0.9);
+  background: rgba(125, 240, 184, 0.1);
+}
+.workspaces-page__create {
+  display: flex;
+  gap: 6px;
+}
+.workspaces-page__create input {
+  flex: 1;
+  background: rgba(8, 14, 22, 0.7);
+  border: 1px solid rgba(110, 231, 255, 0.3);
+  border-radius: 3px;
+  padding: 6px 8px;
+  color: #d6eef7;
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.workspaces-page__create button {
+  background: rgba(110, 231, 255, 0.2);
+  border: 1px solid rgba(110, 231, 255, 0.5);
+  border-radius: 3px;
+  padding: 5px 12px;
+  color: #aef3ff;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.workspaces-page__create button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.workspaces-page__main {
+  overflow-y: auto;
+  padding: 22px 28px;
+}
+.workspaces-page__empty {
+  color: rgba(214, 238, 247, 0.5);
+  font-size: 13px;
+}
+
+.workspace-editor__head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 22px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(110, 231, 255, 0.15);
+}
+.workspace-editor__head h2 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: 0.5px;
+  color: #ecf6fc;
+}
+.workspace-editor__head code {
+  font-size: 11px;
+  color: rgba(214, 238, 247, 0.45);
+}
+.workspace-editor__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 18px;
+}
+.workspace-editor__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.workspace-editor__field--wide {
+  grid-column: 1 / -1;
+}
+.workspace-editor__field > span {
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(110, 231, 255, 0.7);
+}
+.workspace-editor__field input[type='text'],
+.workspace-editor__field > input:not([type='color']) {
+  background: rgba(8, 14, 22, 0.55);
+  border: 1px solid rgba(110, 231, 255, 0.25);
+  border-radius: 3px;
+  padding: 6px 8px;
+  color: #d6eef7;
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.workspace-editor__field small {
+  font-size: 10px;
+  color: rgba(214, 238, 247, 0.45);
+  line-height: 1.4;
+}
+.workspace-editor__color {
+  display: flex;
+  gap: 8px;
+}
+.workspace-editor__color input[type='color'] {
+  width: 36px;
+  height: 30px;
+  background: transparent;
+  border: 1px solid rgba(110, 231, 255, 0.25);
+  border-radius: 3px;
+  padding: 0;
+  cursor: pointer;
+}
+.workspace-editor__color input[type='text'] {
+  flex: 1;
+  font-family: ui-monospace, monospace;
+}
+.workspace-editor__toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11px;
+  color: rgba(214, 238, 247, 0.65);
+  line-height: 1.45;
+}
+.workspace-editor__toggle input {
+  margin-top: 2px;
+}
+
+.workspace-editor__overlay {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px dashed rgba(110, 231, 255, 0.2);
+}
+.workspace-editor__overlay-head h3 {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: rgba(110, 231, 255, 0.85);
+}
+.workspace-editor__overlay-head small {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgba(214, 238, 247, 0.55);
+  line-height: 1.45;
+}
+.workspace-editor__overlay-text {
+  width: 100%;
+  margin-top: 10px;
+  background: rgba(8, 14, 22, 0.6);
+  border: 1px solid rgba(110, 231, 255, 0.2);
+  border-radius: 4px;
+  padding: 10px 12px;
+  color: #d6eef7;
+  font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.workspace-editor__overlay-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+.workspace-editor__overlay-foot code {
+  font-size: 10px;
+  color: rgba(214, 238, 247, 0.4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
+.workspace-editor__overlay-save {
+  background: rgba(110, 231, 255, 0.2);
+  border: 1px solid rgba(110, 231, 255, 0.5);
+  border-radius: 3px;
+  padding: 5px 14px;
+  color: #aef3ff;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.workspace-editor__overlay-save:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.workspace-editor__danger {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 85, 119, 0.2);
+}
+.workspace-editor__delete {
+  background: transparent;
+  border: 1px solid rgba(255, 85, 119, 0.45);
+  border-radius: 3px;
+  padding: 6px 14px;
+  color: rgba(255, 85, 119, 0.85);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.workspace-editor__delete:hover:not(:disabled) {
+  background: rgba(255, 85, 119, 0.1);
+}
+.workspace-editor__delete:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 /* Active-project scope picker — the global "what am I working on" filter
    that lives in the shell header. Pulses gently when a scope is active so
    the user can't lose track of which project notes/meetings will land in. */

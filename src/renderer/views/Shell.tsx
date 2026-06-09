@@ -12,6 +12,7 @@ import { MeetingOverlay } from './MeetingOverlay';
 import { MeetingPrompt } from './MeetingPrompt';
 import { NewProjectDialog } from './projects/NewProjectDialog';
 import { Projects } from './projects/Projects';
+import { Workspaces } from './workspaces/Workspaces';
 import { ScopePicker } from './projects/ScopePicker';
 import { WorkspaceSwitcher } from './workspaces/WorkspaceSwitcher';
 import { useWorkspace } from './workspaces/useWorkspace';
@@ -43,6 +44,7 @@ type Tab =
   | 'activity'
   | 'memory'
   | 'projects'
+  | 'workspaces'
   | 'routines'
   | 'skills'
   | 'workflows'
@@ -724,6 +726,17 @@ export function Shell({ status }: Props) {
         title: 'Trigger + pipeline of nodes — every cron-fetch workflow lives here',
       },
       {
+        id: 'workspaces',
+        label: 'Workspaces',
+        icon: 'W',
+        isActive: tab === 'workspaces' && !openModuleId,
+        onClick: () => {
+          setTab('workspaces');
+          setOpenModuleId(null);
+        },
+        title: 'Top-level contexts — Work / Side Project / Personal …',
+      },
+      {
         id: 'projects',
         label: 'Projects',
         icon: 'P',
@@ -1010,6 +1023,8 @@ export function Shell({ status }: Props) {
           <Activity />
         ) : tab === 'memory' ? (
           <MemoryPage />
+        ) : tab === 'workspaces' ? (
+          <Workspaces />
         ) : tab === 'projects' ? (
           <Projects />
         ) : tab === 'routines' ? (
