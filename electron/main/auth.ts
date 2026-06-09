@@ -58,6 +58,14 @@ interface PersistedConfig {
     endHour?: number;
     daysOfWeek?: string;
   };
+  /** Per-workspace working hours. Lets the user set 9–5 weekdays for
+   *  "Work" and free-form / blank for "Personal". Resolution falls
+   *  through to the legacy global `workingHours` and finally
+   *  DEFAULT_WORKING_HOURS_PREFS. */
+  workingHoursByWorkspace?: Record<
+    string,
+    { startHour?: number; endHour?: number; daysOfWeek?: string }
+  >;
   /** Cost guardrails — single-task and daily totals. When unset, the
    *  defaults below apply. Set 0 or negative to disable a guardrail. */
   costPrefs?: {
@@ -407,28 +415,57 @@ export function saveSpeedBias(value: SpeedBias): void {
   writeConfig({ ...cfg, speedBias: value });
 }
 
-export function loadWorkingHours(): WorkingHoursPrefs {
-  const cfg = readConfig() as { workingHours?: Partial<WorkingHoursPrefs> };
-  const wh = cfg.workingHours ?? {};
+/**
+ * Working-hours preferences for the active workspace (or, when an
+ * `id` is passed, that workspace specifically). Resolution:
+ *
+ *   1. `workingHoursByWorkspace[id]` — per-workspace canonical slot
+ *   2. legacy global `workingHours`  — pre-Phase-2 single value
+ *   3. DEFAULT_WORKING_HOURS_PREFS
+ *
+ * Each FIELD falls through independently so a workspace can override
+ * just `daysOfWeek` (e.g. "Side Project = weekends") while inheriting
+ * hours from the legacy global.
+ */
+export function loadWorkingHours(
+  id: string | null = null,
+): WorkingHoursPrefs {
+  const cfg = readConfig();
+  const resolvedId = id === null ? loadActiveWorkspaceId() : id;
+  const perWs = resolvedId
+    ? cfg.workingHoursByWorkspace?.[resolvedId]
+    : undefined;
+  const legacy = cfg.workingHours;
+  const pick = <K extends keyof WorkingHoursPrefs>(
+    key: K,
+    validate: (v: unknown) => v is WorkingHoursPrefs[K],
+  ): WorkingHoursPrefs[K] => {
+    const fromWs = perWs?.[key];
+    if (validate(fromWs)) return fromWs;
+    const fromLegacy = legacy?.[key];
+    if (validate(fromLegacy)) return fromLegacy;
+    return DEFAULT_WORKING_HOURS_PREFS[key];
+  };
+  const validHour = (v: unknown): v is number =>
+    typeof v === 'number' && v >= 0 && v <= 23;
+  const validDays = (v: unknown): v is string =>
+    typeof v === 'string' && v.trim().length > 0;
   return {
-    startHour:
-      typeof wh.startHour === 'number' &&
-      wh.startHour >= 0 &&
-      wh.startHour <= 23
-        ? wh.startHour
-        : DEFAULT_WORKING_HOURS_PREFS.startHour,
-    endHour:
-      typeof wh.endHour === 'number' && wh.endHour >= 0 && wh.endHour <= 23
-        ? wh.endHour
-        : DEFAULT_WORKING_HOURS_PREFS.endHour,
-    daysOfWeek:
-      typeof wh.daysOfWeek === 'string' && wh.daysOfWeek.trim()
-        ? wh.daysOfWeek.trim()
-        : DEFAULT_WORKING_HOURS_PREFS.daysOfWeek,
+    startHour: pick('startHour', validHour),
+    endHour: pick('endHour', validHour),
+    daysOfWeek: pick('daysOfWeek', validDays),
   };
 }
 
-export function saveWorkingHours(value: WorkingHoursPrefs): void {
+/**
+ * Write working hours into the active workspace's slot (or a given
+ * id's slot). Use `null` to write the legacy global field — useful
+ * only for boot-time defaults or per-workspace-unaware callers.
+ */
+export function saveWorkingHours(
+  value: WorkingHoursPrefs,
+  id: string | null = null,
+): void {
   // Normalize before persisting — caller may pass invalid hours.
   const safe: WorkingHoursPrefs = {
     startHour: clampHour(value.startHour, DEFAULT_WORKING_HOURS_PREFS.startHour),
@@ -438,7 +475,15 @@ export function saveWorkingHours(value: WorkingHoursPrefs): void {
         ? value.daysOfWeek.trim()
         : DEFAULT_WORKING_HOURS_PREFS.daysOfWeek,
   };
-  writeConfig({ ...readConfig(), workingHours: safe });
+  const cfg = readConfig();
+  const resolvedId = id === null ? loadActiveWorkspaceId() : id;
+  if (resolvedId) {
+    const byWs = { ...(cfg.workingHoursByWorkspace ?? {}) };
+    byWs[resolvedId] = safe;
+    writeConfig({ ...cfg, workingHoursByWorkspace: byWs });
+  } else {
+    writeConfig({ ...cfg, workingHours: safe });
+  }
 }
 
 function clampHour(v: unknown, fallback: number): number {

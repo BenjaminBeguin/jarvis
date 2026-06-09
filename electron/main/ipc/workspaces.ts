@@ -22,6 +22,7 @@ import type { IpcDeps } from './types.js';
  */
 export function registerWorkspacesIpc({
   workspaces,
+  workflowScheduler,
 }: IpcDeps): void {
   ipcMain.handle(IpcChannels.listWorkspaces, () => workspaces.list());
 
@@ -91,6 +92,11 @@ export function registerWorkspacesIpc({
       win.webContents.send(IpcChannels.appModeChanged, nextMode);
       win.webContents.send(IpcChannels.pausedChanged, nextMode === 'paused');
     }
+    // Working hours are per-workspace too — re-sync the scheduler so
+    // any cron expression using `{businessHours}` recomputes against
+    // the new workspace's hours. Safe to call even when nothing
+    // depends on the token; resync is idempotent for unchanged jobs.
+    workflowScheduler.resync();
     return target;
   });
 }
