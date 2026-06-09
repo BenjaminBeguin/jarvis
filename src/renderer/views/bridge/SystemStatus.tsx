@@ -32,14 +32,26 @@ export function SystemStatus() {
   const [paused, setPaused] = useState(false);
   const [afk, setAfk] = useState(false);
 
+  // App mode is per-workspace as of Phase 2. When the user switches
+  // workspaces we have to re-fetch the mode for the NEW workspace —
+  // the appModeChanged broadcast carries the current workspace's
+  // value already, but the active id changing doesn't (the workspace
+  // didn't change, only which one we're looking at). So we
+  // additionally re-fetch on every workspace switch.
   useEffect(() => {
-    void window.jarvis.getAppMode().then(setAppMode);
-    return window.jarvis.onAppModeChanged(setAppMode);
-  }, []);
-
-  useEffect(() => {
-    void window.jarvis.getPaused().then(setPaused);
-    return window.jarvis.onPausedChanged(setPaused);
+    const refresh = (): void => {
+      void window.jarvis.getAppMode().then(setAppMode);
+      void window.jarvis.getPaused().then(setPaused);
+    };
+    refresh();
+    const offMode = window.jarvis.onAppModeChanged(setAppMode);
+    const offPaused = window.jarvis.onPausedChanged(setPaused);
+    const offWorkspace = window.jarvis.onActiveWorkspaceChanged(refresh);
+    return () => {
+      offMode();
+      offPaused();
+      offWorkspace();
+    };
   }, []);
 
   useEffect(() => {

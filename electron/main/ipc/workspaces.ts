@@ -5,6 +5,7 @@ import type { WorkspaceInput } from '@shared/types';
 
 import {
   loadActiveWorkspaceId,
+  loadAppMode,
   saveActiveWorkspaceId,
 } from '../auth.js';
 import { setTrayWorkspace } from '../tray.js';
@@ -79,6 +80,16 @@ export function registerWorkspacesIpc({
     }
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(IpcChannels.activeWorkspaceChanged, target);
+    }
+    // appMode is per-workspace; switching workspaces is equivalent
+    // to "the global current mode might be different now." Re-broadcast
+    // so legacy consumers (notifier source gates, modules that
+    // subscribed to onAppModeChanged) refresh without us needing to
+    // teach every site about active-workspace events.
+    const nextMode = loadAppMode();
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send(IpcChannels.appModeChanged, nextMode);
+      win.webContents.send(IpcChannels.pausedChanged, nextMode === 'paused');
     }
     return target;
   });

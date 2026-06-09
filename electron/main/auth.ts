@@ -34,11 +34,19 @@ interface PersistedConfig {
    *  (via the Telegram module) so the user can act on them from afar.
    *  Cross-cutting state, not module-scoped. */
   afkMode?: boolean;
-  /** Tri-state operating mode (paused / running / autopilot). Replaces
-   *  the legacy `paused: boolean` — see `loadAppMode` for the one-shot
-   *  migration. `paused` is still tolerated on read for forward-from-
-   *  old-config compatibility and gets stripped on the next write. */
+  /** Legacy global tri-state operating mode. Phase 2 of workspaces
+   *  migrated this to `appModesByWorkspace` (one slot per workspace
+   *  id); on read, this value lands in the active workspace's slot
+   *  and stays here as a fallback for surfaces that still read the
+   *  legacy field. Drop only once every read site goes through
+   *  loadAppMode. */
   appMode?: AppMode;
+  /** Per-workspace operating mode. Keyed by workspace id. Lets the
+   *  user run autopilot in "Work" while staying manual in "Personal."
+   *  Missing entries fall back to legacy `appMode` then to
+   *  DEFAULT_APP_MODE; the loader writes resolved values back here
+   *  on first read so the field self-populates over time. */
+  appModesByWorkspace?: Record<string, AppMode>;
   /** Legacy. Migrated to `appMode` on load and dropped on next write. */
   paused?: boolean;
   /** Working-hours window the user expects to be at their desk.
@@ -294,13 +302,28 @@ export function saveActiveWorkspaceId(id: string | null): void {
 }
 
 /**
- * Read the tri-state app mode. Performs the one-shot migration from
- * the legacy `paused: boolean` shape: `paused: true → 'paused'`,
- * `paused: false | undefined → 'running'`. The `paused` field is
- * dropped on the next write (see saveAppMode).
+ * Read the tri-state app mode for the active workspace (or, when an
+ * id is passed, that workspace). Resolution order:
+ *
+ *   1. `appModesByWorkspace[id]` — per-workspace canonical slot
+ *   2. legacy global `appMode`   — pre-Phase-2 single value
+ *   3. legacy `paused: boolean`  — pre-Phase-1 boolean
+ *   4. DEFAULT_APP_MODE          — 'running'
+ *
+ * `id` defaults to `loadActiveWorkspaceId()` so most callers don't
+ * need to pass anything. Workspace-agnostic callsites that want the
+ * legacy global (e.g. a background task at boot before any workspace
+ * is active) can pass `null` to read just the legacy field.
  */
-export function loadAppMode(): AppMode {
+export function loadAppMode(id: string | null = null): AppMode {
   const cfg = readConfig();
+  const resolvedId = id === null ? loadActiveWorkspaceId() : id;
+  if (resolvedId) {
+    const perWs = cfg.appModesByWorkspace?.[resolvedId];
+    if (perWs === 'paused' || perWs === 'running' || perWs === 'autopilot') {
+      return perWs;
+    }
+  }
   if (cfg.appMode === 'paused' || cfg.appMode === 'running' || cfg.appMode === 'autopilot') {
     return cfg.appMode;
   }
@@ -308,9 +331,26 @@ export function loadAppMode(): AppMode {
   return cfg.paused === true ? 'paused' : 'running';
 }
 
-export function saveAppMode(mode: AppMode): void {
+/**
+ * Write the active workspace's app mode (or, when `id` is passed,
+ * that specific workspace's). Other workspaces are unaffected.
+ * Also keeps the legacy global `appMode` field in sync with the
+ * default workspace's slot so non-workspace-aware readers stay
+ * truthful — a clean-up that can shrink once every reader is
+ * migrated.
+ */
+export function saveAppMode(mode: AppMode, id: string | null = null): void {
   const cfg = readConfig();
-  const next = { ...cfg, appMode: mode };
+  const resolvedId = id === null ? loadActiveWorkspaceId() : id;
+  const next = { ...cfg };
+  if (resolvedId) {
+    const byWs = { ...(cfg.appModesByWorkspace ?? {}) };
+    byWs[resolvedId] = mode;
+    next.appModesByWorkspace = byWs;
+  } else {
+    // No workspace context — keep writing the legacy global.
+    next.appMode = mode;
+  }
   // One-shot strip of the legacy field once we've written the canonical
   // `appMode`. Idempotent — second save just sees no `paused`.
   delete (next as { paused?: boolean }).paused;

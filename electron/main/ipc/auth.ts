@@ -5,6 +5,7 @@ import type { AppMode, AuthMode } from '@shared/types';
 
 import {
   clearAuthMode,
+  loadActiveWorkspaceId,
   loadAfkMode,
   loadAppMode,
   loadPaused,
@@ -31,7 +32,12 @@ import { refreshTrayMenu } from '../tray.js';
 import { broadcast } from '../windows.js';
 import type { IpcDeps } from './types.js';
 
-export function registerAuthIpc({ auth, activity, modules }: IpcDeps): void {
+export function registerAuthIpc({
+  auth,
+  activity,
+  modules,
+  workspaces,
+}: IpcDeps): void {
   ipcMain.handle(IpcChannels.appStatus, () => auth.refresh());
 
   ipcMain.handle(IpcChannels.setApiKey, async (_e, value: string) => {
@@ -116,6 +122,11 @@ export function registerAuthIpc({ auth, activity, modules }: IpcDeps): void {
     const prev = loadAppMode();
     if (prev === next) return;
     saveAppMode(next);
+    // Workspace name on the audit trail — appMode is now per-workspace,
+    // so "Jarvis running → autopilot" without context is ambiguous.
+    const wsId = loadActiveWorkspaceId();
+    const ws = wsId ? workspaces.get(wsId) : workspaces.getDefault();
+    const wsLabel = ws ? ws.name : 'global';
     // Fire BOTH events so legacy consumers (renderer Shell's
     // onPausedChanged subscription) keep working alongside the new
     // appMode-aware ones.
@@ -124,8 +135,13 @@ export function registerAuthIpc({ auth, activity, modules }: IpcDeps): void {
     refreshTrayMenu();
     activity.record({
       kind: 'mode.changed',
-      label: `Jarvis ${prev} → ${next}`,
-      detail: { from: prev, to: next, source: 'ipc' },
+      label: `${wsLabel}: ${prev} → ${next}`,
+      detail: {
+        from: prev,
+        to: next,
+        source: 'ipc',
+        workspaceId: ws?.id ?? null,
+      },
     });
   }
 
