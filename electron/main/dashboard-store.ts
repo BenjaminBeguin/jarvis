@@ -5,7 +5,7 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { nanoid } from 'nanoid';
 
 import type {
@@ -81,31 +81,82 @@ function defaultConfig(): DashboardConfig {
 }
 
 /**
- * Persistent store for the user-defined Dashboard layout. Writes to
- * `~/.jarvis/dashboard.json`. The renderer never edits the file directly
- * — it goes through IPC so the store can validate, normalize ids, and
- * broadcast changes.
+ * Persistent store for the user-defined Dashboard layout.
+ *
+ * Workspace-aware: each workspace gets its own layout file under
+ * `~/.jarvis/dashboards/<workspaceId>.json`. The store keeps the
+ * **active workspace's** config in memory and reloads when the
+ * workspace switches. On first read for a new workspace the store
+ * seeds from `~/.jarvis/dashboard.json` (legacy single-config file)
+ * when present, otherwise from `defaultConfig()`. The legacy file
+ * stays on disk so pre-Phase-3 users always have a fall-back; it
+ * isn't deleted by the migration so a rollback path exists.
+ *
+ * The renderer never edits the file directly — it goes through IPC
+ * so the store can validate, normalize ids, and broadcast changes.
  */
 export class DashboardStore extends EventEmitter {
-  readonly path: string;
+  readonly path: string; // legacy single-file path (back-compat read seed)
+  private readonly rootDir: string;
+  private workspaceResolver: (() => string | null) | null = null;
   private cached: DashboardConfig = { sections: [] };
+  private cachedKey: string | null = null;
 
-  constructor(path: string) {
+  constructor(legacyPath: string) {
     super();
-    this.path = path;
+    this.path = legacyPath;
+    // `~/.jarvis/dashboards/` — one file per workspace lives here.
+    // Sibling to the legacy single-file path so users grepping ~/.jarvis
+    // for "dashboard" find both. Kept as a directory so adding a new
+    // workspace doesn't need a migration write — the file is created
+    // lazily on first save.
+    this.rootDir = join(dirname(legacyPath), 'dashboards');
+  }
+
+  /** Wire the resolver right after WorkspaceStore.init() in bootstrap.
+   *  Reloads cache + emits 'changed' so the renderer re-fetches. */
+  setWorkspaceResolver(fn: () => string | null): void {
+    this.workspaceResolver = fn;
+    // Force a reload so the cache reflects the workspace's file —
+    // boot path hits this immediately after wiring.
+    this.reload();
   }
 
   init(): void {
-    mkdirSync(dirname(this.path), { recursive: true });
-    if (!existsSync(this.path)) {
+    mkdirSync(this.rootDir, { recursive: true });
+    // First call: resolver not wired yet → fall back to legacy file.
+    this.reload();
+  }
+
+  /** Reload from disk for the currently-active workspace and emit
+   *  'changed' so the renderer re-fetches. Called on boot, after the
+   *  resolver is wired, and whenever the active workspace switches. */
+  reload(): void {
+    const key = this.workspaceKey();
+    const path = this.pathFor(key);
+    if (existsSync(path)) {
+      this.cached = this.loadPath(path);
+    } else if (existsSync(this.path)) {
+      // First time this workspace asks for its file — seed from the
+      // legacy single-config and persist so subsequent edits don't
+      // bleed back into the legacy file (which other workspaces would
+      // also still seed from).
+      this.cached = this.loadPath(this.path);
+      writeFileSync(path, JSON.stringify(this.cached, null, 2), 'utf8');
+    } else {
       this.cached = defaultConfig();
-      this.persist();
-      return;
+      writeFileSync(path, JSON.stringify(this.cached, null, 2), 'utf8');
     }
-    this.cached = this.load();
+    this.cachedKey = key;
+    this.emit('changed', this.cached);
   }
 
   read(): DashboardConfig {
+    // Resolve lazily so a workspace switch between events doesn't
+    // serve stale state. Cheap — string compare + (possibly) a single
+    // read.
+    const key = this.workspaceKey();
+    if (key !== this.cachedKey) this.reload();
     return this.cached;
   }
 
@@ -129,15 +180,33 @@ export class DashboardStore extends EventEmitter {
             : {}),
         })),
     };
+    const key = this.workspaceKey();
     this.cached = cleaned;
-    this.persist();
+    this.cachedKey = key;
+    writeFileSync(
+      this.pathFor(key),
+      JSON.stringify(this.cached, null, 2),
+      'utf8',
+    );
     this.emit('changed', this.cached);
     return this.cached;
   }
 
-  private load(): DashboardConfig {
+  /** Resolve the active workspace key (or '_default_' when no resolver
+   *  is wired yet — happens during bootstrap before
+   *  setWorkspaceResolver runs). */
+  private workspaceKey(): string {
+    const id = this.workspaceResolver?.();
+    return id && id.trim() ? id : '_default_';
+  }
+
+  private pathFor(key: string): string {
+    return join(this.rootDir, `${key}.json`);
+  }
+
+  private loadPath(p: string): DashboardConfig {
     try {
-      const raw = JSON.parse(readFileSync(this.path, 'utf8'));
+      const raw = JSON.parse(readFileSync(p, 'utf8'));
       if (
         raw &&
         typeof raw === 'object' &&
@@ -149,12 +218,8 @@ export class DashboardStore extends EventEmitter {
         return { sections };
       }
     } catch (err) {
-      console.warn(`failed to read dashboard.json — using defaults:`, err);
+      console.warn(`failed to read ${p} — using defaults:`, err);
     }
     return defaultConfig();
-  }
-
-  private persist(): void {
-    writeFileSync(this.path, JSON.stringify(this.cached, null, 2), 'utf8');
   }
 }

@@ -25,6 +25,7 @@ export function registerWorkspacesIpc({
   workflowScheduler,
   mcp,
   integrations,
+  dashboard,
 }: IpcDeps): void {
   ipcMain.handle(IpcChannels.listWorkspaces, () => workspaces.list());
 
@@ -106,6 +107,11 @@ export function registerWorkspacesIpc({
     // The effective OAuth account set shifted too — the Integrations
     // page's "active in current workspace" indicator needs to refresh.
     integrations.emit('changed');
+    // Dashboard layout is per-workspace; reload the cache so the next
+    // readDashboard() returns the new workspace's sections, and emit
+    // 'changed' so any open Dashboard tabs swap to the new layout
+    // without a manual refresh.
+    dashboard.reload();
     return target;
   });
 }

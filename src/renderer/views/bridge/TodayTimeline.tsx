@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { InboxItem } from '../../../shared/types';
+import type { InboxItem, ProjectDef } from '../../../shared/types';
+import { inWorkspace } from '../workspaces/inWorkspace';
+import { useWorkspace } from '../workspaces/useWorkspace';
 
 /**
  * TodayTimeline — thin horizontal time-anchor for the Bridge.
@@ -35,15 +37,26 @@ interface WorkingHours {
 
 export function TodayTimeline() {
   const [items, setItems] = useState<InboxItem[]>([]);
+  const [projects, setProjects] = useState<ProjectDef[]>([]);
   const [now, setNow] = useState(Date.now());
   const [workingHours, setWorkingHours] = useState<WorkingHours>({
     startHour: 9,
     endHour: 18,
   });
+  const workspace = useWorkspace();
 
   useEffect(() => {
     void window.jarvis.listInbox().then(setItems);
     return window.jarvis.onInboxChanged(setItems);
+  }, []);
+
+  // Projects power the workspace filter — a calendar item tagged with
+  // a project that lives in another workspace gets dropped from the
+  // timeline so the bridge stays scoped. Items without a project
+  // match (no `project` field + no name hit) are kept (global).
+  useEffect(() => {
+    void window.jarvis.listProjects().then(setProjects);
+    return window.jarvis.onProjectsChanged(setProjects);
   }, []);
 
   useEffect(() => {
@@ -61,10 +74,10 @@ export function TodayTimeline() {
     return () => clearInterval(t);
   }, []);
 
-  const todayMeetings = useMemo(
-    () => filterTodayMeetings(items, now),
-    [items, now],
-  );
+  const todayMeetings = useMemo(() => {
+    const inActive = inWorkspace(workspace.id, projects);
+    return filterTodayMeetings(items.filter(inActive), now);
+  }, [items, now, workspace.id, projects]);
 
   const startOfDay = useMemo(() => {
     const d = new Date(now);

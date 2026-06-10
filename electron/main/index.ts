@@ -1532,6 +1532,12 @@ app.whenReady().then(async () => {
   preferences.setWorkspaceResolver(
     () => loadActiveWorkspaceId() ?? workspaces.getDefault().id,
   );
+  // Dashboard layout is per-workspace — wire the resolver and let the
+  // store load the active workspace's config (or seed it from the
+  // legacy single-file dashboard.json on first read).
+  dashboard.setWorkspaceResolver(
+    () => loadActiveWorkspaceId() ?? workspaces.getDefault().id,
+  );
   projects.init();
   // One-shot migration: any project without a workspaceId on disk
   // gets the default workspace stamped onto it. Idempotent — second

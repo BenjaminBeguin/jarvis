@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
-import type { ActivityEvent } from '../../../shared/types';
+import type { ActivityEvent, ProjectDef } from '../../../shared/types';
+import { useWorkspace } from '../workspaces/useWorkspace';
 
 /**
  * StreamTicker — the bottom band of the Bridge.
@@ -35,11 +36,44 @@ interface Chip {
 
 export function StreamTicker() {
   const [chips, setChips] = useState<Chip[]>([]);
+  const [projects, setProjects] = useState<ProjectDef[]>([]);
+  const workspace = useWorkspace();
+
+  // Workspace filter for activity chips: if the event detail has a
+  // `project` hint that matches a project living in ANOTHER
+  // workspace, drop the chip. Activity events without a project hint
+  // (most workflows, browser visits, send.dispatched, etc.) pass
+  // through — the ticker is "ambient" by design so under-filtering is
+  // the right failure mode. When activity events grow a first-class
+  // workspaceId later this filter tightens automatically.
+  useEffect(() => {
+    void window.jarvis.listProjects().then(setProjects);
+    return window.jarvis.onProjectsChanged(setProjects);
+  }, []);
+
+  const acceptEvent = (event: ActivityEvent): boolean => {
+    if (!workspace.id) return true;
+    const detail = (event.detail ?? {}) as { project?: unknown };
+    const projectAlias =
+      typeof detail.project === 'string' && detail.project.trim()
+        ? detail.project.trim().toLowerCase()
+        : null;
+    if (!projectAlias) return true;
+    const matched = projects.find(
+      (p) =>
+        p.name.toLowerCase() === projectAlias ||
+        p.aliases.some((a) => a.toLowerCase() === projectAlias),
+    );
+    if (!matched) return true;
+    if (!matched.workspaceId) return true;
+    return matched.workspaceId === workspace.id;
+  };
 
   // Hydrate from the persistent activity log + browser ring buffer.
   useEffect(() => {
     void window.jarvis.listActivity(20).then((events) => {
       const seed = events
+        .filter(acceptEvent)
         .map(activityToChip)
         .filter((c): c is Chip => c != null)
         .slice(0, MAX_CHIPS);
@@ -52,11 +86,15 @@ export function StreamTicker() {
         .reverse();
       setChips((prev) => mergeChips(seed, prev));
     });
-  }, []);
+    // Reset chips when workspace switches so the previous workspace's
+    // chips don't linger until they age out of the MAX_CHIPS window.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace.id, projects]);
 
   // Live updates.
   useEffect(() => {
     const offActivity = window.jarvis.onActivityChanged((event) => {
+      if (!acceptEvent(event)) return;
       const c = activityToChip(event);
       if (!c) return;
       setChips((prev) => mergeChips([c], prev));
@@ -68,7 +106,10 @@ export function StreamTicker() {
       offActivity();
       offBrowser();
     };
-  }, []);
+    // acceptEvent closure depends on projects + workspace.id; re-sub
+    // when either changes so live chips honour the latest scope.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace.id, projects]);
 
   if (chips.length === 0) {
     return (
