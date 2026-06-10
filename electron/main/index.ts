@@ -1543,6 +1543,20 @@ app.whenReady().then(async () => {
   // gets the default workspace stamped onto it. Idempotent — second
   // launch finds them already tagged and no-ops.
   backfillProjectWorkspaces();
+  // One-shot migration: every connected integration account that was
+  // created before per-workspace tagging existed lands in the default
+  // workspace. Without this they'd stay "globally visible" and leak
+  // managed MCP entries into every workspace — the opposite of the
+  // "clean space per workspace" promise. Idempotent.
+  {
+    const defaultId = workspaces.getDefault().id;
+    const migrated = integrationsStore.migrateUntaggedToWorkspace(defaultId);
+    if (migrated > 0) {
+      console.log(
+        `[integrations] migrated ${migrated} untagged account(s) → workspace "${defaultId}"`,
+      );
+    }
+  }
   // Push the current workspace into the tray title and keep it in
   // sync as the user switches contexts or edits workspace metadata.
   // Default workspace = no prefix (canonical "home" state); other

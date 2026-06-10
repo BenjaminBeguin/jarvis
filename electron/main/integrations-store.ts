@@ -93,20 +93,62 @@ export class IntegrationsStore extends EventEmitter {
   }
 
   /** Upsert by `id` — if an account with the same id already exists,
-   *  it's replaced (handles re-auth on the same provider account). */
+   *  it's replaced (handles re-auth on the same provider account).
+   *
+   *  Workspace tagging:
+   *    - NEW account: stamp with the active workspace (or the default
+   *      workspace via the resolver). User wanted "clean space per
+   *      workspace" — defaulting to "global / null" instead leaked
+   *      every connected account into every workspace.
+   *    - EXISTING account: preserve the workspaceId on the stored row.
+   *      Re-auth shouldn't reset a user's previous tagging choice.
+   */
   upsert(account: ConnectorAccount): void {
     const idx = this.file.accounts.findIndex((a) => a.id === account.id);
     if (idx >= 0) {
-      this.file.accounts[idx] = account;
+      const existing = this.file.accounts[idx]!;
+      this.file.accounts[idx] = {
+        ...account,
+        workspaceId: existing.workspaceId ?? account.workspaceId ?? null,
+      };
     } else {
-      this.file.accounts.push(account);
+      const tagged: ConnectorAccount = {
+        ...account,
+        workspaceId:
+          account.workspaceId ?? this.workspaceResolver?.() ?? null,
+      };
+      this.file.accounts.push(tagged);
       // First account of a connector becomes the default automatically.
-      if (!this.file.defaults[account.connectorId]) {
-        this.file.defaults[account.connectorId] = account.id;
+      if (!this.file.defaults[tagged.connectorId]) {
+        this.file.defaults[tagged.connectorId] = tagged.id;
       }
     }
     this.write();
     this.emit('changed');
+  }
+
+  /**
+   * One-shot migration: tag every account that doesn't yet have a
+   * workspaceId with `defaultWorkspaceId`. Returns the number of
+   * accounts that were tagged. Idempotent — running it a second time
+   * is a no-op because none are untagged anymore. Called from boot
+   * after the WorkspaceStore is initialized so existing accounts
+   * (pre-workspaces) land in the user's default workspace instead of
+   * staying globally visible.
+   */
+  migrateUntaggedToWorkspace(defaultWorkspaceId: string): number {
+    if (!defaultWorkspaceId) return 0;
+    let migrated = 0;
+    this.file.accounts = this.file.accounts.map((a) => {
+      if (a.workspaceId) return a;
+      migrated += 1;
+      return { ...a, workspaceId: defaultWorkspaceId };
+    });
+    if (migrated > 0) {
+      this.write();
+      this.emit('changed');
+    }
+    return migrated;
   }
 
   update(accountId: string, patch: Partial<ConnectorAccount>): boolean {
