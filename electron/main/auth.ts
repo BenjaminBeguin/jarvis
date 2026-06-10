@@ -298,6 +298,40 @@ export function loadActiveWorkspaceId(): string | null {
   return typeof v === 'string' && v.trim() ? v.trim() : null;
 }
 
+/**
+ * Default-workspace-id resolver, set by the bootstrap once the
+ * WorkspaceStore exists. `loadAppMode` / `loadWorkingHours` and their
+ * setters use this to give the **default workspace its own dedicated
+ * slot** when no explicit `activeWorkspaceId` is persisted. Without
+ * this, reads/writes for the default workspace fall through to the
+ * legacy global field — which then also acts as the fallback for
+ * every other workspace whose slot is empty, making modes appear
+ * shared across workspaces.
+ *
+ * Resolver only — auth.ts stays decoupled from WorkspaceStore by
+ * accepting a function instead of importing the store.
+ */
+let resolveDefaultWorkspaceId: (() => string | null) | null = null;
+
+export function setDefaultWorkspaceResolver(
+  fn: () => string | null,
+): void {
+  resolveDefaultWorkspaceId = fn;
+}
+
+/**
+ * Resolve the workspace id for keyed-by-workspace settings. Explicit
+ * `id` wins; otherwise read the persisted `activeWorkspaceId`;
+ * otherwise ask the default-workspace resolver. Returns null only
+ * when the resolver isn't wired yet (very early boot).
+ */
+function resolveWorkspaceId(id: string | null): string | null {
+  if (id !== null) return id;
+  const stored = loadActiveWorkspaceId();
+  if (stored) return stored;
+  return resolveDefaultWorkspaceId?.() ?? null;
+}
+
 export function saveActiveWorkspaceId(id: string | null): void {
   const cfg = readConfig();
   const next = { ...cfg };
@@ -325,7 +359,7 @@ export function saveActiveWorkspaceId(id: string | null): void {
  */
 export function loadAppMode(id: string | null = null): AppMode {
   const cfg = readConfig();
-  const resolvedId = id === null ? loadActiveWorkspaceId() : id;
+  const resolvedId = resolveWorkspaceId(id);
   if (resolvedId) {
     const perWs = cfg.appModesByWorkspace?.[resolvedId];
     if (perWs === 'paused' || perWs === 'running' || perWs === 'autopilot') {
@@ -349,7 +383,7 @@ export function loadAppMode(id: string | null = null): AppMode {
  */
 export function saveAppMode(mode: AppMode, id: string | null = null): void {
   const cfg = readConfig();
-  const resolvedId = id === null ? loadActiveWorkspaceId() : id;
+  const resolvedId = resolveWorkspaceId(id);
   const next = { ...cfg };
   if (resolvedId) {
     const byWs = { ...(cfg.appModesByWorkspace ?? {}) };
@@ -431,7 +465,7 @@ export function loadWorkingHours(
   id: string | null = null,
 ): WorkingHoursPrefs {
   const cfg = readConfig();
-  const resolvedId = id === null ? loadActiveWorkspaceId() : id;
+  const resolvedId = resolveWorkspaceId(id);
   const perWs = resolvedId
     ? cfg.workingHoursByWorkspace?.[resolvedId]
     : undefined;
@@ -476,7 +510,7 @@ export function saveWorkingHours(
         : DEFAULT_WORKING_HOURS_PREFS.daysOfWeek,
   };
   const cfg = readConfig();
-  const resolvedId = id === null ? loadActiveWorkspaceId() : id;
+  const resolvedId = resolveWorkspaceId(id);
   if (resolvedId) {
     const byWs = { ...(cfg.workingHoursByWorkspace ?? {}) };
     byWs[resolvedId] = safe;

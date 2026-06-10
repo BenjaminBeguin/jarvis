@@ -55,6 +55,7 @@ import {
   saveAfkMode,
   saveAppMode,
   savePaused,
+  setDefaultWorkspaceResolver,
 } from './auth.js';
 import {
   artifactIdFromVscodeUrl,
@@ -1499,7 +1500,9 @@ app.whenReady().then(async () => {
   // entries by active workspace, mirroring the pattern PreferencesStore
   // + McpConfigStore overlay use. Lets "Work Slack" + "Personal Slack"
   // coexist without crossing wires at agent dispatch time.
-  integrationsStore.setWorkspaceResolver(() => loadActiveWorkspaceId());
+  integrationsStore.setWorkspaceResolver(
+    () => loadActiveWorkspaceId() ?? workspaces.getDefault().id,
+  );
   mcp.setManagedSource(integrationsStore);
   mcp.init();
   // Warm any connector caches (stdio-MCP connectors like GitHub need
@@ -1512,11 +1515,23 @@ app.whenReady().then(async () => {
   // backfill (any project missing a workspaceId gets the default)
   // has a valid id to point at.
   workspaces.init();
+  // Default-workspace fallback for workspace-keyed settings in auth.ts
+  // (appMode + workingHours). Without this, the default workspace
+  // resolves to `null` and reads/writes the legacy global field,
+  // which then doubles as the fallback for every empty-slot workspace
+  // — making mode/hours appear shared. Stamping the default's id here
+  // gives the default its own dedicated bucket alongside every other
+  // workspace.
+  setDefaultWorkspaceResolver(() => workspaces.getDefault().id);
   // MCP overlay needs the active workspace id at resolve time. Wired
   // before projects.init so any project init paths that touch MCP
   // see the overlay-aware resolver.
-  mcp.setWorkspaceResolver(() => loadActiveWorkspaceId());
-  preferences.setWorkspaceResolver(() => loadActiveWorkspaceId());
+  mcp.setWorkspaceResolver(
+    () => loadActiveWorkspaceId() ?? workspaces.getDefault().id,
+  );
+  preferences.setWorkspaceResolver(
+    () => loadActiveWorkspaceId() ?? workspaces.getDefault().id,
+  );
   projects.init();
   // One-shot migration: any project without a workspaceId on disk
   // gets the default workspace stamped onto it. Idempotent — second
