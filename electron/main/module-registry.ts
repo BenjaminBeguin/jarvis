@@ -25,7 +25,11 @@ interface RegistryEntry {
 export class ModuleRegistry extends EventEmitter {
   private readonly modules = new Map<string, RegistryEntry>();
   private ctx: ModuleContext | null = null;
-  private disabledIds = new Set<string>(loadDisabledModules());
+  // Lazy: defer reading the disabled-modules list until first use so the
+  // workspace resolver in auth.ts has a chance to be wired up (the
+  // registry is constructed at module-import time, but the resolver
+  // attaches after `workspaces.init()` runs).
+  private disabledIds: Set<string> | null = null;
   // Renderer-side pages exist for these module ids. We mirror that here so
   // the renderer can render a 'View' affordance without an extra lookup.
   private static readonly PAGED_MODULES = new Set([
@@ -36,6 +40,13 @@ export class ModuleRegistry extends EventEmitter {
 
   setContext(ctx: ModuleContext): void {
     this.ctx = ctx;
+  }
+
+  private getDisabled(): Set<string> {
+    if (!this.disabledIds) {
+      this.disabledIds = new Set(loadDisabledModules());
+    }
+    return this.disabledIds;
   }
 
   async register(module: Module): Promise<void> {
@@ -52,7 +63,7 @@ export class ModuleRegistry extends EventEmitter {
       }
       intentsById.set(intent.id, intent);
     }
-    const enabled = !this.disabledIds.has(module.id);
+    const enabled = !this.getDisabled().has(module.id);
     this.modules.set(module.id, {
       module,
       intentsById,
@@ -107,6 +118,7 @@ export class ModuleRegistry extends EventEmitter {
     const entry = this.modules.get(moduleId);
     if (!entry) throw new Error(`Unknown module: ${moduleId}`);
     if (entry.enabled === enabled) return;
+    const disabled = this.getDisabled();
     if (enabled) {
       try {
         await entry.module.onLoad?.(this.ctx);
@@ -115,17 +127,56 @@ export class ModuleRegistry extends EventEmitter {
           `module ${moduleId} failed to load: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
-      this.disabledIds.delete(moduleId);
+      disabled.delete(moduleId);
     } else {
       try {
         await entry.module.onUnload?.();
       } catch (err) {
         console.warn(`module ${moduleId} onUnload threw:`, err);
       }
-      this.disabledIds.add(moduleId);
+      disabled.add(moduleId);
     }
     entry.enabled = enabled;
-    saveDisabledModules([...this.disabledIds]);
+    saveDisabledModules([...disabled]);
+    this.emit('changed', this.list());
+  }
+
+  /**
+   * Re-evaluate every registered module against the active workspace's
+   * disabled list. Called on workspace switch:
+   *
+   *   - module enabled here but disabled in the new workspace → onUnload
+   *   - module disabled here but enabled in the new workspace   → onLoad
+   *
+   * The whole point of per-workspace module enablement is that side
+   * effects (Telegram bot connection, chokidar watchers, cron timers)
+   * actually go away — so we go through the real onLoad / onUnload
+   * lifecycle rather than just masking visibility. Lifecycle errors
+   * don't abort the transition; we log + continue so a single bad
+   * module can't strand the user with half the new workspace's
+   * modules loaded.
+   */
+  async applyWorkspaceTransition(): Promise<void> {
+    if (!this.ctx) return;
+    const nextDisabled = new Set(loadDisabledModules());
+    for (const [moduleId, entry] of this.modules) {
+      const shouldBeEnabled = !nextDisabled.has(moduleId);
+      if (shouldBeEnabled === entry.enabled) continue;
+      try {
+        if (shouldBeEnabled) {
+          await entry.module.onLoad?.(this.ctx);
+        } else {
+          await entry.module.onUnload?.();
+        }
+      } catch (err) {
+        console.warn(
+          `module ${moduleId} workspace-transition error:`,
+          err,
+        );
+      }
+      entry.enabled = shouldBeEnabled;
+    }
+    this.disabledIds = nextDisabled;
     this.emit('changed', this.list());
   }
 

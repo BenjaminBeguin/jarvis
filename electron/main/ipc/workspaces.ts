@@ -26,6 +26,7 @@ export function registerWorkspacesIpc({
   mcp,
   integrations,
   dashboard,
+  modules,
 }: IpcDeps): void {
   ipcMain.handle(IpcChannels.listWorkspaces, () => workspaces.list());
 
@@ -112,6 +113,13 @@ export function registerWorkspacesIpc({
     // 'changed' so any open Dashboard tabs swap to the new layout
     // without a manual refresh.
     dashboard.reload();
+    // Module set is per-workspace too — onLoad/onUnload fire for any
+    // module whose enabled state differs between the previous and new
+    // workspace. Telegram bot disconnects, chokidar watchers stop,
+    // etc. Fire-and-forget; the registry emits 'changed' when the
+    // transition completes so the UI updates without blocking the
+    // switch.
+    void modules.applyWorkspaceTransition();
     return target;
   });
 }

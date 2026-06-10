@@ -23,7 +23,20 @@ import {
 
 interface PersistedConfig {
   authMode?: AuthMode;
+  /** Legacy: module ids the user has disabled. Phase-3 of workspaces
+   *  migrated this to `disabledModulesByWorkspace` so each workspace
+   *  can pick its own module set (e.g. Telegram bot in Personal only).
+   *  Read first when a workspace's slot is empty; remains as a one-shot
+   *  migration source. */
   disabledModules?: string[];
+  /** Per-workspace disabled-modules lists. Keyed by workspace id. Each
+   *  entry is the set of module ids that should be UNLOADED while that
+   *  workspace is active. Empty list = every module enabled. Resolution
+   *  on load: if the active workspace has its own slot, use it;
+   *  otherwise fall back to the legacy global. Modules onLoad/onUnload
+   *  fire on every workspace switch, so per-workspace choices actually
+   *  silence side effects (bot disconnects, watchers stop). */
+  disabledModulesByWorkspace?: Record<string, string[]>;
   notificationPrefs?: Partial<NotificationPrefs>;
   inboxPrefs?: Partial<InboxPrefs>;
   /** Per-module user settings — keyed by module id. The schema lives
@@ -190,13 +203,49 @@ export function clearAuthMode(): void {
   writeConfig(cfg);
 }
 
-export function loadDisabledModules(): string[] {
+/**
+ * Read the list of module ids that should be DISABLED in a workspace.
+ * Resolution mirrors `loadAppMode` / `loadWorkingHours`:
+ *
+ *   1. `disabledModulesByWorkspace[id]` — per-workspace slot
+ *   2. legacy global `disabledModules`  — pre-Phase-3 single list
+ *   3. `[]`                              — every module enabled
+ *
+ * `id` defaults to the active workspace (or, when none is explicitly
+ * persisted, the default workspace via the resolver). Pass an explicit
+ * `id` from boot paths that need to read another workspace's slot.
+ */
+export function loadDisabledModules(id: string | null = null): string[] {
   const cfg = readConfig();
-  return Array.isArray(cfg.disabledModules) ? cfg.disabledModules : [];
+  const resolvedId = resolveWorkspaceId(id);
+  if (resolvedId) {
+    const perWs = cfg.disabledModulesByWorkspace?.[resolvedId];
+    if (Array.isArray(perWs)) return [...perWs];
+  }
+  return Array.isArray(cfg.disabledModules) ? [...cfg.disabledModules] : [];
 }
 
-export function saveDisabledModules(ids: string[]): void {
-  writeConfig({ ...readConfig(), disabledModules: ids });
+/**
+ * Persist the disabled-modules list for a workspace (active by default).
+ * Writes to the workspace's slot; the legacy global field stays as-is
+ * so a workspace-unaware reader still gets a sensible (pre-migration)
+ * answer. To clear the legacy field entirely, pass `id: null`.
+ */
+export function saveDisabledModules(
+  ids: string[],
+  id: string | null = null,
+): void {
+  const cfg = readConfig();
+  const resolvedId = resolveWorkspaceId(id);
+  const next = { ...cfg };
+  if (resolvedId) {
+    const byWs = { ...(cfg.disabledModulesByWorkspace ?? {}) };
+    byWs[resolvedId] = [...ids];
+    next.disabledModulesByWorkspace = byWs;
+  } else {
+    next.disabledModules = [...ids];
+  }
+  writeConfig(next);
 }
 
 export function loadNotificationPrefs(): NotificationPrefs {
