@@ -12,3 +12,11 @@ dist/
 # electron-vite's transient compiled config cache. Sometimes lingers
 # when the dev server crashes before cleaning it up.
 electron.vite.config.*.mjs
+
+# Per-connector local OAuth credentials for dev builds. The committed
+# connectors fall back to REPLACE_ME_* placeholders when the .local.json
+# is absent; in dev you drop your real client_id / client_secret here
+# and the connector loads them at startup. Keychain (Settings →
+# Integrations → Save credentials) is the prod path; this file is the
+# dev convenience that stops you having to re-paste after every reset.
+electron/main/oauth/connectors/*.local.json

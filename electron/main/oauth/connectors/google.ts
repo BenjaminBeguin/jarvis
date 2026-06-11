@@ -1,3 +1,7 @@
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 
 import type { ConnectorAccount } from "@shared/types";
@@ -43,17 +47,59 @@ import { buildGmailMcp } from "./google-mcp/gmail.js";
 
 /** Fallback bundled credentials. Settings → Integrations can override
  *  these at runtime by writing to Keychain; the resolved pair below
- *  always prefers the Keychain copy. Leave both as `REPLACE_ME_*` if
- *  you want to force every install to paste their own. */
+ *  always prefers the Keychain copy. `REPLACE_ME_*` placeholders are
+ *  treated as "not configured" and force the caller to throw, so the
+ *  user can't accidentally hit Google with an empty client id.
+ *
+ *  For local dev, drop your real client_id / client_secret into a
+ *  gitignored `google.local.json` next to this file (see .gitignore).
+ *  The file is loaded at startup; if it's absent the placeholders win.
+ */
+const LOCAL_OVERRIDES = readLocalOverrides();
 const FALLBACK_CLIENT_ID =
-  "REPLACE_ME_CLIENT_ID";
+  LOCAL_OVERRIDES.CLIENT_ID ?? "REPLACE_ME_CLIENT_ID";
 /**
  * Empty for **Desktop app** clients (PKCE-only). Required for **Web
  * application** clients — Google's token endpoint returns 400
  * `client_secret is missing` if you try to exchange a Web-app code
  * without it.
  */
-const FALLBACK_CLIENT_SECRET = "REPLACE_ME_CLIENT_SECRET";
+const FALLBACK_CLIENT_SECRET =
+  LOCAL_OVERRIDES.CLIENT_SECRET ?? "REPLACE_ME_CLIENT_SECRET";
+
+interface LocalOverrides {
+  CLIENT_ID?: string;
+  CLIENT_SECRET?: string;
+}
+
+/**
+ * Read the gitignored `google.local.json` sitting next to this file.
+ * Returns an empty object when the file is missing or unparseable —
+ * production builds never ship this file, so the empty case is the
+ * common one and the placeholder fallbacks above kick in.
+ *
+ * Located via `import.meta.url` so dev (running from src/) and prod
+ * (running from the bundle output) both resolve to the directory
+ * containing the connector module.
+ */
+function readLocalOverrides(): LocalOverrides {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const path = join(here, "google.local.json");
+    if (!existsSync(path)) return {};
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
+    ) {
+      return parsed as LocalOverrides;
+    }
+  } catch {
+    // Malformed file or unreadable — fall through to placeholders.
+  }
+  return {};
+}
 
 interface ResolvedCreds {
   clientId: string;
