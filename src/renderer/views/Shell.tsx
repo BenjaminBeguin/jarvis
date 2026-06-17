@@ -207,6 +207,11 @@ export function Shell({ status }: Props) {
     return () => window.removeEventListener('jarvis:open-new-project', onOpen);
   }, []);
 
+  // Previous activeProject — used to detect REAL transitions so the
+  // toast only fires when the user actually changed scope, not when
+  // a sibling subscription (workspace/projects) re-renders Shell and
+  // the projectList memo is recomputed with a new array reference.
+  const previousScopeRef = useRef<string | null>(null);
   useEffect(() => {
     try {
       if (activeProject) {
@@ -229,22 +234,28 @@ export function Shell({ status }: Props) {
     // Visible feedback. Without this, picking a scope feels like a
     // no-op because most of the cascade (cwd of next task, project
     // memory load) is invisible until you actually launch something.
-    if (scopeToastSeededRef.current) {
-      if (activeProject) {
-        const def = projectList.find((p) => p.name === activeProject);
-        if (def?.path) {
-          toast({ message: `Scope: ${activeProject} · cwd ${def.path}` });
-        } else {
-          toast({
-            kind: 'info',
-            message: `Scope: ${activeProject} · no path set in projects.json — tasks will still run in ~`,
-          });
-        }
+    const previous = previousScopeRef.current;
+    previousScopeRef.current = activeProject;
+    if (!scopeToastSeededRef.current) {
+      scopeToastSeededRef.current = true;
+      return;
+    }
+    // Only toast on a real transition — a sidebar navigation that
+    // re-renders Shell but keeps the same activeProject (often null)
+    // would otherwise spam "Scope cleared" repeatedly.
+    if (previous === activeProject) return;
+    if (activeProject) {
+      const def = projectList.find((p) => p.name === activeProject);
+      if (def?.path) {
+        toast({ message: `Scope: ${activeProject} · cwd ${def.path}` });
       } else {
-        toast({ message: 'Scope cleared' });
+        toast({
+          kind: 'info',
+          message: `Scope: ${activeProject} · no path set in projects.json — tasks will still run in ~`,
+        });
       }
     } else {
-      scopeToastSeededRef.current = true;
+      toast({ message: 'Scope cleared' });
     }
   }, [activeProject, projectList]);
 
