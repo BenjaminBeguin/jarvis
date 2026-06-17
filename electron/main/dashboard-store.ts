@@ -111,6 +111,14 @@ export class DashboardStore extends EventEmitter {
     // workspace doesn't need a migration write — the file is created
     // lazily on first save.
     this.rootDir = join(dirname(legacyPath), 'dashboards');
+    // mkdir up front, in the constructor, so any subsequent call —
+    // setWorkspaceResolver, reload, write, init — can blindly
+    // writeFileSync without ENOENT. Boot order has historically been
+    // fragile here (setWorkspaceResolver wires before init()), and a
+    // store that mkdirs at construction is cheaper than threading
+    // call-order rules through every caller. mkdirSync recursive is
+    // idempotent on directories that already exist.
+    mkdirSync(this.rootDir, { recursive: true });
   }
 
   /** Wire the resolver right after WorkspaceStore.init() in bootstrap.
@@ -123,8 +131,9 @@ export class DashboardStore extends EventEmitter {
   }
 
   init(): void {
-    mkdirSync(this.rootDir, { recursive: true });
-    // First call: resolver not wired yet → fall back to legacy file.
+    // Directory creation moved into the constructor — keeping the
+    // method as the canonical "load the active workspace's config
+    // from disk" hook so existing bootstrap callers still work.
     this.reload();
   }
 
