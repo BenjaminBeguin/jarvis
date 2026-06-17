@@ -1,7 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 
 interface ScopePickerProps {
+  /** Projects visible in the active workspace. The dropdown lists
+   *  exactly these — scope is intentionally workspace-bounded so the
+   *  "scope to Side Project's customer-portal repo" choice doesn't
+   *  leak into the Work workspace's task launches. */
   projects: { name: string; aliases: string[]; path?: string }[];
+  /** Projects across EVERY workspace. Used only to detect "you have N
+   *  projects, just in other workspaces" and render a helpful empty
+   *  state instead of a confusing "No projects yet" when the user is
+   *  actually looking at projects on another tab. */
+  projectsAll?: { name: string; workspaceId?: string }[];
+  /** Active workspace name — used in the empty state to anchor the
+   *  "no projects in <workspace>" copy. */
+  activeWorkspaceName?: string;
   active: string | null;
   onChange: (next: string | null) => void;
   onCreate: () => void;
@@ -18,6 +30,8 @@ interface ScopePickerProps {
  */
 export function ScopePicker({
   projects,
+  projectsAll,
+  activeWorkspaceName,
   active,
   onChange,
   onCreate,
@@ -70,7 +84,31 @@ export function ScopePicker({
           </button>
           {projects.length === 0 && (
             <div className="shell__scope-empty">
-              No projects yet — hit "+ New project" below.
+              {(() => {
+                // Count projects that exist BUT are tagged to a
+                // different workspace — those won't appear in this
+                // dropdown by design. If any exist, the empty state
+                // explains why (otherwise the user wonders where
+                // their HIVE projects went after switching to Memory).
+                const otherCount = (projectsAll ?? []).filter(
+                  (p) =>
+                    !projects.find((q) => q.name === p.name) &&
+                    p.workspaceId, // ignore projects without any workspace tag
+                ).length;
+                if (otherCount > 0) {
+                  return (
+                    <>
+                      No projects in
+                      {activeWorkspaceName ? ` ${activeWorkspaceName}` : ''}.
+                      <br />
+                      {otherCount} in other workspace
+                      {otherCount === 1 ? '' : 's'} — switch via the
+                      workspace pill, or hit "+ New project" below.
+                    </>
+                  );
+                }
+                return 'No projects yet — hit "+ New project" below.';
+              })()}
             </div>
           )}
           {projects.map((p) => (

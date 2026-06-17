@@ -849,6 +849,8 @@ export function Shell({ status }: Props) {
           />
           <ScopePicker
             projects={projectList}
+            projectsAll={projectListAll}
+            activeWorkspaceName={workspace.active?.name}
             active={activeProject}
             onChange={setActiveProject}
             onCreate={() => setNewProjectOpen(true)}
